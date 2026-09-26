@@ -39,16 +39,21 @@ export function buildTtsPlaybackExportArtifactId(
   input: TtsPlaybackCanonicalScopeInput & {
     format: 'mp3' | 'm4b';
     speed: number;
+    /** Omitted for the whole book, so existing book artifact ids stay stable. */
+    chapterIndex?: number;
   },
 ): string {
   const speed = Math.max(0.5, Math.min(3, Number.isFinite(input.speed) ? input.speed : 1));
-  return createHash('sha256')
+  const hash = createHash('sha256')
     .update(buildTtsPlaybackCanonicalScopeKey(input))
     .update('\0')
     .update(input.format)
     .update('\0')
-    .update(speed.toFixed(2))
-    .digest('hex');
+    .update(speed.toFixed(2));
+  if (input.chapterIndex !== undefined) {
+    hash.update('\0chapter:').update(String(Math.max(0, Math.floor(input.chapterIndex))));
+  }
+  return hash.digest('hex');
 }
 
 export interface AccountExportScopeInput {

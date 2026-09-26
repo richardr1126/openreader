@@ -180,19 +180,16 @@ export class OperationOrchestrator {
     updatedAt?: number;
     timing?: WorkerJobTiming;
   }): Promise<WorkerOperationState> {
-    const current = await this.requireState(input.opId);
-    const now = input.updatedAt ?? this.clock.now();
-
-    const next: WorkerOperationState = {
-      ...current,
-      status: 'running',
-      startedAt: input.startedAt ?? current.startedAt ?? now,
-      updatedAt: now,
-      ...(input.timing ? { timing: input.timing } : {}),
-    };
-
-    await this.persistState(next);
-    return next;
+    return this.persistActiveState(input.opId, (current) => {
+      const now = input.updatedAt ?? this.clock.now();
+      return {
+        ...current,
+        status: 'running',
+        startedAt: input.startedAt ?? current.startedAt ?? now,
+        updatedAt: now,
+        ...(input.timing ? { timing: input.timing } : {}),
+      };
+    });
   }
 
   async markProgress(input: {
@@ -201,20 +198,17 @@ export class OperationOrchestrator {
     updatedAt?: number;
     timing?: WorkerJobTiming;
   }): Promise<WorkerOperationState> {
-    const current = await this.requireState(input.opId);
-    const now = input.updatedAt ?? this.clock.now();
-
-    const next: WorkerOperationState = {
-      ...current,
-      status: 'running',
-      startedAt: current.startedAt ?? now,
-      updatedAt: now,
-      progress: input.progress,
-      ...(input.timing ? { timing: input.timing } : {}),
-    };
-
-    await this.persistState(next);
-    return next;
+    return this.persistActiveState(input.opId, (current) => {
+      const now = input.updatedAt ?? this.clock.now();
+      return {
+        ...current,
+        status: 'running',
+        startedAt: current.startedAt ?? now,
+        updatedAt: now,
+        progress: input.progress,
+        ...(input.timing ? { timing: input.timing } : {}),
+      };
+    });
   }
 
   async markSucceeded(input: {
@@ -310,9 +304,33 @@ export class OperationOrchestrator {
     if (!current) {
       throw new Error(`Operation not found: ${opId}`);
     }
-    if (isTerminalStatus(current.status)) {
-      return current;
-    }
     return current;
+  }
+
+  /**
+   * Writes a running/progress update only while the operation is still
+   * active. A heartbeat or progress write that read the state before the job
+   * finished must not reopen it: a terminal state that reads as running again
+   * leaves every waiting reader stalled.
+   */
+  private async persistActiveState(
+    opId: string,
+    build: (current: WorkerOperationState) => WorkerOperationState,
+  ): Promise<WorkerOperationState> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const record = await this.stateStore.getOpStateRecord(opId);
+      if (!record) throw new Error(`Operation not found: ${opId}`);
+      if (isTerminalStatus(record.state.status)) return record.state;
+      const next = build(record.state);
+      const updated = await this.stateStore.compareAndSetOpState({
+        opId,
+        expectedRevision: record.revision,
+        newState: next,
+      });
+      if (!updated) continue;
+      await this.eventStream.append(opId, next);
+      return next;
+    }
+    throw new Error('Unable to update operation after repeated CAS conflicts');
   }
 }

@@ -135,4 +135,51 @@ describe('operation orchestrator', () => {
     const events = await eventStream.listSince(created.opId, 0);
     expect(events.filter((event) => event.snapshot.status === 'failed')).toHaveLength(1);
   });
+
+  test('a late heartbeat or progress write does not reopen a finished operation', async () => {
+    const queue = new InMemoryOperationQueue();
+    const store = new InMemoryOperationStateStore();
+    const eventStream = new InMemoryOperationEventStream();
+    let finishDuringRead = false;
+    const racingStore = {
+      getOpState: store.getOpState.bind(store),
+      putOpState: store.putOpState.bind(store),
+      compareAndSetOpState: store.compareAndSetOpState.bind(store),
+      getOpIndex: store.getOpIndex.bind(store),
+      compareAndSetOpIndex: store.compareAndSetOpIndex.bind(store),
+      // The heartbeat reads the running state, then the job succeeds before
+      // the heartbeat writes it back.
+      getOpStateRecord: async (opId: string) => {
+        const record = await store.getOpStateRecord(opId);
+        if (finishDuringRead) {
+          finishDuringRead = false;
+          await orchestrator.markSucceeded({ opId, result: { ok: true }, updatedAt: 3_000 });
+        }
+        return record;
+      },
+    };
+    const orchestrator = new OperationOrchestrator({
+      queue,
+      stateStore: racingStore,
+      eventStream,
+      config: { opStaleMs: 2_000, maxCasRetries: 5 },
+    });
+
+    const created = await orchestrator.enqueueOrReuse(buildRequest('racing-op'));
+    await orchestrator.markRunning({ opId: created.opId, updatedAt: 2_000 });
+
+    finishDuringRead = true;
+    const heartbeat = await orchestrator.markRunning({ opId: created.opId, updatedAt: 3_100 });
+    const progress = await orchestrator.markProgress({
+      opId: created.opId,
+      progress: { totalPages: 2, pagesParsed: 2, currentPage: 2, phase: 'merge' },
+      updatedAt: 3_200,
+    });
+
+    expect(heartbeat.status).toBe('succeeded');
+    expect(progress.status).toBe('succeeded');
+    expect((await store.getOpState(created.opId))?.status).toBe('succeeded');
+    const events = await eventStream.listSince(created.opId, 0);
+    expect(events.at(-1)?.snapshot.status).toBe('succeeded');
+  });
 });

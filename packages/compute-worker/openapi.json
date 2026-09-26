@@ -414,6 +414,9 @@
           "plannedSegments": {
             "type": "number"
           },
+          "chapterIndex": {
+            "type": "number"
+          },
           "dispositionFilename": {
             "type": "string"
           },
@@ -2205,6 +2208,9 @@
                     "type": "number"
                   },
                   "plannedSegments": {
+                    "type": "number"
+                  },
+                  "chapterIndex": {
                     "type": "number"
                   },
                   "dispositionFilename": {
@@ -4576,6 +4582,9 @@
                     "plannedSegments": {
                       "type": "number"
                     },
+                    "chapterIndex": {
+                      "type": "number"
+                    },
                     "dispositionFilename": {
                       "type": "string"
                     },
@@ -4807,6 +4816,9 @@
                       "window",
                       "document"
                     ]
+                  },
+                  "retryErroredSegments": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -5811,6 +5823,369 @@
             }
           },
           "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts-playback/sessions/{sessionId}/export-progress": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed",
+                        "canceled"
+                      ]
+                    },
+                    "stopReason": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "usage_limit"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "lastError": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "plannedSegments": {
+                      "type": "number"
+                    },
+                    "completedSegments": {
+                      "type": "number"
+                    },
+                    "skippedSegments": {
+                      "type": "number"
+                    },
+                    "lastSkipError": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "message": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "code": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "message",
+                            "code"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "chapters": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": {
+                            "type": "number"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "spineHref": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "page": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "plannedSegments": {
+                            "type": "number"
+                          },
+                          "completedSegments": {
+                            "type": "number"
+                          },
+                          "skippedSegments": {
+                            "type": "number"
+                          },
+                          "generatingSegments": {
+                            "type": "number"
+                          },
+                          "durationMs": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "index",
+                          "title",
+                          "spineHref",
+                          "page",
+                          "plannedSegments",
+                          "completedSegments",
+                          "skippedSegments",
+                          "generatingSegments",
+                          "durationMs"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "status",
+                    "stopReason",
+                    "lastError",
+                    "plannedSegments",
+                    "completedSegments",
+                    "skippedSegments",
+                    "lastSkipError",
+                    "chapters"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts-playback/sessions/{sessionId}/cancel": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "generationRunId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "generationRunId"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "sessionId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "canceled": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "running",
+                            "succeeded",
+                            "failed",
+                            "canceled"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "sessionId",
+                    "canceled",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
             "description": "Default Response",
             "content": {
               "application/json": {
@@ -8347,6 +8722,9 @@
                       "window",
                       "document"
                     ]
+                  },
+                  "retryErroredSegments": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -11219,6 +11597,11 @@
                     "type": "number",
                     "minimum": 0.5,
                     "maximum": 3
+                  },
+                  "chapterIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
                   }
                 },
                 "required": [
@@ -11852,6 +12235,9 @@
                               "type": "number"
                             },
                             "plannedSegments": {
+                              "type": "number"
+                            },
+                            "chapterIndex": {
                               "type": "number"
                             },
                             "dispositionFilename": {

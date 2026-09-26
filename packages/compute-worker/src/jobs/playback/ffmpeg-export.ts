@@ -3,10 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import ffmpegPath from 'ffmpeg-static';
-import { locatorGroupKey } from '@openreader/tts/locator';
-import { normalizeLocator } from '@openreader/tts/segments';
-import type { TTSSegmentLocator } from '@openreader/tts/types';
-import { isHtmlLocator, isPdfLocator, isStableEpubLocator } from '@openreader/tts/types';
+import { groupExportChapters } from './export-chapters';
 import type { TtsPlaybackSegmentInput } from './plan';
 
 type ExportChapter = { title: string; startMs: number; endMs: number };
@@ -27,9 +24,13 @@ export function buildExportFilename(input: {
   documentId: string;
   speed: number;
   format: 'mp3' | 'm4b';
+  chapterIndex?: number;
 }): string {
   const speedSuffix = speedNeedsTranscode(input.speed) ? `-${formatSpeedForFilename(input.speed)}x` : '';
-  return `openreader-${input.documentId.slice(0, 12)}${speedSuffix}.${input.format}`;
+  const chapterSuffix = input.chapterIndex === undefined
+    ? ''
+    : `-chapter-${String(input.chapterIndex + 1).padStart(3, '0')}`;
+  return `openreader-${input.documentId.slice(0, 12)}${chapterSuffix}${speedSuffix}.${input.format}`;
 }
 
 export function stripId3Tag(bytes: Buffer): Buffer {
@@ -61,13 +62,6 @@ function escapeFfmetadataValue(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '').replace(/=/g, '\\=').replace(/;/g, '\\;').replace(/#/g, '\\#');
 }
 
-function fallbackChapterTitle(locator: TTSSegmentLocator | null, index: number): string {
-  if (isPdfLocator(locator)) return `Page ${Math.max(1, Math.floor(locator.page))}`;
-  if (isStableEpubLocator(locator)) return `Chapter ${index}`;
-  if (isHtmlLocator(locator)) return index === 1 ? 'Document' : `Section ${index}`;
-  return `Chapter ${index}`;
-}
-
 export function buildExportChapters(input: {
   segments: TtsPlaybackSegmentInput[];
   durationsByOrdinal: Map<number, number>;
@@ -75,36 +69,20 @@ export function buildExportChapters(input: {
 }): ExportChapter[] {
   const speed = Math.max(0.5, Math.min(3, Number.isFinite(input.speed) ? input.speed : 1));
   const chapters: ExportChapter[] = [];
-  let activeGroup: string | null = null;
-  let activeLocator: TTSSegmentLocator | null = null;
-  let activeStartMs = 0;
   let cursorMs = 0;
-  for (const segment of input.segments) {
-    const locator = normalizeLocator(segment.locator as never);
-    const group = locatorGroupKey(locator);
-    if (activeGroup === null) {
-      activeGroup = group;
-      activeLocator = locator;
-      activeStartMs = cursorMs;
-    } else if (group !== activeGroup) {
-      chapters.push({
-        title: fallbackChapterTitle(activeLocator, chapters.length + 1),
-        startMs: Math.max(0, Math.floor(activeStartMs / speed)),
-        endMs: Math.max(0, Math.floor(cursorMs / speed)),
-      });
-      activeGroup = group;
-      activeLocator = locator;
-      activeStartMs = cursorMs;
+  for (const group of groupExportChapters(input.segments)) {
+    const startMs = cursorMs;
+    for (const ordinal of group.ordinals) {
+      cursorMs += Math.max(1, Math.floor(input.durationsByOrdinal.get(ordinal) ?? 1000));
     }
-    cursorMs += Math.max(1, Math.floor(input.durationsByOrdinal.get(segment.ordinal) ?? 1000));
-  }
-  if (activeGroup !== null) {
     chapters.push({
-      title: fallbackChapterTitle(activeLocator, chapters.length + 1),
-      startMs: Math.max(0, Math.floor(activeStartMs / speed)),
-      endMs: Math.max(0, Math.ceil(cursorMs / speed)),
+      title: group.title,
+      startMs: Math.max(0, Math.floor(startMs / speed)),
+      endMs: Math.max(0, Math.floor(cursorMs / speed)),
     });
   }
+  const last = chapters[chapters.length - 1];
+  if (last) last.endMs = Math.max(0, Math.ceil(cursorMs / speed));
   return chapters.map((chapter, index, all) => ({
     ...chapter,
     endMs: Math.max(chapter.startMs + 1, Math.min(chapter.endMs, all[index + 1]?.startMs ?? chapter.endMs)),

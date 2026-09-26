@@ -13,6 +13,7 @@ import {
   LAYOUT_CONSUMER_NAME,
   NATS_API_TIMEOUT_MS,
   TTS_PLAYBACK_CONSUMER_NAME,
+  TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME,
   TTS_PLAYBACK_EXPORT_CONSUMER_NAME,
   TTS_PLAYBACK_PLAN_CONSUMER_NAME,
   ensureJetStreamResources,
@@ -31,6 +32,7 @@ export interface NatsSession {
   kv: Awaited<ReturnType<Kvm['create']>>;
   layoutConsumer: Consumer;
   ttsPlaybackConsumer: Consumer;
+  ttsPlaybackDocumentConsumer: Consumer;
   ttsPlaybackPlanConsumer: Consumer;
   ttsPlaybackExportConsumer: Consumer;
   documentPreviewConsumer: Consumer;
@@ -168,6 +170,7 @@ export function createNatsSessionManager(input: {
         kv,
         layoutConsumer: await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME),
         ttsPlaybackConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_CONSUMER_NAME),
+        ttsPlaybackDocumentConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME),
         ttsPlaybackPlanConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_PLAN_CONSUMER_NAME),
         ttsPlaybackExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_EXPORT_CONSUMER_NAME),
         documentPreviewConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_PREVIEW_CONSUMER_NAME),

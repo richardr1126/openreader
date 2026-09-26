@@ -12,10 +12,12 @@ import {
   speedNeedsTranscode,
   stripId3Tag,
 } from './ffmpeg-export';
+import { groupExportChapters } from './export-chapters';
 import { readPersistedTtsPlaybackPlanSegments } from './plan';
 import { ttsPlaybackExportArtifactRequestSchema } from './schemas';
 
 const SKIPPED_SEGMENT_PAUSE_MS = 1_000;
+const SIDECAR_READ_BATCH = 32;
 
 export type TtsPlaybackExportSegmentSource =
   | { kind: 'audio'; audioKey: string; durationMs: number }
@@ -54,45 +56,71 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       documentId: parsed.documentId,
       prefix: input.s3Prefix,
     });
-    const existingMetadata = await input.storage.readObject(metadataKey)
-      .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata)
-      .catch(() => null);
-    if (existingMetadata?.schemaVersion === 1 && existingMetadata.status === 'ready' && await input.storage.objectExists(existingMetadata.objectKey).catch(() => false)) {
-      return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
-    }
-
     const session = await playbackStorage.sessions.getSession(parsed.sessionId);
     if (!session) throw new Error('TTS playback export session was not found');
     if (session.storageUserId !== parsed.storageUserId || session.documentId !== parsed.documentId) {
       throw new Error('TTS playback export session scope mismatch');
     }
-    if (session.status !== 'succeeded') throw new Error(`TTS playback export session is not complete: ${session.status}`);
     if (session.planObjectKey !== parsed.planObjectKey) throw new Error('TTS playback export session plan key mismatch');
+    // A whole-book artifact needs a finished run. One chapter only needs its
+    // own segments settled, so it can be downloaded while later chapters are
+    // still generating or after a stopped/limited run.
+    if (parsed.chapterIndex === undefined && (session.status !== 'succeeded' || session.stopReason)) {
+      throw new Error(`TTS playback export session is not complete: ${session.stopReason ?? session.status}`);
+    }
 
-    const plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, parsed.planObjectKey);
-    if (!plannedSegments || plannedSegments.length === 0) {
+    const documentSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, parsed.planObjectKey);
+    if (!documentSegments || documentSegments.length === 0) {
       throw new Error('TTS playback export requires a loaded canonical plan');
+    }
+    let plannedSegments = documentSegments;
+    let chapterTitle: string | null = null;
+    if (parsed.chapterIndex !== undefined) {
+      const chapter = groupExportChapters(documentSegments)[parsed.chapterIndex];
+      if (!chapter) throw new Error(`TTS playback export chapter ${parsed.chapterIndex} does not exist`);
+      const ordinals = new Set(chapter.ordinals);
+      plannedSegments = documentSegments.filter((segment) => ordinals.has(segment.ordinal));
+      chapterTitle = chapter.title;
     }
     const durationsByOrdinal = new Map<number, number>();
     const sourcesByOrdinal = new Map<number, TtsPlaybackExportSegmentSource>();
     let generatedSegments = 0;
     let skippedSegments = 0;
-    for (const segment of plannedSegments) {
-      const sidecar = await playbackStorage.artifacts.readSegmentMetadata({
+    for (let index = 0; index < plannedSegments.length; index += SIDECAR_READ_BATCH) {
+      const batch = plannedSegments.slice(index, index + SIDECAR_READ_BATCH);
+      const sidecars = await Promise.all(batch.map((segment) => playbackStorage.artifacts.readSegmentMetadata({
         storageUserId: parsed.storageUserId,
         documentId: parsed.documentId,
         documentVersion: parsed.documentVersion,
         settingsHash: parsed.settingsHash,
         ordinal: segment.ordinal,
+      })));
+      batch.forEach((segment, batchIndex) => {
+        const source = resolveTtsPlaybackExportSegmentSource(segment.ordinal, sidecars[batchIndex] ?? null);
+        sourcesByOrdinal.set(segment.ordinal, source);
+        durationsByOrdinal.set(segment.ordinal, source.durationMs);
+        if (source.kind === 'audio') generatedSegments += 1;
+        else skippedSegments += 1;
       });
-      const source = resolveTtsPlaybackExportSegmentSource(segment.ordinal, sidecar);
-      sourcesByOrdinal.set(segment.ordinal, source);
-      durationsByOrdinal.set(segment.ordinal, source.durationMs);
-      if (source.kind === 'audio') generatedSegments += 1;
-      else skippedSegments += 1;
     }
     if (generatedSegments === 0) {
       throw new Error('TTS playback export could not generate any narratable audio');
+    }
+
+    // Artifact ids are deterministic per scope, so a ready artifact is reused
+    // only while it still describes the current sidecars. Retrying skipped
+    // segments changes the counts and rebuilds the file without its silence.
+    const existingMetadata = await input.storage.readObject(metadataKey)
+      .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata)
+      .catch(() => null);
+    if (
+      existingMetadata?.schemaVersion === 1
+      && existingMetadata.status === 'ready'
+      && existingMetadata.generatedSegments === generatedSegments
+      && existingMetadata.skippedSegments === skippedSegments
+      && await input.storage.objectExists(existingMetadata.objectKey).catch(() => false)
+    ) {
+      return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     }
 
     const chunks: Buffer[] = [];
@@ -128,7 +156,9 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       source: baseMp3,
       format: parsed.format,
       speed: parsed.speed,
-      title: `OpenReader ${parsed.documentId.slice(0, 12)}`,
+      title: chapterTitle
+        ? `OpenReader ${parsed.documentId.slice(0, 12)} - ${chapterTitle}`
+        : `OpenReader ${parsed.documentId.slice(0, 12)}`,
       chapters,
     }) : baseMp3;
     const objectKey = ttsPlaybackExportArtifactKey({
@@ -157,7 +187,13 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       generatedSegments,
       skippedSegments,
       plannedSegments: plannedSegments.length,
-      dispositionFilename: buildExportFilename({ documentId: parsed.documentId, speed: parsed.speed, format: parsed.format }),
+      ...(parsed.chapterIndex === undefined ? {} : { chapterIndex: parsed.chapterIndex }),
+      dispositionFilename: buildExportFilename({
+        documentId: parsed.documentId,
+        speed: parsed.speed,
+        format: parsed.format,
+        ...(parsed.chapterIndex === undefined ? {} : { chapterIndex: parsed.chapterIndex }),
+      }),
       sourceSessionId: parsed.sessionId,
       sourcePlanObjectKey: parsed.planObjectKey,
       status: 'ready',

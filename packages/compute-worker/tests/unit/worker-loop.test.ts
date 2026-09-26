@@ -419,4 +419,190 @@ describe('worker loop controller', () => {
       }),
     }));
   });
+
+  test('writes the terminal state only after an in-flight progress write settles', async () => {
+    const owner = {};
+    const writes: string[] = [];
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => { complete = resolve; });
+    const orchestrator: WorkerLoopOrchestrator = {
+      markRunning: async (input) => { writes.push('running'); return input as never; },
+      // A slow KV write that is still in flight when the job returns.
+      markProgress: async (input) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        writes.push('progress');
+        return input as never;
+      },
+      markSucceeded: async (input) => { writes.push('succeeded'); complete(); return input as never; },
+      markFailed: async (input) => { writes.push('failed'); complete(); return input as never; },
+    };
+    const pdf = createMessage({
+      jobId: 'job-pdf',
+      opId: 'op-pdf',
+      opKey: 'pdf-key',
+      kind: 'pdf_layout',
+      queuedAt: Date.now(),
+      payload: { documentId: 'a'.repeat(64), namespace: null, documentObjectKey: 'openreader/doc.pdf' },
+    });
+    const handlers = {
+      runPdfLayout: async (_payload: unknown, _queueWaitMs: number, hooks?: {
+        onProgress?: (progress: PdfLayoutProgress) => Promise<void>;
+      }) => {
+        void hooks?.onProgress?.({ totalPages: 2, pagesParsed: 2, currentPage: 2, phase: 'merge' });
+        return { parsedObjectKey: 'openreader/parsed.json' };
+      },
+    } as unknown as JobHandlers;
+    const controller = createWorkerLoopController({
+      orchestrator,
+      handlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: cloneComputeLimitPolicyDocument,
+      pdfAttempts: 1,
+      pdfCodec: pdf.codec,
+      isOwnerActive: () => true,
+      isStopping: () => false,
+      markActivity: vi.fn(),
+      onInFlightJobsChanged: vi.fn(),
+    });
+
+    controller.start(owner, { pdfLayout: createConsumer(pdf.msg) });
+    await completed;
+    await controller.stop();
+
+    expect(writes).toEqual(['running', 'progress', 'succeeded']);
+  });
+
+  test('keeps live playback flowing while whole-document exports queue on their own consumer', async () => {
+    const owner = {};
+    const playbackJob = (id: string, generationExtent?: 'document') => createMessage({
+      jobId: `job-${id}`, opId: `op-${id}`, opKey: `key-${id}`, kind: 'tts_playback',
+      queuedAt: Date.now(),
+      payload: { sessionId: `session-${id}`, ...(generationExtent ? { generationExtent } : {}) },
+    });
+    const exportA = playbackJob('export-a', 'document');
+    const exportB = playbackJob('export-b', 'document');
+    const live = playbackJob('live');
+    const queueConsumer = (messages: JsMsg[], pulls: { count: number }) => ({
+      next: async () => {
+        const message = messages[pulls.count];
+        if (message) {
+          pulls.count += 1;
+          return message;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return null;
+      },
+    } as unknown as Consumer);
+    const documentPulls = { count: 0 };
+    const policy = cloneComputeLimitPolicyDocument();
+    policy.worker.maxExecutingPerWorker = 3;
+    let releaseExportA!: () => void;
+    const exportAGate = new Promise<void>((resolve) => { releaseExportA = resolve; });
+    let liveRan!: () => void;
+    const liveCompletion = new Promise<void>((resolve) => { liveRan = resolve; });
+    const started: string[] = [];
+    const handlers = {
+      runTtsPlayback: async (payload: { sessionId: string }) => {
+        started.push(payload.sessionId);
+        if (payload.sessionId === 'session-export-a') await exportAGate;
+        if (payload.sessionId === 'session-live') liveRan();
+        return { sessionId: payload.sessionId };
+      },
+    } as unknown as JobHandlers;
+    const { orchestrator } = createOrchestrator();
+    const controller = createWorkerLoopController({
+      orchestrator,
+      handlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: () => policy,
+      pdfAttempts: 1,
+      pdfCodec: exportA.codec as never,
+      ttsPlaybackCodec: exportA.codec as never,
+      isOwnerActive: () => true,
+      isStopping: () => false,
+      markActivity: vi.fn(),
+      onInFlightJobsChanged: vi.fn(),
+    });
+
+    controller.start(owner, {
+      pdfLayout: createConsumer(),
+      ttsPlayback: queueConsumer([live.msg], { count: 0 }),
+      ttsPlaybackDocument: queueConsumer([exportA.msg, exportB.msg], documentPulls),
+    });
+    await liveCompletion;
+    // One document slot per worker: export B stays in JetStream for any
+    // replica instead of waiting inside this worker.
+    await vi.waitFor(() => expect(started).toContain('session-export-a'));
+    expect(started).not.toContain('session-export-b');
+    expect(documentPulls.count).toBe(1);
+
+    releaseExportA();
+    await vi.waitFor(() => expect(exportB.ack).toHaveBeenCalledOnce());
+    expect(started.at(-1)).toBe('session-export-b');
+    await controller.stop();
+  });
+
+  test('fails queued playback work that a stopping worker cannot redeliver', async () => {
+    const job = (id: string) => createMessage({
+      jobId: `job-${id}`, opId: `op-${id}`, opKey: `key-${id}`, kind: 'tts_playback',
+      queuedAt: Date.now(),
+      payload: { sessionId: `session-${id}` },
+    });
+    const running = job('running');
+    const queued = job('queued');
+    const messages = [running.msg, queued.msg];
+    let nextMessage = 0;
+    const consumer = {
+      next: async () => {
+        const message = messages[nextMessage];
+        nextMessage += 1;
+        if (message) return message;
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        return null;
+      },
+    } as unknown as Consumer;
+    const policy = cloneComputeLimitPolicyDocument();
+    policy.worker.maxExecutingPerWorker = 2;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const runningStarted = new Promise<void>((resolve) => { started = resolve; });
+    const { orchestrator, calls } = createOrchestrator();
+    const controller = createWorkerLoopController({
+      orchestrator,
+      handlers: {
+        runTtsPlayback: async (payload: { sessionId: string }) => {
+          started();
+          await gate;
+          return { sessionId: payload.sessionId };
+        },
+      } as unknown as JobHandlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: () => policy,
+      pdfAttempts: 1,
+      pdfCodec: running.codec as never,
+      ttsPlaybackCodec: running.codec as never,
+      isOwnerActive: () => true,
+      isStopping: () => false,
+      markActivity: vi.fn(),
+      onInFlightJobsChanged: vi.fn(),
+    });
+
+    controller.start({}, { pdfLayout: createConsumer(), ttsPlayback: consumer });
+    await runningStarted;
+    await vi.waitFor(() => expect(nextMessage).toBeGreaterThanOrEqual(2));
+    const stopping = controller.stop();
+    release();
+    await stopping;
+
+    expect(queued.term).toHaveBeenCalledOnce();
+    expect(queued.nak).not.toHaveBeenCalled();
+    expect(calls).toContainEqual(expect.objectContaining({
+      method: 'failed',
+      input: expect.objectContaining({
+        opId: 'op-queued',
+        error: expect.objectContaining({ code: 'COMPUTE_WORK_NOT_STARTED' }),
+      }),
+    }));
+  });
 });

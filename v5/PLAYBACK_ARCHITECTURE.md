@@ -1829,3 +1829,59 @@ the complete maintained runtime seed. Local validation passed 145 Vitest files /
 builds, route-error and compute-boundary guards, and the complete 24-case
 Chromium/WebKit Playwright matrix including the true-audio journeys. Production
 latency validation remains required.
+
+---
+
+### 27. Audiobook Export Reliability, Control, and Chapter Output
+
+Status: implemented. Issue #148 reported exports that stalled, could not be
+stopped or resumed, silenced the rest of a book after a local Kokoro crash, and
+could not produce partial output. Reproduction against CPU Kokoro found these
+causes, now fixed:
+
+- Whole-document runs stopped silently when the 30-minute session TTL passed,
+  leaving the session `running` behind a terminal operation. Only `failed`
+  sessions restarted, so the export was stuck. Document runs now ignore the
+  live-playback expiry and end only when finished, stopped, or superseded.
+- Every start used one `document` operation key, so a start while a stopped run
+  drained reused that run. Each start/resume now carries a fresh
+  `generationRunId`; a superseded document run stops at its next segment.
+- Export generation shared the interactive `tts_playback` execution slot
+  (one per worker by default). One long export expired live playback and other
+  exports behind it. Whole-document runs publish to their own
+  `jobs.tts_playback_document` subject and consumer under the separate
+  `tts_playback_document` compute action. A worker pulls only as many as that
+  action may execute, leaving the rest in JetStream for any replica, and each
+  run leaves one provider request free for interactive playback.
+- Queued playback work cancelled by worker shutdown was NAKed on a
+  `max_deliver: 1` consumer and stayed `queued` forever. It is now failed with
+  `COMPUTE_WORK_NOT_STARTED`. An embedded worker that boots before the app now
+  retries its policy fetch with a short backoff instead of running every action
+  one at a time for a full refresh interval.
+- A usage-limited run was marked `succeeded`, then artifact assembly failed on
+  unsettled segments. The resolve route classifies it as `usage_limited` and
+  resumable, and never builds a whole book from it.
+- Provider-capacity waits (for example during a 429 cooldown) no longer consume
+  segment attempts; timeouts are retryable, transient failures back off, and
+  whole-document runs use at least a 120-second per-segment timeout. A stopped
+  run releases its generating leases so a resume can claim them immediately.
+- Terminal error sidecars still become one-second silence, but an explicit
+  `retry-skipped` start regenerates them; artifacts are reused only while their
+  generated/skipped counts match the current sidecars.
+
+`POST /api/tts/export/resolve` takes `action: resolve | start | retry-skipped |
+stop` and an optional `chapterIndex`, and returns a server-classified snapshot:
+generation state (`idle`, `queued`, `generating`, `complete`, `stopped`,
+`usage_limited`, `interrupted`, `failed`) with its cause, per-chapter progress
+from `GET /v1/tts-playback/sessions/:sessionId/export-progress`, and artifact
+state (`none`, `building`, `ready`, `stale`, `failed`). Stop cancels the export
+session through `POST /v1/tts-playback/sessions/:sessionId/cancel`, conditional
+on the generation run the request observed so a stop racing a resume never
+cancels the replacement run; cached audio is kept. A chapter artifact needs only that chapter's segments settled, so it
+downloads while the rest of the book generates. Chapters are plan locator
+groups shared with M4B markers; EPUB rows use TOC labels.
+
+The export sidebar is presentation over `useAudiobookExport`, which owns
+resolve requests, the operation SSE subscriptions (SSE only updates counters and
+triggers a throttled snapshot refresh while open), one automatic file build per
+settled state, and per-chapter downloads.

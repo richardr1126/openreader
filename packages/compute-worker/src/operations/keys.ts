@@ -183,9 +183,9 @@ export function buildTtsPlaybackOperationKey(input: {
     settingsHash: input.settingsHash,
     planObjectKey: input.planObjectKey,
   })).digest('hex');
-  const intent = input.generationExtent === 'document'
-    ? 'document'
-    : `live:${input.generationRunId?.trim() || 'initial'}`;
+  // Every start or resume of a document export is its own run, so a new run
+  // never reuses the operation of a stopped run that is still draining.
+  const intent = `${input.generationExtent === 'document' ? 'document' : 'live'}:${input.generationRunId?.trim() || 'initial'}`;
   return [
     'tts_playback',
     'v1',

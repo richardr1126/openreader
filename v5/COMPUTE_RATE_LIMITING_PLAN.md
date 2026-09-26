@@ -130,12 +130,19 @@ The word "limit" is qualified throughout the implementation:
 
 An **action** is a policy identity. Most actions match a worker operation kind.
 `tts_synthesis` is a metered sub-action because actual provider work happens per
-segment inside a `tts_playback` operation.
+segment inside a `tts_playback` operation. `tts_playback_document` schedules
+whole-document (audiobook export) `tts_playback` operations separately from
+interactive playback: those operations publish to `jobs.tts_playback_document`
+with their own consumer, and each worker pulls only as many as the action's
+per-worker concurrency allows. An hours-long export therefore queues in
+JetStream behind other exports, available to any replica, instead of holding the
+interactive playback slot and expiring live playback behind it.
 
 ```ts
 type ComputeAction =
   | 'pdf_layout'
   | 'tts_playback'
+  | 'tts_playback_document'
   | 'tts_playback_plan'
   | 'tts_playback_export'
   | 'document_preview'
@@ -143,6 +150,10 @@ type ComputeAction =
   | 'account_export'
   | 'tts_synthesis';
 ```
+
+Stored policy documents saved before an additive action existed (currently
+`tts_playback_document`) are completed with that action's defaults when parsed;
+unknown actions are still rejected.
 
 Adding a new worker operation kind must fail type checking until it declares an
 app admission policy and a worker execution policy. Metered sub-actions must be
@@ -284,6 +295,7 @@ as lightweight protection for the host and upstream services.
 | Action | Enabled by default | User admission windows | User active | Site active | Queue / per-worker concurrent |
 | --- | --- | --- | ---: | ---: | --- |
 | `tts_playback` | no | 12 / 60 seconds; 60 / hour | 2 | 50 | 100 / 1 |
+| `tts_playback_document` | no | 6 / 600 seconds; 30 / day | 1 | 20 | 50 / 1 (6-hour queue age) |
 | `tts_playback_plan` | no | 12 / 60 seconds; 60 / hour | 2 | 20 | 100 / 1 |
 | `pdf_layout` | no | 8 / 60 seconds; 24 / 600 seconds | 1 | 8 | 50 / 1 |
 | `tts_playback_export` | no | 2 / 600 seconds; 6 / day | 1 | 4 | 20 / 1 |
@@ -388,6 +400,27 @@ Both seed forms must support the complete policy document:
             "maxQueued": 100,
             "maxConcurrentPerWorker": 1,
             "maxQueueAgeSeconds": 60,
+            "resources": {}
+          }
+        },
+        "tts_playback_document": {
+          "enabled": false,
+          "admission": {
+            "windows": [
+              { "scope": "user", "limit": 6, "windowSeconds": 600 },
+              { "scope": "user", "limit": 30, "windowSeconds": 86400 }
+            ],
+            "active": [
+              { "scope": "user", "limit": 1, "leaseSeconds": 43200 },
+              { "scope": "site", "limit": 20, "leaseSeconds": 43200 }
+            ]
+          },
+          "usage": [],
+          "execution": {
+            "priority": "background",
+            "maxQueued": 50,
+            "maxConcurrentPerWorker": 1,
+            "maxQueueAgeSeconds": 21600,
             "resources": {}
           }
         },
@@ -626,6 +659,7 @@ Constraints and indexes:
 | --- | --- |
 | `pdf_layout` | document/version/force token |
 | `tts_playback` | canonical session incarnation |
+| `tts_playback_document` | canonical export session plus start time |
 | `tts_playback_plan` | plan signature |
 | `tts_playback_export` | export artifact id plus attempt |
 | `document_preview` | source fingerprint plus preview kind |
@@ -917,6 +951,7 @@ Initial profiles should reflect actual expensive phases, not historical names:
 | Action | Priority | Principal resources |
 | --- | --- | --- |
 | `tts_playback` | interactive | provider capacity; Whisper alignment when needed |
+| `tts_playback_document` | background | provider capacity, leaving one request for interactive playback |
 | `tts_playback_plan` | foreground | Object I/O; bounded by per-action and worker totals |
 | `pdf_layout` | foreground | model inference, CPU, memory |
 | `document_conversion` | foreground | LibreOffice, CPU, memory |

@@ -6,7 +6,8 @@ interface ProgressPopupProps {
   isOpen: boolean;
   progress: number;
   estimatedTimeRemaining?: string;
-  onCancel: () => void;
+  /** Omit for work that cannot be canceled from the popup. */
+  onCancel?: () => void;
   statusMessage?: string;
   operationType?: 'sync' | 'load' | 'library' | 'audiobook';
   cancelText?: string;
@@ -50,10 +51,10 @@ export function ProgressPopup({
             <ProgressCard
               progress={progress}
               estimatedTimeRemaining={estimatedTimeRemaining}
-              onCancel={(e) => {
+              onCancel={onCancel ? (e) => {
                 e?.stopPropagation();
                 onCancel();
-              }}
+              } : undefined}
               operationType={operationType}
               cancelText={cancelText}
               currentChapter={currentChapter}

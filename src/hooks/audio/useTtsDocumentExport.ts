@@ -6,19 +6,13 @@ import { resolveTtsExport } from '@/lib/client/api/tts';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { TtsPlaybackPlanRequest } from '@/hooks/audio/useTtsPlayback';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
+import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-export';
 
-export type TtsDocumentAudioExportResolution = {
-  sessionId: string;
-  artifactId: string;
-  downloadUrl: string | null;
-  generationOperationId: string | null;
-  artifactOperationId: string | null;
-  generationStatus: string | null;
-  artifactStatus: string | null;
-  seekLayoutUrl: string;
-  plannedCount: number;
-  completedCount: number | null;
-  skippedCount: number;
+export type TtsDocumentAudioExportRequest = {
+  format: 'mp3' | 'm4b';
+  speed: number;
+  action: TtsExportAction;
+  chapterIndex?: number;
 };
 
 type UseTtsDocumentExportInput = {
@@ -27,6 +21,7 @@ type UseTtsDocumentExportInput = {
   buildPlaybackPlanRequest: () => TtsPlaybackPlanRequest | null;
 };
 
+/** Binds audiobook export requests to the reader's adopted canonical plan. */
 export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
   const {
     playbackPlanRef,
@@ -34,11 +29,10 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
     buildPlaybackPlanRequest,
   } = input;
 
-  const resolveDocumentAudioExportInternal = useCallback(async (
-    options: { format: 'mp3' | 'm4b'; speed: number },
-    start: boolean,
+  const resolveDocumentAudioExport = useCallback(async (
+    options: TtsDocumentAudioExportRequest,
     signal?: AbortSignal,
-  ): Promise<TtsDocumentAudioExportResolution> => {
+  ): Promise<TtsExportResolveSnapshot> => {
     const request = buildPlaybackPlanRequest();
     if (!request) {
       throw new Error('No document is ready for audio export.');
@@ -54,7 +48,7 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
       throw new Error('The worker playback plan was empty for export.');
     }
 
-    const snapshot = await resolveTtsExport({
+    return resolveTtsExport({
       documentId: request.payload.documentId,
       settings: request.payload.settings,
       ...(request.payload.planning ? { planning: request.payload.planning } : {}),
@@ -65,60 +59,10 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
       generationExtent: 'document',
       format: options.format,
       speed: options.speed,
-      start,
+      action: options.action,
+      ...(options.chapterIndex === undefined ? {} : { chapterIndex: options.chapterIndex }),
     }, request.headers, signal);
-
-    const plannedCount = plan.plannedCount ?? plan.segments.length;
-    const generationProgress = snapshot.generation.progress ?? snapshot.generation.operation?.progress ?? null;
-    const progressCompletedCount = generationProgress && Number.isFinite(Number(generationProgress.completedCount))
-      ? Math.max(0, Math.floor(Number(generationProgress.completedCount)))
-      : generationProgress && Number.isFinite(Number(generationProgress.completedThroughOrdinal))
-        ? Math.max(0, Math.floor(Number(generationProgress.completedThroughOrdinal)) + 1)
-        : null;
-    const progressSkippedCount = generationProgress && Number.isFinite(Number(generationProgress.skippedCount))
-      ? Math.max(0, Math.floor(Number(generationProgress.skippedCount)))
-      : 0;
-    const artifactSkippedCount = snapshot.artifact.artifact
-      && Number.isFinite(Number(snapshot.artifact.artifact.skippedSegments))
-      ? Math.max(0, Math.floor(Number(snapshot.artifact.artifact.skippedSegments)))
-      : null;
-    // The durable session is the generation authority. A terminal operation
-    // row can lag or describe a superseded run, so it must not mask a session
-    // that has already committed its complete state.
-    const generationStatus = snapshot.generation.session?.status ?? snapshot.generation.operation?.status ?? null;
-    const artifactStatus = snapshot.artifact.artifact ? 'succeeded' : snapshot.artifact.operation?.status ?? null;
-    const completedCount = snapshot.downloadUrl || artifactStatus === 'succeeded' || generationStatus === 'succeeded'
-      ? plannedCount
-      : progressCompletedCount === null
-        ? null
-        : Math.min(plannedCount, progressCompletedCount);
-
-    return {
-      sessionId: snapshot.sessionId,
-      artifactId: snapshot.artifactId,
-      downloadUrl: snapshot.downloadUrl,
-      generationOperationId: snapshot.generation.operation?.opId ?? null,
-      artifactOperationId: snapshot.artifact.operation?.opId ?? null,
-      generationStatus,
-      artifactStatus,
-      seekLayoutUrl: plan.planId
-        ? `/api/tts/playback/plans/${encodeURIComponent(plan.planId)}/seek-layout?sessionId=${encodeURIComponent(snapshot.sessionId)}`
-        : '',
-      plannedCount,
-      completedCount,
-      skippedCount: Math.min(plannedCount, artifactSkippedCount ?? progressSkippedCount),
-    };
   }, [applyWorkerPlan, buildPlaybackPlanRequest, playbackPlanRef]);
 
-  const resolveDocumentAudioExport = useCallback((
-    options: { format: 'mp3' | 'm4b'; speed: number },
-    signal?: AbortSignal,
-  ) => resolveDocumentAudioExportInternal(options, false, signal), [resolveDocumentAudioExportInternal]);
-
-  const startDocumentAudioExport = useCallback((
-    options: { format: 'mp3' | 'm4b'; speed: number },
-    signal?: AbortSignal,
-  ) => resolveDocumentAudioExportInternal(options, true, signal), [resolveDocumentAudioExportInternal]);
-
-  return { resolveDocumentAudioExport, startDocumentAudioExport };
+  return { resolveDocumentAudioExport };
 }

@@ -33,51 +33,41 @@ test('downloads account data and an already-completed audiobook export', async (
     timeout: 60_000,
   });
 
-  const startIntents: boolean[] = [];
+  const resolveActions: string[] = [];
   const artifactSubscriptions: string[] = [];
-  let exportResolveCount = 0;
+  let bookArtifactReady = false;
+  const chapters = [
+    { index: 0, title: 'Chapter 1', spineHref: null, page: null, plannedSegments: 20, completedSegments: 20, skippedSegments: 0, generatingSegments: 0, durationMs: 65_000 },
+    { index: 1, title: 'Chapter 2', spineHref: null, page: null, plannedSegments: 15, completedSegments: 14, skippedSegments: 1, generatingSegments: 0, durationMs: 48_000 },
+  ];
   await page.route('**/api/tts/export/resolve', async (route) => {
-    const body = route.request().postDataJSON() as { start?: boolean };
-    startIntents.push(body.start === true);
-    exportResolveCount += 1;
-    const activeArtifactOperationId = exportResolveCount === 1
-      ? 'initial-artifact-operation'
-      : 'replacement-artifact-operation';
-    const artifactReady = exportResolveCount >= 3;
+    const body = route.request().postDataJSON() as { action: string; chapterIndex?: number };
+    resolveActions.push(body.chapterIndex === undefined ? body.action : `${body.action}:${body.chapterIndex}`);
+    const chapterDownload = body.chapterIndex !== undefined;
+    const artifactReady = chapterDownload || bookArtifactReady;
     await route.fulfill({
       json: {
         sessionId: 'completed-session',
-        artifactId: 'completed-artifact',
-        generation: {
-          session: { status: 'succeeded' },
-          operation: {
-            opId: 'stale-generation-operation',
-            status: 'failed',
-            progress: { completedCount: 34, skippedCount: 1, plannedCount: 35 },
-          },
-          progress: { completedCount: 34, skippedCount: 1, plannedCount: 35 },
+        artifactId: chapterDownload ? 'chapter-artifact' : 'completed-artifact',
+        chapterIndex: body.chapterIndex ?? null,
+        generation: { state: 'complete', operationId: 'generation-operation', issue: null },
+        progress: {
+          plannedSegments: 35,
+          completedSegments: 34,
+          skippedSegments: 1,
+          lastSkipIssue: { code: 'UPSTREAM_TIMEOUT', message: 'timed out' },
+          chapters,
         },
         artifact: {
-          artifact: artifactReady ? {
-            artifactId: 'completed-artifact',
-            objectKey: 'exports/completed.mp3',
-            contentType: 'audio/mpeg',
-            byteLength: 10,
-            dispositionFilename: 'completed.mp3',
-            format: 'mp3',
-            speed: 1,
-            generatedSegments: 34,
-            skippedSegments: 1,
-            plannedSegments: 35,
-          } : null,
-          operation: artifactReady ? null : {
-            opId: activeArtifactOperationId,
-            status: 'running',
-            progress: { completedSegments: 35, skippedSegments: 1, plannedSegments: 35 },
-          },
+          state: artifactReady ? 'ready' : 'building',
+          operationId: artifactReady ? null : 'book-artifact-operation',
+          issue: null,
         },
-        downloadUrl: artifactReady
-          ? '/api/tts/export/download?artifactId=completed-artifact&documentId=test-document'
+        download: artifactReady
+          ? {
+            url: `/api/tts/export/download?artifactId=${chapterDownload ? 'chapter-artifact' : 'completed-artifact'}&documentId=test-document`,
+            filename: chapterDownload ? 'completed-chapter-001.mp3' : 'completed.mp3',
+          }
           : null,
       },
     });
@@ -85,6 +75,7 @@ test('downloads account data and an already-completed audiobook export', async (
   await page.route('**/api/tts/export/events?**', async (route) => {
     const operationId = new URL(route.request().url()).searchParams.get('opId') ?? '';
     artifactSubscriptions.push(operationId);
+    bookArtifactReady = true;
     await route.fulfill({
       body: `event: snapshot\ndata: ${JSON.stringify({
         snapshot: {
@@ -97,27 +88,35 @@ test('downloads account data and an already-completed audiobook export', async (
     });
   });
   await page.route('**/api/tts/export/download?**', async (route) => {
+    const chapter = new URL(route.request().url()).searchParams.get('artifactId') === 'chapter-artifact';
     await route.fulfill({
       body: 'fake audio',
       contentType: 'audio/mpeg',
-      headers: { 'Content-Disposition': 'attachment; filename="completed.mp3"' },
+      headers: {
+        'Content-Disposition': `attachment; filename="${chapter ? 'completed-chapter-001.mp3' : 'completed.mp3'}"`,
+      },
     });
   });
 
   await page.getByRole('button', { name: 'Open audiobook export', exact: true }).click();
   const exportSidebar = page.getByRole('dialog', { name: 'Export audiobook', exact: true });
   await expect(exportSidebar.getByText('Ready', { exact: true })).toBeVisible();
-  await expect(exportSidebar.getByText(/1 segment was unable to be narrated/)).toBeVisible();
+  await expect(exportSidebar.getByText(/1 segment could not be narrated/)).toBeVisible();
+  await expect(exportSidebar.getByRole('button', { name: 'Retry 1 skipped segment', exact: true })).toBeVisible();
+  const chapterList = exportSidebar.getByRole('list', { name: 'Audiobook chapters', exact: true });
+  await expect(chapterList.getByRole('listitem')).toHaveCount(2);
+  await expect(chapterList.getByText('1:05', { exact: true })).toBeVisible();
   const downloadButton = exportSidebar.getByRole('button', { name: 'Download', exact: true });
   await expect(downloadButton).toBeEnabled();
-  expect(startIntents).toEqual([false, true, true]);
-  expect(artifactSubscriptions).toEqual([
-    'initial-artifact-operation',
-    'replacement-artifact-operation',
-  ]);
+  expect(artifactSubscriptions).toEqual(['book-artifact-operation']);
+
+  const chapterDownloadPromise = page.waitForEvent('download');
+  await chapterList.getByRole('button', { name: 'Download Chapter 1', exact: true }).click();
+  expect((await chapterDownloadPromise).suggestedFilename()).toBe('completed-chapter-001.mp3');
 
   const audiobookDownloadPromise = page.waitForEvent('download');
   await downloadButton.click();
   const audiobookDownload = await audiobookDownloadPromise;
   expect(audiobookDownload.suggestedFilename()).toMatch(/\.mp3$/);
+  expect(resolveActions).toEqual(['resolve', 'resolve', 'start:0']);
 });
