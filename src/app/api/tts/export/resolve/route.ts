@@ -52,8 +52,8 @@ function normalizeFormat(value: unknown): ExportFormat {
 
 function normalizeChapterIndex(value: unknown): number | null {
   if (value === undefined || value === null) return null;
-  const index = Number(value);
-  return Number.isInteger(index) && index >= 0 ? index : Number.NaN;
+  // JSON numbers only: `Number("")` and `Number(false)` would select chapter 0.
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : Number.NaN;
 }
 
 export async function POST(request: NextRequest) {

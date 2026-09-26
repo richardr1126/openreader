@@ -330,6 +330,15 @@ describe('POST /api/tts/export/resolve', () => {
     expect(hoisted.createArtifact).not.toHaveBeenCalled();
   });
 
+  test('rejects chapter indices that are not non-negative integers', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    for (const chapterIndex of ['', false, '0', -1, 1.5]) {
+      const { status } = await post({ action: 'resolve', chapterIndex });
+      expect(status).toBe(400);
+    }
+    expect(hoisted.resolveArtifact).not.toHaveBeenCalled();
+  });
+
   test('returns the admission retry hint when export work is rate limited', async () => {
     hoisted.resolveSession.mockResolvedValue(completeSession);
     const { ComputeAdmissionLimitedError } = await import('@/lib/server/compute-limits/run-admitted');
