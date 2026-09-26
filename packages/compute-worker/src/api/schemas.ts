@@ -488,6 +488,17 @@ export const ttsPlaybackExportProgressSummarySchema = z.object({
   })),
 });
 
+export const ttsPlaybackSessionCancelSchema = z.object({
+  /** The run the caller observed; a newer run is never canceled by a stale stop. */
+  generationRunId: z.string().trim().min(1).max(128).nullable(),
+}).strict();
+
+export const ttsPlaybackSessionCancelResponseSchema = z.object({
+  sessionId: z.string(),
+  canceled: z.boolean(),
+  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'canceled']).nullable(),
+});
+
 export const ttsPlaybackExportArtifactResolutionSchema = z.object({
   artifact: ttsPlaybackExportArtifactMetadataSchema.nullable(),
   operation: computeOperationSchema.nullable(),

@@ -420,7 +420,7 @@ describe('worker loop controller', () => {
     }));
   });
 
-  test('keeps live playback flowing while whole-document exports queue for their own slot', async () => {
+  test('keeps live playback flowing while whole-document exports queue on their own consumer', async () => {
     const owner = {};
     const playbackJob = (id: string, generationExtent?: 'document') => createMessage({
       jobId: `job-${id}`, opId: `op-${id}`, opKey: `key-${id}`, kind: 'tts_playback',
@@ -430,19 +430,20 @@ describe('worker loop controller', () => {
     const exportA = playbackJob('export-a', 'document');
     const exportB = playbackJob('export-b', 'document');
     const live = playbackJob('live');
-    const messages = [exportA.msg, exportB.msg, live.msg];
-    let nextMessage = 0;
-    const consumer = {
+    const queueConsumer = (messages: JsMsg[], pulls: { count: number }) => ({
       next: async () => {
-        const message = messages[nextMessage];
-        nextMessage += 1;
-        if (message) return message;
+        const message = messages[pulls.count];
+        if (message) {
+          pulls.count += 1;
+          return message;
+        }
         await new Promise((resolve) => setTimeout(resolve, 1));
         return null;
       },
-    } as unknown as Consumer;
+    } as unknown as Consumer);
+    const documentPulls = { count: 0 };
     const policy = cloneComputeLimitPolicyDocument();
-    policy.worker.maxExecutingPerWorker = 2;
+    policy.worker.maxExecutingPerWorker = 3;
     let releaseExportA!: () => void;
     const exportAGate = new Promise<void>((resolve) => { releaseExportA = resolve; });
     let liveRan!: () => void;
@@ -471,14 +472,21 @@ describe('worker loop controller', () => {
       onInFlightJobsChanged: vi.fn(),
     });
 
-    controller.start(owner, { pdfLayout: createConsumer(), ttsPlayback: consumer });
+    controller.start(owner, {
+      pdfLayout: createConsumer(),
+      ttsPlayback: queueConsumer([live.msg], { count: 0 }),
+      ttsPlaybackDocument: queueConsumer([exportA.msg, exportB.msg], documentPulls),
+    });
     await liveCompletion;
-    // Export B still waits for the single document slot held by export A.
-    expect(started).toEqual(['session-export-a', 'session-live']);
+    // One document slot per worker: export B stays in JetStream for any
+    // replica instead of waiting inside this worker.
+    await vi.waitFor(() => expect(started).toContain('session-export-a'));
+    expect(started).not.toContain('session-export-b');
+    expect(documentPulls.count).toBe(1);
 
     releaseExportA();
     await vi.waitFor(() => expect(exportB.ack).toHaveBeenCalledOnce());
-    expect(started).toEqual(['session-export-a', 'session-live', 'session-export-b']);
+    expect(started.at(-1)).toBe('session-export-b');
     await controller.stop();
   });
 
@@ -486,7 +494,7 @@ describe('worker loop controller', () => {
     const job = (id: string) => createMessage({
       jobId: `job-${id}`, opId: `op-${id}`, opKey: `key-${id}`, kind: 'tts_playback',
       queuedAt: Date.now(),
-      payload: { sessionId: `session-${id}`, generationExtent: 'document' },
+      payload: { sessionId: `session-${id}` },
     });
     const running = job('running');
     const queued = job('queued');

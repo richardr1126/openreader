@@ -152,7 +152,6 @@ export function createWorkerLoopController(input: {
 }) {
   const scheduler = new ComputeExecutionScheduler(input.getComputePolicy);
   let loops: Promise<void>[] = [];
-  const deferredRuns = new Set<Promise<void>>();
   let stopRequested = false;
   let growLoops: (() => void) | null = null;
 
@@ -174,12 +173,6 @@ export function createWorkerLoopController(input: {
     codec: JsonCodec<QueuedJob<TPayload>>;
     run: JobRunner<TPayload, TResult>;
     action?: WorkerOperationAction;
-    /**
-     * Per-message action for a consumer that carries more than one kind of
-     * work. Messages resolved to a different action than `action` wait for
-     * their own execution slot without parking this consumer's pull loop.
-     */
-    actionFor?: (payload: TPayload) => WorkerOperationAction;
   };
 
   const markRunning = async <TPayload>(context: Context<TPayload>, updatedAt: number): Promise<void> => {
@@ -418,19 +411,6 @@ export function createWorkerLoopController(input: {
     }
   };
 
-  const resolveMessageAction = <TPayload, TResult>(
-    work: WorkDefinition<TPayload, TResult>,
-    msg: JsMsg,
-  ): WorkerOperationAction | undefined => {
-    if (!work.actionFor) return work.action;
-    try {
-      return work.actionFor(work.codec.decode(msg.data).payload);
-    } catch {
-      // processMessage reports undecodable messages as failed operations.
-      return work.action;
-    }
-  };
-
   const runLoop = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
     owner: object;
     consumer: Consumer;
@@ -448,21 +428,6 @@ export function createWorkerLoopController(input: {
         continue;
       }
       if (!msg) continue;
-      const action = resolveMessageAction(work, msg);
-      if (action !== work.action) {
-        // Long whole-document runs share the playback consumer but must not
-        // hold its pull loop while they queue for their own slot; interactive
-        // playback behind them would otherwise expire unpulled.
-        const deferred = handleMessage({ ...work, action, msg }, detached)
-          .then(() => undefined)
-          .catch((error) => input.logger.error({
-            error: toErrorMessage(error),
-            worker: work.workerLabel,
-          }, 'deferred job handling failed'));
-        deferredRuns.add(deferred);
-        void deferred.finally(() => deferredRuns.delete(deferred));
-        continue;
-      }
       if (await handleMessage({ ...work, msg }, detached) === 'return') return;
     }
   };
@@ -475,6 +440,7 @@ export function createWorkerLoopController(input: {
     start(owner: object, consumers: {
       pdfLayout: Consumer;
       ttsPlayback?: Consumer;
+      ttsPlaybackDocument?: Consumer;
       ttsPlaybackPlan?: Consumer;
       ttsPlaybackExport?: Consumer;
       documentPreview?: Consumer;
@@ -495,7 +461,14 @@ export function createWorkerLoopController(input: {
             codec: input.ttsPlaybackCodec,
             run: input.handlers.runTtsPlayback,
             action: 'tts_playback',
-            actionFor: (payload) => payload.generationExtent === 'document' ? 'tts_playback_document' : 'tts_playback',
+          }
+          : null;
+      const ttsPlaybackDocumentWork: WorkDefinition<TtsPlaybackJobRequest, TtsPlaybackJobResult> | null =
+        input.ttsPlaybackCodec && consumers.ttsPlaybackDocument
+          ? {
+            codec: input.ttsPlaybackCodec,
+            run: input.handlers.runTtsPlayback,
+            action: 'tts_playback_document',
           }
           : null;
       const ttsPlaybackPlanWork: WorkDefinition<TtsPlaybackPlanJobRequest, TtsPlaybackPlanJobResult> | null =
@@ -564,14 +537,31 @@ export function createWorkerLoopController(input: {
           loops.push(runLoop({ owner, consumer: consumers.accountExport, ...accountExportWork, workerLabel: `account-export-${i + 1}` }));
         }
       };
+      // Whole-document runs pull only as many messages as this worker may
+      // execute; queued exports stay in JetStream for any replica with a free
+      // slot instead of waiting (for hours) inside one worker.
+      let documentLoopSlots = 0;
       growLoops = () => {
-        const desired = Math.max(
-          1,
-          Math.floor(input.getComputePolicy().worker.maxExecutingPerWorker),
-        );
+        const policy = input.getComputePolicy();
+        const desired = Math.max(1, Math.floor(policy.worker.maxExecutingPerWorker));
         while (loopSlots < desired) {
           addLoopSlot(loopSlots);
           loopSlots += 1;
+        }
+        if (!ttsPlaybackDocumentWork || !consumers.ttsPlaybackDocument) return;
+        const documentConsumer = consumers.ttsPlaybackDocument;
+        const desiredDocument = Math.max(1, Math.min(
+          desired,
+          Math.floor(policy.actions.tts_playback_document.execution!.maxConcurrentPerWorker),
+        ));
+        while (documentLoopSlots < desiredDocument) {
+          documentLoopSlots += 1;
+          loops.push(runLoop({
+            owner,
+            consumer: documentConsumer,
+            ...ttsPlaybackDocumentWork,
+            workerLabel: `tts-playback-document-${documentLoopSlots}`,
+          }));
         }
       };
       if (emailDeliveryWork && consumers.emailDelivery) {
@@ -588,7 +578,7 @@ export function createWorkerLoopController(input: {
       stopRequested = true;
       growLoops = null;
       scheduler.cancelWaiters();
-      await Promise.allSettled([...loops, ...deferredRuns]);
+      await Promise.allSettled(loops);
       loops = [];
     },
   };

@@ -140,7 +140,13 @@ export async function POST(request: NextRequest) {
 
     const runActive = current.state === 'generating' || current.state === 'queued';
     if (action === 'stop' && runActive) {
-      await client.cancelTtsPlaybackSession(sessionId);
+      // Stop only the run this request observed; if a newer run replaced it
+      // in the meantime, the snapshot below reports that run instead.
+      const observed = current.generation.session as { generationRunId?: unknown } | null;
+      await client.cancelTtsPlaybackSession(
+        sessionId,
+        typeof observed?.generationRunId === 'string' ? observed.generationRunId : null,
+      );
       current = await readGeneration();
     }
 

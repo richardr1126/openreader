@@ -81,6 +81,9 @@ export function useAudiobookExport(input: {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoBuildAttemptRef = useRef<string | null>(null);
   const chapterSubscriptionsRef = useRef(new Map<number, () => void>());
+  // Bumped when this export's lifecycle ends (settings change or unmount), so
+  // an in-flight chapter request can neither subscribe nor download afterward.
+  const lifecycleRef = useRef(0);
 
   const run = useCallback(async (action: TtsExportAction, options?: { quiet?: boolean }) => {
     const key = exportKeyRef.current;
@@ -132,6 +135,7 @@ export function useAudiobookExport(input: {
     autoBuildAttemptRef.current = null;
     const chapterSubscriptions = chapterSubscriptionsRef.current;
     return () => {
+      lifecycleRef.current += 1;
       requestControllerRef.current?.abort();
       requestControllerRef.current = null;
       setPendingAction(null);
@@ -198,8 +202,10 @@ export function useAudiobookExport(input: {
   const downloadChapter = useCallback(async (chapterIndex: number) => {
     const key = exportKeyRef.current;
     if (!key || chapterSubscriptionsRef.current.has(chapterIndex)) return;
+    const lifecycle = lifecycleRef.current;
+    const isCurrent = () => exportKeyRef.current === key && lifecycleRef.current === lifecycle;
     const setChapter = (state: AudiobookChapterDownloadState | null) => {
-      if (exportKeyRef.current !== key) return;
+      if (!isCurrent()) return;
       setChapterDownloads((previous) => {
         const next = { ...previous };
         if (state) next[chapterIndex] = state;
@@ -210,7 +216,7 @@ export function useAudiobookExport(input: {
     const settle = async (action: TtsExportAction): Promise<void> => {
       try {
         const next = await resolve({ format, speed, action, chapterIndex });
-        if (exportKeyRef.current !== key) return;
+        if (!isCurrent()) return;
         // The chapter response carries fresh book-wide progress too.
         setSnapshot((previous) => previous
           ? { ...previous, generation: next.generation, progress: next.progress }

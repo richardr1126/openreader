@@ -781,8 +781,27 @@ export interface paths {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": {
+                        generationRunId: string | null;
+                    };
+                };
+            };
             responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessionId: string;
+                            canceled: boolean;
+                            status: ("queued" | "running" | "succeeded" | "failed" | "canceled") | null;
+                        };
+                    };
+                };
                 /** @description Default Response */
                 400: {
                     headers: {

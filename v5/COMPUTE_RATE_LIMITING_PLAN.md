@@ -132,9 +132,11 @@ An **action** is a policy identity. Most actions match a worker operation kind.
 `tts_synthesis` is a metered sub-action because actual provider work happens per
 segment inside a `tts_playback` operation. `tts_playback_document` schedules
 whole-document (audiobook export) `tts_playback` operations separately from
-interactive playback: the worker resolves it per message, so an hours-long
-export queues behind other exports instead of holding the interactive playback
-slot and expiring live playback behind it.
+interactive playback: those operations publish to `jobs.tts_playback_document`
+with their own consumer, and each worker pulls only as many as the action's
+per-worker concurrency allows. An hours-long export therefore queues in
+JetStream behind other exports, available to any replica, instead of holding the
+interactive playback slot and expiring live playback behind it.
 
 ```ts
 type ComputeAction =

@@ -19,6 +19,8 @@ import {
   ttsPlaybackExportArtifactResolutionSchema,
   ttsPlaybackExportArtifactResolveSchema,
   ttsPlaybackExportProgressSummarySchema,
+  ttsPlaybackSessionCancelResponseSchema,
+  ttsPlaybackSessionCancelSchema,
 } from '../../schemas';
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
@@ -260,13 +262,20 @@ export function registerPlaybackExportSessionRoutes(
   app.post('/v1/tts-playback/sessions/:sessionId/cancel', {
     schema: {
       params: sessionIdParamsSchema,
-      response: { 400: errorResponseSchema, 404: errorResponseSchema, 503: errorResponseSchema },
+      body: jsonSchema(ttsPlaybackSessionCancelSchema),
+      response: {
+        200: jsonSchema(ttsPlaybackSessionCancelResponseSchema),
+        400: errorResponseSchema,
+        404: errorResponseSchema,
+        503: errorResponseSchema,
+      },
     },
   }, async (request, reply) => {
     const sessionId = (request.params as { sessionId?: string }).sessionId?.trim() ?? '';
-    if (!sessionId) {
+    const body = ttsPlaybackSessionCancelSchema.safeParse(request.body);
+    if (!sessionId || !body.success) {
       reply.code(400);
-      return { error: 'Missing playback session id' };
+      return { error: 'Missing playback session id or observed generation run' };
     }
     if (!playbackStorage) {
       reply.code(503);
@@ -279,14 +288,16 @@ export function registerPlaybackExportSessionRoutes(
     }
     // The document run checks status before every segment, so a canceled
     // session stops after its in-flight segments. Cached audio is kept and a
-    // later start resumes from it.
-    if (session.status === 'queued' || session.status === 'running') {
-      await playbackStorage.sessions.patchSession(sessionId, {
+    // later start resumes from it. The write is conditional on the run the
+    // caller observed, so a stop that races a resume never cancels the
+    // replacement run.
+    const canceled = (session.status === 'queued' || session.status === 'running')
+      && await playbackStorage.sessions.patchSessionIfGenerationRun(sessionId, body.data.generationRunId, {
         status: 'canceled',
         lastError: null,
         updatedAt: Date.now(),
       }, session.sessionInstanceId);
-    }
-    return { sessionId, status: session.status === 'queued' || session.status === 'running' ? 'canceled' : session.status };
+    const current = canceled ? null : await playbackStorage.sessions.getSession(sessionId);
+    return { sessionId, canceled, status: canceled ? 'canceled' : current?.status ?? null };
   });
 }

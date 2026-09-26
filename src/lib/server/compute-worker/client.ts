@@ -18,6 +18,7 @@ import type {
   TtsPlaybackExportArtifactResolution,
   TtsPlaybackExportProgressSummary,
   TtsPlaybackPlanRequest,
+  TtsPlaybackSessionCancelResponse,
   TtsPlaybackSessionState,
   TtsPlaybackCompletedSegment,
   TtsPlaybackSessionResolution,
@@ -203,8 +204,15 @@ export class ComputeWorkerClient {
     }
   }
 
-  cancelTtsPlaybackSession(sessionId: string): Promise<{ sessionId: string; status: string }> {
-    return this.requestJson('POST', `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}/cancel`, {});
+  cancelTtsPlaybackSession(
+    sessionId: string,
+    observedGenerationRunId: string | null,
+  ): Promise<TtsPlaybackSessionCancelResponse> {
+    return this.requestJson(
+      'POST',
+      `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}/cancel`,
+      { generationRunId: observedGenerationRunId },
+    );
   }
 
   async getTtsPlaybackSession(sessionId: string): Promise<TtsPlaybackSessionState | null> {

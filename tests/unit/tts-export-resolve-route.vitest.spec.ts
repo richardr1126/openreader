@@ -239,12 +239,17 @@ describe('POST /api/tts/export/resolve', () => {
 
   test('stops an active run without discarding it', async () => {
     hoisted.resolveSession
-      .mockResolvedValueOnce({ session: { status: 'running' }, operation: { opId: 'generation-op-1', status: 'running' }, progress: null })
+      .mockResolvedValueOnce({
+        session: { status: 'running', generationRunId: 'run-1' },
+        operation: { opId: 'generation-op-1', status: 'running' },
+        progress: null,
+      })
       .mockResolvedValueOnce({ session: { status: 'canceled' }, operation: { opId: 'generation-op-1', status: 'running' }, progress: null });
 
     const { json } = await post({ action: 'stop' });
 
-    expect(hoisted.cancelSession).toHaveBeenCalledWith('session-1');
+    // The stop is bound to the run it observed.
+    expect(hoisted.cancelSession).toHaveBeenCalledWith('session-1', 'run-1');
     expect(json.generation.state).toBe('stopped');
     expect(hoisted.createPlayback).not.toHaveBeenCalled();
   });

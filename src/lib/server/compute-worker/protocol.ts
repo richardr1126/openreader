@@ -46,6 +46,8 @@ export type TtsPlaybackExportArtifactResolution =
   paths['/v1/tts-playback/exports/resolve']['post']['responses'][200]['content']['application/json'];
 export type TtsPlaybackExportArtifactMetadata =
   NonNullable<TtsPlaybackExportArtifactResolution['artifact']>;
+export type TtsPlaybackSessionCancelResponse =
+  paths['/v1/tts-playback/sessions/{sessionId}/cancel']['post']['responses'][200]['content']['application/json'];
 export type TtsPlaybackExportProgressSummary =
   paths['/v1/tts-playback/sessions/{sessionId}/export-progress']['get']['responses'][200]['content']['application/json'];
 export type DocumentPreviewRequest =

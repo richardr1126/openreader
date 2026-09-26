@@ -1848,10 +1848,11 @@ causes, now fixed:
   `generationRunId`; a superseded document run stops at its next segment.
 - Export generation shared the interactive `tts_playback` execution slot
   (one per worker by default). One long export expired live playback and other
-  exports behind it. Whole-document runs are scheduled under the separate
-  `tts_playback_document` compute action, resolved per message; they wait for
-  their own slot without parking the playback consumer's pull loop, and leave
-  one provider request free for interactive playback.
+  exports behind it. Whole-document runs publish to their own
+  `jobs.tts_playback_document` subject and consumer under the separate
+  `tts_playback_document` compute action. A worker pulls only as many as that
+  action may execute, leaving the rest in JetStream for any replica, and each
+  run leaves one provider request free for interactive playback.
 - Queued playback work cancelled by worker shutdown was NAKed on a
   `max_deliver: 1` consumer and stayed `queued` forever. It is now failed with
   `COMPUTE_WORK_NOT_STARTED`. An embedded worker that boots before the app now
@@ -1874,8 +1875,9 @@ generation state (`idle`, `queued`, `generating`, `complete`, `stopped`,
 `usage_limited`, `interrupted`, `failed`) with its cause, per-chapter progress
 from `GET /v1/tts-playback/sessions/:sessionId/export-progress`, and artifact
 state (`none`, `building`, `ready`, `stale`, `failed`). Stop cancels the export
-session through `POST /v1/tts-playback/sessions/:sessionId/cancel`; cached audio
-is kept. A chapter artifact needs only that chapter's segments settled, so it
+session through `POST /v1/tts-playback/sessions/:sessionId/cancel`, conditional
+on the generation run the request observed so a stop racing a resume never
+cancels the replacement run; cached audio is kept. A chapter artifact needs only that chapter's segments settled, so it
 downloads while the rest of the book generates. Chapters are plan locator
 groups shared with M4B markers; EPUB rows use TOC labels.
 

@@ -74,6 +74,7 @@ import {
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
   TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
   TTS_PLAYBACK_JOBS_SUBJECT,
+  TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT,
 } from '../infrastructure/nats';
 import { registerHttpHooks } from './http-hooks';
 import {
@@ -308,6 +309,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     getJs: async () => (await ensureConnected()).js,
     layoutSubject: LAYOUT_JOBS_SUBJECT,
     ttsPlaybackSubject: TTS_PLAYBACK_JOBS_SUBJECT,
+    ttsPlaybackDocumentSubject: TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT,
     ttsPlaybackPlanSubject: TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
     ttsPlaybackExportSubject: TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
     documentPreviewSubject: DOCUMENT_PREVIEW_JOBS_SUBJECT,
@@ -479,6 +481,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       workerLoops.start(session, {
         pdfLayout: session.layoutConsumer,
         ttsPlayback: session.ttsPlaybackConsumer,
+        ttsPlaybackDocument: session.ttsPlaybackDocumentConsumer,
         ttsPlaybackPlan: session.ttsPlaybackPlanConsumer,
         ttsPlaybackExport: session.ttsPlaybackExportConsumer,
         documentPreview: session.documentPreviewConsumer,

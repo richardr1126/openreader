@@ -61,6 +61,12 @@ function formatDuration(ms: number): string {
   return hours > 0 ? `${hours}:${pad(minutes)}:${pad(seconds)}` : `${minutes}:${pad(seconds)}`;
 }
 
+/** Every segment has an outcome (audio or skipped silence); drives progress display. */
+function chapterIsFinished(chapter: TtsExportChapterProgress): boolean {
+  return chapter.completedSegments + chapter.skippedSegments >= chapter.plannedSegments;
+}
+
+/** Finished with at least some narration; the resolve route's rule for a downloadable chapter. */
 function chapterIsSettled(chapter: TtsExportChapterProgress): boolean {
   return chapter.completedSegments > 0
     && chapter.completedSegments + chapter.skippedSegments === chapter.plannedSegments;
@@ -218,7 +224,7 @@ export function AudiobookExportModal({
 
   const chapters = progress?.chapters ?? [];
   const activeChapter = isGenerating
-    ? chapters.find((chapter) => !chapterIsSettled(chapter)) ?? null
+    ? chapters.find((chapter) => !chapterIsFinished(chapter)) ?? null
     : null;
   const titleFor = useCallback(
     (chapter: TtsExportChapterProgress) => resolveChapterTitle?.(chapter) || chapter.title,

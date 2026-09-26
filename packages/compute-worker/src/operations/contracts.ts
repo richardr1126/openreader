@@ -388,8 +388,8 @@ export type WorkerOperationKind =
 export const WORKER_OPERATION_COMPUTE_ACTION = {
   pdf_layout: 'pdf_layout',
   tts_playback: 'tts_playback',
-  // Whole-document runs are tts_playback operations scheduled under their own
-  // action (resolved per message by the worker loop).
+  // Whole-document runs are tts_playback operations published to their own
+  // subject/consumer and scheduled under their own action.
   tts_playback_document: 'tts_playback',
   tts_playback_plan: 'tts_playback_plan',
   tts_playback_export: 'tts_playback_export',
