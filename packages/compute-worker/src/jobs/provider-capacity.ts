@@ -33,6 +33,20 @@ const EMPTY_DISTRIBUTED_STATE: DistributedProviderState = {
 };
 const distributedCodec = createJsonCodec<DistributedProviderState>();
 
+/**
+ * The admin-configured provider limit is saturated or cooling down after an
+ * upstream 429. This is back-pressure, not a synthesis failure: callers wait
+ * again instead of spending a segment attempt on it.
+ */
+export class ProviderCapacityWaitTimeoutError extends Error {
+  readonly code = 'PROVIDER_CAPACITY_TIMEOUT';
+
+  constructor() {
+    super('TTS provider capacity wait timed out');
+    this.name = 'ProviderCapacityWaitTimeoutError';
+  }
+}
+
 const sleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((resolve, reject) => {
   const onAbort = () => {
     clearTimeout(timeout);
@@ -143,7 +157,7 @@ export class ProviderCapacityCoordinator {
         }
       }
       if (now - startedAt >= limits.maxWaitSeconds * 1000) {
-        throw new Error('TTS provider capacity wait timed out');
+        throw new ProviderCapacityWaitTimeoutError();
       }
       await sleep(50, input.signal);
     }
@@ -224,7 +238,7 @@ export class ProviderCapacityCoordinator {
         };
       }
       if (now - startedAt >= limits.maxWaitSeconds * 1000) {
-        throw new Error('TTS provider capacity wait timed out');
+        throw new ProviderCapacityWaitTimeoutError();
       }
       await sleep(50, input.signal);
     }

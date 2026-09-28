@@ -206,6 +206,32 @@ describe('jetstream adapters', () => {
     expect(appended.eventId).toBe(2);
   });
 
+  test('queue routes whole-document playback runs to their own subject', async () => {
+    const js = new FakeJetStream();
+    const queue = new JetStreamOperationQueue({
+      getJs: async () => js as never,
+      layoutSubject: 'jobs.layout',
+      ttsPlaybackSubject: 'jobs.tts_playback',
+      ttsPlaybackDocumentSubject: 'jobs.tts_playback_document',
+    });
+    const job = (opId: string, generationExtent?: 'document') => ({
+      jobId: `job-${opId}`,
+      opId,
+      opKey: `k-${opId}`,
+      kind: 'tts_playback' as const,
+      queuedAt: 1000,
+      payload: { sessionId: opId, ...(generationExtent ? { generationExtent } : {}) } as never,
+    });
+
+    await queue.enqueue(job('live'));
+    await queue.enqueue(job('export', 'document'));
+
+    expect(js.published.map((entry) => entry.subject)).toEqual([
+      'jobs.tts_playback',
+      'jobs.tts_playback_document',
+    ]);
+  });
+
   test('queue routes playback plan jobs to the isolated subject', async () => {
     const js = new FakeJetStream();
     const queue = new JetStreamOperationQueue({

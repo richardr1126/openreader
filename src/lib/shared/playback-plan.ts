@@ -27,6 +27,11 @@ export type TtsPlaybackPlan = {
   segments: TtsPlaybackPlanSegment[];
 };
 
+/** Server-authoritative identity of one playback plan. */
+export function playbackPlanIdentity(plan: Pick<TtsPlaybackPlan, 'planId' | 'planSignature'>): string {
+  return `${plan.planId ?? 'missing-plan-id'}:${plan.planSignature ?? 'missing-plan-signature'}`;
+}
+
 export function assertAuthoritativePlaybackPlan(
   plan: TtsPlaybackPlan,
   expected: { documentId: string; readerType: string },

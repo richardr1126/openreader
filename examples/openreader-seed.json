@@ -57,6 +57,27 @@
             "resources": {}
           }
         },
+        "tts_playback_document": {
+          "enabled": false,
+          "admission": {
+            "windows": [
+              { "scope": "user", "limit": 6, "windowSeconds": 600 },
+              { "scope": "user", "limit": 30, "windowSeconds": 86400 }
+            ],
+            "active": [
+              { "scope": "user", "limit": 1, "leaseSeconds": 43200 },
+              { "scope": "site", "limit": 20, "leaseSeconds": 43200 }
+            ]
+          },
+          "usage": [],
+          "execution": {
+            "priority": "background",
+            "maxQueued": 50,
+            "maxConcurrentPerWorker": 1,
+            "maxQueueAgeSeconds": 21600,
+            "resources": {}
+          }
+        },
         "tts_playback_plan": {
           "enabled": false,
           "admission": {

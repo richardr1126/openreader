@@ -127,27 +127,29 @@ describe('server-state architecture', () => {
 
   test('keeps audiobook export on worker playback state instead of legacy status rows', () => {
     const modal = source('src/components/AudiobookExportModal.tsx');
-    expect(modal).toContain('startDocumentAudioExport');
+    const lifecycle = source('src/hooks/audio/useAudiobookExport.ts');
+    // The modal is presentation; one hook owns requests, SSE, and downloads.
+    expect(modal).toContain('useAudiobookExport(');
     expect(modal).toContain('resolveDocumentAudioExport');
-    expect(modal).toContain('subscribeTtsExportGenerationEvents');
-    expect(modal).toContain('subscribeTtsExportArtifactEvents');
-    expect(modal).toContain('snapshot.completedCount');
-    expect(modal).toContain('const urlToDownload = downloadUrl;');
-    expect(modal).not.toContain('withDownloadOptions');
+    expect(modal).not.toContain('subscribeTtsExport');
     expect(modal).toContain("type ExportFormat = 'mp3' | 'm4b'");
     expect(modal).toContain('Audiobook export format');
     expect(modal).toContain('setAudioPlayerSpeedAndRestart');
-    expect(modal).not.toContain('progressCompleteRef');
-    expect(modal).toContain("if (snapshot.status === 'succeeded')");
-    expect(modal).not.toContain("snapshot.status === 'succeeded' || (total > 0 && completed >= total)");
-    expect(modal).not.toContain('useAudiobookStatus');
-    expect(modal).not.toContain('/api/audiobook');
-    expect(modal).not.toContain('getTtsPlaybackSeekLayout');
-    expect(modal).not.toContain('setInterval');
-    expect(modal).not.toContain('await fetch(urlToDownload');
-    expect(modal).not.toContain('Audio export progress disconnected');
-    expect(modal).not.toContain('setChapters');
-    expect(modal).not.toContain('setBookId');
+    expect(modal).toContain('aria-label="Audiobook chapters"');
+    expect(lifecycle).toContain('subscribeTtsExportGenerationEvents');
+    expect(lifecycle).toContain('subscribeTtsExportArtifactEvents');
+    // SSE only triggers snapshot refreshes; the server snapshot owns state.
+    expect(lifecycle).toContain("if (event.status === 'succeeded' || event.status === 'failed') void refresh();");
+    for (const file of [modal, lifecycle]) {
+      expect(file).not.toContain('withDownloadOptions');
+      expect(file).not.toContain('progressCompleteRef');
+      expect(file).not.toContain('useAudiobookStatus');
+      expect(file).not.toContain('/api/audiobook');
+      expect(file).not.toContain('getTtsPlaybackSeekLayout');
+      expect(file).not.toContain('setInterval');
+      expect(file).not.toContain('Audio export progress disconnected');
+      expect(file).not.toContain('setBookId');
+    }
   });
 
   test('supplies the parsed PDF artifact through the aggregate bootstrap payload', () => {
@@ -213,6 +215,7 @@ describe('server-state architecture', () => {
       'GET /v1/tts-playback/exports/:artifactId',
       'GET /v1/tts-playback/sessions/:sessionId',
       'GET /v1/tts-playback/sessions/:sessionId/audio',
+      'GET /v1/tts-playback/sessions/:sessionId/export-progress',
       'GET /v1/tts-playback/sessions/:sessionId/segments',
       'POST /v1/account-exports/expire',
       'POST /v1/account-exports/jobs',
@@ -226,6 +229,7 @@ describe('server-state architecture', () => {
       'POST /v1/pdf-layout/clear',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
+      'POST /v1/tts-playback/sessions/:sessionId/cancel',
       'POST /v1/tts-playback/cache/clear',
       'POST /v1/tts-playback/exports/expire',
       'POST /v1/tts-playback/exports/jobs',
@@ -770,7 +774,8 @@ describe('server-state architecture', () => {
     expect(playbackScope).toContain('return `tts-${input.purpose}-${scopeHash}`');
     expect(workerKeys).toContain("'tts_playback',\n    'v1',");
     expect(workerKeys).toContain('scopeHash');
-    expect(workerKeys).toContain("const intent = input.generationExtent === 'document'");
+    // Live continuations and document export starts are each keyed by run id.
+    expect(workerKeys).toContain("const intent = `${input.generationExtent === 'document' ? 'document' : 'live'}:${input.generationRunId?.trim() || 'initial'}`;");
     expect(workerKeys).not.toContain("'v2'");
     expect(workerSchemas).toContain('planObjectKey: z.string().trim().min(1).max(2048),');
 

@@ -100,3 +100,39 @@ export function ReaderError({
     </div>
   );
 }
+
+/**
+ * Non-blocking status for an open reader whose playback plan is being
+ * re-prepared after a voice, speed, language, or segmentation change.
+ */
+export function ReaderReplanStatus({
+  error,
+  onRetry,
+}: {
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-3 z-40 flex justify-center px-4">
+      <div
+        role="status"
+        aria-live="polite"
+        className="pointer-events-auto flex max-w-md items-center gap-2 rounded-full border border-line bg-background px-3 py-1.5 text-xs text-soft shadow-sm"
+      >
+        {error ? (
+          <>
+            <span>Couldn&apos;t update playback: {error}</span>
+            <Button type="button" variant="ghost" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          </>
+        ) : (
+          <>
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" aria-hidden />
+            <span>Updating playback for new settings…</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

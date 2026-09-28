@@ -32,6 +32,7 @@ export const ttsPlaybackRequestSchema = ttsPlaybackPlanRequestSchema.extend({
   aheadWindow: z.number().int().positive().max(4096).optional(),
   backgroundExtent: z.enum(['section', 'document']).optional(),
   generationExtent: z.enum(['window', 'document']).optional(),
+  retryErroredSegments: z.boolean().optional(),
 }).strict();
 
 export const ttsPlaybackExportArtifactRequestSchema = z.object({
@@ -47,6 +48,7 @@ export const ttsPlaybackExportArtifactRequestSchema = z.object({
   planObjectKey: z.string().trim().min(1).max(2048),
   format: z.enum(['mp3', 'm4b']),
   speed: z.number().min(0.5).max(3),
+  chapterIndex: z.number().int().nonnegative().optional(),
 }).strict();
 
 export type TtsPlaybackRequest = z.infer<typeof ttsPlaybackRequestSchema>;

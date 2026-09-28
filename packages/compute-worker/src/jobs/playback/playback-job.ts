@@ -13,6 +13,10 @@ import { ttsPlaybackRequestSchema } from './schemas';
 import { consumeTtsSynthesisUsage } from '../compute-limit-broker';
 
 const CURSOR_STALE_MS = 15_000;
+// Whole-document exports are throughput-bound, not latency-bound: a slow
+// (for example CPU-only) provider must not turn long segments into silence
+// just because live playback wants a tight per-segment timeout.
+const DOCUMENT_SEGMENT_TIMEOUT_FLOOR_MS = 120_000;
 
 function playbackSectionKey(locator: unknown, readerType: 'pdf' | 'epub' | 'html'): string | null {
   if (!locator || typeof locator !== 'object') return null;
@@ -124,6 +128,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const aheadWindow = parsed.aheadWindow ?? DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW;
       const backgroundExtent = parsed.backgroundExtent ?? 'section';
       const forceDocumentExtent = parsed.generationExtent === 'document';
+      const retryErroredSegments = forceDocumentExtent && parsed.retryErroredSegments === true;
       const readCurrentCacheEpoch = async () => playbackStorage.artifacts.getScopeEpoch({
         storageUserId: parsed.storageUserId,
         documentId: parsed.documentId,
@@ -158,7 +163,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return;
           if (sidecar.status === 'completed' && sidecar.audioKey) {
             completedOrdinals.add(sidecar.ordinal);
-          } else if (sidecar.status === 'error') {
+          } else if (sidecar.status === 'error' && !retryErroredSegments) {
             erroredOrdinals.add(sidecar.ordinal);
           }
         });
@@ -216,12 +221,23 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           cursorUpdatedAt: kvCursor.cursorUpdatedAt == null ? null : Number(kvCursor.cursorUpdatedAt),
           expiresAt: Number(kvCursor.expiresAt),
         } : null;
-        if (!cursor || (cursor.status !== 'queued' && cursor.status !== 'running') || Date.now() > cursor.expiresAt) {
+        if (
+          !cursor
+          || (cursor.status !== 'queued' && cursor.status !== 'running')
+          || cursor.generationRunId !== generationRunId
+        ) {
           stoppedEarly = true;
           return 'stop';
         }
+        // Session expiry bounds live playback windows. A whole-document export
+        // routinely runs longer than that TTL; it ends only when it finishes
+        // or is stopped/superseded through its status or run id.
         if (forceDocumentExtent) return 'continue';
-        if (cursor.playbackActive === false || cursor.generationRunId !== generationRunId) {
+        if (Date.now() > cursor.expiresAt) {
+          stoppedEarly = true;
+          return 'stop';
+        }
+        if (cursor.playbackActive === false) {
           stoppedEarly = true;
           return 'stop';
         }
@@ -279,8 +295,11 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           readAudioObject: async (key) => Buffer.from(await input.storage.readObject(key)),
           cacheEpoch,
           getCurrentCacheEpoch: readCurrentCacheEpoch,
-          synthesisTimeoutMs: Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
+          synthesisTimeoutMs: forceDocumentExtent
+            ? Math.max(input.ttsPlaybackSegmentTimeoutMs, DOCUMENT_SEGMENT_TIMEOUT_FLOOR_MS)
+            : Math.max(input.ttsPlaybackSegmentTimeoutMs, 1_000),
           signal: generationController.signal,
+          retryErroredSegments,
           onBeforeSegment,
           onSynthesisSettled: persistSatisfiedWindowIfCurrent,
           onSegmentCompleted,

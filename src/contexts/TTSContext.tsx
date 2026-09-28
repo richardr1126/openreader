@@ -38,7 +38,8 @@ import {
   type EpubRenderedAnchorResult,
   type EpubPlanLocatorResult,
 } from '@/hooks/audio/useTtsDocumentNavigation';
-import { useTtsDocumentExport, type TtsDocumentAudioExportResolution } from '@/hooks/audio/useTtsDocumentExport';
+import { useTtsDocumentExport, type TtsDocumentAudioExportRequest } from '@/hooks/audio/useTtsDocumentExport';
+import type { TtsExportResolveSnapshot } from '@/types/tts-export';
 import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
@@ -68,7 +69,7 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
-import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
+import { playbackPlanIdentity, type TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { ReaderInitialPosition } from '@/lib/shared/reader-position';
 import { queryKeys } from '@/lib/client/query-keys';
 import type { EpubLocationChangeIntent } from '@/lib/client/epub/location-controller';
@@ -99,8 +100,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   playbackPhase: TtsPlaybackPhase;
   audioSpeed: number;
   playbackPlanSegmentCount: number | null;
-  resolveDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
-  startDocumentAudioExport: (options: { format: 'mp3' | 'm4b'; speed: number }, signal?: AbortSignal) => Promise<TtsDocumentAudioExportResolution>;
+  resolveDocumentAudioExport: (options: TtsDocumentAudioExportRequest, signal?: AbortSignal) => Promise<TtsExportResolveSnapshot>;
 
   // Control functions
   togglePlay: () => void;
@@ -124,7 +124,14 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
     plan: TtsPlaybackPlan;
     initialPosition: ReaderInitialPosition;
   }) => void;
+  /**
+   * Swap in a plan the server re-planned for the open reader (voice, speed,
+   * language, segmentation) without resetting the reading position.
+   */
+  adoptReplannedPlaybackPlan: (input: { language: string; plan: TtsPlaybackPlan }) => void;
   playbackPlanReady: boolean;
+  /** Identity of the adopted plan, or null while none is adopted. */
+  playbackPlanKey: string | null;
   setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
   documentLanguage: string;
   resolvedLanguage: string;
@@ -382,7 +389,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setPlaybackSeekLayout,
     setSelectedOrdinal,
   });
-  const { resolveDocumentAudioExport, startDocumentAudioExport } = useTtsDocumentExport({
+  const { resolveDocumentAudioExport } = useTtsDocumentExport({
     playbackPlanRef,
     applyWorkerPlan,
     buildPlaybackPlanRequest,
@@ -593,6 +600,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     stop,
   ]);
 
+  const adoptReplannedPlaybackPlan = useCallback((input: {
+    language: string;
+    plan: TtsPlaybackPlan;
+  }) => {
+    abortAudio();
+    setIsPlaying(false);
+    resetBootstrapPlanAdoption();
+    setDocumentLanguage(input.language);
+    acceptBootstrapPlaybackPlan(input.plan);
+  }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption]);
+
   const reacquirePlaybackPlan = useCallback(async () => {
     if (!documentId) return;
     await queryClient.refetchQueries({
@@ -638,7 +656,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     audioSpeed,
     playbackPlanSegmentCount: playbackPlan ? sentences.length : null,
     resolveDocumentAudioExport,
-    startDocumentAudioExport,
     currDocPage,
     currDocPageNumber,
     currDocPages,
@@ -659,7 +676,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setVoiceAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
+    adoptReplannedPlaybackPlan,
     playbackPlanReady: Boolean(playbackPlan?.planObjectKey),
+    playbackPlanKey: playbackPlan?.planObjectKey
+      ? playbackPlanIdentity(playbackPlan)
+      : null,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
@@ -674,7 +695,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     sentences,
     playbackPlan,
     resolveDocumentAudioExport,
-    startDocumentAudioExport,
     selectedOrdinal,
     playbackPhase,
     audioSpeed,
@@ -698,6 +718,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setVoiceAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
+    adoptReplannedPlaybackPlan,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,

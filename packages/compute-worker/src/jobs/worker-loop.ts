@@ -49,6 +49,22 @@ class ComputeQueueExpiredError extends Error {
   }
 }
 
+/**
+ * Queued work that never started because this worker stopped or its local
+ * queue was full, and that its consumer will not redeliver. Failing it keeps
+ * the operation from reading as queued forever.
+ */
+class ComputeWorkNotStartedError extends Error {
+  readonly code = 'COMPUTE_WORK_NOT_STARTED';
+
+  constructor(reason: 'rejected' | 'cancelled') {
+    super(reason === 'rejected'
+      ? 'Compute work was rejected because the worker queue is full'
+      : 'Compute worker stopped before queued work could start');
+    this.name = 'ComputeWorkNotStartedError';
+  }
+}
+
 export interface QueuedJob<TPayload> {
   jobId: string;
   opId: string;
@@ -180,10 +196,22 @@ export function createWorkerLoopController(input: {
   const processMessage = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
     msg: JsMsg;
     workerLabel: string;
-    queueExpired?: boolean;
+    notStarted?: ComputeQueueExpiredError | ComputeWorkNotStartedError;
   }): Promise<void> => {
     let context: Context<TPayload> | null = null;
     let heartbeat: NodeJS.Timeout | null = null;
+    // State writes for one job apply in order, so a heartbeat or progress
+    // update still in flight cannot land after (and hide) the terminal state.
+    let stateWrites: Promise<unknown> = Promise.resolve();
+    const writeState = <T>(write: () => Promise<T>): Promise<T> => {
+      const next = stateWrites.then(write, write);
+      stateWrites = next.catch(() => undefined);
+      return next;
+    };
+    const stopHeartbeat = (): void => {
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = null;
+    };
     try {
       const decoded = work.codec.decode(work.msg.data);
       const startedAt = Date.now();
@@ -198,10 +226,11 @@ export function createWorkerLoopController(input: {
         startedAt,
         queueWaitTiming: buildQueueWaitTiming(decoded.queuedAt, startedAt),
       };
-      if (work.queueExpired || startedAt - decoded.queuedAt > maxQueueAgeMs) {
+      if (work.notStarted) throw work.notStarted;
+      if (startedAt - decoded.queuedAt > maxQueueAgeMs) {
         throw new ComputeQueueExpiredError();
       }
-      await markRunning(context, startedAt);
+      await writeState(() => markRunning(context!, startedAt));
       input.logger.info({
         worker: work.workerLabel,
         kind: decoded.kind,
@@ -211,7 +240,7 @@ export function createWorkerLoopController(input: {
         deliveryCount: work.msg.info.deliveryCount,
       }, 'job.started');
       heartbeat = setInterval(() => {
-        void markRunning(context!, Date.now()).catch((error) => {
+        void writeState(() => markRunning(context!, Date.now())).catch((error) => {
           input.logger.error({
             worker: work.workerLabel,
             opId: context?.decoded.opId,
@@ -234,17 +263,18 @@ export function createWorkerLoopController(input: {
             }, 'failed to extend JetStream ack wait on progress');
           }
           context!.latestProgress = progress;
-          await markRunning(context!, Date.now());
+          await writeState(() => markRunning(context!, Date.now()));
         },
       });
       const timing = extractTiming(result);
       const now = Date.now();
-      await input.orchestrator.markSucceeded({
+      stopHeartbeat();
+      await writeState(() => input.orchestrator.markSucceeded({
         opId: decoded.opId,
         result,
         updatedAt: now,
         ...(timing ? { timing } : {}),
-      });
+      }));
       await input.onOperationTerminal?.({ operationId: decoded.opId, state: 'succeeded' })
         .catch((error) => input.logger.warn({
           opId: decoded.opId,
@@ -270,7 +300,8 @@ export function createWorkerLoopController(input: {
       const errorLog = toErrorLog(error);
       const deliveryCount = work.msg.info.deliveryCount;
       const kind = context?.decoded.kind ?? 'pdf_layout';
-      const action = error instanceof ComputeQueueExpiredError
+      const notStarted = error instanceof ComputeQueueExpiredError || error instanceof ComputeWorkNotStartedError;
+      const action = notStarted
         ? 'term'
         : decideRetryAction({
           kind,
@@ -281,18 +312,20 @@ export function createWorkerLoopController(input: {
             : undefined,
         });
       const timing = context ? buildQueueWaitTiming(context.decoded.queuedAt, Date.now()) : undefined;
+      stopHeartbeat();
       if (context) {
-        const update = action === 'nak_retry'
-          ? markRunning(context, Date.now())
+        const failedContext = context;
+        const update = writeState(() => (action === 'nak_retry'
+          ? markRunning(failedContext, Date.now())
           : input.orchestrator.markFailed({
-            opId: context.decoded.opId,
+            opId: failedContext.decoded.opId,
             error: {
               message: errorMessage,
-              ...(error instanceof ComputeQueueExpiredError ? { code: error.code } : {}),
+              ...(notStarted ? { code: error.code } : {}),
             },
             updatedAt: Date.now(),
             ...(timing ? { timing } : {}),
-          });
+          })));
         await update.catch((stateError) => input.logger.error({
           worker: context?.workerLabel,
           opId: context?.decoded.opId,
@@ -329,7 +362,67 @@ export function createWorkerLoopController(input: {
         retryAction: action === 'nak_retry' ? 'nack_retry' : 'term',
       }, 'job.terminal');
     } finally {
-      if (heartbeat) clearInterval(heartbeat);
+      stopHeartbeat();
+    }
+  };
+
+  const handleMessage = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
+    msg: JsMsg;
+    workerLabel: string;
+  }, detached: () => boolean): Promise<'continue' | 'return'> => {
+    const { msg } = work;
+    let executionLease: ComputeExecutionLease | null = null;
+    input.markActivity(`job_received:${work.workerLabel}`);
+    input.onInFlightJobsChanged(1);
+    try {
+      const queueHeartbeat = setInterval(() => {
+        try {
+          msg.working();
+        } catch {
+          // A detached or redelivered message is handled by the normal loop path.
+        }
+      }, RUNNING_HEARTBEAT_MS);
+      try {
+        if (work.action) {
+          const acquisition = await scheduler.acquire(work.action);
+          if (acquisition.status === 'acquired') executionLease = acquisition.lease;
+          else if (acquisition.status === 'expired') {
+            await processMessage({ ...work, notStarted: new ComputeQueueExpiredError() });
+            return 'continue';
+          } else if (!canRedeliver(work, msg)) {
+            await processMessage({ ...work, notStarted: new ComputeWorkNotStartedError(acquisition.status) });
+            return 'continue';
+          }
+        }
+      } finally {
+        clearInterval(queueHeartbeat);
+      }
+      if (work.action && !executionLease) {
+        msg.nak();
+        return 'continue';
+      }
+      if (detached()) {
+        msg.nak();
+        return 'return';
+      }
+      await processMessage(work);
+      return 'continue';
+    } finally {
+      if (executionLease) scheduler.release(executionLease);
+      input.onInFlightJobsChanged(-1);
+      input.markActivity(`job_completed:${work.workerLabel}`);
+    }
+  };
+
+  const canRedeliver = <TPayload, TResult>(work: WorkDefinition<TPayload, TResult>, msg: JsMsg): boolean => {
+    try {
+      return decideRetryAction({
+        kind: work.codec.decode(msg.data).kind,
+        deliveryCount: msg.info.deliveryCount,
+        pdfAttempts: input.pdfAttempts,
+      }) === 'nak_retry';
+    } catch {
+      return true;
     }
   };
 
@@ -341,54 +434,16 @@ export function createWorkerLoopController(input: {
     const detached = () => input.isStopping() || stopRequested || !input.isOwnerActive(work.owner);
     while (!detached()) {
       let msg: JsMsg | null = null;
-      let executionLease: ComputeExecutionLease | null = null;
       try {
-        try {
-          msg = await work.consumer.next({ expires: PULL_EXPIRES_MS });
-        } catch (error) {
-          if (detached()) return;
-          input.logger.error({ error: toErrorMessage(error), worker: work.workerLabel }, 'worker pull failed');
-          await sleep(LOOP_ERROR_BACKOFF_MS);
-          continue;
-        }
-        if (!msg) continue;
-        input.markActivity(`job_received:${work.workerLabel}`);
-        input.onInFlightJobsChanged(1);
-        const queueHeartbeat = setInterval(() => {
-          try {
-            msg?.working();
-          } catch {
-            // A detached or redelivered message is handled by the normal loop path.
-          }
-        }, RUNNING_HEARTBEAT_MS);
-        try {
-          if (work.action) {
-            const acquisition = await scheduler.acquire(work.action);
-            if (acquisition.status === 'acquired') executionLease = acquisition.lease;
-            else if (acquisition.status === 'expired') {
-              await processMessage({ ...work, msg, queueExpired: true });
-              continue;
-            }
-          }
-        } finally {
-          clearInterval(queueHeartbeat);
-        }
-        if (work.action && !executionLease) {
-          msg.nak();
-          continue;
-        }
-        if (detached()) {
-          msg.nak();
-          return;
-        }
-        await processMessage({ ...work, msg });
-      } finally {
-        if (msg) {
-          if (executionLease) scheduler.release(executionLease);
-          input.onInFlightJobsChanged(-1);
-          input.markActivity(`job_completed:${work.workerLabel}`);
-        }
+        msg = await work.consumer.next({ expires: PULL_EXPIRES_MS });
+      } catch (error) {
+        if (detached()) return;
+        input.logger.error({ error: toErrorMessage(error), worker: work.workerLabel }, 'worker pull failed');
+        await sleep(LOOP_ERROR_BACKOFF_MS);
+        continue;
       }
+      if (!msg) continue;
+      if (await handleMessage({ ...work, msg }, detached) === 'return') return;
     }
   };
 
@@ -400,6 +455,7 @@ export function createWorkerLoopController(input: {
     start(owner: object, consumers: {
       pdfLayout: Consumer;
       ttsPlayback?: Consumer;
+      ttsPlaybackDocument?: Consumer;
       ttsPlaybackPlan?: Consumer;
       ttsPlaybackExport?: Consumer;
       documentPreview?: Consumer;
@@ -420,6 +476,14 @@ export function createWorkerLoopController(input: {
             codec: input.ttsPlaybackCodec,
             run: input.handlers.runTtsPlayback,
             action: 'tts_playback',
+          }
+          : null;
+      const ttsPlaybackDocumentWork: WorkDefinition<TtsPlaybackJobRequest, TtsPlaybackJobResult> | null =
+        input.ttsPlaybackCodec && consumers.ttsPlaybackDocument
+          ? {
+            codec: input.ttsPlaybackCodec,
+            run: input.handlers.runTtsPlayback,
+            action: 'tts_playback_document',
           }
           : null;
       const ttsPlaybackPlanWork: WorkDefinition<TtsPlaybackPlanJobRequest, TtsPlaybackPlanJobResult> | null =
@@ -488,14 +552,31 @@ export function createWorkerLoopController(input: {
           loops.push(runLoop({ owner, consumer: consumers.accountExport, ...accountExportWork, workerLabel: `account-export-${i + 1}` }));
         }
       };
+      // Whole-document runs pull only as many messages as this worker may
+      // execute; queued exports stay in JetStream for any replica with a free
+      // slot instead of waiting (for hours) inside one worker.
+      let documentLoopSlots = 0;
       growLoops = () => {
-        const desired = Math.max(
-          1,
-          Math.floor(input.getComputePolicy().worker.maxExecutingPerWorker),
-        );
+        const policy = input.getComputePolicy();
+        const desired = Math.max(1, Math.floor(policy.worker.maxExecutingPerWorker));
         while (loopSlots < desired) {
           addLoopSlot(loopSlots);
           loopSlots += 1;
+        }
+        if (!ttsPlaybackDocumentWork || !consumers.ttsPlaybackDocument) return;
+        const documentConsumer = consumers.ttsPlaybackDocument;
+        const desiredDocument = Math.max(1, Math.min(
+          desired,
+          Math.floor(policy.actions.tts_playback_document.execution!.maxConcurrentPerWorker),
+        ));
+        while (documentLoopSlots < desiredDocument) {
+          documentLoopSlots += 1;
+          loops.push(runLoop({
+            owner,
+            consumer: documentConsumer,
+            ...ttsPlaybackDocumentWork,
+            workerLabel: `tts-playback-document-${documentLoopSlots}`,
+          }));
         }
       };
       if (emailDeliveryWork && consumers.emailDelivery) {

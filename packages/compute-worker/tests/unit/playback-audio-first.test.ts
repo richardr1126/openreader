@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { TtsPlaybackSegmentMetadata, TtsPlaybackStorage } from '../../src/playback/storage';
 
 const mocks = vi.hoisted(() => ({
@@ -34,6 +34,12 @@ vi.mock('../../src/jobs/tts-credential-broker', () => ({
 }));
 
 describe('playback audio-first segment generation', () => {
+  // Load the generation module (and its mocked dependency graph) once, outside
+  // any single test's timeout; a cold import under full-suite load can exceed it.
+  beforeAll(async () => {
+    await import('../../src/jobs/playback/segment-generation');
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -371,8 +377,10 @@ describe('playback audio-first segment generation', () => {
     await expect(run).resolves.toBeUndefined();
 
     expect(putAudioObject).not.toHaveBeenCalled();
-    expect(sidecars).toHaveLength(1);
+    // The abandoned lease is released (not failed) so a resumed run can claim it.
+    expect(sidecars).toHaveLength(2);
     expect(sidecars[0]).toMatchObject({ status: 'generating', error: null });
+    expect(sidecars[1]).toMatchObject({ status: 'generating', error: null, leaseOwnerId: null, leaseUpdatedAt: 0 });
   });
 
   test('stops cleanly before provider work when the next uncached segment is denied', async () => {

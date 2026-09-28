@@ -20,8 +20,13 @@ import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
 import { parseTtsSettings, type TtsPlaybackSegmentInput } from './plan';
 import type { TtsPlaybackRequest } from './schemas';
 import type { ModelDownloadProgressHandler } from '../../inference/model-download';
+import { ProviderCapacityWaitTimeoutError } from '../provider-capacity';
 
-const SEGMENT_MAX_ATTEMPTS = 2;
+const SEGMENT_MAX_ATTEMPTS = 3;
+// A 429 already cools down shared provider capacity, so later attempts wait
+// for the provider window instead of hammering it.
+const SEGMENT_RATE_LIMIT_MAX_ATTEMPTS = 6;
+const SEGMENT_RETRY_BACKOFF_MS = 1_000;
 // Keep a small ordered pipeline full so a provider configured for parallel
 // requests can build playback runway. Provider capacity remains the actual,
 // admin-controlled concurrency limit; this is only bounded local look-ahead.
@@ -30,7 +35,7 @@ const GENERATION_LEASE_MIN_MS = 60_000;
 const GENERATION_LEASE_GRACE_MS = 30_000;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-class TtsPlaybackSegmentTimeoutError extends Error {
+export class TtsPlaybackSegmentTimeoutError extends Error {
   readonly code = 'UPSTREAM_TIMEOUT';
 
   constructor(timeoutMs: number) {
@@ -83,7 +88,9 @@ async function withAbortableTimeout<T>(
 export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; retryable: boolean } {
   const message = error instanceof Error ? error.message : String(error);
   if (error instanceof TtsPlaybackSegmentTimeoutError) {
-    return { info: { message, code: error.code }, retryable: false };
+    // A local provider serves pipelined requests one at a time, so a request
+    // can time out while queued behind its siblings and succeed on retry.
+    return { info: { message, code: error.code }, retryable: true };
   }
   const upstreamStatus = getUpstreamStatus(error);
   if (upstreamStatus === undefined) return { info: { message }, retryable: true };
@@ -130,6 +137,8 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   getCurrentCacheEpoch?: () => Promise<number>;
   synthesisTimeoutMs: number;
   signal?: AbortSignal;
+  /** Regenerate terminal error sidecars instead of keeping their silence. */
+  retryErroredSegments?: boolean;
   onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
   onSynthesisSettled?: () => Promise<void>;
   onSegmentCompleted?: (planOrdinal: number) => Promise<void>;
@@ -167,9 +176,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   const effectiveProviderRef = requestCreds.providerRef;
   const resolvedProviderType = requestCreds.providerType;
   const configuredProviderConcurrency = input.getProviderMaxConcurrent?.(effectiveProviderRef);
-  const synthesisPipelineDepth = configuredProviderConcurrency == null
+  const providerDepth = configuredProviderConcurrency == null
     ? TTS_SYNTHESIS_PIPELINE_DEPTH
     : Math.min(TTS_SYNTHESIS_PIPELINE_DEPTH, Math.max(1, configuredProviderConcurrency));
+  // Whole-document exports leave one provider request free so a reader
+  // starting live playback is not queued behind the entire export pipeline.
+  const synthesisPipelineDepth = input.request.generationExtent === 'document'
+    ? Math.max(1, providerDepth - 1)
+    : providerDepth;
   const effectiveModel = resolveTtsModelForProvider({
     providerRef: effectiveProviderRef,
     providerType: resolvedProviderType,
@@ -338,6 +352,12 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     return Number.isFinite(leaseUpdatedAt) && now - leaseUpdatedAt < leaseStaleMs;
   };
 
+  const releaseOwnLease = async (segment: (typeof normalized)[number], audioKey: string): Promise<void> => {
+    const current = await freshSidecar(segment);
+    if (current?.status !== 'generating' || current.leaseOwnerId !== leaseOwnerId) return;
+    await persistSegmentMetadata(segment, 'generating', { audioKey, leaseOwnerId: null, updatedAt: 0 });
+  };
+
   // Keep synthesis audio-first, but do not postpone the first exact word
   // timing until the entire ahead window has been generated. A single ordered
   // alignment lane runs beside synthesis: the current segment becomes
@@ -429,7 +449,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       return null;
     }
 
-    if (existing?.status === 'error') {
+    if (existing?.status === 'error' && !input.retryErroredSegments) {
       await input.onSegmentErrored?.(planOrdinal);
       return null;
     }
@@ -474,111 +494,144 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     }
     await persistSegmentMetadata(segment, 'generating', { audioKey, leaseOwnerId, updatedAt: Date.now() })
       .catch(() => undefined);
-    existing = await freshSidecar(segment);
-    while (isFreshForeignLease(existing, audioKey)) {
+    // Every path below either settles this segment (completed or error) or
+    // abandons it because the run stopped. An abandoned lease is released so a
+    // resumed run can claim the segment immediately instead of waiting for it
+    // to go stale.
+    let leaseSettled = false;
+    try {
+      existing = await freshSidecar(segment);
+      while (isFreshForeignLease(existing, audioKey)) {
+        if (!await shouldContinueWrites(planOrdinal)) {
+          stopScheduling = true;
+          return null;
+        }
+        await sleep(1_000);
+        existing = await freshSidecar(segment);
+        if (existing?.status === 'completed') {
+          await input.onSegmentCompleted?.(planOrdinal);
+          return null;
+        }
+        if (existing?.status === 'error') {
+          await input.onSegmentErrored?.(planOrdinal);
+          return null;
+        }
+      }
+
+      let lastError: unknown = null;
+      let lastErrorInfo: SegmentErrorInfo | null = null;
+      let completed = false;
+      let completedAlignment: PendingAlignment | null = null;
+      let attempt = 0;
+      while (true) {
+        attempt += 1;
+        try {
+          const releaseProvider = input.acquireProviderCapacity
+            ? await input.acquireProviderCapacity({
+              providerRef: effectiveProviderRef,
+              characters: segment.text.length,
+              signal: input.signal,
+            })
+            : async () => undefined;
+          let audioBuffer: Buffer;
+          try {
+            audioBuffer = await withAbortableTimeout(
+              (signal) => generateTTSBuffer({
+                text: segment.text,
+                voice: effectiveSettings.voice,
+                speed: effectiveSettings.nativeSpeed,
+                format: 'mp3',
+                model: effectiveSettings.ttsModel,
+                instructions: effectiveSettings.ttsInstructions,
+                language: effectiveSettings.language,
+                provider: requestCreds.providerType,
+                apiKey: requestCreds.apiKey,
+                baseUrl: requestCreds.baseUrl ?? undefined,
+              }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
+              input.synthesisTimeoutMs,
+              'tts playback segment synthesis',
+              input.signal,
+            );
+          } finally {
+            await releaseProvider().catch(() => undefined);
+          }
+          if (!await shouldContinueWrites(planOrdinal)) return null;
+          await input.putAudioObject(audioKey, audioBuffer);
+          if (!await shouldContinueWrites(planOrdinal)) {
+            await input.deleteAudioObject?.(audioKey).catch(() => undefined);
+            return null;
+          }
+          const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
+          if (!await shouldContinueWrites(planOrdinal)) return null;
+          await persistSegmentMetadata(segment, 'completed', {
+            audioKey,
+            durationMs,
+            alignment: null,
+            updatedAt: Date.now(),
+          }).catch(() => undefined);
+          leaseSettled = true;
+          completedAlignment = {
+            segment,
+            audio: audioBuffer,
+            audioKey,
+            durationMs: Math.max(1, durationMs),
+          };
+          completed = true;
+          break;
+        } catch (error) {
+          if (input.signal?.aborted) return null;
+          if (error instanceof ProviderCapacityWaitTimeoutError) {
+            // Saturated shared capacity is back-pressure, not a failed segment.
+            // Keep waiting while this run still owns the segment.
+            attempt -= 1;
+            if (!await shouldContinueWrites(planOrdinal)) {
+              stopScheduling = true;
+              return null;
+            }
+            continue;
+          }
+          lastError = error;
+          const classified = classifySegmentError(error);
+          lastErrorInfo = classified.info;
+          const rateLimited = classified.info.code === 'UPSTREAM_RATE_LIMIT';
+          if (rateLimited) {
+            await input.coolDownProviderCapacity?.(
+              effectiveProviderRef,
+              classified.info.retryAfterSeconds ?? 60,
+            ).catch(() => undefined);
+          }
+          const maxAttempts = rateLimited ? SEGMENT_RATE_LIMIT_MAX_ATTEMPTS : SEGMENT_MAX_ATTEMPTS;
+          if (!classified.retryable || attempt >= maxAttempts) break;
+          if (!await shouldContinueWrites(planOrdinal)) {
+            stopScheduling = true;
+            return null;
+          }
+          // Enabled provider limits also hold the next attempt until a 429
+          // cooldown expires; this backoff covers disabled limits and transient
+          // failures such as a restarting local TTS server.
+          await sleep(SEGMENT_RETRY_BACKOFF_MS * attempt);
+        }
+      }
+
+      if (completed) {
+        await input.onSegmentCompleted?.(planOrdinal);
+        return completedAlignment;
+      }
       if (!await shouldContinueWrites(planOrdinal)) {
         stopScheduling = true;
         return null;
       }
-      await sleep(1_000);
-      existing = await freshSidecar(segment);
-      if (existing?.status === 'completed') {
-        await input.onSegmentCompleted?.(planOrdinal);
-        return null;
-      }
-      if (existing?.status === 'error') {
-        await input.onSegmentErrored?.(planOrdinal);
-        return null;
-      }
-    }
-
-    let lastError: unknown = null;
-    let lastErrorInfo: SegmentErrorInfo | null = null;
-    let completed = false;
-    let completedAlignment: PendingAlignment | null = null;
-    for (let attempt = 1; attempt <= SEGMENT_MAX_ATTEMPTS; attempt += 1) {
-      try {
-        const releaseProvider = input.acquireProviderCapacity
-          ? await input.acquireProviderCapacity({
-            providerRef: effectiveProviderRef,
-            characters: segment.text.length,
-            signal: input.signal,
-          })
-          : async () => undefined;
-        let audioBuffer: Buffer;
-        try {
-          audioBuffer = await withAbortableTimeout(
-            (signal) => generateTTSBuffer({
-              text: segment.text,
-              voice: effectiveSettings.voice,
-              speed: effectiveSettings.nativeSpeed,
-              format: 'mp3',
-              model: effectiveSettings.ttsModel,
-              instructions: effectiveSettings.ttsInstructions,
-              language: effectiveSettings.language,
-              provider: requestCreds.providerType,
-              apiKey: requestCreds.apiKey,
-              baseUrl: requestCreds.baseUrl ?? undefined,
-            }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
-            input.synthesisTimeoutMs,
-            'tts playback segment synthesis',
-            input.signal,
-          );
-        } finally {
-          await releaseProvider().catch(() => undefined);
-        }
-        if (!await shouldContinueWrites(planOrdinal)) return null;
-        await input.putAudioObject(audioKey, audioBuffer);
-        if (!await shouldContinueWrites(planOrdinal)) {
-          await input.deleteAudioObject?.(audioKey).catch(() => undefined);
-          return null;
-        }
-        const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
-        if (!await shouldContinueWrites(planOrdinal)) return null;
-        await persistSegmentMetadata(segment, 'completed', {
-          audioKey,
-          durationMs,
-          alignment: null,
-          updatedAt: Date.now(),
-        }).catch(() => undefined);
-        completedAlignment = {
-          segment,
-          audio: audioBuffer,
-          audioKey,
-          durationMs: Math.max(1, durationMs),
-        };
-        completed = true;
-        break;
-      } catch (error) {
-        if (input.signal?.aborted) return null;
-        lastError = error;
-        const classified = classifySegmentError(error);
-        lastErrorInfo = classified.info;
-        if (classified.info.code === 'UPSTREAM_RATE_LIMIT') {
-          await input.coolDownProviderCapacity?.(
-            effectiveProviderRef,
-            classified.info.retryAfterSeconds ?? 60,
-          ).catch(() => undefined);
-        }
-        if (!classified.retryable) break;
-      }
-    }
-
-    if (completed) {
-      await input.onSegmentCompleted?.(planOrdinal);
-      return completedAlignment;
-    }
-    if (!await shouldContinueWrites(planOrdinal)) {
-      stopScheduling = true;
+      await persistSegmentMetadata(segment, 'error', {
+        audioKey,
+        error: lastErrorInfo ?? { message: lastError instanceof Error ? lastError.message : String(lastError) },
+        updatedAt: Date.now(),
+      }).catch(() => undefined);
+      leaseSettled = true;
+      await input.onSegmentErrored?.(planOrdinal);
       return null;
+    } finally {
+      if (!leaseSettled) await releaseOwnLease(segment, audioKey).catch(() => undefined);
     }
-    await persistSegmentMetadata(segment, 'error', {
-      audioKey,
-      error: lastErrorInfo ?? { message: lastError instanceof Error ? lastError.message : String(lastError) },
-      updatedAt: Date.now(),
-    }).catch(() => undefined);
-    await input.onSegmentErrored?.(planOrdinal);
-    return null;
   };
 
   const inFlight = new Set<Promise<void>>();

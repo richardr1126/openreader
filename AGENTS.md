@@ -167,6 +167,10 @@ caused conflicts, high CPU, misleading failures, and overheating.
   redesigning it; many playback invariants were solved and documented already.
 - Use the browser and logs together for product diagnosis. Production latency and
   event delivery can expose issues that a fast local stack hides.
+- Never attribute work to an agent or tool. Commits, PR titles and bodies,
+  review replies, issue comments, and code must not contain `Co-Authored-By`
+  agent trailers, session links, "Generated with/by" footers, or model names,
+  and commits use the owner's git identity rather than an agent's.
 - Commit only when requested, using a concise conventional message. Before a PR
   merge, inspect all inline/general comments and checks, fix valid findings,
   revalidate, then squash-merge.

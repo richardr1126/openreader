@@ -55,9 +55,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     deviceScopeKey: computeLimitAdmissions.deviceScopeKey,
     ipScopeKey: computeLimitAdmissions.ipScopeKey,
     requestKey: computeLimitAdmissions.requestKey,
+    action: computeLimitAdmissions.action,
   }).from(computeLimitAdmissions).where(and(
     eq(computeLimitAdmissions.userId, parsed.userId),
-    eq(computeLimitAdmissions.action, 'tts_playback'),
+    // Live playback and whole-document export runs both synthesize under
+    // their session admission.
+    inArray(computeLimitAdmissions.action, ['tts_playback', 'tts_playback_document']),
     inArray(computeLimitAdmissions.state, ['reserved', 'active']),
     gt(computeLimitAdmissions.leaseExpiresAt, nowMs),
     sql`${computeLimitAdmissions.requestKey} like ${`${escapeSqlLike(`tts-session:${parsed.sessionId}:`)}%`} escape '\\'`,
@@ -70,8 +73,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const runtimeConfig = await getRuntimeConfig();
   const leaseSeconds = Math.max(
     60,
-    ...runtimeConfig.computeLimitPolicies.actions.tts_playback.admission.active
-      .map((limit) => limit.leaseSeconds),
+    ...runtimeConfig.computeLimitPolicies.actions[
+      admission.action === 'tts_playback_document' ? 'tts_playback_document' : 'tts_playback'
+    ].admission.active.map((limit) => limit.leaseSeconds),
   );
   await touchComputeAdmission({ admissionId: admission.id, leaseSeconds, nowMs });
   const decision = await consumeComputeUsage({

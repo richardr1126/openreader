@@ -150,4 +150,96 @@ describe('TTS playback export job', () => {
     await expect(run(request, 0)).rejects.toThrow('could not generate any narratable audio');
     expect(getCbrSilenceSecond).not.toHaveBeenCalled();
   });
+
+  function pdfPlanStorage(): MemoryStorage {
+    const storage = new MemoryStorage();
+    storage.objects.set(request.planObjectKey, Buffer.from(JSON.stringify({
+      schemaVersion: 1,
+      segments: [
+        { ordinal: 0, text: 'One.', locator: { readerType: 'pdf', page: 1 } },
+        { ordinal: 1, text: 'Two.', locator: { readerType: 'pdf', page: 1 } },
+        { ordinal: 2, text: 'Three.', locator: { readerType: 'pdf', page: 2 } },
+      ],
+    })));
+    storage.objects.set('audio/0', Buffer.from('one'));
+    storage.objects.set('audio/1', Buffer.from('two'));
+    return storage;
+  }
+
+  function handler(storage: MemoryStorage, sidecars: Map<number, ReturnType<typeof sidecar>>, status = 'succeeded') {
+    return createTtsPlaybackExportHandler({
+      storage,
+      playbackStorage: {
+        sessions: { getSession: async () => ({
+          sessionId: request.sessionId,
+          storageUserId: request.storageUserId,
+          documentId: request.documentId,
+          status,
+          planObjectKey: request.planObjectKey,
+        }) },
+        artifacts: { readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null },
+      },
+      s3Prefix: 'test',
+    } as never);
+  }
+
+  test('exports one settled chapter while later chapters are still generating', async () => {
+    const storage = pdfPlanStorage();
+    const run = handler(storage, new Map([
+      [0, sidecar(0, 'completed', 'audio/0')],
+      [1, sidecar(1, 'completed', 'audio/1')],
+    ]), 'running');
+
+    const result = await run({ ...request, chapterIndex: 0 }, 0);
+
+    expect(result.artifact).toMatchObject({
+      chapterIndex: 0,
+      generatedSegments: 2,
+      skippedSegments: 0,
+      plannedSegments: 2,
+      dispositionFilename: 'openreader-dddddddddddd-chapter-001.mp3',
+    });
+    expect(storage.objects.get(result.artifact.objectKey)?.toString()).toBe('onetwo');
+    await expect(run(request, 0)).rejects.toThrow('session is not complete: running');
+  });
+
+  test('rebuilds a ready artifact once retried segments change the settled counts', async () => {
+    const storage = pdfPlanStorage();
+    const sidecars = new Map([
+      [0, sidecar(0, 'completed', 'audio/0')],
+      [1, sidecar(1, 'error', 'audio/1')],
+    ]);
+    const run = handler(storage, sidecars);
+    const first = await run({ ...request, chapterIndex: 0 }, 0);
+    expect(first.artifact.skippedSegments).toBe(1);
+
+    const reused = await run({ ...request, chapterIndex: 0 }, 0);
+    expect(reused.artifact.createdAt).toBe(first.artifact.createdAt);
+
+    sidecars.set(1, sidecar(1, 'completed', 'audio/1'));
+    const rebuilt = await run({ ...request, chapterIndex: 0 }, 0);
+    expect(rebuilt.artifact).toMatchObject({ generatedSegments: 2, skippedSegments: 0 });
+    expect(storage.objects.get(rebuilt.artifact.objectKey)?.toString()).toBe('onetwo');
+  });
+
+  test('refuses a whole-book export from a usage-limited run', async () => {
+    const storage = pdfPlanStorage();
+    const run = createTtsPlaybackExportHandler({
+      storage,
+      playbackStorage: {
+        sessions: { getSession: async () => ({
+          sessionId: request.sessionId,
+          storageUserId: request.storageUserId,
+          documentId: request.documentId,
+          status: 'succeeded',
+          stopReason: 'usage_limit',
+          planObjectKey: request.planObjectKey,
+        }) },
+        artifacts: { readSegmentMetadata: async () => null },
+      },
+      s3Prefix: 'test',
+    } as never);
+
+    await expect(run(request, 0)).rejects.toThrow('session is not complete: usage_limit');
+  });
 });

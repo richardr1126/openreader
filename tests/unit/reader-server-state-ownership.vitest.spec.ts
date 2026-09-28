@@ -83,9 +83,11 @@ describe('reader server-state ownership', () => {
   test('keys renderer sessions to the authoritative bootstrap surface', () => {
     const shell = source('src/components/reader/ReaderShell.tsx');
     const surfaceKey = source('src/lib/client/reader-readiness/surface-key.ts');
-    expect(surfaceKey).toContain('payload.plan.planId');
-    expect(surfaceKey).toContain('payload.plan.planSignature');
+    // A re-plan swaps the plan into the mounted surface; only document
+    // content identity remounts the renderer.
+    expect(surfaceKey).not.toContain('payload.plan');
     expect(surfaceKey).toContain('payload.document.contentVersion');
+    expect(shell).toContain('adoptReplannedPlaybackPlan({ language: replannedLanguage, plan: replannedPlan })');
     expect(shell).toContain('const attemptKey = `${surfaceKey}:${rendererAttempt}`');
     expect(shell).toContain('restartBootstrap,');
     expect(shell).toContain('enabled: Boolean(payload && sourceDocument)');

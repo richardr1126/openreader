@@ -21,6 +21,16 @@ export async function closeChangelog(page: Page) {
   ))).toBe(true);
 }
 
+/**
+ * A fresh browser context shows the consent banner shortly after load, fixed
+ * over the bottom of the page. Settle it before using controls it can cover.
+ */
+export async function declineOptionalCookies(page: Page) {
+  const decline = page.getByRole('button', { name: 'Decline Non-Essential', exact: true });
+  await decline.click();
+  await expect(decline).toBeHidden();
+}
+
 export async function enterAnonymousLibrary(page: Page) {
   await page.goto('/app');
 
@@ -38,12 +48,7 @@ export async function enterAnonymousLibrary(page: Page) {
 
   await closeChangelog(page);
 
-  const declineOptionalCookies = page.getByRole('button', {
-    name: 'Decline Non-Essential',
-    exact: true,
-  });
-  await declineOptionalCookies.click();
-  await expect(declineOptionalCookies).toBeHidden();
+  await declineOptionalCookies(page);
   await expect(
     page.getByText('Drop your file(s) here, or click to select', { exact: true }),
   ).toBeVisible();

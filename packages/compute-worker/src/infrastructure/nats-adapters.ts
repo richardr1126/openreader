@@ -318,6 +318,7 @@ export interface JetStreamOperationQueueDeps<TPayload> {
   getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
   layoutSubject: string;
   ttsPlaybackSubject: string;
+  ttsPlaybackDocumentSubject?: string;
   ttsPlaybackPlanSubject?: string;
   ttsPlaybackExportSubject?: string;
   documentPreviewSubject?: string;
@@ -341,6 +342,7 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
   private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
   private readonly layoutSubject: string;
   private readonly ttsPlaybackSubject: string;
+  private readonly ttsPlaybackDocumentSubject: string;
   private readonly ttsPlaybackPlanSubject: string;
   private readonly ttsPlaybackExportSubject: string;
   private readonly documentPreviewSubject: string;
@@ -361,6 +363,7 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
     this.getJs = deps.getJs;
     this.layoutSubject = deps.layoutSubject;
     this.ttsPlaybackSubject = deps.ttsPlaybackSubject;
+    this.ttsPlaybackDocumentSubject = deps.ttsPlaybackDocumentSubject ?? 'jobs.tts_playback_document';
     this.ttsPlaybackPlanSubject = deps.ttsPlaybackPlanSubject ?? 'jobs.tts_playback_plan';
     this.ttsPlaybackExportSubject = deps.ttsPlaybackExportSubject ?? 'jobs.tts_playback_export';
     this.documentPreviewSubject = deps.documentPreviewSubject ?? 'jobs.document_preview';
@@ -378,8 +381,11 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
         this.layoutCodec.encode(job as QueuedOperation<PdfLayoutJobRequest>),
       );
     } else if (job.kind === 'tts_playback') {
+      // Whole-document runs have their own consumer so hours-long exports
+      // queue among themselves instead of occupying live playback pullers.
+      const payload = job.payload as TtsPlaybackJobRequest;
       await js.publish(
-        this.ttsPlaybackSubject,
+        payload.generationExtent === 'document' ? this.ttsPlaybackDocumentSubject : this.ttsPlaybackSubject,
         this.ttsPlaybackCodec.encode(job as QueuedOperation<TtsPlaybackJobRequest>),
       );
     } else if (job.kind === 'tts_playback_plan') {

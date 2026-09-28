@@ -338,14 +338,20 @@ Every ready payload has one client surface key composed only from immutable
 server identities:
 
 ```text
-readerType + documentId + contentVersion + planId + planSignature
+readerType + documentId + contentVersion
 ```
 
 React object identity, callback identity, current playback state, container
 dimensions, and renderer callbacks are not part of this key. A renderer retry
 adds an explicit attempt number. A plan-affecting settings change produces a
-new authoritative plan identity and therefore a new surface. Ordinary
-rerenders do not create a new surface.
+new authoritative plan but keeps the surface: while the server re-plans,
+`useReaderBootstrap` keeps serving the last ready result (`replanning`), the
+shell shows a non-blocking status, and each later ready result for the same
+surface is adopted in place through `adoptReplannedPlaybackPlan`, keyed by the
+query's `dataUpdatedAt` so a return to an earlier plan is adopted too. Playback
+stays disabled until the replacement plan is adopted. Only an explicit restart
+(PDF reparse) returns to the loader. Ordinary rerenders do not create a new
+surface.
 
 ### 2. One source-acquisition query
 
@@ -463,7 +469,8 @@ The corrective implementation is incomplete without behavioral checks proving:
 - at least 50 unrelated TTS/provider rerenders do not repeat initialization;
 - a deferred same-key source request is shared rather than aborted/restarted;
 - a rejected source request stays failed until explicit retry;
-- changing document/content/plan identity initializes exactly one new surface;
+- changing document/content identity initializes exactly one new surface; a
+  plan-only change swaps the plan into the mounted surface;
 - force reparse prefers its replacement operation over the previous artifact
   and advances readiness even when the regenerated surface identity is equal;
 - saved PDF/HTML ordinals survive the renderer's first anchor commit;

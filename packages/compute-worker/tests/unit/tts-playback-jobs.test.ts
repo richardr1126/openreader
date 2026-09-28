@@ -6,7 +6,7 @@ import {
   contentTypeForExportFormat,
   stripId3Tag,
 } from '../../src/jobs/playback/ffmpeg-export';
-import { classifySegmentError } from '../../src/jobs/playback/segment-generation';
+import { classifySegmentError, TtsPlaybackSegmentTimeoutError } from '../../src/jobs/playback/segment-generation';
 import {
   playbackGenerationCancellationExpected,
   requestedPlaybackSegmentFailed,
@@ -45,6 +45,16 @@ describe('TTS playback segment retry classification', () => {
       retryable: true,
     });
     expect(classifySegmentError(Object.assign(new Error('unavailable'), { status: 503 })).retryable).toBe(true);
+  });
+
+  test('retries a segment that timed out queued behind a serial local provider', () => {
+    expect(classifySegmentError(new TtsPlaybackSegmentTimeoutError(30_000))).toEqual({
+      info: {
+        message: 'TTS playback segment synthesis timed out after 30000ms',
+        code: 'UPSTREAM_TIMEOUT',
+      },
+      retryable: true,
+    });
   });
 
   test('does not retry provider client errors', () => {

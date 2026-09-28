@@ -7,6 +7,7 @@ import type {
 } from '@/types/client';
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
+import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-export';
 import { normalizeLocator } from '@openreader/tts/locator';
 
 export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
@@ -65,59 +66,23 @@ export const createTtsPlaybackSession = async (
 export type TtsExportResolvePayload = TtsPlaybackSessionPayload & {
   format: 'mp3' | 'm4b';
   speed: number;
-  start?: boolean;
+  action: TtsExportAction;
+  /** Resolve or build one chapter's download instead of the whole book. */
+  chapterIndex?: number;
 };
 
-export type TtsExportResolveSnapshot = {
-  sessionId: string;
-  artifactId: string;
-  generation: {
-    session: { status?: string } | null;
-    operation: {
-      opId?: string;
-      status?: 'queued' | 'running' | 'succeeded' | 'failed';
-      progress?: {
-        completedThroughOrdinal?: number;
-        completedCount?: number;
-        skippedCount?: number;
-        plannedCount?: number;
-      } | null;
-      error?: { message?: string } | null;
-    } | null;
-    progress?: {
-      completedThroughOrdinal?: number;
-      completedCount?: number;
-      skippedCount?: number;
-      plannedCount?: number;
-    } | null;
-  };
-  artifact: {
-    artifact: {
-      artifactId: string;
-      objectKey: string;
-      contentType: string;
-      byteLength: number;
-      dispositionFilename: string;
-      format: 'mp3' | 'm4b';
-      speed: number;
-      generatedSegments?: number;
-      skippedSegments?: number;
-      plannedSegments?: number;
-    } | null;
-    operation: {
-      opId?: string;
-      status?: 'queued' | 'running' | 'succeeded' | 'failed';
-      progress?: {
-        phase?: 'assembling' | 'transcoding' | 'uploading';
-        completedSegments?: number;
-        plannedSegments?: number;
-        skippedSegments?: number;
-      } | null;
-      error?: { message?: string } | null;
-    } | null;
-  };
-  downloadUrl: string | null;
-};
+/** A failed export request, keeping the server's code and retry hint. */
+export class TtsExportRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+    readonly retryAfterMs: number | null,
+  ) {
+    super(message);
+    this.name = 'TtsExportRequestError';
+  }
+}
 
 export const resolveTtsExport = async (
   payload: TtsExportResolvePayload,
@@ -132,16 +97,15 @@ export const resolveTtsExport = async (
   });
 
   if (!response.ok) {
-    let problem: unknown = null;
-    try {
-      problem = await response.json();
-    } catch {
-      problem = null;
-    }
-    const detail = problem && typeof problem === 'object' && typeof (problem as Record<string, unknown>).detail === 'string'
-      ? (problem as Record<string, string>).detail
-      : null;
-    throw new Error(detail || `Audiobook export resolve failed with status ${response.status}`);
+    const problem = await response.json().catch(() => null) as Record<string, unknown> | null;
+    const text = (key: string) => (typeof problem?.[key] === 'string' && problem[key] ? problem[key] as string : null);
+    const retryAfterMs = Number(problem?.retryAfterMs);
+    throw new TtsExportRequestError(
+      text('detail') ?? text('error') ?? `Audiobook export request failed with status ${response.status}`,
+      response.status,
+      text('code'),
+      Number.isFinite(retryAfterMs) ? retryAfterMs : null,
+    );
   }
 
   return await response.json();

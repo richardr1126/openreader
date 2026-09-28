@@ -12,6 +12,8 @@ import { OP_EVENTS_SUBJECT_WILDCARD } from './nats-adapters';
 export const JOBS_STREAM_NAME = 'compute_jobs';
 export const LAYOUT_JOBS_SUBJECT = 'jobs.layout';
 export const TTS_PLAYBACK_JOBS_SUBJECT = 'jobs.tts_playback';
+/** Whole-document (audiobook export) playback runs, consumed separately from live playback. */
+export const TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT = 'jobs.tts_playback_document';
 export const TTS_PLAYBACK_PLAN_JOBS_SUBJECT = 'jobs.tts_playback_plan';
 export const TTS_PLAYBACK_EXPORT_JOBS_SUBJECT = 'jobs.tts_playback_export';
 export const DOCUMENT_PREVIEW_JOBS_SUBJECT = 'jobs.document_preview';
@@ -20,6 +22,7 @@ export const ACCOUNT_EXPORT_JOBS_SUBJECT = 'jobs.account_export';
 export const EMAIL_DELIVERY_JOBS_SUBJECT = 'jobs.email_delivery';
 export const LAYOUT_CONSUMER_NAME = 'compute_layout';
 export const TTS_PLAYBACK_CONSUMER_NAME = 'compute_tts_playback';
+export const TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME = 'compute_tts_playback_document';
 export const TTS_PLAYBACK_PLAN_CONSUMER_NAME = 'compute_tts_playback_plan';
 export const TTS_PLAYBACK_EXPORT_CONSUMER_NAME = 'compute_tts_playback_export';
 export const DOCUMENT_PREVIEW_CONSUMER_NAME = 'compute_document_preview';
@@ -50,6 +53,7 @@ export async function ensureJetStreamResources(input: {
     subjects: [
       LAYOUT_JOBS_SUBJECT,
       TTS_PLAYBACK_JOBS_SUBJECT,
+      TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT,
       TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
       TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
       DOCUMENT_PREVIEW_JOBS_SUBJECT,
@@ -119,6 +123,7 @@ export async function ensureJetStreamResources(input: {
   await Promise.all([
     ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
     ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
+    ensureConsumer(TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME, TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
     ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
     ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
     ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
