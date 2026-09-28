@@ -17,7 +17,7 @@ import { IconButton } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 
-export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = true, hasReadableContent = true }: {
+export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true }: {
   currentPage?: number;
   numPages?: number | undefined;
   isPlaybackReady?: boolean;
@@ -37,7 +37,11 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
     availableVoices,
     skipToLocation,
     seekPlaybackTo,
+    playbackPlanReady,
   } = useTTS();
+  // A re-plan (voice, speed, language) keeps the reader mounted; playback waits
+  // until the replacement plan is adopted.
+  const playbackReady = rendererPlaybackReady && playbackPlanReady;
   const {
     playbackTimeSec,
     playbackDurationSec,
@@ -161,7 +165,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           <IconButton
             onClick={skipBackward}
             aria-label="Skip backward"
-            disabled={isProcessing || !isPlaybackReady || !hasReadableContent}
+            disabled={isProcessing || !playbackReady || !hasReadableContent}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
             {isProcessing ? <LoadingSpinner /> : <SkipBackwardIcon className="w-5 h-5" />}
@@ -174,12 +178,12 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
             onClick={togglePlay}
             aria-label={playbackControl.ariaLabel}
             aria-busy={playbackControl.isPending}
-            disabled={!isPlaying && (!isPlaybackReady || !hasReadableContent)}
+            disabled={!isPlaying && (!playbackReady || !hasReadableContent)}
             className="relative h-11 w-11 rounded-full bg-transparent text-soft hover:bg-accent-wash hover:text-accent sm:h-8 sm:w-8 sm:rounded-md"
           >
             {!hasReadableContent
               ? <PlayIcon className="w-5 h-5" />
-              : !isPlaying && !isPlaybackReady
+              : !isPlaying && !playbackReady
               ? <LoadingSpinner />
               : playbackControl.isPending
               ? <LoadingSpinner />
@@ -189,7 +193,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady = tru
           <IconButton
             onClick={skipForward}
             aria-label="Skip forward"
-            disabled={isProcessing || !isPlaybackReady || !hasReadableContent}
+            disabled={isProcessing || !playbackReady || !hasReadableContent}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
             {isProcessing ? <LoadingSpinner /> : <SkipForwardIcon className="w-5 h-5" />}

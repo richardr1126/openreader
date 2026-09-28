@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import {
@@ -49,7 +49,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
   const progressMutation = useMutation({ mutationFn: putDocumentProgress });
   const mutateProgress = progressMutation.mutate;
 
-  const result: ReaderBootstrapResult = !documentId
+  const currentResult: ReaderBootstrapResult = !documentId
     ? { status: 'error', message: 'Document not found.', retryable: false }
     : query.error
       ? {
@@ -58,6 +58,31 @@ export function useReaderBootstrap(documentId: string | undefined) {
         retryable: true,
       }
       : query.data ?? { status: 'pending' };
+  // A plan-affecting settings change re-plans on the server. The open reader
+  // keeps its last ready surface meanwhile instead of returning to the loader;
+  // only an explicit restart (such as a PDF reparse) hides it.
+  const surfaceOwner = `${sessionId}:${documentId ?? ''}`;
+  const [settled, setSettled] = useState<{
+    owner: string;
+    result: Extract<ReaderBootstrapResult, { status: 'ready' }>;
+    version: number;
+  } | null>(null);
+  useEffect(() => {
+    if (query.data?.status !== 'ready') return;
+    setSettled({ owner: surfaceOwner, result: query.data, version: query.dataUpdatedAt });
+  }, [query.data, query.dataUpdatedAt, surfaceOwner]);
+  const settledForSurface = settled?.owner === surfaceOwner ? settled : null;
+  const replanning = Boolean(settledForSurface) && currentResult.status === 'pending';
+  const replanError = settledForSurface && currentResult.status === 'error'
+    ? currentResult.message
+    : null;
+  const result: ReaderBootstrapResult = settledForSurface && currentResult.status !== 'ready'
+    ? settledForSurface.result
+    : currentResult;
+  /** Changes whenever a new ready result arrives, even for an identical plan. */
+  const readyVersion = currentResult.status === 'ready'
+    ? query.dataUpdatedAt
+    : settledForSurface?.version ?? 0;
   const sourceMetadata = result.status === 'ready' ? result.payload.document : null;
   const sourceQuery = useQuery({
     queryKey: queryKeys.readerDocumentSource(
@@ -113,6 +138,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
       operationId,
       ...(input.progress ? { progress: input.progress } : {}),
     };
+    setSettled(null);
     queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
   }, [key, queryClient]);
   const retry = useCallback(async () => {
@@ -157,6 +183,9 @@ export function useReaderBootstrap(documentId: string | undefined) {
 
   return {
     result,
+    replanning,
+    replanError,
+    readyVersion,
     documentSource,
     restart,
     retry,

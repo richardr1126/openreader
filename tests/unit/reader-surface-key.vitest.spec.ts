@@ -31,12 +31,12 @@ function htmlPayload(contentVersion: string, planId: string, planSignature: stri
 }
 
 describe('reader surface identity', () => {
-  test('is stable across object recreation and changes for content or plan identity', () => {
+  test('is stable across object recreation and a re-plan, and changes for new content', () => {
     const initial = htmlPayload('content-v1', 'plan-v1', 'signature-v1');
     expect(readerSurfaceKey({ ...initial })).toBe(readerSurfaceKey(initial));
     expect(readerSurfaceKey(htmlPayload('content-v2', 'plan-v1', 'signature-v1')))
       .not.toBe(readerSurfaceKey(initial));
     expect(readerSurfaceKey(htmlPayload('content-v1', 'plan-v2', 'signature-v2')))
-      .not.toBe(readerSurfaceKey(initial));
+      .toBe(readerSurfaceKey(initial));
   });
 });

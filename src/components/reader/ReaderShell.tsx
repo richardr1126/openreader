@@ -4,6 +4,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -11,13 +12,14 @@ import { useTTS } from '@/contexts/TTSContext';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { useReaderSurfaceAdoption } from '@/hooks/useReaderSurfaceAdoption';
 import { readerSurfaceKey } from '@/lib/client/reader-readiness/surface-key';
+import { playbackPlanIdentity } from '@/lib/shared/playback-plan';
 import type {
   ReaderBootstrapRestart,
   ReaderPayload,
 } from '@/types/reader-bootstrap';
 import type { ReaderDocument } from '@/types/documents';
 import type { ReaderType } from '@/types/user-state';
-import { ReaderError, ReaderLoader } from './ReaderLoader';
+import { ReaderError, ReaderLoader, ReaderReplanStatus } from './ReaderLoader';
 
 export type ReaderRendererProps<T extends ReaderType> = {
   payload: Extract<ReaderPayload, { readerType: T }>;
@@ -40,7 +42,7 @@ export function ReaderShell<T extends ReaderType>({
 }) {
   const bootstrap = useReaderBootstrap(documentId);
   const { result } = bootstrap;
-  const { initializeReaderSession } = useTTS();
+  const { initializeReaderSession, adoptReplannedPlaybackPlan, playbackPlanKey } = useTTS();
   const {
     disableProgressPersistence,
     enableProgressPersistence,
@@ -87,6 +89,35 @@ export function ReaderShell<T extends ReaderType>({
       });
     },
   });
+  // Each later ready result for the same surface (a re-plan) swaps its plan into
+  // the mounted reader. The initial adoption above owns the first result.
+  const adoptedReadyVersionRef = useRef<{ attemptKey: string; version: number } | null>(null);
+  const adoptedSurface = Boolean(payload) && adoption.adoptedAttemptKey === attemptKey;
+  const readyVersion = bootstrap.readyVersion;
+  const replanning = bootstrap.replanning;
+  const replannedPlan = payload?.plan;
+  const replannedLanguage = payload?.settings.language ?? 'auto';
+  useEffect(() => {
+    if (!adoptedSurface || replanning || !replannedPlan) return;
+    const adopted = adoptedReadyVersionRef.current;
+    if (adopted?.attemptKey !== attemptKey) {
+      adoptedReadyVersionRef.current = { attemptKey, version: readyVersion };
+      return;
+    }
+    if (adopted.version === readyVersion) return;
+    adoptedReadyVersionRef.current = { attemptKey, version: readyVersion };
+    if (playbackPlanKey === playbackPlanIdentity(replannedPlan)) return;
+    adoptReplannedPlaybackPlan({ language: replannedLanguage, plan: replannedPlan });
+  }, [
+    adoptReplannedPlaybackPlan,
+    adoptedSurface,
+    attemptKey,
+    playbackPlanKey,
+    readyVersion,
+    replannedLanguage,
+    replannedPlan,
+    replanning,
+  ]);
   const initializationError = adoption.failure?.attemptKey === attemptKey
     ? adoption.failure.error
     : null;
@@ -195,6 +226,12 @@ export function ReaderShell<T extends ReaderType>({
 
   return (
     <>
+      {rendererReady && (bootstrap.replanning || bootstrap.replanError) ? (
+        <ReaderReplanStatus
+          error={bootstrap.replanError}
+          onRetry={() => void bootstrap.retry()}
+        />
+      ) : null}
       <div
         className={rendererReady ? undefined : 'pointer-events-none opacity-0'}
         aria-hidden={!rendererReady}

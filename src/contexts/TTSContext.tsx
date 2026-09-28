@@ -69,7 +69,7 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
-import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
+import { playbackPlanIdentity, type TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { ReaderInitialPosition } from '@/lib/shared/reader-position';
 import { queryKeys } from '@/lib/client/query-keys';
 import type { EpubLocationChangeIntent } from '@/lib/client/epub/location-controller';
@@ -124,7 +124,14 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
     plan: TtsPlaybackPlan;
     initialPosition: ReaderInitialPosition;
   }) => void;
+  /**
+   * Swap in a plan the server re-planned for the open reader (voice, speed,
+   * language, segmentation) without resetting the reading position.
+   */
+  adoptReplannedPlaybackPlan: (input: { language: string; plan: TtsPlaybackPlan }) => void;
   playbackPlanReady: boolean;
+  /** Identity of the adopted plan, or null while none is adopted. */
+  playbackPlanKey: string | null;
   setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
   documentLanguage: string;
   resolvedLanguage: string;
@@ -593,6 +600,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     stop,
   ]);
 
+  const adoptReplannedPlaybackPlan = useCallback((input: {
+    language: string;
+    plan: TtsPlaybackPlan;
+  }) => {
+    abortAudio();
+    setIsPlaying(false);
+    resetBootstrapPlanAdoption();
+    setDocumentLanguage(input.language);
+    acceptBootstrapPlaybackPlan(input.plan);
+  }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption]);
+
   const reacquirePlaybackPlan = useCallback(async () => {
     if (!documentId) return;
     await queryClient.refetchQueries({
@@ -658,7 +676,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setVoiceAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
+    adoptReplannedPlaybackPlan,
     playbackPlanReady: Boolean(playbackPlan?.planObjectKey),
+    playbackPlanKey: playbackPlan?.planObjectKey
+      ? playbackPlanIdentity(playbackPlan)
+      : null,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
@@ -696,6 +718,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setVoiceAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
+    adoptReplannedPlaybackPlan,
     setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
