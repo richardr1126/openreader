@@ -87,6 +87,7 @@ export function useAudiobookExport(input: {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoBuildAttemptRef = useRef<string | null>(null);
   const chapterSubscriptionsRef = useRef(new Map<number, () => void>());
+  const chapterRetryTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   // Bumped when this export's lifecycle ends (settings change or unmount), so
   // an in-flight chapter request can neither subscribe nor download afterward.
   const lifecycleRef = useRef(0);
@@ -172,6 +173,7 @@ export function useAudiobookExport(input: {
     setChapterDownloads({});
     autoBuildAttemptRef.current = null;
     const chapterSubscriptions = chapterSubscriptionsRef.current;
+    const chapterRetryTimers = chapterRetryTimersRef.current;
     return () => {
       lifecycleRef.current += 1;
       requestControllerRef.current?.abort();
@@ -181,6 +183,8 @@ export function useAudiobookExport(input: {
       refreshTimerRef.current = null;
       chapterSubscriptions.forEach((unsubscribe) => unsubscribe());
       chapterSubscriptions.clear();
+      chapterRetryTimers.forEach((timer) => clearTimeout(timer));
+      chapterRetryTimers.clear();
     };
   }, [exportKey]);
 
@@ -238,7 +242,8 @@ export function useAudiobookExport(input: {
 
   const downloadChapter = useCallback(async (chapterIndex: number) => {
     const key = exportKeyRef.current;
-    if (!key || chapterSubscriptionsRef.current.has(chapterIndex)) return;
+    if (!key || chapterSubscriptionsRef.current.has(chapterIndex)
+      || chapterRetryTimersRef.current.has(chapterIndex)) return;
     const lifecycle = lifecycleRef.current;
     const isCurrent = () => exportKeyRef.current === key && lifecycleRef.current === lifecycle;
     const setChapter = (state: AudiobookChapterDownloadState | null) => {
@@ -284,9 +289,10 @@ export function useAudiobookExport(input: {
               if (!isClosedEventSource(event)) return;
               chapterSubscriptionsRef.current.get(chapterIndex)?.();
               chapterSubscriptionsRef.current.delete(chapterIndex);
-              setTimeout(() => {
+              chapterRetryTimersRef.current.set(chapterIndex, setTimeout(() => {
+                chapterRetryTimersRef.current.delete(chapterIndex);
                 if (isCurrent()) void settle('resolve');
-              }, STREAM_RECONNECT_DELAY_MS);
+              }, STREAM_RECONNECT_DELAY_MS));
             },
           });
           chapterSubscriptionsRef.current.set(chapterIndex, unsubscribe);
