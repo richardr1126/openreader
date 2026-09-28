@@ -13,6 +13,12 @@ import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-expo
 // Chapter progress is a read model refresh, not a stream: SSE progress only
 // triggers it, at most this often, while the export sidebar is open.
 const PROGRESS_REFRESH_INTERVAL_MS = 5_000;
+const STREAM_RECONNECT_DELAY_MS = 2_000;
+
+function isClosedEventSource(event: Event): boolean {
+  const source = event.target as EventSource | null;
+  return source?.readyState === EventSource.CLOSED;
+}
 
 type ExportFormat = 'mp3' | 'm4b';
 
@@ -115,6 +121,38 @@ export function useAudiobookExport(input: {
 
   const refresh = useCallback(() => run('resolve', { quiet: true }), [run]);
 
+  // EventSource retries a dropped connection by itself, but gives up for good
+  // (readyState CLOSED) when a reconnect is refused, for example after the
+  // stream's time limit or while the browser suspended a background tab.
+  // Reopening the streams and refreshing the snapshot catches progress up
+  // without a page reload.
+  const [streamEpoch, setStreamEpoch] = useState(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnect = useCallback((delayMs = STREAM_RECONNECT_DELAY_MS) => {
+    if (reconnectTimerRef.current) return;
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      void refresh();
+      setStreamEpoch((epoch) => epoch + 1);
+    }, delayMs);
+  }, [refresh]);
+  const reconnectIfClosed = useCallback((event: Event) => {
+    if (isClosedEventSource(event)) reconnect();
+  }, [reconnect]);
+  useEffect(() => {
+    const resume = () => {
+      if (document.visibilityState === 'visible') reconnect(0);
+    };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('online', resume);
+    return () => {
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('online', resume);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    };
+  }, [reconnect]);
+
   const scheduleRefresh = useCallback(() => {
     if (!isOpenRef.current || refreshTimerRef.current) return;
     const waitMs = Math.max(0, lastRefreshAtRef.current + PROGRESS_REFRESH_INTERVAL_MS - Date.now());
@@ -166,10 +204,9 @@ export function useAudiobookExport(input: {
         if (event.status === 'succeeded' || event.status === 'failed') void refresh();
         else scheduleRefresh();
       },
-      // EventSource reconnects on its own; the next snapshot catches up.
-      onError: () => {},
+      onError: reconnectIfClosed,
     });
-  }, [documentId, generationOperationId, generationState, refresh, scheduleRefresh]);
+  }, [documentId, generationOperationId, generationState, reconnectIfClosed, refresh, scheduleRefresh, streamEpoch]);
 
   const artifactState = snapshot?.artifact.state ?? null;
   const artifactOperationId = snapshot?.artifact.operationId ?? null;
@@ -183,9 +220,9 @@ export function useAudiobookExport(input: {
         setArtifactProgress(progressPercent(event.completedSegments, event.plannedSegments));
         if (event.status === 'succeeded' || event.status === 'failed') void refresh();
       },
-      onError: () => {},
+      onError: reconnectIfClosed,
     });
-  }, [artifactOperationId, artifactState, documentId, refresh]);
+  }, [artifactOperationId, artifactState, documentId, reconnectIfClosed, refresh, streamEpoch]);
 
   // Build (or rebuild after retried skips) the book file once every segment
   // is settled. One attempt per artifact/count state avoids retry loops when
@@ -241,7 +278,16 @@ export function useAudiobookExport(input: {
               }
               setChapter({ status: 'preparing', progress: progressPercent(event.completedSegments, event.plannedSegments) });
             },
-            onError: () => {},
+            // A closed stream re-resolves the chapter, which downloads a
+            // finished file or subscribes to the build again.
+            onError: (event) => {
+              if (!isClosedEventSource(event)) return;
+              chapterSubscriptionsRef.current.get(chapterIndex)?.();
+              chapterSubscriptionsRef.current.delete(chapterIndex);
+              setTimeout(() => {
+                if (isCurrent()) void settle('resolve');
+              }, STREAM_RECONNECT_DELAY_MS);
+            },
           });
           chapterSubscriptionsRef.current.set(chapterIndex, unsubscribe);
           return;
