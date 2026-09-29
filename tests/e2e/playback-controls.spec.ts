@@ -230,7 +230,8 @@ test('anonymous user controls playback across every accepted document journey', 
   const changedSpeedButton = page.getByRole('button', { name: '1.1x', exact: true });
   await expect(changedSpeedButton).toBeEnabled({ timeout: 60_000 });
 
-  await changedSpeedButton.click();
+  // A speed change re-plans in place, so the open popover survives it.
+  await expect(audioSpeed).toBeVisible();
   await audioSpeed.focus();
   await audioSpeed.press('ArrowRight');
   await expect(page.getByRole('button', { name: '1.1x • 1.1x', exact: true })).toBeVisible();
