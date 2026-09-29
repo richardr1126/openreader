@@ -34,4 +34,6 @@ The [Docker Compose guide](./deploy/docker-compose) is the maintained Docker set
 
 The initial email is an account identifier, **not** an email allowlist. It never promotes a later signup, and `ADMIN_EMAILS` is no longer used. If account email delivery is enabled, the first sign-in attempt sends a verification link; follow it before signing in. Other admins can be granted from **Settings → Admin → Users**.
 
-For all stack variants, LAN access, security settings, and upgrades, use the [Docker Compose guide](./deploy/docker-compose). Do not delete volumes during an upgrade.
+After sign-in, **Settings → Admin → System** confirms the worker, storage, provider, and addresses work from your browser.
+
+For all stack variants, LAN access, and security settings, use the [Docker Compose guide](./deploy/docker-compose). Upgrading a v4 instance? Follow [Upgrade from v4](./deploy/upgrade-from-v4). Do not delete volumes during an upgrade.

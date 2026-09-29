@@ -163,6 +163,15 @@ At the end of the **Site features** tab, a dedicated **TTS upstream** group cont
 
 In v4 these settings are admin-only and are no longer configurable through environment variables.
 
+## System check
+
+**Settings → Admin → System** verifies the instance from where it matters. It checks that the app
+can reach the compute worker and object storage, that a playback signing secret is available, that at
+least one shared provider is enabled, and, from your browser, that the address you opened matches
+`BASE_URL` and that the worker's playback address is reachable (and not blocked as mixed content).
+Each row that is not **OK** says what is wrong and which setting fixes it. Use **Run again** after
+changing configuration.
+
 ## Scheduled tasks
 
 The **Scheduled tasks** section controls background maintenance jobs such as expired-upload cleanup, orphaned-blob reaping, and rate-limit ledger pruning.

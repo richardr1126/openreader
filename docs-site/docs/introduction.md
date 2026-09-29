@@ -35,6 +35,7 @@ It supports multiple TTS providers including OpenAI, Replicate, DeepInfra, and c
 ## 🧭 Key Docs
 
 - [Docker Compose](./deploy/docker-compose)
+- [Upgrade from v4](./deploy/upgrade-from-v4)
 - [Local Development](./deploy/local-development)
 - [Vercel Deployment](./deploy/vercel-deployment)
 - [Environment Variables](./reference/environment-variables)

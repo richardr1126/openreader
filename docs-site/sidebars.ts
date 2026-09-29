@@ -58,6 +58,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'deploy/local-development',
         'deploy/docker-compose',
+        'deploy/upgrade-from-v4',
         'deploy/compute-worker',
         'deploy/vercel-deployment',
       ],
