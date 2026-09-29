@@ -267,6 +267,7 @@ describe('server-state architecture', () => {
       '/api/admin/providers',
       '/api/admin/providers/[id]',
       '/api/admin/settings',
+      '/api/admin/system-check',
       '/api/admin/tasks',
       '/api/admin/tasks/[key]',
       '/api/admin/tasks/[key]/run',

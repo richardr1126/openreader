@@ -18,6 +18,9 @@ import {
   waitForEndpoint,
 } from './embedded-seaweedfs.mjs';
 import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
+import { evaluateStartupConfig, formatConfigProblems, formatConfigWarnings } from './preflight.mjs';
+import { applyEmbeddedPlaybackSecret } from './runtime-secrets.mjs';
+import { detectPreV5Database, formatV4UpgradeNotice } from './v4-upgrade.mjs';
 
 function applyStorageTransportEnv(env, options = {}) {
   const resolved = resolveStorageTransport(env, options);
@@ -76,18 +79,6 @@ function resolveWorkspacePath(value, fallback) {
   return path.isAbsolute(configuredPath)
     ? configuredPath
     : path.resolve(workspaceRoot, configuredPath);
-}
-
-function requireAuthEnv(env) {
-  const missing = [];
-  if (!env.AUTH_SECRET?.trim()) missing.push('AUTH_SECRET');
-  if (!env.BASE_URL?.trim()) missing.push('BASE_URL');
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required auth env vars: ${missing.join(', ')}. `
-      + 'OpenReader v4 requires both AUTH_SECRET and BASE_URL at startup.',
-    );
-  }
 }
 
 function embeddedCredentialBrokerUrl() {
@@ -224,7 +215,14 @@ async function main() {
     runtimeEnv.SQLITE_DB_PATH,
     path.join(workspaceRoot, 'docstore', 'sqlite3.db'),
   );
-  requireAuthEnv(runtimeEnv);
+  const startupConfig = evaluateStartupConfig(runtimeEnv, { hasNatsBinary: hasNatsBinary() });
+  if (startupConfig.errors.length > 0) {
+    console.error(formatConfigProblems(startupConfig));
+    process.exit(1);
+  }
+  if (startupConfig.warnings.length > 0) {
+    console.warn(formatConfigWarnings(startupConfig));
+  }
   let weedProc = null;
   let weedExitPromise = Promise.resolve();
   let natsProc = null;
@@ -295,6 +293,9 @@ async function main() {
   try {
     const shouldRunDbMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_DRIZZLE_MIGRATIONS', true);
     if (shouldRunDbMigrations) {
+      if (await detectPreV5Database({ workspaceRoot, env: runtimeEnv })) {
+        console.warn(formatV4UpgradeNotice());
+      }
       await runDbMigrations(runtimeEnv);
     }
 
@@ -395,13 +396,6 @@ async function main() {
     const embeddedNatsMonitorPort = Number.parseInt(withDefault(runtimeEnv.EMBEDDED_NATS_MONITOR_PORT, '8222'), 10);
     const shouldStartEmbeddedWorker = !Boolean(runtimeEnv.COMPUTE_WORKER_URL?.trim());
 
-    if (shouldStartEmbeddedWorker && !hasNatsBinary()) {
-      throw new Error(
-        '`nats-server` binary is required when COMPUTE_WORKER_URL is unset. '
-        + 'Install nats-server or set COMPUTE_WORKER_URL and COMPUTE_WORKER_TOKEN for an external worker.',
-      );
-    }
-
     if (shouldStartEmbeddedWorker) {
       runtimeEnv.NATS_URL = withDefault(runtimeEnv.NATS_URL, `nats://127.0.0.1:${embeddedNatsPort}`);
       runtimeEnv.COMPUTE_WORKER_URL = withDefault(runtimeEnv.COMPUTE_WORKER_URL, `http://127.0.0.1:${embeddedWorkerPort}`);
@@ -413,6 +407,7 @@ async function main() {
         runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN,
         randomBytes(24).toString('base64url'),
       );
+      applyEmbeddedPlaybackSecret(runtimeEnv);
       runtimeEnv.COMPUTE_WORKER_HOST = withDefault(runtimeEnv.COMPUTE_WORKER_HOST, '127.0.0.1');
       runtimeEnv.COMPUTE_NATS_REPLICAS = withDefault(runtimeEnv.COMPUTE_NATS_REPLICAS, '1');
 
@@ -490,15 +485,6 @@ async function main() {
       });
       await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30, 'Embedded compute-worker');
       console.log(`Embedded compute-worker is ready at http://127.0.0.1:${embeddedWorkerPort}`);
-    } else if (
-      !runtimeEnv.COMPUTE_WORKER_URL?.trim()
-      || !runtimeEnv.COMPUTE_WORKER_TOKEN?.trim()
-      || !runtimeEnv.COMPUTE_CREDENTIAL_BROKER_TOKEN?.trim()
-    ) {
-      throw new Error(
-        'COMPUTE_WORKER_URL, COMPUTE_WORKER_TOKEN, and COMPUTE_CREDENTIAL_BROKER_TOKEN '
-        + 'are required when embedded compute worker startup is disabled.',
-      );
     }
 
     const { child, exitPromise } = spawnMainCommand(command, runtimeEnv);

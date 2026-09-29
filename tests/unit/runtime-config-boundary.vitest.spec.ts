@@ -179,7 +179,9 @@ describe('shared runtime configuration boundary', () => {
       expect(slimCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');
       expect(slimCompose).toContain('COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}');
       expect(slimCompose).toContain('- "8081:8081"');
-      expect(slimCompose).toContain('COMPUTE_CREDENTIAL_BROKER_TOKEN:');
+      // Embedded bootstrap generates the broker token; a published default would let
+      // anyone who can reach the app read provider credentials.
+      expect(slimCompose).not.toContain('COMPUTE_CREDENTIAL_BROKER_TOKEN');
     }
 
     const dockerfile = source('Dockerfile');

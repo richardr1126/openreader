@@ -6,7 +6,7 @@ export const metadata: Metadata = {
 };
 
 const SETTINGS_SECTIONS = new Set<SettingsSectionId>([
-  'api', 'theme', 'account', 'providers', 'instance', 'compute', 'email', 'maintenance',
+  'api', 'theme', 'account', 'providers', 'instance', 'compute', 'email', 'system', 'maintenance',
 ]);
 
 export default async function SettingsRoute({

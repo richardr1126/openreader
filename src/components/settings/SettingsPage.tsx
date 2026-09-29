@@ -3,11 +3,12 @@
 import { useMemo, type ComponentType, type SVGProps } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClockIcon, DocumentIcon, InfoIcon, KeyIcon, MailIcon,
+import { CheckIcon, ClockIcon, DocumentIcon, InfoIcon, KeyIcon, MailIcon,
   PaletteIcon, SettingsIcon, SpeedometerIcon, UserIcon } from '@/components/icons/Icons';
 import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
+import { AdminSystemPanel } from '@/components/admin/AdminSystemPanel';
 import { AdminTasksPanel } from '@/components/admin/AdminTasksPanel';
 import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
 import { Sidebar, SidebarNav, SidebarNavGroup, SidebarNavItem, Toolbar } from '@/components/ui';
@@ -20,7 +21,7 @@ import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'email' | 'maintenance';
+export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'email' | 'system' | 'maintenance';
 type SettingsSection = {
   id: SettingsSectionId;
   label: string;
@@ -84,6 +85,13 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Email',
     shortLabel: 'Email',
     icon: MailIcon,
+    group: 'admin',
+  },
+  {
+    id: 'system',
+    label: 'System',
+    shortLabel: 'System',
+    icon: CheckIcon,
     group: 'admin',
   },
   {
@@ -291,6 +299,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                   {isAdmin && activeSection === 'instance' ? <AdminFeaturesPanel scope="instance" /> : null}
                   {isAdmin && activeSection === 'compute' ? <AdminFeaturesPanel scope="compute" /> : null}
                   {isAdmin && activeSection === 'email' ? <AdminEmailPanel /> : null}
+                  {isAdmin && activeSection === 'system' ? <AdminSystemPanel /> : null}
                   {isAdmin && activeSection === 'maintenance' ? <AdminTasksPanel /> : null}
                 </div>
               </div>
