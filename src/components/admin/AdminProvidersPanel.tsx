@@ -12,6 +12,7 @@ import {
   Section,
   ToggleRow,
   Select,
+  SelectOptionDetail,
   Button,
   IconButton,
   Input,
@@ -447,9 +448,9 @@ export function AdminProvidersPanel() {
                     <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
                       <span className="block truncate">{model.name}</span>
                       {model.id.includes(':') ? (
-                        <span className="block truncate text-xs text-muted">
+                        <SelectOptionDetail className="truncate">
                           {model.id.slice(model.id.indexOf(':'))}
-                        </span>
+                        </SelectOptionDetail>
                       ) : null}
                     </span>
                   )}

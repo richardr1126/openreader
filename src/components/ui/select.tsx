@@ -104,6 +104,15 @@ export function SharedListboxOption({
   );
 }
 
+/**
+ * Secondary line inside a `Select` option. It inherits the option's text color
+ * (dimmed) so it stays legible on the selected accent fill as well as on the
+ * hover and resting backgrounds; never give it a fixed `text-muted`/`text-soft`.
+ */
+export function SelectOptionDetail({ className, children }: { className?: string; children: ReactNode }) {
+  return <span className={cn('block text-xs opacity-80', className)}>{children}</span>;
+}
+
 export type SelectOption = {
   value: string;
   label: string;
@@ -180,7 +189,7 @@ export function Select<T = SelectOption>({
                 <>
                   {optionRenderer(option, { selected })}
                   {showCheckmark && selected ? (
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-accent">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-background">
                       <CheckIcon className="h-5 w-5" aria-hidden="true" />
                     </span>
                   ) : null}

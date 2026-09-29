@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Button, Input, Select, Textarea } from '@/components/ui';
+import { Button, Input, Select, SelectOptionDetail, Textarea } from '@/components/ui';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
@@ -216,9 +216,9 @@ export function ProviderSettingsPanel({
               <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
                 <span className="block truncate">{model.name}</span>
                 {model.id.includes(':') && (
-                  <span className="block truncate text-xs text-soft">
+                  <SelectOptionDetail className="truncate">
                     {model.id.slice(model.id.indexOf(':'))}
-                  </span>
+                  </SelectOptionDetail>
                 )}
               </span>
             )}

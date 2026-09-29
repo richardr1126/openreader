@@ -8,6 +8,7 @@ import {
   SettingRow,
   ToggleRow,
   Select,
+  SelectOptionDetail,
   SegmentedControl,
   Button,
   InlineButton,
@@ -377,9 +378,7 @@ export function AdminFeaturesPanel({
                 <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
                   {option.label}
                 </span>
-                <span className="block text-xs text-muted">
-                  {option.description}
-                </span>
+                <SelectOptionDetail>{option.description}</SelectOptionDetail>
               </span>
             )}
             chevronClassName="h-4 w-4 text-muted"
