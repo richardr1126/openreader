@@ -119,7 +119,7 @@ function ProviderLimits({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-foreground">{title}</p>
-          <p className="mt-0.5 text-xs text-muted">{description}</p>
+          <p className="mt-0.5 text-xs text-soft">{description}</p>
         </div>
         {onRemove ? (
           <Button variant="ghost" size="xs" onClick={onRemove}>Remove</Button>
@@ -196,28 +196,25 @@ export function ComputeLimitsEditor({
   );
 
   return (
-    <div className="space-y-3">
-      <div className="border-b border-line-soft px-0.5 pb-3">
-        <p className="text-sm font-medium text-foreground">Usage and request limits</p>
-        <p className="mt-0.5 text-xs text-muted">
-          Request-limit switches control admission only; the TTS switch controls generated-character usage.
-          Worker queues, resource capacity, and provider capacity continue to apply either way.
-        </p>
-      </div>
+    <div className="divide-y divide-line-soft !p-0">
+      <p className="px-3 py-2.5 text-xs text-soft">
+        Request-limit switches control admission only; the TTS switch controls generated-character usage.
+        Worker queues, resource capacity, and provider capacity continue to apply either way.
+      </p>
 
-      <div className="space-y-2">
+      <div className="divide-y divide-line-soft">
         {COMPUTE_ACTIONS.map((action) => {
           const actionPolicy = policy.actions[action];
           const detail = ACTION_DETAILS[action];
           return (
-            <details key={action} className="group overflow-hidden rounded-md border border-line bg-background">
+            <details key={action} className="group">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">{detail.label}</p>
                   <p className="truncate text-xs text-muted">{detail.description}</p>
                 </div>
                 <span className="flex shrink-0 items-center gap-2">
-                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                     actionPolicy.enabled
                       ? 'bg-accent-wash text-accent'
                       : 'bg-surface-sunken text-muted'
@@ -229,7 +226,7 @@ export function ComputeLimitsEditor({
                   <ChevronRightIcon className="h-3.5 w-3.5 text-soft transition-transform duration-base group-open:rotate-90" />
                 </span>
               </summary>
-              <div className="space-y-3 border-t border-line-soft px-3 pb-3 pt-2">
+              <div className="space-y-3 px-3 pb-3 pt-1">
                 <ToggleRow
                   label={action === 'tts_synthesis' ? 'Limit new generation' : 'Enforce request limits'}
                   description={action === 'tts_synthesis'
@@ -256,7 +253,7 @@ export function ComputeLimitsEditor({
                 ) : (
                   <>
                     <div>
-                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Start windows</p>
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Start windows</p>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {actionPolicy.admission.windows.map((window, index) => (
                           <div key={`${window.scope}:${index}`} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
@@ -280,7 +277,7 @@ export function ComputeLimitsEditor({
                       </div>
                     </div>
                     <div>
-                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Active work</p>
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Active work</p>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         {actionPolicy.admission.active.map((active, index) => (
                           <div key={active.scope} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
@@ -305,7 +302,7 @@ export function ComputeLimitsEditor({
                     </div>
                     {actionPolicy.execution ? (
                       <div>
-                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Worker queue</p>
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Worker queue</p>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                           <LimitNumber
                             label="Queued jobs"
@@ -356,7 +353,7 @@ export function ComputeLimitsEditor({
         })}
       </div>
 
-      <details className="group overflow-hidden rounded-md border border-line bg-background">
+      <details className="group">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
           <span className="min-w-0">
             <span className="block text-sm font-medium text-foreground">Worker capacity</span>
@@ -364,7 +361,7 @@ export function ComputeLimitsEditor({
           </span>
           <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
         </summary>
-        <div className="space-y-3 border-t border-line-soft p-3">
+        <div className="space-y-3 px-3 pb-3 pt-1">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <LimitNumber
               label="Executing per worker"
@@ -380,7 +377,7 @@ export function ComputeLimitsEditor({
             />
           </div>
           <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Resource slots per worker</p>
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Resource slots per worker</p>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {WORKER_RESOURCES.map((resource) => (
                 <LimitNumber
@@ -396,7 +393,7 @@ export function ComputeLimitsEditor({
         </div>
       </details>
 
-      <details className="group overflow-hidden rounded-md border border-line bg-background">
+      <details className="group">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
           <span className="min-w-0">
             <span className="block text-sm font-medium text-foreground">TTS provider capacity</span>
@@ -404,7 +401,7 @@ export function ComputeLimitsEditor({
           </span>
           <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
         </summary>
-        <div className="space-y-2 border-t border-line-soft p-3">
+        <div className="space-y-2 px-3 pb-3 pt-1">
           <ProviderLimits
             title="All providers"
             description="Used whenever a provider does not have its own override."

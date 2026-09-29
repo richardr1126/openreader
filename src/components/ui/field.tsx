@@ -25,18 +25,45 @@ export function Field({
   );
 }
 
-/** Label on the left, control on the right; for rows inside a `Section variant="group"`. */
+/**
+ * A labelled setting inside a `Section variant="group"`: text on the left, the
+ * control on the right (or below it when `stacked`). `meta` is a quiet line
+ * under the description, e.g. where the current value came from.
+ */
 export function SettingRow({
   label,
+  description,
+  meta,
+  stacked = false,
+  controlClassName = 'w-[min(15rem,60%)]',
   children,
 }: {
   label: string;
+  description?: ReactNode;
+  meta?: ReactNode;
+  stacked?: boolean;
+  controlClassName?: string;
   children: ReactNode;
 }) {
+  const text = (
+    <div className="min-w-0 flex-1 space-y-0.5">
+      <span className="block text-sm font-medium leading-5 text-foreground">{label}</span>
+      {description ? <span className="block text-xs leading-4 text-soft">{description}</span> : null}
+      {meta ? <span className="block text-[11px] leading-4 text-faint">{meta}</span> : null}
+    </div>
+  );
+  if (stacked) {
+    return (
+      <div className="space-y-2">
+        {text}
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="shrink-0 text-sm font-medium text-foreground">{label}</span>
-      <div className="min-w-0 flex-1 max-w-[15rem]">{children}</div>
+      {text}
+      <div className={cn('shrink-0', controlClassName)}>{children}</div>
     </div>
   );
 }
@@ -47,7 +74,7 @@ export function ToggleRow({
   checked,
   onChange,
   disabled = false,
-  right,
+  meta,
   variant = 'card',
 }: {
   label: string;
@@ -55,7 +82,7 @@ export function ToggleRow({
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
-  right?: ReactNode;
+  meta?: ReactNode;
   variant?: 'card' | 'flat' | 'plain';
 }) {
   const labelId = useId();
@@ -78,8 +105,8 @@ export function ToggleRow({
         >
           <span id={labelId} className="block text-sm font-medium leading-5 text-foreground">{label}</span>
           {description ? <span id={descId} className="block text-xs leading-4 text-soft">{description}</span> : null}
+          {meta ? <span className="block text-[11px] leading-4 text-faint">{meta}</span> : null}
         </div>
-        {right ? <div className="shrink-0 self-start pl-1.5">{right}</div> : null}
         <Switch
           checked={checked}
           onChange={onChange}

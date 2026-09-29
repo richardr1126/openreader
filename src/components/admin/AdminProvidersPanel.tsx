@@ -368,25 +368,23 @@ export function AdminProvidersPanel() {
   return (
     <Section
       title="Shared TTS providers"
-      action={
-        <div className="flex items-center gap-2">
-          <Badge tone="foreground">Shared</Badge>
-          {!editingId ? (
-            <Button
-              onClick={startCreate}
-              variant="primary"
-              size="icon"
-              aria-label="Add provider"
-              title="Add provider"
-            >
-              <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
-            </Button>
-          ) : null}
-        </div>
-      }
+      variant="group"
+      action={!editingId ? (
+        <Button
+          onClick={startCreate}
+          variant="primary"
+          size="xs"
+          className="gap-1"
+          aria-label="Add provider"
+          title="Add provider"
+        >
+          <PlusIcon className="h-3 w-3" aria-hidden="true" />
+          Add
+        </Button>
+      ) : null}
     >
       {editingId && (
-        <div className="space-y-2.5 pb-3 border-b border-offbase">
+        <div className="space-y-2.5">
           <div className="flex items-baseline justify-between gap-3">
             <h4 className="text-sm font-semibold text-foreground">
               {isEditingExisting ? `Edit "${editingProvider?.slug}"` : 'New provider'}
@@ -555,14 +553,14 @@ export function AdminProvidersPanel() {
         </div>
       )}
 
-      <div className="space-y-0">
+      <div className="divide-y divide-line-soft !p-0">
         {isLoading ? (
           <ProvidersListSkeleton />
         ) : providers.length === 0 ? (
-          <p className="text-xs text-muted py-2">No shared providers configured yet.</p>
+          <p className="px-3 py-2.5 text-xs text-soft">No shared providers configured yet.</p>
         ) : (
           providers.map((p) => (
-            <div key={p.id} className="py-1.5 border-b border-offbase last:border-b-0 px-0.5 rounded-md">
+            <div key={p.id} className="px-3 py-2.5">
               <div className="flex items-start gap-2.5">
                 <div className="flex-1 min-w-0 space-y-0.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -633,9 +631,9 @@ export function AdminProvidersPanel() {
 function ProvidersListSkeleton() {
   const rows = Array.from({ length: 4 });
   return (
-    <div className="animate-pulse space-y-0.5" aria-label="Loading shared providers" aria-busy="true">
+    <div className="animate-pulse divide-y divide-line-soft" aria-label="Loading shared providers" aria-busy="true">
       {rows.map((_, index) => (
-        <div key={index} className="py-1.5 border-b border-offbase last:border-b-0">
+        <div key={index} className="px-3 py-2.5">
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0 space-y-1.5">
               <div className="flex items-center gap-2">

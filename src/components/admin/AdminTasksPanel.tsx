@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Button, Card, Input, Section, Switch } from '@/components/ui';
+import { Button, Input, Section, Switch } from '@/components/ui';
 import { ClockIcon, RefreshIcon } from '@/components/icons/Icons';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -121,19 +121,16 @@ export function AdminTasksPanel() {
   });
 
   return (
-    <Section
-      variant="flat"
-      title="Maintenance schedule"
-    >
+    <Section variant="group" title="Scheduled tasks">
       {data?.scheduler.mode === 'vercel-cron' && (
-        <p className="mb-2 text-xs text-soft">
+        <p className="text-xs text-soft">
           Vercel Hobby invokes scheduled tasks once daily. Shorter intervals are unavailable on this deployment.
         </p>
       )}
       {isLoading ? (
         <TasksSkeleton />
       ) : (
-        <ul className="space-y-2">
+        <ul className="divide-y divide-line-soft !p-0">
           {(data?.tasks ?? []).map((task) => (
             <TaskRow
               key={task.key}
@@ -160,12 +157,12 @@ function TasksSkeleton() {
   const rows = Array.from({ length: 2 });
   return (
     <div
-      className="animate-pulse space-y-2"
+      className="animate-pulse divide-y divide-line-soft !p-0"
       aria-label="Loading maintenance tasks"
       aria-busy="true"
     >
       {rows.map((_, index) => (
-        <Card key={index} className="p-3">
+        <div key={index} className="px-3 py-2.5">
           <div className="space-y-2">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 space-y-1.5">
@@ -182,7 +179,7 @@ function TasksSkeleton() {
               <div className="h-7 w-28 rounded-md bg-offbase" />
             </div>
           </div>
-        </Card>
+        </div>
       ))}
     </div>
   );
@@ -223,8 +220,8 @@ function TaskRow({
   const running = task.running || runPending;
 
   return (
-    <li>
-      <Card className="p-3">
+    <li className="px-3 py-2.5">
+      <div>
         <div className="space-y-2.5">
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -294,7 +291,7 @@ function TaskRow({
             )
           )}
         </div>
-      </Card>
+      </div>
     </li>
   );
 }

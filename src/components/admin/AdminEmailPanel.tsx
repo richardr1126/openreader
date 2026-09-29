@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
-import { Badge, Button, Field, Input, Section, ToggleRow } from '@/components/ui';
+import { Button, Input, Section, SettingRow, ToggleRow } from '@/components/ui';
 import {
   buildEmailSettingsPatch,
   emailSettingsDraftFromResponse,
@@ -92,28 +92,31 @@ export function AdminEmailPanel() {
   };
 
   if (loading) return <EmailSettingsSkeleton />;
+  const emailField = (label: string, input: ReactNode, meta?: ReactNode) => (
+    <SettingRow label={label} meta={meta} controlClassName="w-[min(20rem,60%)]">
+      {input}
+    </SettingRow>
+  );
   return (
-    <div className="space-y-4">
-      <Section
-        title="Account email delivery"
-        action={<Badge tone={settings.enabled ? 'accent' : 'muted'}>{settings.enabled ? 'Enabled' : 'Off by default'}</Badge>}
-      >
-        <div className="space-y-4">
-          <ToggleRow
-            label="Enable account emails"
-            description="Require verified email addresses for password sign-in and enable password recovery. Existing sessions stay active."
-            checked={settings.enabled}
-            disabled={saving}
-            onChange={(enabled) => void save({ enabled })}
-          />
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Sender name"><Input aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} /></Field>
-            <Field label="Sender email"><Input aria-label="Sender email" type="email" value={draft.senderEmail} placeholder="reader@example.com" onChange={(event) => setDraft({ ...draft, senderEmail: event.target.value })} /></Field>
-            <Field label="Reply-to (optional)"><Input aria-label="Reply-to (optional)" type="email" value={draft.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setDraft({ ...draft, replyTo: event.target.value || null })} /></Field>
-            <Field label="Resend API key" hint={settings.apiKeyConfigured ? `Saved key: ${settings.apiKeyMask}` : 'No key saved'}>
-              <Input aria-label="Resend API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 're_…'} onChange={(event) => setApiKey(event.target.value)} />
-            </Field>
-          </div>
+    <div className="space-y-5">
+      <Section title="Account email delivery" variant="group">
+        <ToggleRow
+          label="Enable account emails"
+          description="Require verified email addresses for password sign-in and enable password recovery. Existing sessions stay active."
+          checked={settings.enabled}
+          disabled={saving}
+          onChange={(enabled) => void save({ enabled })}
+          variant="plain"
+        />
+        {emailField('Sender name', <Input aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} />)}
+        {emailField('Sender email', <Input aria-label="Sender email" type="email" value={draft.senderEmail} placeholder="reader@example.com" onChange={(event) => setDraft({ ...draft, senderEmail: event.target.value })} />)}
+        {emailField('Reply-to (optional)', <Input aria-label="Reply-to (optional)" type="email" value={draft.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setDraft({ ...draft, replyTo: event.target.value || null })} />)}
+        {emailField(
+          'Resend API key',
+          <Input aria-label="Resend API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 're_…'} onChange={(event) => setApiKey(event.target.value)} />,
+          settings.apiKeyConfigured ? `Saved key: ${settings.apiKeyMask}` : 'No key saved',
+        )}
+        <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
             <Button variant="primary" size="sm" disabled={saving} onClick={() => void save(buildEmailSettingsPatch(draft, apiKey), true)}>Save configuration</Button>
             {settings.apiKeyConfigured && <Button variant="outline" size="sm" disabled={saving} onClick={() => void save({ apiKey: null })}>Remove saved key</Button>}
@@ -126,8 +129,8 @@ export function AdminEmailPanel() {
           )}
         </div>
       </Section>
-      <Section title="Resend setup">
-        <ol className="list-decimal space-y-2 pl-5 text-sm text-soft">
+      <Section title="Resend setup" variant="group">
+        <ol className="list-inside list-decimal space-y-1.5 text-sm text-soft">
           <li>Verify the sender domain in Resend.</li>
           <li>Create a sending-only API key, preferably restricted to that domain.</li>
           <li>Save the key and sender above, then send a test before enabling account emails.</li>
@@ -139,43 +142,14 @@ export function AdminEmailPanel() {
 
 function EmailSettingsSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse" aria-label="Loading email settings" aria-busy="true">
-      <Section
-        title="Account email delivery"
-        action={<div className="h-4 w-20 rounded bg-offbase" />}
-      >
-        <div className="rounded-md border border-line px-2.5 py-2">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-1.5">
-              <div className="h-4 w-40 rounded bg-offbase" />
-              <div className="h-3 w-72 max-w-full rounded bg-offbase" />
-            </div>
-            <div className="h-5 w-9 shrink-0 rounded-pill bg-offbase" />
+    <div className="space-y-5 animate-pulse" aria-label="Loading email settings" aria-busy="true">
+      <Section title="Account email delivery" variant="group">
+        {[0, 1, 2, 3].map((index) => (
+          <div key={index} className="flex items-center justify-between gap-3">
+            <div className="h-4 w-32 rounded bg-offbase" />
+            <div className="h-8 w-56 rounded-md bg-offbase" />
           </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {[0, 1, 2, 3].map((index) => (
-            <div key={index} className="space-y-1">
-              <div className="h-3 w-24 rounded bg-offbase" />
-              <div className="h-9 w-full rounded-md bg-offbase" />
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <div className="h-8 w-32 rounded-md bg-offbase" />
-          <div className="h-8 w-28 rounded-md bg-offbase" />
-          <div className="h-8 w-28 rounded-md bg-offbase" />
-        </div>
-      </Section>
-
-      <Section
-        title="Resend setup"
-      >
-        <div className="space-y-2">
-          {[0, 1, 2].map((index) => (
-            <div key={index} className="h-4 w-4/5 max-w-md rounded bg-offbase" />
-          ))}
-        </div>
+        ))}
       </Section>
     </div>
   );

@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
-  Badge,
   Section,
+  SettingRow,
   ToggleRow,
   Select,
   SegmentedControl,
   Button,
+  InlineButton,
   Input,
 } from '@/components/ui';
 import { type TtsProviderId } from '@openreader/tts/provider-catalog';
@@ -223,22 +224,38 @@ export function AdminFeaturesPanel({
     );
   }
 
+  const numberRow = ({ key, label, ariaLabel, unit }: {
+    key: string;
+    label: string;
+    ariaLabel?: string;
+    unit?: string;
+  }) => (
+    <SettingRow label={label} meta={renderSource(key)} controlClassName="w-40">
+      <div className="flex items-center gap-1.5">
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          inputMode="numeric"
+          aria-label={ariaLabel ?? label}
+          className="text-right"
+          value={String(draft[key] ?? '')}
+          onChange={(event) => updatePositiveIntDraft(key, event.target.value)}
+        />
+        {unit ? <span className="w-9 shrink-0 text-xs text-soft">{unit}</span> : null}
+      </div>
+    </SettingRow>
+  );
+
   return (
-    <div className="space-y-4">
-      {showInstanceSettings ? <Section
-        title="TTS defaults"
-        action={<Badge tone="foreground">Defaults</Badge>}
-      >
-        <div className="space-y-1.5 pb-2 border-b border-offbase">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Default TTS provider</p>
-              <p className="text-xs text-muted mt-0.5">
-                Starting provider for new users.
-              </p>
-            </div>
-            <div className="shrink-0">{renderSource('defaultTtsProvider')}</div>
-          </div>
+    <div className="space-y-5">
+      {showInstanceSettings ? <Section title="TTS defaults" variant="group">
+        <SettingRow
+          label="Default TTS provider"
+          description="Starting provider for new users."
+          meta={renderSource('defaultTtsProvider')}
+          controlClassName="w-56"
+        >
           {providerOptions.length > 0 ? (
             <Select
               value={selectedProviderOption}
@@ -254,146 +271,48 @@ export function AdminFeaturesPanel({
               chevronClassName="h-4 w-4 text-muted"
             />
           ) : (
-            <div className="px-0.5 py-2 text-sm text-muted">
-              No shared providers yet. Add one first.
-            </div>
+            <p className="text-xs text-soft">No shared providers yet. Add one first.</p>
           )}
-        </div>
-
+        </SettingRow>
         <ToggleRow
           label="Show TTS provider settings tab"
           description="Allow per-user provider overrides."
           checked={Boolean(draft.enableTtsProvidersTab)}
           onChange={(checked) => updateDraft('enableTtsProvidersTab', checked)}
-          right={renderSource('enableTtsProvidersTab')}
-          variant="flat"
+          meta={renderSource('enableTtsProvidersTab')}
+          variant="plain"
         />
         <ToggleRow
           label="Show all provider models"
           description="Allow model selection beyond defaults."
           checked={Boolean(draft.showAllProviderModels)}
           onChange={(checked) => updateDraft('showAllProviderModels', checked)}
-          right={renderSource('showAllProviderModels')}
-          variant="flat"
+          meta={renderSource('showAllProviderModels')}
+          variant="plain"
         />
       </Section> : null}
 
-      {showComputeSettings ? <Section
-        title="Rate limiting"
-        action={<Badge tone="foreground">Limits</Badge>}
-      >
-        <div className="space-y-3 px-0.5 py-1.5 border-b border-offbase">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-foreground">Compute limits</p>
-              <p className="text-xs text-muted mt-0.5">
-                Configure each boundary directly. Enabled limits reject new work at the configured threshold.
-              </p>
-            </div>
-            <div className="shrink-0">{renderSource('computeLimitPolicies')}</div>
-          </div>
-          {computePolicy ? (
-            <ComputeLimitsEditor
-              policy={computePolicy}
-              providers={sharedProviders.map(({ slug, displayName }) => ({ slug, displayName }))}
-              onChange={(nextPolicy) => updateDraft('computeLimitPolicies', nextPolicy)}
-            />
-          ) : null}
-          <p className="text-xs text-muted">
-            TTS usage is checked per uncached segment. Cached audio and already generated ranges remain available after a limit is reached.
-          </p>
-        </div>
-
-        <div className="px-0.5 pt-1 pb-2 border-b border-offbase last:border-b-0">
-          <div className="flex items-center gap-2.5">
-            <div className="flex-1 min-w-0 space-y-0.5">
-              <span className="block text-sm font-medium leading-5 text-foreground">Max upload size</span>
-              <span className="block text-xs leading-4 text-muted">Largest single document upload accepted.</span>
-            </div>
-            <div className="shrink-0 self-start pl-1.5">{renderSource('maxUploadMb')}</div>
-            <div className="shrink-0 flex items-center gap-1.5">
-              <Input
-                type="number"
-                min={1}
-                step={1}
-                inputMode="numeric"
-                aria-label="Max upload size in megabytes"
-                className="w-20 text-right"
-                value={String(draft.maxUploadMb ?? '')}
-                onChange={(event) => updatePositiveIntDraft('maxUploadMb', event.target.value)}
-              />
-              <span className="text-xs text-muted">MB</span>
-            </div>
-          </div>
-        </div>
-      </Section> : null}
-
-      {showComputeSettings ? <Section
-        title="TTS playback"
-        action={<Badge tone="foreground">Playback</Badge>}
-      >
-        <div className="space-y-1.5 pb-2 border-b border-offbase">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Background generation extent</p>
-              <p className="text-xs text-muted mt-0.5">
-                How far the worker keeps generating after playback cursor updates stop.
-              </p>
-            </div>
-            <div className="shrink-0">{renderSource('ttsPlaybackBackgroundExtent')}</div>
-          </div>
-          <Select
-            value={playbackBackgroundExtentOption}
-            onChange={(option) => updateDraft('ttsPlaybackBackgroundExtent', option.value)}
-            options={PLAYBACK_BACKGROUND_EXTENT_OPTIONS}
-            getOptionKey={(option) => option.value}
-            renderValue={(option) => option.label}
-            renderOption={(option, { selected }) => (
-              <span className="block">
-                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                  {option.label}
-                </span>
-                <span className="block truncate text-xs text-muted">
-                  {option.description}
-                </span>
-              </span>
-            )}
-            chevronClassName="h-4 w-4 text-muted"
-          />
-        </div>
-      </Section> : null}
-
-      {showInstanceSettings ? <Section
-        title="Site features"
-        action={<Badge tone="foreground">Feature Flags</Badge>}
-      >
-        <div className="space-y-1.5 pb-2 border-b border-offbase">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">Changelog feed URL</p>
-              <p className="text-xs text-muted mt-0.5">
-                Public URL used by the standalone changelog page.
-              </p>
-            </div>
-            <div className="shrink-0">{renderSource('changelogFeedUrl')}</div>
-          </div>
+      {showInstanceSettings ? <Section title="Site features" variant="group">
+        <SettingRow
+          label="Changelog feed URL"
+          description="Public URL used by the standalone changelog page."
+          meta={renderSource('changelogFeedUrl')}
+          stacked
+        >
           <Input
             type="text"
+            aria-label="Changelog feed URL"
             value={String(draft.changelogFeedUrl ?? '')}
             onChange={(event) => updateDraft('changelogFeedUrl', event.target.value)}
             placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
           />
-        </div>
-        <div className="space-y-2 border-b border-line-soft pb-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-foreground">New account sign-ups</p>
-              <p className="mt-0.5 text-xs text-soft">
-                Open access, collect requests for approval, or close registration. Approval does not verify email ownership.
-              </p>
-            </div>
-            <div className="shrink-0">{renderSource('signupPolicy')}</div>
-          </div>
+        </SettingRow>
+        <SettingRow
+          label="New account sign-ups"
+          description="Open access, collect requests for approval, or close registration. Approval does not verify email ownership."
+          meta={renderSource('signupPolicy')}
+          stacked
+        >
           <SegmentedControl<SignupPolicy>
             value={draft.signupPolicy === 'approval' || draft.signupPolicy === 'closed' ? draft.signupPolicy : 'open'}
             options={[
@@ -405,151 +324,127 @@ export function AdminFeaturesPanel({
             ariaLabel="New account sign-up policy"
             className="grid-cols-3"
           />
-        </div>
+        </SettingRow>
         <ToggleRow
           label="Audiobook export"
           description='Show "Export audiobook" on PDF/EPUB pages.'
           checked={Boolean(draft.enableAudiobookExport)}
           onChange={(checked) => updateDraft('enableAudiobookExport', checked)}
-          right={renderSource('enableAudiobookExport')}
-          variant="flat"
+          meta={renderSource('enableAudiobookExport')}
+          variant="plain"
         />
         <ToggleRow
           label="DOCX upload conversion"
           description="Allow DOCX uploads (converted to PDF)."
           checked={Boolean(draft.enableDocxConversion)}
           onChange={(checked) => updateDraft('enableDocxConversion', checked)}
-          right={renderSource('enableDocxConversion')}
-          variant="flat"
+          meta={renderSource('enableDocxConversion')}
+          variant="plain"
         />
       </Section> : null}
 
       {showComputeSettings ? <Section
-        title="TTS upstream"
-        action={<Badge tone="foreground">Upstream</Badge>}
+        title="Limits"
+        variant="group"
+        subtitle="Enabled limits reject new work at the configured threshold. TTS usage is checked per uncached segment; cached audio stays available after a limit is reached."
+        action={renderSource('computeLimitPolicies')}
       >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-0.5 py-1.5">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-medium text-foreground">Retry attempts</label>
-              {renderSource('ttsUpstreamMaxRetries')}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              value={String(draft.ttsUpstreamMaxRetries ?? '')}
-              onChange={(event) => updatePositiveIntDraft('ttsUpstreamMaxRetries', event.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-medium text-foreground">Upstream timeout (ms)</label>
-              {renderSource('ttsUpstreamTimeoutMs')}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              value={String(draft.ttsUpstreamTimeoutMs ?? '')}
-              onChange={(event) => updatePositiveIntDraft('ttsUpstreamTimeoutMs', event.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-medium text-foreground">Audio cache size (bytes)</label>
-              {renderSource('ttsCacheMaxSizeBytes')}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              value={String(draft.ttsCacheMaxSizeBytes ?? '')}
-              onChange={(event) => updatePositiveIntDraft('ttsCacheMaxSizeBytes', event.target.value)}
-            />
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-2">
-              <label className="text-xs font-medium text-foreground">Audio cache TTL (ms)</label>
-              {renderSource('ttsCacheTtlMs')}
-            </div>
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              value={String(draft.ttsCacheTtlMs ?? '')}
-              onChange={(event) => updatePositiveIntDraft('ttsCacheTtlMs', event.target.value)}
-            />
-          </div>
-        </div>
+        {numberRow({ key: 'maxUploadMb', label: 'Max upload size', ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
+        {computePolicy ? (
+          <ComputeLimitsEditor
+            policy={computePolicy}
+            providers={sharedProviders.map(({ slug, displayName }) => ({ slug, displayName }))}
+            onChange={(nextPolicy) => updateDraft('computeLimitPolicies', nextPolicy)}
+          />
+        ) : null}
       </Section> : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs text-muted">
-          {dirty.size > 0
-            ? `${dirty.size} unsaved change${dirty.size === 1 ? '' : 's'}`
-            : 'No unsaved changes'}
-        </p>
-        <div className="flex gap-2">
-          <Button
-            onClick={discardAll}
-            disabled={dirty.size === 0 || saving}
-            variant="secondary"
-            size="sm"
-          >
-            Discard
-          </Button>
-          <Button
-            onClick={saveAll}
-            disabled={dirty.size === 0 || saving}
-            variant="primary"
-            size="sm"
-          >
-            {saving ? 'Saving…' : dirty.size > 0 ? `Save (${dirty.size})` : 'Save'}
-          </Button>
+      {showComputeSettings ? <Section title="TTS generation" variant="group">
+        <SettingRow
+          label="Background generation"
+          description="How far the worker keeps generating after playback cursor updates stop."
+          meta={renderSource('ttsPlaybackBackgroundExtent')}
+          controlClassName="w-52"
+        >
+          <Select
+            value={playbackBackgroundExtentOption}
+            onChange={(option) => updateDraft('ttsPlaybackBackgroundExtent', option.value)}
+            options={PLAYBACK_BACKGROUND_EXTENT_OPTIONS}
+            getOptionKey={(option) => option.value}
+            renderValue={(option) => option.label}
+            renderOption={(option, { selected }) => (
+              <span className="block">
+                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                  {option.label}
+                </span>
+                <span className="block text-xs text-muted">
+                  {option.description}
+                </span>
+              </span>
+            )}
+            chevronClassName="h-4 w-4 text-muted"
+          />
+        </SettingRow>
+        {numberRow({ key: 'ttsUpstreamMaxRetries', label: 'Retry attempts' })}
+        {numberRow({ key: 'ttsUpstreamTimeoutMs', label: 'Upstream timeout', unit: 'ms' })}
+        {numberRow({ key: 'ttsCacheMaxSizeBytes', label: 'Audio cache size', unit: 'bytes' })}
+        {numberRow({ key: 'ttsCacheTtlMs', label: 'Audio cache TTL', unit: 'ms' })}
+      </Section> : null}
+
+      {dirty.size > 0 || saving ? (
+        <div className="sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-solid px-3 py-2 shadow-elev-3">
+          <p className="text-xs text-soft">
+            {dirty.size} unsaved change{dirty.size === 1 ? '' : 's'}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              onClick={discardAll}
+              disabled={dirty.size === 0 || saving}
+              variant="secondary"
+              size="sm"
+            >
+              Discard
+            </Button>
+            <Button
+              onClick={saveAll}
+              disabled={dirty.size === 0 || saving}
+              variant="primary"
+              size="sm"
+            >
+              {saving ? 'Saving…' : `Save (${dirty.size})`}
+            </Button>
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
 
 function AdminFeaturesSkeleton() {
   return (
-    <div className="space-y-4 animate-pulse" aria-label="Loading feature settings" aria-busy="true">
-      <Section
-        title="TTS defaults"
-        action={<div className="h-4 w-16 rounded bg-offbase" />}
-      >
-        <div className="space-y-1.5 pb-2 border-b border-offbase">
-          <div className="flex items-start justify-between gap-3">
-            <div className="space-y-1 min-w-0">
-              <div className="h-4 w-40 rounded bg-offbase" />
-              <div className="h-3 w-56 rounded bg-offbase" />
+    <div className="space-y-5 animate-pulse" aria-label="Loading feature settings" aria-busy="true">
+      {['TTS defaults', 'Site features'].map((title) => (
+        <Section key={title} title={title} variant="group">
+          {[0, 1, 2].map((row) => (
+            <div key={row} className="flex items-center justify-between gap-3">
+              <div className="min-w-0 space-y-1.5">
+                <div className="h-4 w-40 rounded bg-offbase" />
+                <div className="h-3 w-56 rounded bg-offbase" />
+              </div>
+              <div className="h-5 w-9 shrink-0 rounded-pill bg-offbase" />
             </div>
-            <div className="h-5 w-20 rounded bg-offbase" />
-          </div>
-          <div className="h-9 w-full rounded-md bg-offbase" />
-        </div>
-        <div className="space-y-2">
-          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
-          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
-          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
-        </div>
-      </Section>
-
-      <Section
-        title="Site features"
-        action={<div className="h-4 w-24 rounded bg-offbase" />}
-      >
-        <div className="space-y-2">
-          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
-          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
-          <div className="h-14 w-full rounded-md border border-offbase bg-background" />
-        </div>
-      </Section>
+          ))}
+        </Section>
+      ))}
     </div>
   );
 }
+
+const SOURCE_LABELS: Partial<Record<RuntimeConfigSource, string>> = {
+  'json-seed': 'From seed',
+  'env-seed': 'From env',
+  admin: 'Set by admin',
+};
 
 function SourceBadge({
   source,
@@ -564,31 +459,17 @@ function SourceBadge({
   onReset: () => void;
   saving: boolean;
 }) {
+  if (dirty) return <span className="font-medium text-accent">Modified</span>;
+  const label = SOURCE_LABELS[source];
+  if (!label && !canReset) return null;
   return (
-    <div className="flex items-center gap-1.5">
-      {canReset && !dirty && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="xs"
-          onClick={onReset}
-          disabled={saving}
-          className="h-auto px-1 py-0 text-[11px] font-medium text-muted hover:text-accent"
-        >
+    <span className="inline-flex items-center gap-1.5">
+      {label}
+      {canReset ? (
+        <InlineButton onClick={onReset} disabled={saving} className="hover:text-accent">
           Reset
-        </Button>
-      )}
-      {dirty ? (
-        <Badge tone="accent">Modified</Badge>
-      ) : source === 'json-seed' ? (
-        <Badge tone="muted">from seed</Badge>
-      ) : source === 'env-seed' ? (
-        <Badge tone="muted">from env</Badge>
-      ) : source === 'admin' ? (
-        <Badge tone="foreground">admin</Badge>
-      ) : (
-        <Badge tone="muted">default</Badge>
-      )}
-    </div>
+        </InlineButton>
+      ) : null}
+    </span>
   );
 }
