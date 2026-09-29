@@ -11,7 +11,34 @@ Use **Settings → Admin** as the primary source of truth for shared providers a
 Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH`.
 :::
 
-## Quick Reference Table
+## Minimal configuration
+
+Most installs need only these. Everything else on this page is optional and lives under
+[Advanced](#advanced-reference).
+
+Generate the secret first, since `.env` stores literal text and never runs commands:
+
+```bash
+openssl rand -base64 32
+```
+
+```dotenv
+BASE_URL=http://localhost:3003          # the address you open in the browser
+AUTH_SECRET=<paste-the-generated-value> # keep it stable; it also encrypts saved provider keys
+```
+
+Off localhost, also set `COMPUTE_WORKER_PUBLIC_URL` to the address browsers use for port `8081`.
+In a single container, startup generates the worker and credential-broker tokens and derives the playback secret, so you set none of them.
+Startup checks the configuration and lists every problem at once. After startup, **Settings → Admin →
+System** re-checks the worker, storage, providers, and addresses from your browser.
+
+Upgrading a v4 instance? Follow [Upgrade from v4](../deploy/upgrade-from-v4).
+
+## Advanced reference
+
+Every variable, grouped by area. You do not need any of these for a standard install.
+
+### Quick Reference Table
 
 All OpenReader configuration variables are server-only; none are exposed through a `NEXT_PUBLIC_` browser variable. "App" includes the bootstrap process and embedded worker it starts. Standalone-worker rows must be set on the worker service itself.
 
@@ -86,7 +113,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `COMPUTE_CREDENTIAL_BROKER_URL` | Standalone worker | unset | HTTPS app endpoint used to resolve TTS provider execution credentials |
 | `COMPUTE_CREDENTIAL_BROKER_TOKEN` | App + worker | generated for embedded startup | Authenticates worker-to-app credential resolution |
 | `COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS` | Standalone worker | `5000` | Credential-broker request timeout |
-| `TTS_PLAYBACK_TOKEN_SECRET` | TTS playback | unset | Required for signed worker-owned playback audio URLs |
+| `TTS_PLAYBACK_TOKEN_SECRET` | TTS playback | derived from `AUTH_SECRET` with an embedded worker | Optional embedded; required with an external worker |
 | `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
 | `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
 | `RUN_DRIZZLE_MIGRATIONS` | DB migrations | `true` | Set `false` to skip startup Drizzle migrations |
@@ -531,7 +558,7 @@ App-owned credential endpoint used by a standalone worker when TTS generation be
 Dedicated bearer token for worker-to-app TTS credential resolution.
 
 - Required on the app and every standalone worker, with the same value
-- Generated automatically for an embedded worker when unset
+- Generated automatically for an embedded worker when unset (including the Compose slim examples)
 - Separate from `COMPUTE_WORKER_TOKEN` because the request direction and permitted route differ
 - Never sent to browsers, NATS, operation state, or storage
 - Generate with `openssl rand -base64 32`
@@ -546,12 +573,14 @@ Timeout for a worker credential-broker request.
 
 ### TTS_PLAYBACK_TOKEN_SECRET
 
-Secret used to sign short-lived browser-facing TTS playback URLs.
+Secret that signs short-lived browser-facing TTS playback URLs and keys the reusable audio cache.
 
-- Required for worker-owned TTS playback.
-- Must be set to the same value on the app server and standalone compute worker.
+- Embedded worker (default): leave it unset. It is derived from `AUTH_SECRET` and stays stable across restarts. A value you set explicitly always wins.
+- External worker: required, and the worker must use the exact same value. The worker never receives `AUTH_SECRET`, so it cannot derive it.
+- Keep it stable. Changing it (or `AUTH_SECRET` when it is derived) makes cached audio regenerate.
 - Generate with `openssl rand -base64 32`.
 - This is separate from `COMPUTE_WORKER_TOKEN`; it signs public audio URLs and must not be used as the internal worker bearer token.
+- The example Compose files set a local default for this value. Replace it before exposing the stack beyond your machine.
 
 ## Audio Runtime
 

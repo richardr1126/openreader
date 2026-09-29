@@ -181,136 +181,107 @@ cd openreader
 pnpm i
 ```
 
-3. Configure the environment.
+3. Create your `.env` file.
 
 ```bash
 cp .env.example .env
+openssl rand -base64 32
 ```
 
-Then edit `.env`.
-
-Default embedded worker flow (no external worker URL):
+Open `.env` and set these two values. Paste the command output as `AUTH_SECRET`:
 
 ```env
-# Leave COMPUTE_WORKER_URL unset.
-# Entry point auto-starts embedded worker+NATS when available.
-TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
-```
-
-External worker flow:
-
-```env
-COMPUTE_WORKER_URL=http://localhost:8081
-# Only needed when browsers cannot reach COMPUTE_WORKER_URL directly.
-# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
-COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
-COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-used-by-worker>
-TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
-```
-
-Use the same ownership split:
-- root `.env`: app routing/auth (`AUTH_SECRET`, `COMPUTE_WORKER_URL`, `COMPUTE_WORKER_PUBLIC_URL`, `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, `TTS_PLAYBACK_TOKEN_SECRET`) plus embedded-worker tuning
-- `compute-worker/.env*` (or worker platform env): worker runtime variables (`NATS_*`, `S3_*`, model base URLs, worker tuning), `COMPUTE_CREDENTIAL_BROKER_URL`, and the matching compute/broker/playback tokens
-- `AUTH_SECRET`, `POSTGRES_URL`, and `SQLITE_DB_PATH` remain app-only; the worker resolves enabled providers through the credential broker
-
-Use one of these `.env` mode templates:
-
-<Tabs groupId="local-env-modes">
-  <TabItem value="auth-enabled" label="Auth Enabled" default>
-
-```env
-API_BASE=http://127.0.0.1:8880/v1
-API_MODEL_NAME=kokoro
 BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-base64-32>
-TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
-# Optional when you need multiple local origins:
-# AUTH_TRUSTED_ORIGINS=http://localhost:3003,http://127.0.0.1:3003
+AUTH_SECRET=<paste-the-generated-value>
 ```
 
-  </TabItem>
-  <TabItem value="auth-with-admin" label="Auth + Admin Panel">
+That is a complete configuration: the app starts its own storage, queue, and compute worker, and
+the worker and playback secrets are generated or derived for you. Keep `AUTH_SECRET` stable, since it
+also encrypts saved provider keys.
+
+Then add only what applies to you. Each tab lists **what to add to the same `.env`**, so you can
+combine them. If something is missing or wrong, startup lists every problem at once and exits.
+
+<Tabs groupId="local-env-additions">
+  <TabItem value="admin" label="First admin account" default>
+
+**Use when:** you want an admin account ready on the first boot.
 
 ```env
-# API_BASE, optional API_KEY, and API_MODEL_NAME are seeded into the admin "default-openai" shared provider
-# on first boot, then no longer read. Manage them in Settings → Admin afterwards.
-API_BASE=http://127.0.0.1:8880/v1
-API_MODEL_NAME=kokoro
-BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-base64-32>
-TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
-# First-admin credential for a fresh database; remove after changing the password in Settings → Account.
 BOOTSTRAP_ADMIN_EMAIL=owner@example.com
 BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
 ```
 
+**Then:** sign in, and change the password in **Settings → Account**. The **Admin** tab appears
+after that. Remove these two lines afterward.
+
   </TabItem>
-  <TabItem value="external-s3" label="External S3">
+  <TabItem value="tts" label="Existing TTS server">
+
+**Use when:** you already run an OpenAI-compatible speech server such as Kokoro-FastAPI.
 
 ```env
 API_BASE=http://127.0.0.1:8880/v1
 API_MODEL_NAME=kokoro
+# API_KEY=<only-if-your-server-requires-one>
+```
+
+**Then:** these are read once on first boot to create a shared provider. Manage providers later in
+**Settings → Admin → Providers**. Adding them after the first boot has no effect.
+
+  </TabItem>
+  <TabItem value="s3" label="External S3">
+
+**Use when:** you want an S3-compatible bucket instead of the embedded SeaweedFS.
+
+```env
 USE_EMBEDDED_WEED_MINI=false
-BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-base64-32>
-TTS_PLAYBACK_TOKEN_SECRET=local-tts-playback-token-secret
 S3_BUCKET=your-bucket
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
-# Optional for non-AWS providers:
+# Non-AWS providers only:
 # S3_INTERNAL_ENDPOINT=https://your-s3-compatible-endpoint
 # S3_PUBLIC_ENDPOINT=https://s3.your-domain.example
 # S3_BROWSER_TRANSPORT=presigned
 # S3_FORCE_PATH_STYLE=true
 ```
 
+**Then:** the `weed` binary is no longer needed. See [Object / Blob Storage](../configure/object-blob-storage).
+
   </TabItem>
-  <TabItem value="worker-mode" label="External Worker Service">
+  <TabItem value="worker" label="External worker">
+
+**Use when:** the compute worker runs as its own service. The `nats-server` binary is then not
+needed on this machine.
 
 ```env
-API_BASE=http://127.0.0.1:8880/v1
-API_MODEL_NAME=kokoro
-BASE_URL=http://localhost:3003
-AUTH_SECRET=<generate-with-openssl-rand-base64-32>
 COMPUTE_WORKER_URL=http://localhost:8081
-# Optional when browsers need a different public URL:
-# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
 COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-used-by-worker>
 TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
-USE_EMBEDDED_WEED_MINI=false
-S3_BUCKET=your-bucket
-S3_REGION=us-east-1
-S3_ACCESS_KEY_ID=your-access-key
-S3_SECRET_ACCESS_KEY=your-secret-key
-# Optional for non-AWS providers:
-# S3_INTERNAL_ENDPOINT=https://your-s3-compatible-endpoint
-# S3_PUBLIC_ENDPOINT=https://s3.your-domain.example
-# S3_BROWSER_TRANSPORT=presigned
-# S3_FORCE_PATH_STYLE=true
+# Only when browsers reach the worker at a different address:
+# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
 ```
+
+**Then:** set the same three values on the worker, along with its own `NATS_*`, `S3_*`, and
+`COMPUTE_CREDENTIAL_BROKER_URL` settings. `AUTH_SECRET` and database settings stay on the app only.
+See [Compute Worker](./compute-worker).
 
   </TabItem>
 </Tabs>
 
 :::note Env vars vs. admin panel
-On first boot, `API_KEY` / `API_BASE` / `API_MODEL_NAME` can bootstrap `default-openai`, and `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_PATH` can seed runtime config, providers, and (when supplied) account email delivery. After that, the admin UI is authoritative and editing bootstrap env vars no longer changes app behavior. See [Admin Panel](../configure/admin-panel).
+Provider and runtime settings in `.env` seed the database on first boot (`API_*`,
+`RUNTIME_SEED_JSON`, `RUNTIME_SEED_JSON_PATH`). After that the admin UI is authoritative and editing
+those variables no longer changes behavior. See [Admin Panel](../configure/admin-panel). Browsers
+never supply provider credentials.
 :::
 
-:::note TTS credentials
-Configure TTS credentials in **Settings → Admin → Shared providers**. User browsers never supply provider credentials.
-:::
-
-:::info
-For all environment variables, see [Environment Variables](../reference/environment-variables).
-:::
-
-See [Auth](../configure/auth) for app/auth behavior.
-See [Admin Panel](../configure/admin-panel) for the shared-provider and feature-flag management UI.
-Storage configuration details are in [Object / Blob Storage](../configure/object-blob-storage).
-Refer to [Database](../configure/database) for database modes.
-Learn about migration behavior and commands in [Migrations](../configure/migrations).
+Related guides: [Auth](../configure/auth), [Database](../configure/database),
+[Migrations](../configure/migrations), and the full
+[Environment Variables](../reference/environment-variables) reference. Upgrading from v4? See
+[Upgrade from v4](./upgrade-from-v4).
 
 :::info Scheduled maintenance tasks
 Local and self-hosted Node.js deployments start the scheduled-task loop in-process and check for due work once per minute. No `CRON_SECRET` is required unless you intentionally invoke the cron HTTP route yourself. Manage task intervals and inspect failures from **Settings → Admin → Scheduled tasks**.
@@ -346,7 +317,7 @@ For native `pnpm dev`/`pnpm start` with the embedded worker, `http://127.0.0.1:<
 If the worker is remote, configure a URL reachable from that host as well.
 :::
 
-Visit [http://localhost:3003](http://localhost:3003).
+Visit [http://localhost:3003](http://localhost:3003). Signed in as an admin, open **Settings → Admin → System** to confirm the worker, storage, and providers are healthy.
 
 ### Optional workflows
 
@@ -359,5 +330,5 @@ pnpm migrate
 ```
 
 :::info
-If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_V4_DECOMMISSION=false`. You can run the idempotent v4 legacy storage decommission manually with `pnpm migrate-decommission`. See [Migrations](../configure/migrations) before a production v4.4→v5 upgrade.
+If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_V4_DECOMMISSION=false`. You can run the idempotent v4 legacy storage decommission manually with `pnpm migrate-decommission`. See [Upgrade from v4](./upgrade-from-v4) before a production v4.4→v5 upgrade.
 :::

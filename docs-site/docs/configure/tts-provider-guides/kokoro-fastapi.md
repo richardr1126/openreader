@@ -10,36 +10,36 @@ For Kokoro issues and support, use the upstream repository: [remsky/Kokoro-FastA
 
 ## Run Kokoro
 
-**CPU:**
+Use the upstream images; their README is the source of truth for tags and options. These commands
+follow it at the time of writing.
+
+**CPU (any machine):**
 
 ```bash
-docker run --name kokoro-tts \
-  --restart unless-stopped \
-  -d \
+docker run --name kokoro-tts --restart unless-stopped -d \
   -p 8880:8880 \
-  -e ONNX_NUM_THREADS=8 \
-  -e ONNX_INTER_OP_THREADS=4 \
-  -e ONNX_EXECUTION_MODE=parallel \
-  -e ONNX_OPTIMIZATION_LEVEL=all \
-  -e ONNX_MEMORY_PATTERN=true \
-  -e ONNX_ARENA_EXTEND_STRATEGY=kNextPowerOfTwo \
-  -e API_LOG_LEVEL=DEBUG \
-  ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.4
+  ghcr.io/remsky/kokoro-fastapi-cpu:latest
 ```
 
-**GPU (NVIDIA):**
+**GPU (NVIDIA, needs the NVIDIA Container Toolkit):**
 
 ```bash
-docker run --name kokoro-tts \
-  --restart unless-stopped \
-  -d \
+docker run --name kokoro-tts --restart unless-stopped -d \
   --gpus all \
-  --user 1001:1001 \
   -p 8880:8880 \
-  -e USE_GPU=true \
-  -e PYTHONUNBUFFERED=1 \
-  -e API_LOG_LEVEL=DEBUG \
-  ghcr.io/remsky/kokoro-fastapi-gpu:v0.2.4
+  ghcr.io/remsky/kokoro-fastapi-gpu:latest
+```
+
+`gpu:latest` ships CUDA 12.6 on amd64 and CUDA 12.9 on arm64 (Jetson, GH200). For Blackwell/RTX
+50-series GPUs on amd64, use `ghcr.io/remsky/kokoro-fastapi-gpu:latest-cu128` instead. Docker GPU images do not run on Apple
+Silicon; use the CPU image there.
+
+Pin a release tag (for example `v0.9.0`) instead of `latest` if you want upgrades to be deliberate.
+
+**Check that it is running** before connecting OpenReader:
+
+```bash
+curl http://localhost:8880/v1/audio/voices
 ```
 
 ## Connect to OpenReader

@@ -215,7 +215,8 @@ for PostgreSQL and SQLite behavior.
 
 ## Upgrade from v4.4 to v5
 
-Back up the named volumes first, then pull and recreate the same Compose project. Do not use
+The [Upgrade from v4](./upgrade-from-v4) checklist is the complete guide, including backup, what is
+deleted, and verification. In short: back up the named volumes first, then pull and recreate the same Compose project. Do not use
 `docker compose down -v`: the `-v` option deletes the data being upgraded.
 
 <Tabs groupId="docker-compose-upgrade-stack">
@@ -251,8 +252,11 @@ docker compose -f examples/docker/compose.local-full.yml up -d --build
 </TabItem>
 </Tabs>
 
-Keep the same Compose project name, volumes, `AUTH_SECRET`, and storage settings. Add stable values
-for the v5 worker, credential-broker, and playback secrets before recreating the services.
+Keep the same Compose project name, volumes, `AUTH_SECRET`, and storage settings. The slim examples
+generate the worker and credential-broker tokens; the full examples share local defaults between the
+containers, so set your own `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN`, and
+`TTS_PLAYBACK_TOKEN_SECRET` before exposing them beyond your machine (changing the playback secret
+regenerates cached audio).
 Existing administrators are preserved by the migration; do not set first-admin seed values for
 an upgrade. `ADMIN_EMAILS` does not grant roles in v5.
 

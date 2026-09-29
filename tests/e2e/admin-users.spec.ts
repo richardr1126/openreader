@@ -33,6 +33,14 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await expect(page.getByText(adminEmail).first()).toBeVisible();
   await expect(page.getByText('Anonymous', { exact: true }).first()).toBeVisible();
 
+  await page.getByRole('button', { name: 'System', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'System', exact: true })).toBeVisible();
+  const systemChecks = page.getByRole('list', { name: 'System check results' });
+  await expect(systemChecks.getByText('Compute worker')).toBeVisible();
+  await expect(systemChecks.getByText('Object storage')).toBeVisible();
+  await expect(systemChecks.getByText('Playback signing secret')).toBeVisible();
+  await expect(systemChecks.getByText('Address you opened')).toBeVisible();
+
   await page.getByRole('button', { name: 'Instance', exact: true }).first().click();
   await page.getByRole('radio', { name: 'Approve', exact: true }).click();
   const savePolicy = page.getByRole('button', { name: /^Save \(1\)$/ });

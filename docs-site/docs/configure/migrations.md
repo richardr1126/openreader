@@ -5,7 +5,7 @@ title: Migrations
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page covers migration behavior for both database schema and storage data in OpenReader.
+This page covers migration behavior for both database schema and storage data in OpenReader. Upgrading a v4 instance? Follow the [Upgrade from v4](../deploy/upgrade-from-v4) checklist.
 
 ## Runtime ownership
 

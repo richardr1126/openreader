@@ -13,13 +13,14 @@ progressive generation, a durable reusable document-audio timeline, word-level
 alignment, PDF layout analysis, previews, and audiobook export.
 
 The v5 architecture is a hard redesign, not a compatibility layer over every
-intermediate implementation. Because v5 has not been released yet, delete
-superseded v5-only paths rather than retaining duplicate logic or dead fallback
-code. Preserve released v4 data and documented upgrade behavior.
+intermediate implementation. v5.0.0 has shipped (tagged 2026-09-17), so released
+v5 data and behavior now need the same care as v4: do not break stored data or the
+documented upgrade path. Still delete superseded code rather than retaining
+duplicate logic or dead fallback paths. Preserve released v4 data and the
+documented v4-to-v5 upgrade (`docs-site/docs/deploy/upgrade-from-v4.md`).
 
-The root package version intentionally remains `4.4.0` until the owner has
-deployed and smoke-tested the final v5 production build and is ready to create
-the `v5.0.0` release. Do not bump it early.
+The owner creates version bumps, tags, and releases. Do not bump the root package
+version or tag a release unless asked.
 
 ## Architecture Boundaries
 
@@ -49,6 +50,7 @@ Normative architecture and history:
 - `v5/COMPUTE_RATE_LIMITING_PLAN.md`
 - `v5/CLEANUP_PLAN.md`
 - `v5/TEST_MIGRATION_PLAN.md`
+- `v5/USER_MANAGEMENT_AND_BOOTSTRAP.md`
 
 ## Playback Invariants
 
@@ -114,9 +116,10 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-09-07 the expected clean result is 680 Vitest tests and 24 local
-  Chromium/WebKit Playwright cases. Treat the count as a checkpoint, not a rule
-  preventing legitimate new coverage.
+- As of 2026-09-29 the expected clean result is 869 Vitest tests and 33 local
+  Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
+  playback cases). Treat the counts as a checkpoint, not a rule preventing
+  legitimate new coverage.
 
 ## Local Stack Discipline
 
@@ -188,17 +191,29 @@ caused conflicts, high CPU, misleading failures, and overheating.
   migrations, deploys web and worker, smoke-tests production, and only then
   creates the final version bump/tag/release.
 
-## Current Handoff — 2026-09-07
+## Startup Configuration and Upgrades
 
-- `main` contains `23ddb846`, the squash merge of PR #139,
-  “refactor(playback): simplify client lifecycle and seek readiness.” The later
-  commits that add or maintain this guide are documentation-only.
-- PR #139 passed Vitest, Playwright, Vercel, and CodeRabbit. Three valid review
-  findings were fixed before merge: stale SSE subscription retargeting,
-  non-terminal pending-seek expiry, and missing foreground-sync unmount cleanup.
-- Docker workflow run `34154719414` completed successfully from that exact
-  `main` SHA. Web and compute-worker images and multi-architecture manifests
-  were published for amd64 and arm64 with the `main` tag.
-- The next owner action is Railway redeployment from the new worker `main` image,
-  followed by production playback smoke testing at `openreader.richardr.dev`.
-- The worktree was clean immediately before this guide was created.
+- `packages/bootstrap` owns startup. `preflight.mjs` reports every configuration
+  problem at once and exits; `v4-upgrade.mjs` prints the v4 upgrade notice when a
+  pre-v5 database is detected; `runtime-secrets.mjs` derives the playback secret.
+- With the embedded worker, `TTS_PLAYBACK_TOKEN_SECRET` is derived from
+  `AUTH_SECRET` when unset (an explicit value wins). External workers cannot
+  derive it and need the explicit shared value. The secret keys the persisted
+  audio cache identity, so changing it or the derivation invalidates cached audio.
+- Keep the v4 upgrade page, the bootstrap notice, and the env reference in sync
+  when upgrade behavior changes. Never reference pre-v5 storage prefixes from v5
+  runtime code; `runV4Decommission` alone owns the legacy purge.
+- **Settings → Admin → System** (`/api/admin/system-check`) is the admin-facing
+  health check. Prefer extending it over adding a setup wizard.
+- Example Compose files ship local-only defaults for some secrets. Do not add new
+  known-default secrets; the slim files generate the broker token at startup.
+
+## Current State — 2026-09-29
+
+- v5.0.0 is released and the package version is `5.0.0`.
+- Work on `feat/upgrade-experience` adds the startup preflight, embedded playback
+  secret derivation, the System admin tab, and the restructured upgrade,
+  environment-variable, and local-development docs.
+- Open follow-ups for the owner: whether the full Compose files should require
+  worker/broker/playback secrets instead of shipping known defaults, and whether
+  to bump the pinned `kokoro-fastapi-cpu:v0.2.4` image in the Compose examples.
