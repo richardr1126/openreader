@@ -37,6 +37,16 @@ class WorkerHttpError extends Error {
   }
 }
 
+/**
+ * The worker could not serve the request at all: unreachable (for example
+ * while it redeploys) or failing server-side, as opposed to rejecting it.
+ */
+export function isComputeWorkerUnavailableError(error: unknown): boolean {
+  if (error instanceof WorkerHttpError) return error.status >= 500;
+  // `fetch` rejects with a TypeError when the connection itself fails.
+  return error instanceof TypeError && error.message === 'fetch failed';
+}
+
 function readRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required for compute worker client`);

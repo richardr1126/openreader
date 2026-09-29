@@ -13,6 +13,8 @@ export interface JobHandlerContext {
     providerRef: string;
     characters: number;
     signal?: AbortSignal;
+    /** Called if the held slot's lease is lost; the request must stop. */
+    onLost?: () => void;
   }) => Promise<() => Promise<void>>;
   getProviderMaxConcurrent?: (providerRef: string) => number | null;
   coolDownProviderCapacity?: (providerRef: string, retryAfterSeconds: number) => Promise<void>;

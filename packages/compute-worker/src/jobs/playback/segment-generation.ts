@@ -107,14 +107,28 @@ export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; 
   return { info: { message, code: 'UPSTREAM_ERROR', upstreamStatus }, retryable: false };
 }
 
-export function leaseBelongsToPlaybackSession(
+/**
+ * Whether the current run of a playback session may take over a segment lease
+ * without waiting for it to go stale. Its own incarnation's earlier runs are
+ * superseded, and so is any other run of the same session: only the session's
+ * current run passes the run-id check before each write, so a replaced run (a
+ * resume after a worker restart included) can no longer settle the segment.
+ * Two incarnations that share a run id cannot be told apart, so a replacement
+ * incarnation still respects that lease until it expires.
+ */
+export function leaseReclaimableByRun(
   ownerId: string,
-  sessionId: string,
-  sessionInstanceId: string,
+  run: { sessionId: string; sessionInstanceId: string; generationRunId: string },
 ): boolean {
   try {
-    const parsed = JSON.parse(ownerId) as { sessionId?: unknown; sessionInstanceId?: unknown };
-    return parsed.sessionId === sessionId && parsed.sessionInstanceId === sessionInstanceId;
+    const parsed = JSON.parse(ownerId) as {
+      sessionId?: unknown;
+      sessionInstanceId?: unknown;
+      generationRunId?: unknown;
+    };
+    if (parsed.sessionId !== run.sessionId) return false;
+    return parsed.sessionInstanceId === run.sessionInstanceId
+      || (typeof parsed.generationRunId === 'string' && parsed.generationRunId !== run.generationRunId);
   } catch {
     // Legacy owner ids cannot prove which incarnation wrote them. Treat them
     // as foreign until their bounded lease expires rather than overlapping
@@ -156,6 +170,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     providerRef: string;
     characters: number;
     signal?: AbortSignal;
+    onLost?: () => void;
   }) => Promise<() => Promise<void>>;
   getProviderMaxConcurrent?: (providerRef: string) => number | null;
   coolDownProviderCapacity?: (providerRef: string, retryAfterSeconds: number) => Promise<void>;
@@ -321,11 +336,16 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     return true;
   };
 
-  const leaseOwnerId = JSON.stringify({
+  const leaseRun = {
     sessionId: input.request.sessionId,
     sessionInstanceId: input.sessionInstanceId,
-    generationExtent: input.request.generationExtent ?? 'window',
     generationRunId: input.request.generationRunId ?? 'initial',
+  };
+  const leaseOwnerId = JSON.stringify({
+    sessionId: leaseRun.sessionId,
+    sessionInstanceId: leaseRun.sessionInstanceId,
+    generationExtent: input.request.generationExtent ?? 'window',
+    generationRunId: leaseRun.generationRunId,
   });
   const leaseStaleMs = Math.max(GENERATION_LEASE_MIN_MS, input.synthesisTimeoutMs + GENERATION_LEASE_GRACE_MS);
   const minCacheEpoch = Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)));
@@ -340,14 +360,9 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   ): boolean => {
     if (!sidecar || sidecar.status !== 'generating' || sidecar.audioKey !== audioKey) return false;
     if (!sidecar.leaseOwnerId || sidecar.leaseOwnerId === leaseOwnerId) return false;
-    // One canonical session incarnation has exactly one current generation
-    // run. Its successor may immediately steal its predecessor's lease after a
-    // seek or resume; a replacement incarnation must respect the old lease.
-    if (leaseBelongsToPlaybackSession(
-      sidecar.leaseOwnerId,
-      input.request.sessionId,
-      input.sessionInstanceId,
-    )) return false;
+    // A seek, resume, or restart replaces the session's generation run; the
+    // new run takes over its predecessor's in-flight segments immediately.
+    if (leaseReclaimableByRun(sidecar.leaseOwnerId, leaseRun)) return false;
     const leaseUpdatedAt = Number(sidecar.leaseUpdatedAt ?? sidecar.updatedAt ?? 0);
     return Number.isFinite(leaseUpdatedAt) && now - leaseUpdatedAt < leaseStaleMs;
   };
@@ -525,12 +540,16 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       let attempt = 0;
       while (true) {
         attempt += 1;
+        // Aborts this request if its provider slot lease is lost to another
+        // worker; the segment then waits for a slot again.
+        const slotLost = new AbortController();
         try {
           const releaseProvider = input.acquireProviderCapacity
             ? await input.acquireProviderCapacity({
               providerRef: effectiveProviderRef,
               characters: segment.text.length,
               signal: input.signal,
+              onLost: () => slotLost.abort(new Error('TTS provider capacity lease was lost')),
             })
             : async () => undefined;
           let audioBuffer: Buffer;
@@ -550,7 +569,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
               }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
               input.synthesisTimeoutMs,
               'tts playback segment synthesis',
-              input.signal,
+              input.signal ? AbortSignal.any([input.signal, slotLost.signal]) : slotLost.signal,
             );
           } finally {
             await releaseProvider().catch(() => undefined);
@@ -558,7 +577,13 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           if (!await shouldContinueWrites(planOrdinal)) return null;
           await input.putAudioObject(audioKey, audioBuffer);
           if (!await shouldContinueWrites(planOrdinal)) {
-            await input.deleteAudioObject?.(audioKey).catch(() => undefined);
+            // The key is content-addressed, so a successor run writes and
+            // adopts this same key; deleting it could remove audio the
+            // successor already published. Only a cleared cache discards it.
+            if (input.cacheEpoch !== undefined && input.getCurrentCacheEpoch
+              && await input.getCurrentCacheEpoch().catch(() => input.cacheEpoch) !== input.cacheEpoch) {
+              await input.deleteAudioObject?.(audioKey).catch(() => undefined);
+            }
             return null;
           }
           const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
@@ -580,7 +605,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           break;
         } catch (error) {
           if (input.signal?.aborted) return null;
-          if (error instanceof ProviderCapacityWaitTimeoutError) {
+          if (error instanceof ProviderCapacityWaitTimeoutError || slotLost.signal.aborted) {
             // Saturated shared capacity is back-pressure, not a failed segment.
             // Keep waiting while this run still owns the segment.
             attempt -= 1;

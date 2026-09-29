@@ -111,6 +111,68 @@ describe('provider capacity coordinator', () => {
     await releaseSecond();
   });
 
+  test('renews a held slot and frees one a dead worker left behind within the lease', async () => {
+    vi.useFakeTimers();
+    try {
+      const policy = cloneComputeLimitPolicyDocument();
+      policy.providers.defaults = {
+        enabled: true, maxConcurrent: 1, requestsPerMinute: 100,
+        charactersPerMinute: 100_000, maxWaitSeconds: 1,
+      };
+      const kv = new MemoryKv();
+      const liveWorker = new ProviderCapacityCoordinator(() => policy, async () => kv);
+      const otherWorker = new ProviderCapacityCoordinator(() => policy, async () => kv);
+
+      // A slow synthesis request outlives the lease while it keeps renewing.
+      const releaseLive = await liveWorker.acquire({ providerRef: 'shared', characters: 1 });
+      await vi.advanceTimersByTimeAsync(120_000);
+      const blocked = expect(otherWorker.acquire({ providerRef: 'shared', characters: 1 }))
+        .rejects.toThrow('capacity wait timed out');
+      await vi.advanceTimersByTimeAsync(1_100);
+      await blocked;
+      await releaseLive();
+
+      // A worker killed mid-request never releases or renews its slot.
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      const deadWorker = new ProviderCapacityCoordinator(() => policy, async () => kv);
+      await deadWorker.acquire({ providerRef: 'shared', characters: 1 });
+      clearInterval(setIntervalSpy.mock.results.at(-1)!.value as NodeJS.Timeout);
+      setIntervalSpy.mockRestore();
+      await vi.advanceTimersByTimeAsync(31_000);
+      const releaseNext = await otherWorker.acquire({ providerRef: 'shared', characters: 1 });
+      await releaseNext();
+
+      // A live holder that cannot renew before its lease lapses (KV outage)
+      // is told it lost the slot, since another worker may now hold it.
+      const onLost = vi.fn();
+      let kvDown = false;
+      const stalled = new ProviderCapacityCoordinator(() => policy, async () => {
+        if (kvDown) throw new Error('kv unavailable');
+        return kv;
+      });
+      const releaseStalled = await stalled.acquire({ providerRef: 'shared', characters: 1, onLost });
+      kvDown = true;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(onLost).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(onLost).toHaveBeenCalledTimes(1);
+      kvDown = false;
+      await releaseStalled();
+
+      // A renewal that finds its holder already gone also reports the loss.
+      const onLostAgain = vi.fn();
+      const releaseSecond = await stalled.acquire({ providerRef: 'shared', characters: 1, onLost: onLostAgain });
+      await kv.put([...(kv as unknown as { values: Map<string, unknown> }).values.keys()][0]!, new TextEncoder().encode(
+        JSON.stringify({ schemaVersion: 1, holders: {}, requests: [], characters: [], cooldownUntil: 0 }),
+      ));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(onLostAgain).toHaveBeenCalledTimes(1);
+      await releaseSecond();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('bypasses disabled provider capacity without recording demand', async () => {
     const policy = cloneComputeLimitPolicyDocument();
     policy.providers.defaults = {
