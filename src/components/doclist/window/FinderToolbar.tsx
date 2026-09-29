@@ -10,8 +10,23 @@ import {
   HamburgerIcon,
 } from './finderIcons';
 import { ChevronUpDownIcon } from '@/components/icons/Icons';
-import { SearchField, SharedListboxButton, SharedListboxOption, SharedListboxOptions, Toolbar, ToolbarButton, ToolbarGroup, ToolbarSegment } from '@/components/ui';
-import type { ReactNode } from 'react';
+import {
+  PopoverRoot,
+  PopoverSurface,
+  PopoverTrigger,
+  SearchField,
+  SegmentedControl,
+  SharedListboxButton,
+  SharedListboxOption,
+  SharedListboxOptions,
+  Toolbar,
+  ToolbarButton,
+  ToolbarGroup,
+  ToolbarSegment,
+  cn,
+  toolbarButtonStyles,
+} from '@/components/ui';
+import { useState, type ReactNode } from 'react';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
 
 interface FinderToolbarProps {
@@ -32,8 +47,6 @@ interface FinderToolbarProps {
   totalSize: number;
   /** App-level content rendered at the far left (brand/logo). */
   leftSlot?: ReactNode;
-  /** App-level content rendered at the far right (settings, user menu). */
-  rightSlot?: ReactNode;
 }
 
 const VIEW_BUTTONS: Array<{ value: ViewMode; label: string; Icon: typeof IconsViewIcon }> = [
@@ -56,6 +69,15 @@ const ICON_SIZES: Array<{ value: IconSize; label: string }> = [
   { value: 'xl', label: 'XL' },
 ];
 
+function MobileOption({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</div>
+      {children}
+    </div>
+  );
+}
+
 export function FinderToolbar({
   viewMode,
   onViewModeChange,
@@ -73,13 +95,34 @@ export function FinderToolbar({
   itemCount,
   totalSize,
   leftSlot,
-  rightSlot,
 }: FinderToolbarProps) {
+  const [searchOpen, setSearchOpen] = useState(false);
   const currentSort = SORT_OPTIONS.find((o) => o.value === sortBy) ?? SORT_OPTIONS[0];
   const directionLabel = sortDirection === 'asc' ? currentSort.asc : currentSort.desc;
+  const CurrentViewIcon = VIEW_BUTTONS.find((b) => b.value === viewMode)?.Icon ?? IconsViewIcon;
+  const closeSearch = () => {
+    onQueryChange('');
+    setSearchOpen(false);
+  };
 
   return (
     <Toolbar>
+      {searchOpen && (
+        <div className="flex w-full items-center gap-2 sm:hidden">
+          <SearchField
+            autoFocus
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && closeSearch()}
+            placeholder="Search"
+            aria-label="Search documents"
+            className="flex-1 py-1.5"
+            icon={<SearchIcon className="w-3.5 h-3.5" />}
+          />
+          <ToolbarButton onClick={closeSearch}>Cancel</ToolbarButton>
+        </div>
+      )}
+      <div className={cn('items-center gap-1.5 sm:gap-2', searchOpen ? 'hidden sm:contents' : 'contents')}>
         {leftSlot && (
           <div className="shrink-0 flex items-center gap-2 pr-1 sm:pr-2 sm:border-r sm:border-line">
             {leftSlot}
@@ -97,6 +140,7 @@ export function FinderToolbar({
           <HamburgerIcon className="w-4 h-4" />
         </ToolbarButton>
 
+        <div className="hidden sm:contents">
         <ToolbarGroup>
           {VIEW_BUTTONS.map(({ value, label, Icon }) => {
             const active = viewMode === value;
@@ -168,6 +212,7 @@ export function FinderToolbar({
             </Listbox>
           </div>
         )}
+        </div>
 
         <div className="flex-1 min-w-0" />
 
@@ -191,11 +236,66 @@ export function FinderToolbar({
           icon={<SearchIcon className="w-3.5 h-3.5" />}
         />
 
-        {rightSlot && (
-          <div className="shrink-0 flex items-center gap-2 pl-1 sm:pl-2 sm:border-l sm:border-line ml-0.5">
-            {rightSlot}
-          </div>
-        )}
+        {/* Phones: search and view/sort tuck behind two icon buttons. */}
+        <div className="flex shrink-0 items-center gap-1.5 sm:hidden">
+          <ToolbarButton onClick={() => setSearchOpen(true)} aria-label="Search" title="Search">
+            <SearchIcon className="w-4 h-4" />
+          </ToolbarButton>
+          <PopoverRoot className="relative">
+            <PopoverTrigger className={toolbarButtonStyles()} aria-label="View and sort options">
+              <CurrentViewIcon className="w-4 h-4" />
+              <ChevronUpDownIcon className="ml-1 h-3 w-3 opacity-60" />
+            </PopoverTrigger>
+            <PopoverSurface anchor="bottom end" className="w-[min(20rem,calc(100vw-1rem))] space-y-3">
+              <MobileOption label="View">
+                <SegmentedControl
+                  ariaLabel="View mode"
+                  value={viewMode}
+                  onChange={onViewModeChange}
+                  className="grid-cols-3"
+                  options={VIEW_BUTTONS.map(({ value, label }) => ({ value, label }))}
+                />
+              </MobileOption>
+              {viewMode === 'icons' && (
+                <MobileOption label="Icon size">
+                  <SegmentedControl
+                    ariaLabel="Icon size"
+                    value={iconSize}
+                    onChange={onIconSizeChange}
+                    className="grid-cols-4"
+                    options={ICON_SIZES}
+                  />
+                </MobileOption>
+              )}
+              {showSortControls && (
+                <>
+                  <MobileOption label="Sort by">
+                    <SegmentedControl
+                      ariaLabel="Sort by"
+                      value={sortBy}
+                      onChange={onSortByChange}
+                      className="grid-cols-4"
+                      options={SORT_OPTIONS.map(({ value, label }) => ({ value, label }))}
+                    />
+                  </MobileOption>
+                  <MobileOption label="Order">
+                    <SegmentedControl
+                      ariaLabel="Sort order"
+                      value={sortDirection}
+                      onChange={(dir) => dir !== sortDirection && onSortDirectionToggle()}
+                      className="grid-cols-2"
+                      options={[
+                        { value: 'asc', label: currentSort.asc },
+                        { value: 'desc', label: currentSort.desc },
+                      ]}
+                    />
+                  </MobileOption>
+                </>
+              )}
+            </PopoverSurface>
+          </PopoverRoot>
+        </div>
+      </div>
     </Toolbar>
   );
 }
