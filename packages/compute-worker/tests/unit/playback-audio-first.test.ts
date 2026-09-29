@@ -44,17 +44,23 @@ describe('playback audio-first segment generation', () => {
     vi.clearAllMocks();
   });
 
-  test('only reclaims leases from the same session incarnation', async () => {
-    const { leaseBelongsToPlaybackSession } = await import('../../src/jobs/playback/segment-generation');
+  test('reclaims leases from its own incarnation or a superseded run of the session', async () => {
+    const { leaseReclaimableByRun } = await import('../../src/jobs/playback/segment-generation');
     const owner = JSON.stringify({
       sessionId: 'session-1',
       sessionInstanceId: 'instance-1',
       generationRunId: 'run-1',
     });
+    const run = { sessionId: 'session-1', sessionInstanceId: 'instance-1', generationRunId: 'run-2' };
 
-    expect(leaseBelongsToPlaybackSession(owner, 'session-1', 'instance-1')).toBe(true);
-    expect(leaseBelongsToPlaybackSession(owner, 'session-1', 'instance-2')).toBe(false);
-    expect(leaseBelongsToPlaybackSession('session-1:window:run-1', 'session-1', 'instance-1')).toBe(false);
+    expect(leaseReclaimableByRun(owner, run)).toBe(true);
+    // A resume after a worker restart is a new incarnation with a new run id:
+    // the dead worker's run was superseded, so its leases are not waited out.
+    expect(leaseReclaimableByRun(owner, { ...run, sessionInstanceId: 'instance-2' })).toBe(true);
+    // A replacement incarnation sharing the run id cannot prove supersession.
+    expect(leaseReclaimableByRun(owner, { ...run, sessionInstanceId: 'instance-2', generationRunId: 'run-1' })).toBe(false);
+    expect(leaseReclaimableByRun(owner, { ...run, sessionId: 'session-2' })).toBe(false);
+    expect(leaseReclaimableByRun('session-1:window:run-1', run)).toBe(false);
   });
 
   test('publishes playable audio before alignment and backfills word timing afterward', async () => {
@@ -381,6 +387,82 @@ describe('playback audio-first segment generation', () => {
     expect(sidecars).toHaveLength(2);
     expect(sidecars[0]).toMatchObject({ status: 'generating', error: null });
     expect(sidecars[1]).toMatchObject({ status: 'generating', error: null, leaseOwnerId: null, leaseUpdatedAt: 0 });
+  });
+
+  test('a resumed run takes over a fresh lease left by a worker that died mid-segment', async () => {
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    const settingsJson = {
+      providerRef: 'local-kokoro',
+      providerType: 'custom-openai',
+      ttsModel: 'kokoro',
+      voice: 'af_heart',
+      nativeSpeed: 1,
+      ttsInstructions: '',
+      language: 'en',
+    };
+    const sidecars: TtsPlaybackSegmentMetadata[] = [{
+      status: 'generating',
+      ordinal: 0,
+      audioKey: '',
+      leaseOwnerId: JSON.stringify({
+        sessionId: 'session-export',
+        sessionInstanceId: 'instance-before-restart',
+        generationExtent: 'document',
+        generationRunId: 'run-before-restart',
+      }),
+      leaseUpdatedAt: Date.now(),
+      updatedAt: Date.now(),
+    } as TtsPlaybackSegmentMetadata];
+    const playbackStorage = {
+      artifacts: {
+        readSegmentMetadata: vi.fn(async () => sidecars.at(-1) ?? null),
+        putSegmentMetadata: vi.fn(async (metadata: TtsPlaybackSegmentMetadata) => {
+          sidecars.push(metadata);
+          return 'sidecar-0';
+        }),
+        getScopeEpoch: vi.fn(async () => 0),
+      },
+    } as unknown as TtsPlaybackStorage;
+    // The stale lease must match this segment's audio key to count as held.
+    const audioObjectExists = vi.fn(async (key: string) => {
+      sidecars[0]!.audioKey = key;
+      return false;
+    });
+    const putAudioObject = vi.fn(async () => undefined);
+    mocks.generateTTSBuffer.mockResolvedValueOnce(Buffer.from('resumed-mp3'));
+
+    await generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-export',
+        userId: 'user-1',
+        storageUserId: 'user-1',
+        documentId: 'document-1',
+        documentVersion: 1,
+        readerType: 'epub',
+        settingsHash: 'settings-1',
+        settingsJson,
+        planning: {},
+        planObjectKey: 'plan-key',
+        generationExtent: 'document',
+        generationRunId: 'run-after-restart',
+      },
+      sessionInstanceId: 'instance-after-restart',
+      s3Prefix: 'openreader',
+      segments: [{
+        ordinal: 0,
+        segmentKey: 'segment-0',
+        text: 'The resumed run narrates this right away.',
+        locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 0 },
+      }],
+      putAudioObject,
+      audioObjectExists,
+      playbackStorage,
+      // Waiting out this lease would exceed the test timeout.
+      synthesisTimeoutMs: 120_000,
+    });
+
+    expect(putAudioObject).toHaveBeenCalledTimes(1);
+    expect(sidecars.at(-1)).toMatchObject({ status: 'completed' });
   });
 
   test('stops cleanly before provider work when the next uncached segment is denied', async () => {

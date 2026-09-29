@@ -23,7 +23,10 @@ type DistributedProviderState = {
   cooldownUntil: number;
 };
 
-const PROVIDER_LEASE_MS = 5 * 60 * 1000;
+// A held slot is renewed while its request runs, so the lease only bounds how
+// long a worker that died mid-request (a redeploy, a crash) keeps the slot.
+const PROVIDER_LEASE_MS = 30_000;
+const PROVIDER_LEASE_RENEW_MS = 10_000;
 const EMPTY_DISTRIBUTED_STATE: DistributedProviderState = {
   schemaVersion: 1,
   holders: {},
@@ -138,10 +141,17 @@ export class ProviderCapacityCoordinator {
           else await kv.create(key, distributedCodec.encode(next));
           let released = false;
           let releasePromise: Promise<void> | null = null;
+          const renewal = setInterval(() => {
+            void this.updateHolder(key, holderId, Date.now() + PROVIDER_LEASE_MS).catch((error) => {
+              this.logger?.error({ error: String(error), providerKey: key }, 'provider capacity renewal failed');
+            });
+          }, PROVIDER_LEASE_RENEW_MS);
+          renewal.unref?.();
           return async () => {
             if (released) return;
             if (releasePromise) return releasePromise;
-            releasePromise = this.releaseDistributed(key, holderId);
+            clearInterval(renewal);
+            releasePromise = this.updateHolder(key, holderId, null);
             try {
               await releasePromise;
               released = true;
@@ -163,7 +173,8 @@ export class ProviderCapacityCoordinator {
     }
   }
 
-  private async releaseDistributed(key: string, holderId: string): Promise<void> {
+  /** Extends (`expiresAt`) or removes (`null`) one holder's slot. */
+  private async updateHolder(key: string, holderId: string, expiresAt: number | null): Promise<void> {
     if (!this.getKv) return;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const kv = await this.getKv();
@@ -172,7 +183,8 @@ export class ProviderCapacityCoordinator {
       const current = distributedCodec.decode(entry.value);
       if (!(holderId in current.holders)) return;
       const holders = { ...current.holders };
-      delete holders[holderId];
+      if (expiresAt === null) delete holders[holderId];
+      else holders[holderId] = expiresAt;
       try {
         await kv.update(key, distributedCodec.encode({ ...current, holders }), entry.revision);
         return;
@@ -181,7 +193,7 @@ export class ProviderCapacityCoordinator {
         await sleep(Math.min(10 * (attempt + 1), 50));
       }
     }
-    throw new Error('Provider capacity release exhausted CAS retries');
+    throw new Error(`Provider capacity ${expiresAt === null ? 'release' : 'renewal'} exhausted CAS retries`);
   }
 
   async coolDown(providerRef: string, retryAfterSeconds: number): Promise<void> {

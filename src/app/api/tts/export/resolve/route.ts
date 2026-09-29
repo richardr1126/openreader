@@ -6,6 +6,7 @@ import {
 import {
   ComputeWorkerClient,
   isComputeWorkerAvailable,
+  isComputeWorkerUnavailableError,
 } from '@/lib/server/compute-worker/client';
 import type { TtsPlaybackExportProgressSummary } from '@/lib/server/compute-worker/protocol';
 import { getRuntimeConfig } from '@/lib/server/admin/settings';
@@ -272,6 +273,16 @@ export async function POST(request: NextRequest) {
         status: 429,
         headers: { 'Retry-After': String(Math.max(1, Math.ceil(error.retryAfterMs / 1000))) },
       });
+    }
+    if (isComputeWorkerUnavailableError(error)) {
+      logger.warn({
+        event: 'tts.export.worker_unavailable',
+        error: error instanceof Error ? error.message : String(error),
+      }, 'Compute worker unavailable for audiobook export');
+      return NextResponse.json({
+        error: 'The compute worker is unavailable right now (it may be restarting). Try again in a moment.',
+        code: 'COMPUTE_WORKER_UNAVAILABLE',
+      }, { status: 503, headers: { 'Retry-After': '5' } });
     }
     return errorResponse(error, {
       logger,

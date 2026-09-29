@@ -17,7 +17,10 @@ vi.mock('@openreader/tts/playback-scope', () => ({
   buildTtsPlaybackExportArtifactId: hoisted.artifactId,
 }));
 
-vi.mock('@/lib/server/compute-worker/client', () => ({
+vi.mock('@/lib/server/compute-worker/client', async (importOriginal) => ({
+  isComputeWorkerUnavailableError: (
+    await importOriginal<typeof import('@/lib/server/compute-worker/client')>()
+  ).isComputeWorkerUnavailableError,
   isComputeWorkerAvailable: vi.fn(() => true),
   ComputeWorkerClient: class ComputeWorkerClient {
     resolveTtsPlaybackSession = hoisted.resolveSession;
@@ -34,7 +37,7 @@ vi.mock('@/lib/server/admin/settings', () => ({
 }));
 
 vi.mock('@/lib/server/logger', () => ({
-  createRequestLogger: vi.fn(() => ({ logger: {} })),
+  createRequestLogger: vi.fn(() => ({ logger: { warn: vi.fn() } })),
 }));
 
 vi.mock('@/lib/server/tts/playback-request', () => ({
@@ -382,5 +385,17 @@ describe('POST /api/tts/export/resolve', () => {
       code: 'COMPUTE_ADMISSION_RATE_LIMITED',
       retryAfterMs: 1_000,
     }));
+  });
+
+  test('reports an unreachable (for example redeploying) worker as retryable', async () => {
+    hoisted.resolveSession.mockRejectedValue(new TypeError('fetch failed'));
+
+    const { status, json } = await post({ action: 'resolve' });
+
+    expect(status).toBe(503);
+    expect(json).toEqual({
+      error: expect.stringContaining('compute worker is unavailable'),
+      code: 'COMPUTE_WORKER_UNAVAILABLE',
+    });
   });
 });

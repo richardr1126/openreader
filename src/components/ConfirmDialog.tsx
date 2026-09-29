@@ -29,10 +29,14 @@ export function ConfirmDialog({
       </div>
 
       <div className="mt-6 flex justify-end space-x-3">
-        <Button autoFocus variant="outline" size="sm" onClick={onClose}>
-          {cancelText}
-        </Button>
+        {/* An empty cancel label makes a one-button acknowledgement dialog. */}
+        {cancelText && (
+          <Button autoFocus variant="outline" size="sm" onClick={onClose}>
+            {cancelText}
+          </Button>
+        )}
         <Button
+          autoFocus={!cancelText}
           variant={isDangerous ? 'danger' : 'primary'}
           size="sm"
           className="text-wrap"

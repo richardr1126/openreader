@@ -111,6 +111,41 @@ describe('provider capacity coordinator', () => {
     await releaseSecond();
   });
 
+  test('renews a held slot and frees one a dead worker left behind within the lease', async () => {
+    vi.useFakeTimers();
+    try {
+      const policy = cloneComputeLimitPolicyDocument();
+      policy.providers.defaults = {
+        enabled: true, maxConcurrent: 1, requestsPerMinute: 100,
+        charactersPerMinute: 100_000, maxWaitSeconds: 1,
+      };
+      const kv = new MemoryKv();
+      const liveWorker = new ProviderCapacityCoordinator(() => policy, async () => kv);
+      const otherWorker = new ProviderCapacityCoordinator(() => policy, async () => kv);
+
+      // A slow synthesis request outlives the lease while it keeps renewing.
+      const releaseLive = await liveWorker.acquire({ providerRef: 'shared', characters: 1 });
+      await vi.advanceTimersByTimeAsync(120_000);
+      const blocked = expect(otherWorker.acquire({ providerRef: 'shared', characters: 1 }))
+        .rejects.toThrow('capacity wait timed out');
+      await vi.advanceTimersByTimeAsync(1_100);
+      await blocked;
+      await releaseLive();
+
+      // A worker killed mid-request never releases or renews its slot.
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+      const deadWorker = new ProviderCapacityCoordinator(() => policy, async () => kv);
+      await deadWorker.acquire({ providerRef: 'shared', characters: 1 });
+      clearInterval(setIntervalSpy.mock.results.at(-1)!.value as NodeJS.Timeout);
+      setIntervalSpy.mockRestore();
+      await vi.advanceTimersByTimeAsync(31_000);
+      const releaseNext = await otherWorker.acquire({ providerRef: 'shared', characters: 1 });
+      await releaseNext();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('bypasses disabled provider capacity without recording demand', async () => {
     const policy = cloneComputeLimitPolicyDocument();
     policy.providers.defaults = {

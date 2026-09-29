@@ -991,7 +991,9 @@ provider-specific admin policy before the upstream call.
 
 Per provider reference:
 
-- `maxConcurrent` is a lease released after the request settles.
+- `maxConcurrent` is a lease released after the request settles. The holder
+  renews a short (30-second) lease while its request runs, so a worker killed
+  mid-request frees its slots within that lease rather than minutes later.
 - `requestsPerMinute` is strict.
 - `charactersPerMinute` is strict because it represents provider throughput,
   not the user-facing generous daily threshold.

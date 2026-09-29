@@ -107,14 +107,28 @@ export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; 
   return { info: { message, code: 'UPSTREAM_ERROR', upstreamStatus }, retryable: false };
 }
 
-export function leaseBelongsToPlaybackSession(
+/**
+ * Whether the current run of a playback session may take over a segment lease
+ * without waiting for it to go stale. Its own incarnation's earlier runs are
+ * superseded, and so is any other run of the same session: only the session's
+ * current run passes the run-id check before each write, so a replaced run (a
+ * resume after a worker restart included) can no longer settle the segment.
+ * Two incarnations that share a run id cannot be told apart, so a replacement
+ * incarnation still respects that lease until it expires.
+ */
+export function leaseReclaimableByRun(
   ownerId: string,
-  sessionId: string,
-  sessionInstanceId: string,
+  run: { sessionId: string; sessionInstanceId: string; generationRunId: string },
 ): boolean {
   try {
-    const parsed = JSON.parse(ownerId) as { sessionId?: unknown; sessionInstanceId?: unknown };
-    return parsed.sessionId === sessionId && parsed.sessionInstanceId === sessionInstanceId;
+    const parsed = JSON.parse(ownerId) as {
+      sessionId?: unknown;
+      sessionInstanceId?: unknown;
+      generationRunId?: unknown;
+    };
+    if (parsed.sessionId !== run.sessionId) return false;
+    return parsed.sessionInstanceId === run.sessionInstanceId
+      || (typeof parsed.generationRunId === 'string' && parsed.generationRunId !== run.generationRunId);
   } catch {
     // Legacy owner ids cannot prove which incarnation wrote them. Treat them
     // as foreign until their bounded lease expires rather than overlapping
@@ -321,11 +335,16 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     return true;
   };
 
-  const leaseOwnerId = JSON.stringify({
+  const leaseRun = {
     sessionId: input.request.sessionId,
     sessionInstanceId: input.sessionInstanceId,
-    generationExtent: input.request.generationExtent ?? 'window',
     generationRunId: input.request.generationRunId ?? 'initial',
+  };
+  const leaseOwnerId = JSON.stringify({
+    sessionId: leaseRun.sessionId,
+    sessionInstanceId: leaseRun.sessionInstanceId,
+    generationExtent: input.request.generationExtent ?? 'window',
+    generationRunId: leaseRun.generationRunId,
   });
   const leaseStaleMs = Math.max(GENERATION_LEASE_MIN_MS, input.synthesisTimeoutMs + GENERATION_LEASE_GRACE_MS);
   const minCacheEpoch = Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)));
@@ -340,14 +359,9 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   ): boolean => {
     if (!sidecar || sidecar.status !== 'generating' || sidecar.audioKey !== audioKey) return false;
     if (!sidecar.leaseOwnerId || sidecar.leaseOwnerId === leaseOwnerId) return false;
-    // One canonical session incarnation has exactly one current generation
-    // run. Its successor may immediately steal its predecessor's lease after a
-    // seek or resume; a replacement incarnation must respect the old lease.
-    if (leaseBelongsToPlaybackSession(
-      sidecar.leaseOwnerId,
-      input.request.sessionId,
-      input.sessionInstanceId,
-    )) return false;
+    // A seek, resume, or restart replaces the session's generation run; the
+    // new run takes over its predecessor's in-flight segments immediately.
+    if (leaseReclaimableByRun(sidecar.leaseOwnerId, leaseRun)) return false;
     const leaseUpdatedAt = Number(sidecar.leaseUpdatedAt ?? sidecar.updatedAt ?? 0);
     return Number.isFinite(leaseUpdatedAt) && now - leaseUpdatedAt < leaseStaleMs;
   };

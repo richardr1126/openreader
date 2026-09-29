@@ -1865,6 +1865,15 @@ causes, now fixed:
   segment attempts; timeouts are retryable, transient failures back off, and
   whole-document runs use at least a 120-second per-segment timeout. A stopped
   run releases its generating leases so a resume can claim them immediately.
+- A worker killed mid-export (a redeploy) cannot release anything, and its
+  resume is a new session incarnation. The resumed run waited out every lease
+  the dead run held (segment timeout plus grace, 150 seconds or more) and its
+  provider slots (five minutes), showing `generating` with no progress. A run
+  now takes over any lease held by a different generation run of the same
+  session, since only the session's current run may settle a segment, and
+  provider slots use a short renewed lease. The resolve route reports an
+  unreachable worker as a retryable `503`, and a failed background refresh
+  backs off and retries instead of opening an error dialog.
 - Terminal error sidecars still become one-second silence, but an explicit
   `retry-skipped` start regenerates them; artifacts are reused only while their
   generated/skipped counts match the current sidecars.

@@ -14,6 +14,9 @@ import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-expo
 // triggers it, at most this often, while the export sidebar is open.
 const PROGRESS_REFRESH_INTERVAL_MS = 5_000;
 const STREAM_RECONNECT_DELAY_MS = 2_000;
+// A background refresh that fails (for example while the worker redeploys)
+// retries with backoff instead of interrupting the reader with a dialog.
+const REFRESH_RETRY_MAX_DELAY_MS = 30_000;
 
 function isClosedEventSource(event: Event): boolean {
   const source = event.target as EventSource | null;
@@ -91,6 +94,8 @@ export function useAudiobookExport(input: {
   // Bumped when this export's lifecycle ends (settings change or unmount), so
   // an in-flight chapter request can neither subscribe nor download afterward.
   const lifecycleRef = useRef(0);
+  const refreshFailuresRef = useRef(0);
+  const onRefreshFailedRef = useRef<(failures: number) => void>(() => undefined);
 
   const run = useCallback(async (action: TtsExportAction, options?: { quiet?: boolean }) => {
     const key = exportKeyRef.current;
@@ -106,11 +111,17 @@ export function useAudiobookExport(input: {
       const next = await resolve({ format, speed, action }, controller.signal);
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
       lastRefreshAtRef.current = Date.now();
+      refreshFailuresRef.current = 0;
       setSnapshot(next);
       setLiveCounts(null);
       if (!options?.quiet) setRequestError(null);
     } catch (error) {
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
+      if (options?.quiet) {
+        refreshFailuresRef.current += 1;
+        onRefreshFailedRef.current(refreshFailuresRef.current);
+        return;
+      }
       setRequestError(describeExportRequestError(error));
     } finally {
       if (requestControllerRef.current === controller) {
@@ -139,6 +150,15 @@ export function useAudiobookExport(input: {
   }, [refresh]);
   const reconnectIfClosed = useCallback((event: Event) => {
     if (isClosedEventSource(event)) reconnect();
+  }, [reconnect]);
+  useEffect(() => {
+    onRefreshFailedRef.current = (failures) => reconnect(Math.min(
+      REFRESH_RETRY_MAX_DELAY_MS,
+      STREAM_RECONNECT_DELAY_MS * 2 ** (failures - 1),
+    ));
+    return () => {
+      onRefreshFailedRef.current = () => undefined;
+    };
   }, [reconnect]);
   useEffect(() => {
     const resume = () => {
