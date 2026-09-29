@@ -14,7 +14,7 @@ import {
   resolveTtsProviderModelPolicy,
 } from '@openreader/tts/provider-policy';
 
-const fieldLabelClass = 'block text-[11px] font-semibold uppercase tracking-wide text-soft';
+const fieldLabelClass = 'block text-sm font-medium text-foreground';
 
 export function ProviderSettingsPanel({
   active = true,

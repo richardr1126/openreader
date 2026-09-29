@@ -25,6 +25,22 @@ export function Field({
   );
 }
 
+/** Label on the left, control on the right; for rows inside a `Section variant="group"`. */
+export function SettingRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="shrink-0 text-sm font-medium text-foreground">{label}</span>
+      <div className="min-w-0 flex-1 max-w-[15rem]">{children}</div>
+    </div>
+  );
+}
+
 export function ToggleRow({
   label,
   description,
@@ -40,20 +56,22 @@ export function ToggleRow({
   onChange: (checked: boolean) => void;
   disabled?: boolean;
   right?: ReactNode;
-  variant?: 'card' | 'flat';
+  variant?: 'card' | 'flat' | 'plain';
 }) {
   const labelId = useId();
   const descId = useId();
   const rowClass =
-    variant === 'flat'
-      ? 'px-0.5 pt-1 pb-2 border-b border-line-soft last:border-b-0 transition-colors duration-fast ease-standard'
-      : 'rounded-md border border-line bg-surface px-2.5 py-1.5 transition-colors duration-fast ease-standard';
+    variant === 'plain'
+      ? ''
+      : variant === 'flat'
+        ? 'px-0.5 pt-1 pb-2 border-b border-line-soft last:border-b-0 transition-colors duration-fast ease-standard'
+        : 'rounded-md border border-line bg-surface px-2.5 py-1.5 transition-colors duration-fast ease-standard';
   const handleTextToggle = () => {
     if (!disabled) onChange(!checked);
   };
   return (
     <div className={rowClass}>
-      <div className="flex items-start gap-2.5">
+      <div className={cn('flex gap-2.5', variant === 'plain' ? 'items-center' : 'items-start')}>
         <div
           className={cn('flex-1 min-w-0 space-y-0.5', disabled ? '' : 'cursor-pointer')}
           onClick={handleTextToggle}
@@ -102,8 +120,8 @@ export function RangeField({
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <label className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</label>
-        <span className={cn(valueWidth, 'text-xs font-semibold text-right text-foreground tabular-nums')}>
+        <label className="text-sm font-medium text-foreground">{label}</label>
+        <span className={cn(valueWidth, 'text-sm text-right text-soft tabular-nums')}>
           {formatter(value)}
         </span>
       </div>

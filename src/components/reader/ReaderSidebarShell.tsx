@@ -70,9 +70,9 @@ export function ReaderSidebarShell({
             aria-label={ariaLabel}
             className={`reader-sidebar-panel absolute inset-y-0 right-0 sm:right-3 sm:top-3 sm:bottom-3 pointer-events-auto bg-surface border-l sm:border border-line shadow-elev-3 sm:rounded-lg flex flex-col ${panelClassName}`}
           >
-            <div className="border-b border-line-soft px-4 py-3 flex items-start justify-between gap-3">
+            <div className="border-b border-line-soft px-4 py-2.5 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-sm font-medium text-foreground">{title}</h2>
+                <h2 className="text-sm font-semibold text-foreground">{title}</h2>
                 {subtitle ? <p className="mt-0.5 text-xs text-soft">{subtitle}</p> : null}
               </div>
               <div className="flex items-center gap-1 shrink-0">

@@ -11,7 +11,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
-import { Badge, Button, Field, IconButton, RangeField, Section, SegmentedControl } from '@/components/ui';
+import { Badge, Button, IconButton, RangeField, Section, SegmentedControl, SettingRow } from '@/components/ui';
 import {
   triggerDownload,
   useAudiobookExport,
@@ -300,8 +300,8 @@ export function AudiobookExportModal({
         bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]"
       >
         <div className="space-y-4">
-          <Section title="Settings" variant="flat">
-            <Field label="Voice">
+          <Section title="Settings" variant="group">
+            <SettingRow label="Voice">
               <VoicesControlBase
                 availableVoices={availableVoices}
                 voice={voice}
@@ -312,14 +312,18 @@ export function AudiobookExportModal({
                 variant="field"
                 disabled={isGenerating}
               />
-            </Field>
-            {languageWarnings.map((warning) => (
-              <p key={warning} className="text-xs text-warning">
-                {warning}
-              </p>
-            ))}
+            </SettingRow>
+            {languageWarnings.length > 0 && (
+              <div className="space-y-1">
+                {languageWarnings.map((warning) => (
+                  <p key={warning} className="text-xs text-warning">
+                    {warning}
+                  </p>
+                ))}
+              </div>
+            )}
 
-            <Field label="Format">
+            <SettingRow label="Format">
               <SegmentedControl<ExportFormat>
                 value={exportFormat}
                 options={EXPORT_FORMAT_OPTIONS}
@@ -327,7 +331,7 @@ export function AudiobookExportModal({
                 ariaLabel="Audiobook export format"
                 className="grid-cols-2"
               />
-            </Field>
+            </SettingRow>
 
             {nativeSpeedSupported && (
               <RangeField
@@ -362,77 +366,79 @@ export function AudiobookExportModal({
 
           <Section
             title="Export"
-            variant="flat"
+            variant="group"
             action={<Badge tone={badge.tone}>{badge.label}</Badge>}
           >
-            <div className="flex items-center justify-between text-xs text-faint">
-              <span>Segments</span>
-              <span className="font-semibold text-foreground tabular-nums">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-foreground">Segments</span>
+              <span className="text-soft tabular-nums">
                 {planned > 0 ? `${settledCount}/${planned}` : '—'}
                 {narratedMs > 0 && <span className="ml-2 font-normal text-faint">{formatDuration(narratedMs)} narrated</span>}
               </span>
             </div>
 
-            {isActive && (
-              <ProgressCard
-                progress={displayPercent}
-                estimatedTimeRemaining={isGenerating ? estimatedTimeRemaining || undefined : undefined}
-                operationType="audiobook"
-                currentChapter={activeChapter ? titleFor(activeChapter) : undefined}
-                statusMessage={statusMessage}
-              />
-            )}
+            <div className="space-y-2.5">
+              {isActive && (
+                <ProgressCard
+                  progress={displayPercent}
+                  estimatedTimeRemaining={isGenerating ? estimatedTimeRemaining || undefined : undefined}
+                  operationType="audiobook"
+                  currentChapter={activeChapter ? titleFor(activeChapter) : undefined}
+                  statusMessage={statusMessage}
+                />
+              )}
 
-            {generationNotice && <p role="status" className="text-xs text-warning">{generationNotice}</p>}
-            {skippedNotice && <p className="text-xs text-warning">{skippedNotice}</p>}
-            {artifactNotice && <p role="status" className="text-xs text-warning">{artifactNotice}</p>}
+              {generationNotice && <p role="status" className="text-xs text-warning">{generationNotice}</p>}
+              {skippedNotice && <p className="text-xs text-warning">{skippedNotice}</p>}
+              {artifactNotice && <p role="status" className="text-xs text-warning">{artifactNotice}</p>}
 
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              {primaryAction && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                {primaryAction && (
+                  <Button
+                    onClick={primaryAction.onClick}
+                    disabled={!voice || pendingAction !== null || isBuilding}
+                    variant={primaryAction.variant}
+                    size="md"
+                    className="flex-1"
+                  >
+                    {primaryAction.label}
+                  </Button>
+                )}
                 <Button
-                  onClick={primaryAction.onClick}
-                  disabled={!voice || pendingAction !== null || isBuilding}
-                  variant={primaryAction.variant}
+                  onClick={handleDownload}
+                  disabled={!canDownload}
+                  variant="secondary"
                   size="md"
-                  className="flex-1"
+                  className="flex-1 gap-2"
                 >
-                  {primaryAction.label}
+                  <DownloadIcon className="h-4 w-4" />
+                  <span>Download</span>
+                </Button>
+              </div>
+              {skipped > 0 && !isActive && (
+                <Button
+                  onClick={retrySkipped}
+                  disabled={pendingAction !== null}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full gap-2"
+                >
+                  <RefreshIcon className="h-4 w-4" />
+                  <span>Retry {skipped} skipped {skipped === 1 ? 'segment' : 'segments'}</span>
                 </Button>
               )}
-              <Button
-                onClick={handleDownload}
-                disabled={!canDownload}
-                variant="secondary"
-                size="md"
-                className="flex-1 gap-2"
-              >
-                <DownloadIcon className="h-4 w-4" />
-                <span>Download</span>
-              </Button>
             </div>
-            {skipped > 0 && !isActive && (
-              <Button
-                onClick={retrySkipped}
-                disabled={pendingAction !== null}
-                variant="ghost"
-                size="sm"
-                className="w-full gap-2"
-              >
-                <RefreshIcon className="h-4 w-4" />
-                <span>Retry {skipped} skipped {skipped === 1 ? 'segment' : 'segments'}</span>
-              </Button>
-            )}
           </Section>
 
           {chapters.length > 0 && (
             <Section
               title={documentType === 'pdf' ? 'Pages' : 'Chapters'}
-              variant="flat"
+              variant="group"
               action={<span className="text-xs text-faint tabular-nums">{chapters.filter(chapterIsSettled).length}/{chapters.length} ready</span>}
             >
               <ul
                 aria-label="Audiobook chapters"
-                className="max-h-72 divide-y divide-line-soft overflow-y-auto rounded-md border border-line-soft bg-surface-sunken"
+                className="max-h-72 divide-y divide-line-soft overflow-y-auto !p-0"
               >
                 {chapters.map((chapter) => (
                   <ChapterRow

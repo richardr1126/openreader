@@ -188,31 +188,33 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
       bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]"
       panelClassName="w-full sm:w-[30rem]"
     >
-      <div className="space-y-4">
+      <div className="space-y-5">
         {language && onLanguageChange ? (
-          <Section title="Language" variant="flat">
-            <Select
-              value={selectedLanguage}
-              onChange={(option) => onLanguageChange(option.value)}
-              options={DOCUMENT_LANGUAGE_OPTIONS}
-            />
-            {language === 'auto' && detectedLanguage ? (
-              <p className="text-xs text-soft">
-                Detected: {getLanguageDisplayName(detectedLanguage)}
-              </p>
-            ) : null}
-            {languageWarnings.map((warning) => (
-              <p key={warning} className="text-xs text-warning">
-                {warning}
-              </p>
-            ))}
+          <Section title="Language" variant="group">
+            <div className="space-y-1.5">
+              <Select
+                value={selectedLanguage}
+                onChange={(option) => onLanguageChange(option.value)}
+                options={DOCUMENT_LANGUAGE_OPTIONS}
+              />
+              {language === 'auto' && detectedLanguage ? (
+                <p className="text-xs text-soft">
+                  Detected: {getLanguageDisplayName(detectedLanguage)}
+                </p>
+              ) : null}
+              {languageWarnings.map((warning) => (
+                <p key={warning} className="text-xs text-warning">
+                  {warning}
+                </p>
+              ))}
+            </div>
           </Section>
         ) : null}
 
         {isPdfMode || epub ? (
-          <Section title="Display" variant="flat">
+          <Section title="Display" variant="group">
             {isPdfMode ? (
-              <>
+              <div className="space-y-1.5">
                 <SegmentedControl
                   value={selectedView.id as ViewType}
                   options={viewTypeTextMapping.map((view) => ({ value: view.id as ViewType, label: view.name }))}
@@ -223,36 +225,36 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
                 {selectedView.id === 'scroll' ? (
                   <p className="text-xs text-warning">Scroll mode may be slower on large PDFs.</p>
                 ) : null}
-              </>
+              </div>
             ) : null}
             {epub ? (
               <ToggleRow
                 label="Use app theme"
                 checked={epubTheme}
                 onChange={(checked) => updateConfigKey('epubTheme', checked)}
-                variant="flat"
+                variant="plain"
               />
             ) : null}
           </Section>
         ) : null}
 
-        <Section title="Highlighting" variant="flat">
+        <Section title="Highlighting" variant="group">
           <ToggleRow
             label="Highlight sentence"
             checked={highlight.sentence}
             onChange={(checked) => updateConfigKey(highlight.sentenceKey, checked)}
-            variant="flat"
+            variant="plain"
           />
           <ToggleRow
             label="Highlight words"
             checked={highlight.word && highlight.sentence}
             disabled={!highlight.sentence}
             onChange={(checked) => updateConfigKey(highlight.wordKey, checked)}
-            variant="flat"
+            variant="plain"
           />
         </Section>
 
-        <Section title="Playback" variant="flat">
+        <Section title="Playback" variant="group">
           <RangeField
             label="Max segment length"
             value={localMaxBlockLength}
@@ -268,24 +270,25 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
             }}
           />
           {documentId ? (
-            <Button
-              variant="danger"
-              size="sm"
-              onClick={handleClearCache}
-              disabled={isClearingSegments}
-              className="w-full"
-            >
-              {isClearingSegments ? 'Clearing…' : 'Clear cached audio'}
-            </Button>
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium text-foreground">Cached audio</span>
+              <Button
+                size="sm"
+                onClick={handleClearCache}
+                disabled={isClearingSegments}
+              >
+                {isClearingSegments ? 'Clearing…' : 'Clear cached audio'}
+              </Button>
+            </div>
           ) : null}
         </Section>
 
         {isPdfMode && pdf && (
           <Section
             title="PDF Layout"
-            variant="flat"
+            variant="group"
             action={
-              <span className="flex items-center gap-1 text-xs text-muted">
+              <span className="flex items-center gap-1">
                 <span>{pdf.parseStatus ?? 'pending'}</span>
                 <IconButton
                   size="xs"
@@ -305,10 +308,10 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
               checked={pdf.parsedOverlayEnabled}
               onChange={pdf.onToggleOverlay}
               disabled={pdf.parseStatus !== 'ready'}
-              variant="flat"
+              variant="plain"
             />
-            <details className="rounded-md border border-offbase bg-surface-solid px-3 py-2">
-              <summary className="cursor-pointer text-xs font-medium text-foreground">
+            <details>
+              <summary className="cursor-pointer text-sm font-medium text-foreground">
                 Skip when reading aloud
               </summary>
               <div className="grid grid-cols-2 gap-x-3 pt-2">
