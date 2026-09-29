@@ -175,7 +175,8 @@ export function useAudiobookExport(input: {
   }, [reconnect]);
 
   const scheduleRefresh = useCallback(() => {
-    if (!isOpenRef.current || refreshTimerRef.current) return;
+    // After a failed refresh the backoff retry owns the next attempt.
+    if (!isOpenRef.current || refreshTimerRef.current || refreshFailuresRef.current > 0) return;
     const waitMs = Math.max(0, lastRefreshAtRef.current + PROGRESS_REFRESH_INTERVAL_MS - Date.now());
     refreshTimerRef.current = setTimeout(() => {
       refreshTimerRef.current = null;

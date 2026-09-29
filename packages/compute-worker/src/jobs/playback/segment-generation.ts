@@ -170,6 +170,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     providerRef: string;
     characters: number;
     signal?: AbortSignal;
+    onLost?: () => void;
   }) => Promise<() => Promise<void>>;
   getProviderMaxConcurrent?: (providerRef: string) => number | null;
   coolDownProviderCapacity?: (providerRef: string, retryAfterSeconds: number) => Promise<void>;
@@ -539,12 +540,16 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       let attempt = 0;
       while (true) {
         attempt += 1;
+        // Aborts this request if its provider slot lease is lost to another
+        // worker; the segment then waits for a slot again.
+        const slotLost = new AbortController();
         try {
           const releaseProvider = input.acquireProviderCapacity
             ? await input.acquireProviderCapacity({
               providerRef: effectiveProviderRef,
               characters: segment.text.length,
               signal: input.signal,
+              onLost: () => slotLost.abort(new Error('TTS provider capacity lease was lost')),
             })
             : async () => undefined;
           let audioBuffer: Buffer;
@@ -564,7 +569,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
               }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
               input.synthesisTimeoutMs,
               'tts playback segment synthesis',
-              input.signal,
+              input.signal ? AbortSignal.any([input.signal, slotLost.signal]) : slotLost.signal,
             );
           } finally {
             await releaseProvider().catch(() => undefined);
@@ -572,7 +577,13 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           if (!await shouldContinueWrites(planOrdinal)) return null;
           await input.putAudioObject(audioKey, audioBuffer);
           if (!await shouldContinueWrites(planOrdinal)) {
-            await input.deleteAudioObject?.(audioKey).catch(() => undefined);
+            // The key is content-addressed, so a successor run writes and
+            // adopts this same key; deleting it could remove audio the
+            // successor already published. Only a cleared cache discards it.
+            if (input.cacheEpoch !== undefined && input.getCurrentCacheEpoch
+              && await input.getCurrentCacheEpoch().catch(() => input.cacheEpoch) !== input.cacheEpoch) {
+              await input.deleteAudioObject?.(audioKey).catch(() => undefined);
+            }
             return null;
           }
           const durationMs = await probeAudioDurationMsFromBuffer(audioBuffer).catch(() => 0);
@@ -594,7 +605,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           break;
         } catch (error) {
           if (input.signal?.aborted) return null;
-          if (error instanceof ProviderCapacityWaitTimeoutError) {
+          if (error instanceof ProviderCapacityWaitTimeoutError || slotLost.signal.aborted) {
             // Saturated shared capacity is back-pressure, not a failed segment.
             // Keep waiting while this run still owns the segment.
             attempt -= 1;

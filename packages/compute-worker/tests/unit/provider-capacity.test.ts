@@ -141,6 +141,33 @@ describe('provider capacity coordinator', () => {
       await vi.advanceTimersByTimeAsync(31_000);
       const releaseNext = await otherWorker.acquire({ providerRef: 'shared', characters: 1 });
       await releaseNext();
+
+      // A live holder that cannot renew before its lease lapses (KV outage)
+      // is told it lost the slot, since another worker may now hold it.
+      const onLost = vi.fn();
+      let kvDown = false;
+      const stalled = new ProviderCapacityCoordinator(() => policy, async () => {
+        if (kvDown) throw new Error('kv unavailable');
+        return kv;
+      });
+      const releaseStalled = await stalled.acquire({ providerRef: 'shared', characters: 1, onLost });
+      kvDown = true;
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(onLost).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(11_000);
+      expect(onLost).toHaveBeenCalledTimes(1);
+      kvDown = false;
+      await releaseStalled();
+
+      // A renewal that finds its holder already gone also reports the loss.
+      const onLostAgain = vi.fn();
+      const releaseSecond = await stalled.acquire({ providerRef: 'shared', characters: 1, onLost: onLostAgain });
+      await kv.put([...(kv as unknown as { values: Map<string, unknown> }).values.keys()][0]!, new TextEncoder().encode(
+        JSON.stringify({ schemaVersion: 1, holders: {}, requests: [], characters: [], cooldownUntil: 0 }),
+      ));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(onLostAgain).toHaveBeenCalledTimes(1);
+      await releaseSecond();
     } finally {
       vi.useRealTimers();
     }

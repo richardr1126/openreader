@@ -465,6 +465,104 @@ describe('playback audio-first segment generation', () => {
     expect(sidecars.at(-1)).toMatchObject({ status: 'completed' });
   });
 
+  test('stops a request whose provider slot was lost and retries it with a new slot', async () => {
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    mocks.generateTTSBuffer
+      .mockImplementationOnce((_request: unknown, signal?: AbortSignal) => new Promise<Buffer>((_resolve, reject) => {
+        signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+      }))
+      .mockResolvedValueOnce(Buffer.from('retried-mp3'));
+    const acquireProviderCapacity = vi.fn(async (request: { onLost?: () => void }) => {
+      // The first slot's lease lapses mid-request.
+      if (acquireProviderCapacity.mock.calls.length === 1) setTimeout(() => request.onLost?.(), 10);
+      return async () => undefined;
+    });
+    const sidecars: TtsPlaybackSegmentMetadata[] = [];
+    const putAudioObject = vi.fn(async () => undefined);
+
+    await generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-slot', userId: 'user-1', storageUserId: 'user-1', documentId: 'document-1',
+        documentVersion: 1, readerType: 'epub', settingsHash: 'settings-1',
+        settingsJson: {
+          providerRef: 'local-kokoro', providerType: 'custom-openai', ttsModel: 'kokoro',
+          voice: 'af_heart', nativeSpeed: 1, ttsInstructions: '', language: 'en',
+        },
+        planning: {}, planObjectKey: 'plan-key',
+      },
+      sessionInstanceId: 'instance-slot',
+      s3Prefix: 'openreader',
+      segments: [{
+        ordinal: 0, segmentKey: 'segment-0', text: 'Needs a provider slot.',
+        locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 0 },
+      }],
+      putAudioObject,
+      audioObjectExists: vi.fn(async () => false),
+      playbackStorage: {
+        artifacts: {
+          readSegmentMetadata: vi.fn(async () => sidecars.at(-1) ?? null),
+          putSegmentMetadata: vi.fn(async (metadata: TtsPlaybackSegmentMetadata) => {
+            sidecars.push(metadata);
+            return 'sidecar-0';
+          }),
+          getScopeEpoch: vi.fn(async () => 0),
+        },
+      } as unknown as TtsPlaybackStorage,
+      synthesisTimeoutMs: 30_000,
+      acquireProviderCapacity,
+    });
+
+    expect(acquireProviderCapacity).toHaveBeenCalledTimes(2);
+    expect(putAudioObject).toHaveBeenCalledTimes(1);
+    expect(sidecars.at(-1)).toMatchObject({ status: 'completed', error: null });
+  });
+
+  test('a superseded run leaves its content-addressed audio for the successor', async () => {
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    mocks.generateTTSBuffer.mockResolvedValueOnce(Buffer.from('superseded-mp3'));
+    let superseded = false;
+    const putAudioObject = vi.fn(async () => {
+      superseded = true;
+    });
+    const deleteAudioObject = vi.fn(async () => undefined);
+
+    await generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-superseded', userId: 'user-1', storageUserId: 'user-1', documentId: 'document-1',
+        documentVersion: 1, readerType: 'epub', settingsHash: 'settings-1',
+        settingsJson: {
+          providerRef: 'local-kokoro', providerType: 'custom-openai', ttsModel: 'kokoro',
+          voice: 'af_heart', nativeSpeed: 1, ttsInstructions: '', language: 'en',
+        },
+        planning: {}, planObjectKey: 'plan-key', generationRunId: 'run-1',
+      },
+      sessionInstanceId: 'instance-superseded',
+      s3Prefix: 'openreader',
+      segments: [{
+        ordinal: 0, segmentKey: 'segment-0', text: 'Written just as a resume began.',
+        locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 0 },
+      }],
+      putAudioObject,
+      deleteAudioObject,
+      audioObjectExists: vi.fn(async () => false),
+      playbackStorage: {
+        artifacts: {
+          readSegmentMetadata: vi.fn(async () => null),
+          putSegmentMetadata: vi.fn(async () => 'sidecar-0'),
+          getScopeEpoch: vi.fn(async () => 0),
+        },
+      } as unknown as TtsPlaybackStorage,
+      cacheEpoch: 0,
+      getCurrentCacheEpoch: async () => 0,
+      synthesisTimeoutMs: 30_000,
+      onBeforeSegment: async () => (superseded ? 'stop' : 'continue'),
+    });
+
+    expect(putAudioObject).toHaveBeenCalledTimes(1);
+    // The successor may already have published this same key.
+    expect(deleteAudioObject).not.toHaveBeenCalled();
+  });
+
   test('stops cleanly before provider work when the next uncached segment is denied', async () => {
     const putSegmentMetadata = vi.fn(async () => 'sidecar-0');
     const consumeUsage = vi.fn(async () => ({ allowed: false }));

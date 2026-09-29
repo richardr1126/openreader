@@ -114,6 +114,7 @@ export class ProviderCapacityCoordinator {
     providerRef: string;
     characters: number;
     signal?: AbortSignal;
+    onLost?: () => void;
   }): Promise<() => Promise<void>> {
     const key = providerCapacityKey(input.providerRef);
     const holderId = randomUUID();
@@ -141,9 +142,23 @@ export class ProviderCapacityCoordinator {
           else await kv.create(key, distributedCodec.encode(next));
           let released = false;
           let releasePromise: Promise<void> | null = null;
+          let leaseExpiresAt = now + PROVIDER_LEASE_MS;
+          // Once the lease lapses another worker may take the slot, so the
+          // request holding it must stop rather than exceed the limit.
+          const loseSlot = () => {
+            clearInterval(renewal);
+            this.logger?.error({ providerKey: key }, 'provider capacity lease lost');
+            input.onLost?.();
+          };
           const renewal = setInterval(() => {
-            void this.updateHolder(key, holderId, Date.now() + PROVIDER_LEASE_MS).catch((error) => {
+            const renewedUntil = Date.now() + PROVIDER_LEASE_MS;
+            void this.updateHolder(key, holderId, renewedUntil).then((held) => {
+              if (released || releasePromise) return;
+              if (held) leaseExpiresAt = renewedUntil;
+              else loseSlot();
+            }, (error) => {
               this.logger?.error({ error: String(error), providerKey: key }, 'provider capacity renewal failed');
+              if (!released && !releasePromise && Date.now() >= leaseExpiresAt) loseSlot();
             });
           }, PROVIDER_LEASE_RENEW_MS);
           renewal.unref?.();
@@ -151,7 +166,7 @@ export class ProviderCapacityCoordinator {
             if (released) return;
             if (releasePromise) return releasePromise;
             clearInterval(renewal);
-            releasePromise = this.updateHolder(key, holderId, null);
+            releasePromise = this.updateHolder(key, holderId, null).then(() => undefined);
             try {
               await releasePromise;
               released = true;
@@ -173,21 +188,28 @@ export class ProviderCapacityCoordinator {
     }
   }
 
-  /** Extends (`expiresAt`) or removes (`null`) one holder's slot. */
-  private async updateHolder(key: string, holderId: string, expiresAt: number | null): Promise<void> {
-    if (!this.getKv) return;
+  /**
+   * Extends (`expiresAt`) or removes (`null`) one holder's slot. Returns false
+   * when the holder no longer owns a live slot (its lease lapsed or another
+   * worker compacted it away).
+   */
+  private async updateHolder(key: string, holderId: string, expiresAt: number | null): Promise<boolean> {
+    if (!this.getKv) return false;
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const kv = await this.getKv();
       const entry = await kv.get(key);
-      if (entry?.operation !== 'PUT') return;
+      if (entry?.operation !== 'PUT') return false;
       const current = distributedCodec.decode(entry.value);
-      if (!(holderId in current.holders)) return;
+      const heldUntil = current.holders[holderId];
+      if (heldUntil === undefined) return false;
       const holders = { ...current.holders };
-      if (expiresAt === null) delete holders[holderId];
+      // A lapsed lease is never revived: another worker may already count
+      // the slot as free.
+      if (expiresAt === null || heldUntil <= Date.now()) delete holders[holderId];
       else holders[holderId] = expiresAt;
       try {
         await kv.update(key, distributedCodec.encode({ ...current, holders }), entry.revision);
-        return;
+        return expiresAt !== null && holderId in holders;
       } catch (error) {
         if (!isKvCasConflictError(error)) throw error;
         await sleep(Math.min(10 * (attempt + 1), 50));
@@ -221,6 +243,8 @@ export class ProviderCapacityCoordinator {
     providerRef: string;
     characters: number;
     signal?: AbortSignal;
+    /** Called if a distributed slot's lease is lost; the request must stop. */
+    onLost?: () => void;
   }): Promise<() => Promise<void>> {
     if (this.getKv) return this.acquireDistributed(input);
     const state = this.states.get(input.providerRef) ?? { active: 0, requests: [], characters: [] };
