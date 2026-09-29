@@ -23,12 +23,6 @@ import {
   type NormalizedDocumentListState,
 } from './document-list-preferences';
 
-type DocumentToDelete = {
-  id: string;
-  name: string;
-  type: DocumentListDocument['type'];
-};
-
 type PendingMerge = {
   sources: DocumentListDocument[];
   target: DocumentListDocument;
@@ -38,10 +32,12 @@ export function useDocumentListController() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
-  const [documentToDelete, setDocumentToDelete] = useState<DocumentToDelete | null>(null);
+  const [documentsToDelete, setDocumentsToDelete] = useState<DocumentListDocument[]>([]);
   const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [manualFolderPrompt, setManualFolderPrompt] = useState(false);
+  /** Documents to file into the folder the manual prompt creates (a selection's "New folder…"). */
+  const [manualFolderDocs, setManualFolderDocs] = useState<DocumentListDocument[]>([]);
   const [clearFoldersPrompt, setClearFoldersPrompt] = useState(false);
   const preferenceWriteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -53,7 +49,7 @@ export function useDocumentListController() {
     epubDocs,
     htmlDocs,
     queryState: documentsQueryState,
-    deleteDocument,
+    deleteDocuments,
     refreshDocuments,
     uploadSummary,
     cancelUploads,
@@ -161,18 +157,24 @@ export function useDocumentListController() {
     query,
   ]);
 
-  const requestDeleteDocument = useCallback((document: DocumentListDocument) => {
-    setDocumentToDelete({ id: document.id, name: document.name, type: document.type });
+  const requestDeleteDocuments = useCallback((documents: DocumentListDocument[]) => {
+    if (documents.length > 0) setDocumentsToDelete(documents);
   }, []);
-  const confirmDeleteDocument = useCallback(async () => {
-    if (!documentToDelete) return;
+  const confirmDeleteDocuments = useCallback(async () => {
+    if (documentsToDelete.length === 0) return;
     try {
-      await deleteDocument(documentToDelete.id);
-      setDocumentToDelete(null);
+      await deleteDocuments(documentsToDelete.map((document) => document.id));
+      setDocumentsToDelete([]);
+      selection.clear();
     } catch (error) {
-      console.error('Failed to remove document:', error);
+      console.error('Failed to remove documents:', error);
     }
-  }, [deleteDocument, documentToDelete]);
+  }, [deleteDocuments, documentsToDelete, selection]);
+
+  const moveDocuments = useCallback((documents: DocumentListDocument[], folderId: string | null) => {
+    folderState.move.mutate({ documentIds: documents.map((document) => document.id), folderId });
+    selection.clear();
+  }, [folderState.move, selection]);
 
   const dropOnFolder = useCallback((folderId: string, item: DocumentDragItem) => {
     folderState.move.mutate({ documentIds: item.docs.map((document) => document.id), folderId });
@@ -213,16 +215,36 @@ export function useDocumentListController() {
     }
   }, [folderState.create, newFolderName, pendingMerge, selection, updateListState]);
 
-  const openManualFolderPrompt = useCallback(() => {
+  const openManualFolderPrompt = useCallback((documents: DocumentListDocument[] = []) => {
     setNewFolderName('');
+    setManualFolderDocs(documents);
     setManualFolderPrompt(true);
   }, []);
-  const confirmManualFolder = useCallback(() => {
-    folderState.create.mutate({ name: newFolderName.trim() || 'New Folder' });
-    setNewFolderName('');
+  const cancelManualFolder = useCallback(() => {
     setManualFolderPrompt(false);
-    updateListState({ sidebarFilter: 'all' });
-  }, [folderState.create, newFolderName, updateListState]);
+    setManualFolderDocs([]);
+    setNewFolderName('');
+  }, []);
+  const confirmManualFolder = useCallback(async () => {
+    const name = newFolderName.trim() || 'New Folder';
+    const documentIds = manualFolderDocs.map((document) => document.id);
+    cancelManualFolder();
+    if (documentIds.length === 0) {
+      folderState.create.mutate({ name });
+      updateListState({ sidebarFilter: 'all' });
+      return;
+    }
+    const folderId = crypto.randomUUID();
+    updateListState({ sidebarFilter: `folder:${folderId}` });
+    selection.clear();
+    try {
+      const { folder } = await folderState.create.mutateAsync({ id: folderId, name, documentIds });
+      updateListState({ sidebarFilter: `folder:${folder.id}` });
+    } catch (error) {
+      console.error('Failed to create folder:', error);
+      updateListState({ sidebarFilter: 'all' });
+    }
+  }, [cancelManualFolder, folderState.create, manualFolderDocs, newFolderName, selection, updateListState]);
   const deleteFolder = useCallback((folderId: string) => {
     folderState.remove.mutate(folderId);
     if (listState.sidebarFilter === `folder:${folderId}`) {
@@ -266,10 +288,11 @@ export function useDocumentListController() {
     },
     documentsQueryState,
     retryQueries,
-    requestDeleteDocument,
-    documentToDelete,
-    cancelDeleteDocument: () => setDocumentToDelete(null),
-    confirmDeleteDocument,
+    requestDeleteDocuments,
+    documentsToDelete,
+    cancelDeleteDocuments: () => setDocumentsToDelete([]),
+    confirmDeleteDocuments,
+    moveDocuments,
     dropOnFolder,
     requestMergeIntoFolder,
     pendingMerge,
@@ -282,10 +305,7 @@ export function useDocumentListController() {
     setNewFolderName,
     manualFolderPrompt,
     openManualFolderPrompt,
-    cancelManualFolder: () => {
-      setManualFolderPrompt(false);
-      setNewFolderName('');
-    },
+    cancelManualFolder,
     confirmManualFolder,
     deleteFolder,
     clearFoldersPrompt,

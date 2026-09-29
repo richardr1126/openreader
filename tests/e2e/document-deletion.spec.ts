@@ -11,16 +11,20 @@ test('anonymous user cancels and confirms document deletion', async ({ page }) =
   await uploadLibraryFiles(page, resolve('tests/files/sample.md'));
 
   const documentLink = page.getByRole('link', { name: 'sample.md', exact: true });
-  const deleteButton = page.getByRole('button', {
-    name: 'Delete sample.md',
+  const actionsButton = page.getByRole('button', {
+    name: 'Actions for sample.md',
     exact: true,
   });
+  const deleteFromMenu = async () => {
+    await actionsButton.click();
+    await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+  };
   await expect(documentLink).toBeVisible();
   await expect(page.getByRole('button', { name: 'All Documents 1', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Text 1', exact: true })).toBeVisible();
   await expect(page.getByRole('status')).toContainText('1 item');
 
-  await deleteButton.click();
+  await deleteFromMenu();
   const confirmation = page.getByRole('dialog', { name: 'Delete Document', exact: true });
   const confirmationHeading = confirmation.getByRole('heading', {
     name: 'Delete Document',
@@ -37,9 +41,9 @@ test('anonymous user cancels and confirms document deletion', async ({ page }) =
   await page.keyboard.press('Escape');
   await expect(confirmationHeading).toBeHidden({ timeout: 15_000 });
   await expect(documentLink).toBeVisible();
-  await expect(deleteButton).toBeFocused();
+  await expect(actionsButton).toBeFocused();
 
-  await deleteButton.click();
+  await deleteFromMenu();
   await expect(confirmationHeading).toBeVisible();
   await expect(
     confirmation.getByRole('button', { name: 'Cancel', exact: true }),

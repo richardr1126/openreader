@@ -10,6 +10,8 @@ import { IconButton } from '@/components/ui';
 import { QueryError, RefreshIndicator } from '@/components/ui/query-states';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import { DocumentSelectionProvider } from './dnd/DocumentSelectionContext';
+import { SelectionActionBar } from './SelectionActionBar';
+import type { DocumentActions } from './document-actions';
 import { SidebarUploadStatus } from './SidebarUploadStatus';
 import { GalleryView } from './views/GalleryView';
 import { IconsView } from './views/IconsView';
@@ -41,6 +43,13 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     sidebarFilter,
   } = listState;
   const { initialLoading, error: queryError } = documentsQueryState;
+
+  const actions: DocumentActions = {
+    folders: model.folders,
+    onDelete: controller.requestDeleteDocuments,
+    onMove: controller.moveDocuments,
+    onNewFolder: controller.openManualFolderPrompt,
+  };
 
   const handleFolderDialogKeyDown = (
     event: KeyboardEvent<HTMLInputElement>,
@@ -86,7 +95,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           folders={model.folders}
           counts={model.counts}
           onDeleteFolder={controller.deleteFolder}
-          onNewFolder={controller.openManualFolderPrompt}
+          onNewFolder={() => controller.openManualFolderPrompt()}
           onClearFolders={controller.requestClearFolders}
           onDropOnFolder={controller.dropOnFolder}
           width={sidebarWidth}
@@ -195,7 +204,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             <IconsView
               documents={model.visibleDocuments}
               iconSize={iconSize}
-              onDeleteDoc={controller.requestDeleteDocument}
+              actions={actions}
               onMergeIntoFolder={controller.requestMergeIntoFolder}
             />
           )}
@@ -208,7 +217,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
                 sortBy: by,
                 sortDirection: direction,
               })}
-              onDeleteDoc={controller.requestDeleteDocument}
+              actions={actions}
               onMergeIntoFolder={controller.requestMergeIntoFolder}
             />
           )}
@@ -216,10 +225,11 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
             <GalleryView
               documents={model.visibleDocuments}
               folderNameById={model.folderNameById}
-              onDeleteDoc={controller.requestDeleteDocument}
+              actions={actions}
               onMergeIntoFolder={controller.requestMergeIntoFolder}
             />
           )}
+          <SelectionActionBar actions={actions} />
         </DocumentUploader>
       )}
 
@@ -248,11 +258,15 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       />
 
       <ConfirmDialog
-        isOpen={controller.documentToDelete !== null}
-        onClose={controller.cancelDeleteDocument}
-        onConfirm={controller.confirmDeleteDocument}
-        title="Delete Document"
-        message={`Are you sure you want to delete ${controller.documentToDelete?.name ?? 'this document'}?`}
+        isOpen={controller.documentsToDelete.length > 0}
+        onClose={controller.cancelDeleteDocuments}
+        onConfirm={controller.confirmDeleteDocuments}
+        title={controller.documentsToDelete.length > 1 ? 'Delete Documents' : 'Delete Document'}
+        message={
+          controller.documentsToDelete.length > 1
+            ? `Are you sure you want to delete these ${controller.documentsToDelete.length} documents?`
+            : `Are you sure you want to delete ${controller.documentsToDelete[0]?.name ?? 'this document'}?`
+        }
         confirmText="Delete"
         isDangerous
       />

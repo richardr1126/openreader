@@ -19,6 +19,8 @@ interface SelectionContextValue {
   selection: ReadonlySet<DocKey>;
   isSelected: (doc: Pick<DocumentListDocument, 'id' | 'type'>) => boolean;
   selectionSize: number;
+  /** Number of documents currently visible (the select-all universe). */
+  visibleCount: number;
   /** Treat the visible-doc order so shift-click range-select can resolve. */
   setVisibleOrder: (docs: DocumentListDocument[]) => void;
   /** Click semantics: with shift = range-select, with meta/ctrl = toggle, plain = single-select. */
@@ -27,6 +29,9 @@ interface SelectionContextValue {
     opts?: { shift?: boolean; meta?: boolean },
   ) => void;
   clear: () => void;
+  /** Toggle one document in or out of the selection (checkbox / selection-mode click). */
+  toggle: (doc: DocumentListDocument) => void;
+  selectAll: () => void;
   /** Force a precise selection (e.g. on drag start when nothing was selected). */
   replace: (docs: DocumentListDocument[]) => void;
   /** Resolve concrete docs for the current selection from the visible-order. */
@@ -45,8 +50,20 @@ export function DocumentSelectionProvider({ children }: { children: ReactNode })
     [selection],
   );
 
+  // Selection only ever holds visible documents: filtering, deleting, or moving
+  // a selected document out of view drops it instead of leaving a phantom count.
   const setVisibleOrder = useCallback((docs: DocumentListDocument[]) => {
     setOrder(docs);
+    const visible = new Set(docs.map(docKey));
+    setSelection((prev) => {
+      let pruned = false;
+      const next = new Set<DocKey>();
+      for (const key of prev) {
+        if (visible.has(key)) next.add(key);
+        else pruned = true;
+      }
+      return pruned ? next : prev;
+    });
   }, []);
 
   const select = useCallback<SelectionContextValue['select']>(
@@ -85,6 +102,22 @@ export function DocumentSelectionProvider({ children }: { children: ReactNode })
     setAnchor(null);
   }, []);
 
+  const toggle = useCallback((doc: DocumentListDocument) => {
+    const key = docKey(doc);
+    setSelection((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+    setAnchor(key);
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelection(new Set(order.map(docKey)));
+    setAnchor(order[0] ? docKey(order[0]) : null);
+  }, [order]);
+
   const replace = useCallback((docs: DocumentListDocument[]) => {
     const next = new Set<DocKey>();
     for (const d of docs) next.add(docKey(d));
@@ -102,13 +135,16 @@ export function DocumentSelectionProvider({ children }: { children: ReactNode })
       selection,
       isSelected,
       selectionSize: selection.size,
+      visibleCount: order.length,
       setVisibleOrder,
       select,
       clear,
+      toggle,
+      selectAll,
       replace,
       getSelectedDocs,
     }),
-    [selection, isSelected, setVisibleOrder, select, clear, replace, getSelectedDocs],
+    [selection, order.length, isSelected, setVisibleOrder, select, clear, toggle, selectAll, replace, getSelectedDocs],
   );
 
   return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;

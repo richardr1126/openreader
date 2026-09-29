@@ -79,3 +79,21 @@ export const HomeIcon = (props: IconProps) => (
     <path d="M5 10v9a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1v-9" />
   </svg>
 );
+
+export const TrashIcon = (props: IconProps) => (
+  <svg {...baseSvg(props)}>
+    <path d="M4 7h16M10 11v6M14 11v6M6 7l.9 11.1A2 2 0 0 0 8.9 20h6.2a2 2 0 0 0 2-1.9L18 7M9.5 7V5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2" />
+  </svg>
+);
+
+export const CloseIcon = (props: IconProps) => (
+  <svg {...baseSvg(props)}>
+    <path d="m6 6 12 12M18 6 6 18" />
+  </svg>
+);
+
+export const CheckMarkIcon = (props: IconProps) => (
+  <svg {...baseSvg({ ...props, strokeWidth: 2.4 })}>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </svg>
+);

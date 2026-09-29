@@ -10,7 +10,9 @@ import type {
 } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
-import { IconButton } from '@/components/ui';
+import { DocumentActionsMenu } from '../DocumentActionsMenu';
+import type { DocumentActions } from '../document-actions';
+import { SelectCheck } from '../SelectCheck';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 
@@ -19,7 +21,7 @@ interface ListViewProps {
   sortBy: SortBy;
   sortDirection: SortDirection;
   onSortChange: (sortBy: SortBy, direction: SortDirection) => void;
-  onDeleteDoc: (doc: DocumentListDocument) => void;
+  actions: DocumentActions;
   onMergeIntoFolder: (sources: DocumentListDocument[], target: DocumentListDocument) => void;
 }
 
@@ -77,11 +79,11 @@ function HeaderCell({
 
 function DocRow({
   doc,
-  onDeleteDoc,
+  actions,
   onMergeIntoFolder,
 }: {
   doc: DocumentListDocument;
-  onDeleteDoc: (d: DocumentListDocument) => void;
+  actions: DocumentActions;
   onMergeIntoFolder: (sources: DocumentListDocument[], target: DocumentListDocument) => void;
 }) {
   const selection = useDocumentSelection();
@@ -132,9 +134,10 @@ function DocRow({
       e.preventDefault();
       return;
     }
-    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+    // While anything is selected a plain click keeps selecting instead of opening.
+    if (e.shiftKey || e.metaKey || e.ctrlKey || selection.selectionSize > 0) {
       e.preventDefault();
-      selection.select(doc, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
+      selection.select(doc, { shift: e.shiftKey, meta: !e.shiftKey });
     }
   };
 
@@ -144,7 +147,7 @@ function DocRow({
       data-doc-tile
       aria-selected={isSelected}
       className={
-        'grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px] items-center text-[12px] border-b border-line-soft transition-colors duration-base ease-standard ' +
+        'group grid grid-cols-[28px_minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[28px_minmax(0,1fr)_56px_96px_140px_32px] items-center text-[12px] border-b border-line-soft transition-colors duration-base ease-standard ' +
         // iOS: suppress the long-press link preview/callout and selection magnifier so the
         // long-press is handed to the touch DnD backend instead of the native preview.
         'select-none [-webkit-touch-callout:none] ' +
@@ -155,12 +158,20 @@ function DocRow({
         (isDragging ? ' opacity-50' : '')
       }
     >
+      <span className="flex justify-center">
+        <SelectCheck
+          checked={isSelected}
+          selectionActive={selection.selectionSize > 0}
+          label={`Select ${doc.name}`}
+          onToggle={() => selection.toggle(doc)}
+        />
+      </span>
       <Link
         href={href}
         prefetch={false}
         draggable={false}
         onClick={handleClick}
-        className="flex items-center gap-2 min-w-0 px-2 py-1.5"
+        className="flex items-center gap-2 min-w-0 py-1.5 pr-2"
       >
         <KindIcon doc={doc} />
         <span className="truncate">{doc.name}</span>
@@ -172,23 +183,7 @@ function DocRow({
       <span className="px-2 text-[11px] text-soft tabular-nums">
         {formatDate(doc.lastModified)}
       </span>
-      <IconButton
-        onClick={(e: React.MouseEvent) => {
-          e.stopPropagation();
-          onDeleteDoc(doc);
-        }}
-        size="sm"
-        aria-label={`Delete ${doc.name}`}
-      >
-        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-          />
-        </svg>
-      </IconButton>
+      <DocumentActionsMenu doc={doc} actions={actions} />
     </div>
   );
 }
@@ -198,10 +193,11 @@ export function ListView({
   sortBy,
   sortDirection,
   onSortChange,
-  onDeleteDoc,
+  actions,
   onMergeIntoFolder,
 }: ListViewProps) {
-  const { setVisibleOrder, clear } = useDocumentSelection();
+  const { setVisibleOrder, clear, selectAll, selectionSize } = useDocumentSelection();
+  const allSelected = documents.length > 0 && selectionSize === documents.length;
 
   useEffect(() => {
     setVisibleOrder(documents);
@@ -214,7 +210,15 @@ export function ListView({
 
   return (
     <div onClick={handleBackgroundClick} className="flex-1 min-h-0 overflow-y-auto">
-      <div className="sticky top-0 z-10 bg-surface border-b border-line-soft grid grid-cols-[minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[minmax(0,1fr)_56px_96px_140px_32px]">
+      <div className="sticky top-0 z-10 bg-surface border-b border-line-soft grid grid-cols-[28px_minmax(0,1fr)_44px_72px_104px_28px] sm:grid-cols-[28px_minmax(0,1fr)_56px_96px_140px_32px]">
+        <span className="flex items-center justify-center">
+          <SelectCheck
+            checked={allSelected}
+            selectionActive
+            label={allSelected ? 'Deselect all documents' : 'Select all documents'}
+            onToggle={allSelected ? clear : selectAll}
+          />
+        </span>
         <HeaderCell label="Name" field="name" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
         <HeaderCell label="Kind" field="type" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} />
         <HeaderCell label="Size" field="size" sortBy={sortBy} sortDirection={sortDirection} onSortChange={onSortChange} align="right" />
@@ -226,7 +230,7 @@ export function ListView({
           <DocRow
             key={`${doc.type}-${doc.id}`}
             doc={doc}
-            onDeleteDoc={onDeleteDoc}
+            actions={actions}
             onMergeIntoFolder={onMergeIntoFolder}
           />
         ))}

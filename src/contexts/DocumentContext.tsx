@@ -27,7 +27,7 @@ interface DocumentContextType {
   cancelUploads: () => void;
   retryFailedUploads: () => void;
   dismissUploadStatus: () => void;
-  deleteDocument: (id: string) => Promise<void>;
+  deleteDocuments: (ids: string[]) => Promise<void>;
   refreshDocuments: () => Promise<void>;
 }
 
@@ -87,20 +87,20 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
   }, [docs]);
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteServerDocuments({ ids: [id] }),
-    onMutate: async (id) => {
+    mutationFn: (ids: string[]) => deleteServerDocuments({ ids }),
+    onMutate: async (ids) => {
       await queryClient.cancelQueries({ queryKey: documentsQueryKey });
       const previous = queryClient.getQueryData<SupportedDocument[]>(documentsQueryKey);
-      queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (rows = []) => rows.filter((doc) => doc.id !== id));
+      queryClient.setQueryData<SupportedDocument[]>(documentsQueryKey, (rows = []) => rows.filter((doc) => !ids.includes(doc.id)));
       return { previous };
     },
-    onError: (_error, _id, context) => queryClient.setQueryData(documentsQueryKey, context?.previous),
+    onError: (_error, _ids, context) => queryClient.setQueryData(documentsQueryKey, context?.previous),
     onSettled: () => queryClient.invalidateQueries({ queryKey: documentsQueryKey }),
   });
 
-  const deleteDocument = useCallback(async (id: string) => {
-    await deleteMutation.mutateAsync(id);
-    await evictCachedDocument(id);
+  const deleteDocuments = useCallback(async (ids: string[]) => {
+    await deleteMutation.mutateAsync(ids);
+    await Promise.all(ids.map((id) => evictCachedDocument(id)));
   }, [deleteMutation]);
 
   return (
@@ -114,7 +114,7 @@ export function DocumentProvider({ children }: { children: ReactNode }) {
       cancelUploads: uploads.cancelUploads,
       retryFailedUploads: uploads.retryFailedUploads,
       dismissUploadStatus: uploads.dismissUploadStatus,
-      deleteDocument,
+      deleteDocuments,
       refreshDocuments,
 
     }}>

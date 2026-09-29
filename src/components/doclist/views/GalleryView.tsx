@@ -6,14 +6,17 @@ import type { DocumentListDocument } from '@/types/documents';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
-import { Button, ButtonLink } from '@/components/ui';
+import { ButtonLink } from '@/components/ui';
+import { DocumentActionsMenu } from '../DocumentActionsMenu';
+import type { DocumentActions } from '../document-actions';
+import { SelectCheck } from '../SelectCheck';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 
 interface GalleryViewProps {
   documents: DocumentListDocument[];
   folderNameById?: Record<string, string>;
-  onDeleteDoc: (doc: DocumentListDocument) => void;
+  actions: DocumentActions;
   onMergeIntoFolder: (sources: DocumentListDocument[], target: DocumentListDocument) => void;
 }
 
@@ -88,14 +91,20 @@ function GalleryThumb({
     <div
       ref={setRefs}
       data-doc-tile
-      onClick={() => {
+      onClick={(e) => {
         if (didDragRef.current) {
           didDragRef.current = false;
+          return;
+        }
+        // While anything is selected a click keeps selecting instead of focusing the thumb.
+        if (e.shiftKey || e.metaKey || e.ctrlKey || selection.selectionSize > 0) {
+          selection.select(doc, { shift: e.shiftKey, meta: !e.shiftKey });
           return;
         }
         onClick();
       }}
       aria-current={active ? 'true' : undefined}
+      aria-selected={isSelected}
       className={
         'group relative w-[98px] sm:w-[110px] shrink-0 cursor-pointer rounded-lg overflow-hidden border bg-surface snap-start transition duration-base ease-standard ' +
         // iOS: suppress the long-press link preview/callout and selection magnifier so the
@@ -104,6 +113,7 @@ function GalleryThumb({
         (active
           ? 'border-accent-line shadow-elev-2 -translate-y-px'
           : 'border-line hover:border-accent-line hover:-translate-y-px hover:shadow-elev-2') +
+        (isSelected ? ' ring-2 ring-accent' : '') +
         (isOver && canDrop ? ' border-accent-line' : '') +
         (isDragging ? ' opacity-50' : '')
       }
@@ -112,6 +122,13 @@ function GalleryThumb({
       <div className="aspect-[3/4] bg-surface">
         <DocumentPreview doc={doc} />
       </div>
+      <SelectCheck
+        checked={isSelected}
+        selectionActive={selection.selectionSize > 0}
+        label={`Select ${doc.name}`}
+        onToggle={() => selection.toggle(doc)}
+        className="absolute left-1.5 top-1.5 z-10"
+      />
       <div
         className={
           'px-2 py-1.5 flex items-center gap-1.5 border-t transition-colors duration-base ' +
@@ -141,7 +158,7 @@ function GalleryThumb({
 export function GalleryView({
   documents,
   folderNameById,
-  onDeleteDoc,
+  actions,
   onMergeIntoFolder,
 }: GalleryViewProps) {
   const { setVisibleOrder } = useDocumentSelection();
@@ -190,13 +207,13 @@ export function GalleryView({
         const doc = activeDoc;
         if (doc) {
           e.preventDefault();
-          onDeleteDoc(doc);
+          actions.onDelete([doc]);
         }
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [activeDoc, documentKeys, documents.length, onDeleteDoc]);
+  }, [activeDoc, documentKeys, documents.length, actions]);
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -220,14 +237,7 @@ export function GalleryView({
                 <ButtonLink href={openHref || '/app'} prefetch={false} variant="primary" size="sm">
                   Open
                 </ButtonLink>
-                <Button
-                  type="button"
-                  onClick={() => onDeleteDoc(activeDoc)}
-                  variant="secondary"
-                  size="sm"
-                >
-                  Delete
-                </Button>
+                <DocumentActionsMenu doc={activeDoc} actions={actions} size="sm" className="border border-line" />
               </div>
             </div>
             <dl className="w-full max-w-[280px] sm:max-w-[360px] md:max-w-[340px] grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-md border border-line bg-surface px-3 py-2 text-[11px] md:self-center">

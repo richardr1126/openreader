@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { DocumentListDocument, IconSize } from '@/types/documents';
+import type { DocumentActions } from '../document-actions';
 import { DocumentTile } from './DocumentTile';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { iconsGridStyle, maxColumnsForIconGrid } from './iconsGrid';
@@ -9,14 +10,14 @@ import { iconsGridStyle, maxColumnsForIconGrid } from './iconsGrid';
 interface IconsViewProps {
   documents: DocumentListDocument[];
   iconSize: IconSize;
-  onDeleteDoc: (doc: DocumentListDocument) => void;
+  actions: DocumentActions;
   onMergeIntoFolder: (sources: DocumentListDocument[], target: DocumentListDocument) => void;
 }
 
 export function IconsView({
   documents,
   iconSize,
-  onDeleteDoc,
+  actions,
   onMergeIntoFolder,
 }: IconsViewProps) {
   const { setVisibleOrder, clear } = useDocumentSelection();
@@ -65,7 +66,7 @@ export function IconsView({
             key={`${doc.type}-${doc.id}`}
             doc={doc}
             iconSize={iconSize}
-            onDelete={onDeleteDoc}
+            actions={actions}
             onMergeIntoFolder={onMergeIntoFolder}
           />
         ))}

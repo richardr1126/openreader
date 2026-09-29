@@ -6,14 +6,16 @@ import { useDrag, useDrop, type DragSourceMonitor } from 'react-dnd';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import type { DocumentListDocument, IconSize } from '@/types/documents';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
-import { IconButton } from '@/components/ui';
+import { DocumentActionsMenu } from '../DocumentActionsMenu';
+import type { DocumentActions } from '../document-actions';
+import { SelectCheck } from '../SelectCheck';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
 import { DND_DOCUMENT, documentIdentityKey, type DocumentDragItem } from '../dnd/dndTypes';
 
 interface DocumentTileProps {
   doc: DocumentListDocument;
   iconSize: IconSize;
-  onDelete: (doc: DocumentListDocument) => void;
+  actions: DocumentActions;
   /** Fired when two unfoldered docs are dropped together → caller should open a "create folder" dialog. */
   onMergeIntoFolder: (source: DocumentListDocument[], target: DocumentListDocument) => void;
 }
@@ -48,30 +50,29 @@ const FILE_ICON_CLASSES: Record<IconSize, string> = {
   xl: 'w-4 h-4',
 };
 
-const TRASH_BTN_CLASSES: Record<IconSize, string> = {
+const MENU_BTN_CLASSES: Record<IconSize, string> = {
   sm: 'ml-0.5 h-[18px] w-[18px] rounded-sm',
   md: 'ml-0.5 h-[21px] w-[21px] rounded-sm',
   lg: 'ml-1 h-[23px] w-[23px] rounded',
   xl: 'ml-1.5 h-[25px] w-[25px] rounded',
 };
 
-const TRASH_ICON_CLASSES: Record<IconSize, string> = {
-  sm: 'w-[10px] h-[10px]',
-  md: 'w-[11px] h-[11px]',
-  lg: 'w-[12px] h-[12px]',
-  xl: 'w-[13px] h-[13px]',
+const MENU_ICON_CLASSES: Record<IconSize, string> = {
+  sm: 'w-[10px] h-[5px]',
+  md: 'w-[12px] h-[6px]',
+  lg: 'w-[13px] h-[6.5px]',
+  xl: 'w-[14px] h-[7px]',
 };
 
 export function DocumentTile({
   doc,
   iconSize,
-  onDelete,
+  actions,
   onMergeIntoFolder,
 }: DocumentTileProps) {
   const href = `/${doc.type}/${encodeURIComponent(doc.id)}`;
   const selection = useDocumentSelection();
 
-  const showDeleteButton = true;
   const isSelected = selection.isSelected(doc);
   const isInFolder = Boolean(doc.folderId);
   const didDragRef = useRef(false);
@@ -140,9 +141,10 @@ export function DocumentTile({
       e.preventDefault();
       return;
     }
-    if (e.shiftKey || e.metaKey || e.ctrlKey) {
+    // While anything is selected a plain click keeps selecting instead of opening.
+    if (e.shiftKey || e.metaKey || e.ctrlKey || selection.selectionSize > 0) {
       e.preventDefault();
-      selection.select(doc, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey });
+      selection.select(doc, { shift: e.shiftKey, meta: !e.shiftKey });
     }
   };
 
@@ -174,6 +176,13 @@ export function DocumentTile({
       >
         <DocumentPreview doc={doc} />
       </Link>
+      <SelectCheck
+        checked={isSelected}
+        selectionActive={selection.selectionSize > 0}
+        label={`Select ${doc.name}`}
+        onToggle={() => selection.toggle(doc)}
+        className="absolute left-2 top-2 z-10"
+      />
       <div className={`flex items-center w-full ${BOTTOM_PADDING_CLASSES[iconSize]}`}>
         <Link
           href={href}
@@ -202,23 +211,13 @@ export function DocumentTile({
             {doc.name}
           </span>
         </Link>
-        {showDeleteButton && (
-          <IconButton
-            onClick={() => onDelete(doc)}
-            size="xs"
-            className={TRASH_BTN_CLASSES[iconSize]}
-            aria-label={`Delete ${doc.name}`}
-          >
-            <svg className={TRASH_ICON_CLASSES[iconSize]} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-              />
-            </svg>
-          </IconButton>
-        )}
+        <DocumentActionsMenu
+          doc={doc}
+          actions={actions}
+          size="xs"
+          className={MENU_BTN_CLASSES[iconSize]}
+          iconClassName={MENU_ICON_CLASSES[iconSize]}
+        />
       </div>
     </div>
   );
