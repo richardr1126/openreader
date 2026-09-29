@@ -30,8 +30,8 @@ docker run --name kokoro-tts --restart unless-stopped -d \
   ghcr.io/remsky/kokoro-fastapi-gpu:latest
 ```
 
-`gpu:latest` is the CUDA 12.6 build. For newer NVIDIA GPUs (such as RTX 50-series), use
-`ghcr.io/remsky/kokoro-fastapi-gpu:latest-cu128` instead. Docker GPU images do not run on Apple
+`gpu:latest` ships CUDA 12.6 on amd64 and CUDA 12.9 on arm64 (Jetson, GH200). For Blackwell/RTX
+50-series GPUs on amd64, use `ghcr.io/remsky/kokoro-fastapi-gpu:latest-cu128` instead. Docker GPU images do not run on Apple
 Silicon; use the CPU image there.
 
 Pin a release tag (for example `v0.9.0`) instead of `latest` if you want upgrades to be deliberate.

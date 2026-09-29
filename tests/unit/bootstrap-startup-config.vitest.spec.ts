@@ -102,6 +102,24 @@ describe('startup configuration preflight', () => {
       .toEqual([]);
   });
 
+  test('warns when the explicit public worker URL is loopback for a remote app', () => {
+    const lan = { ...validEnv, BASE_URL: 'http://192.168.0.20:3003' };
+    expect(messages(evaluateStartupConfig({ ...lan, COMPUTE_WORKER_PUBLIC_URL: 'http://127.0.0.1:8081' }).warnings))
+      .toEqual([expect.stringContaining('only works in a browser on this machine')]);
+  });
+
+  test('does not treat the unspecified address as the local machine', () => {
+    const exposed = evaluateStartupConfig({
+      ...validEnv,
+      BASE_URL: 'http://0.0.0.0:3003',
+      AUTH_SECRET: 'local-openreader-auth-secret-change-me',
+    });
+    expect(messages(exposed.warnings)).toEqual([
+      expect.stringContaining('only works in a browser on this machine'),
+      expect.stringContaining('AUTH_SECRET is still the published example value'),
+    ]);
+  });
+
   test('warns about https pages loading http worker audio, except on loopback', () => {
     const https = { ...validEnv, BASE_URL: 'https://reader.example.com' };
     expect(messages(evaluateStartupConfig({ ...https, COMPUTE_WORKER_PUBLIC_URL: 'http://reader.example.com:8081' }).warnings))

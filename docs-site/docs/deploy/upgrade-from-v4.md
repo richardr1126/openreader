@@ -12,7 +12,7 @@ Compose stacks. If you are starting fresh, use the [Docker Quick Start](../docke
 :::danger There is no downgrade without a backup
 The first v5 start applies database migrations that **cannot be reversed**, and permanently deletes
 data v5 does not use (see [What is deleted](#what-is-deleted)). Once it has run, going back to v4
-means restoring the backup from step 1. Do not skip it.
+means restoring the backup from step 2. Do not skip it.
 :::
 
 ## What changes
@@ -28,7 +28,12 @@ means restoring the backup from step 1. Do not skip it.
 
 Your users, documents, reading progress, folders, preferences, and shared providers are kept.
 
-## 1. Back up
+## 1. Export audiobooks you want to keep
+
+v5 deletes v4 audiobooks. While v4 is still running, open each audiobook you want to keep and
+download it. You can regenerate audiobooks in v5, but generation costs time and TTS usage.
+
+## 2. Back up
 
 Stop the container, then copy your data somewhere safe.
 
@@ -60,11 +65,6 @@ deletes the volumes you are upgrading.
 
 If you use an external database or S3 bucket, back those up with your provider's tools.
 
-## 2. Export audiobooks you want to keep
-
-v5 deletes v4 audiobooks. Before upgrading, open each audiobook you want to keep in v4 and download
-it. You can regenerate audiobooks in v5, but generation costs time and TTS usage.
-
 ## 3. Update your configuration
 
 <Tabs groupId="upgrade-from-v4-install">
@@ -73,6 +73,7 @@ it. You can regenerate audiobooks in v5, but generation costs time and TTS usage
 Replace your old command with this one. Keep the same volume, `BASE_URL`, and `AUTH_SECRET`:
 
 ```bash
+docker pull ghcr.io/richardr1126/openreader:latest
 docker rm openreader   # removes the old container only; the volume is kept
 docker run --name openreader \
   --restart unless-stopped \
@@ -116,13 +117,11 @@ as mixed content.
 <Tabs groupId="upgrade-from-v4-install">
 <TabItem value="docker-run" label="docker run" default>
 
-If you ran the command in step 3 it is already starting. Follow the logs:
+The command in step 3 already pulled the new image and started the container. Follow the logs:
 
 ```bash
 docker logs -f openreader
 ```
-
-Pull the newest image first with `docker pull ghcr.io/richardr1126/openreader:latest`.
 
 </TabItem>
 <TabItem value="compose" label="Docker Compose">
@@ -166,4 +165,4 @@ To skip the storage purge, set `RUN_V4_DECOMMISSION=false`. Database migrations 
 - **Container exits immediately:** read the logs; the message lists what to fix.
 - **App loads but audio does not play:** port `8081` is not published, or `COMPUTE_WORKER_PUBLIC_URL` is wrong. **Settings → Admin → System** shows which.
 - **Cannot sign in as an admin:** the account is unchanged in v5. Confirm you kept the same `AUTH_SECRET` and database volume.
-- **Want to go back to v4:** stop v5, restore the backup from step 1, and start the v4 image.
+- **Want to go back to v4:** stop v5, restore the backup from step 2, and start the v4 image.

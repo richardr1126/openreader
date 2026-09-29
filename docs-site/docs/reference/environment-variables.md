@@ -16,13 +16,19 @@ Runtime site features are seeded with `RUNTIME_SEED_JSON` / `RUNTIME_SEED_JSON_P
 Most installs need only these. Everything else on this page is optional and lives under
 [Advanced](#advanced-reference).
 
+Generate the secret first, since `.env` stores literal text and never runs commands:
+
+```bash
+openssl rand -base64 32
+```
+
 ```dotenv
 BASE_URL=http://localhost:3003          # the address you open in the browser
-AUTH_SECRET=<openssl rand -base64 32>   # keep it stable; it also encrypts saved provider keys
+AUTH_SECRET=<paste-the-generated-value> # keep it stable; it also encrypts saved provider keys
 ```
 
 Off localhost, also set `COMPUTE_WORKER_PUBLIC_URL` to the address browsers use for port `8081`.
-The worker, broker, and playback secrets are generated or derived for you in a single container.
+In a single container, startup generates the worker and credential-broker tokens and derives the playback secret, so you set none of them.
 Startup checks the configuration and lists every problem at once. After startup, **Settings → Admin →
 System** re-checks the worker, storage, providers, and addresses from your browser.
 

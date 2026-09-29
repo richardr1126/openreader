@@ -16,12 +16,21 @@ function parseUrl(value) {
   }
 }
 
+function normalizeHost(hostname) {
+  return hostname.replace(/^\[|\]$/g, '').toLowerCase();
+}
+
 export function isLoopbackHost(hostname) {
-  const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  const host = normalizeHost(hostname);
   return host === 'localhost'
     || host === '::1'
-    || host === '0.0.0.0'
     || /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+
+// An address that only works from the machine running the worker: loopback, or the
+// unspecified bind address, which is not something a remote browser can connect to.
+function isLocalOnlyHost(hostname) {
+  return isLoopbackHost(hostname) || normalizeHost(hostname) === '0.0.0.0';
 }
 
 /**
@@ -87,14 +96,15 @@ export function evaluateStartupConfig(env, { hasNatsBinary = true } = {}) {
   const workerUrl = parseUrl((externalWorker ? env.COMPUTE_WORKER_URL : 'http://127.0.0.1:8081').trim());
   const publicUrl = isBlank(env.COMPUTE_WORKER_PUBLIC_URL) ? null : parseUrl(env.COMPUTE_WORKER_PUBLIC_URL.trim());
 
-  if (!publicUrl && !appIsLocal && workerUrl && isLoopbackHost(workerUrl.hostname)) {
+  const effectivePublic = publicUrl ?? workerUrl;
+
+  if (!appIsLocal && effectivePublic && isLocalOnlyHost(effectivePublic.hostname)) {
     warnings.push({
-      message: `Playback audio will be requested from ${workerUrl.origin}, which only works in a browser on this machine.`,
+      message: `Playback audio will be requested from ${effectivePublic.origin}, which only works in a browser on this machine.`,
       fix: 'Publish worker port 8081 and set COMPUTE_WORKER_PUBLIC_URL to an address browsers can reach, for example http://<host>:8081 (or an https URL behind your reverse proxy).',
     });
   }
 
-  const effectivePublic = publicUrl ?? workerUrl;
   if (baseUrl?.protocol === 'https:' && effectivePublic?.protocol === 'http:' && !isLoopbackHost(effectivePublic.hostname)) {
     warnings.push({
       message: `BASE_URL is https but the playback audio URL (${effectivePublic.origin}) is http; browsers block that mixed content.`,
