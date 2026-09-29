@@ -160,7 +160,7 @@ export function ProviderSettingsPanel({
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <label className={fieldLabelClass}>TTS Provider</label>
+        <label className={fieldLabelClass}>Provider</label>
         {sharedProvidersLoading ? (
           <p className="text-xs text-soft">Loading providers…</p>
         ) : viewModel.providers.length === 0 ? (
@@ -194,18 +194,10 @@ export function ProviderSettingsPanel({
         )}
       </div>
 
-      {viewModel.selectedSharedProvider && (
-        <p className="text-xs text-soft">
-          This is a shared provider configured by an admin. API key and base URL are managed server-side.
-        </p>
-      )}
-
       <div className="space-y-1.5">
-        <label className={fieldLabelClass}>TTS Model</label>
+        <label className={fieldLabelClass}>Model</label>
         {!runtimeConfig.showAllProviderModels && (
-          <p className="text-xs text-soft">
-            This instance restricts model selection to each provider&apos;s default model.
-          </p>
+          <p className="text-xs text-soft">Model is fixed by your admin.</p>
         )}
         <div className="flex flex-col gap-2">
           <Select
@@ -248,7 +240,7 @@ export function ProviderSettingsPanel({
                 setCustomModelInput(event.target.value);
                 setModelValue(event.target.value);
               }}
-              placeholder="Enter custom model name"
+              placeholder="Custom model name"
             />
           )}
         </div>
@@ -256,17 +248,17 @@ export function ProviderSettingsPanel({
 
       {providerModelPolicy.supportsInstructions && (
         <div className="space-y-1.5">
-          <label className={fieldLabelClass}>TTS Instructions</label>
+          <label className={fieldLabelClass}>Instructions</label>
           <Textarea
             value={localInstructions}
             onChange={(event) => setLocalInstructions(event.target.value)}
-            placeholder="Enter instructions for the TTS model"
+            placeholder="Optional voice instructions"
             className="h-24 resize-none"
           />
         </div>
       )}
 
-      <div className="pt-4 flex justify-end gap-2">
+      <div className="flex justify-end gap-2 pt-2">
         <Button type="button" variant="secondary" size="md" onClick={reset}>
           Reset
         </Button>

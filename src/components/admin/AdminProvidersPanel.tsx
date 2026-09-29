@@ -368,7 +368,6 @@ export function AdminProvidersPanel() {
   return (
     <Section
       title="Shared TTS providers"
-      subtitle="Server-side providers visible to all users. API keys are encrypted at rest and never sent to the client."
       action={
         <div className="flex items-center gap-2">
           <Badge tone="foreground">Shared</Badge>

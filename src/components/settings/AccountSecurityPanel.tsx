@@ -168,7 +168,7 @@ export function AccountSecurityPanel() {
       {bootstrapPending ? (
         <section className="rounded-lg border border-accent-line bg-accent-wash px-4 py-3" aria-label="Finish administrator setup">
           <p className="text-sm font-semibold text-foreground">Finish administrator setup</p>
-          <p className="mt-1 text-xs leading-5 text-soft">Change the initial deployment password below to activate administrator access. The deployment secret will not update this account again.</p>
+          <p className="mt-1 text-xs leading-5 text-soft">Change the deployment password below to activate administrator access.</p>
         </section>
       ) : null}
       {error ? <p role="alert" className="rounded-md border border-danger bg-danger-wash px-3 py-2 text-xs text-danger">{error}</p> : null}
@@ -182,7 +182,7 @@ export function AccountSecurityPanel() {
           open={editing === 'name'}
         >
           <form onSubmit={saveName} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <Field label="Display name" className="min-w-0 flex-1">
+            <Field className="min-w-0 flex-1">
               <Input aria-label="Display name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} autoComplete="name" autoFocus />
             </Field>
             <Button type="submit" size="sm" variant="primary" disabled={busy !== null || !name.trim() || name.trim() === user.name}>
@@ -207,7 +207,7 @@ export function AccountSecurityPanel() {
           open={editing === 'email'}
         >
           <form onSubmit={requestEmailChange} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-            <Field label="New email address" className="min-w-0 flex-1">
+            <Field className="min-w-0 flex-1">
               <Input aria-label="New email address" type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} autoComplete="email" placeholder="you@example.com" autoFocus />
             </Field>
             <Button type="submit" size="sm" variant="primary" disabled={busy !== null || !newEmail.trim()}>
@@ -217,19 +217,19 @@ export function AccountSecurityPanel() {
         </SettingRow>
         {pendingEmail ? (
           <div className="px-4 py-2 sm:px-5">
-            <p role="status" className="text-xs text-accent">Confirmation requested for {pendingEmail}. Your current email stays active until you follow the link.</p>
+            <p role="status" className="text-xs text-accent">Confirmation sent to {pendingEmail}. Your current email stays active until you confirm.</p>
           </div>
         ) : null}
         {!accountEmailsEnabled ? (
           <div className="px-4 py-2 sm:px-5">
-            <p className="text-xs leading-5 text-soft">Email verification and address changes are unavailable until an administrator enables account email delivery.</p>
+            <p className="text-xs leading-5 text-soft">Account email is disabled by your administrator.</p>
           </div>
         ) : null}
 
         <SettingRow
           icon={KeyIcon}
           title="Password"
-          value={<span>{bootstrapPending ? 'Deployment password — change it to activate admin access.' : 'Change your password. Other sessions are signed out.'}</span>}
+          value={<span>{bootstrapPending ? 'Deployment password' : 'Changing it signs out other sessions'}</span>}
           action={editButton('password', bootstrapPending ? 'Activate' : 'Change')}
           open={editing === 'password'}
         >
@@ -244,7 +244,7 @@ export function AccountSecurityPanel() {
               <Input aria-label="Confirm new password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" minLength={8} />
             </Field>
             <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-2">
-              <p className="text-xs text-soft">At least 8 characters. Use a unique password.</p>
+              <p className="text-xs text-soft">Minimum 8 characters.</p>
               <Button type="submit" size="sm" variant="primary" disabled={busy !== null || !currentPassword || !newPassword || !confirmPassword}>
                 {busy === 'password' ? 'Changing…' : bootstrapPending ? 'Activate administrator access' : 'Change password'}
               </Button>

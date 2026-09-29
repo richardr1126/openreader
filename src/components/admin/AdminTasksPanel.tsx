@@ -124,7 +124,6 @@ export function AdminTasksPanel() {
     <Section
       variant="flat"
       title="Maintenance schedule"
-      subtitle="Automatic cleanup jobs. Run one now or adjust how often it runs."
     >
       {data?.scheduler.mode === 'vercel-cron' && (
         <p className="mb-2 text-xs text-soft">

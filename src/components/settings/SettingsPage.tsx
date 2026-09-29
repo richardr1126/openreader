@@ -25,7 +25,6 @@ type SettingsSection = {
   id: SettingsSectionId;
   label: string;
   shortLabel: string;
-  description: string;
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   group: 'general' | 'admin';
 };
@@ -35,7 +34,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'api',
     label: 'TTS Provider',
     shortLabel: 'Provider',
-    description: 'Choose the service and model OpenReader uses to narrate.',
     icon: KeyIcon,
     group: 'general',
   },
@@ -43,7 +41,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'theme',
     label: 'Appearance',
     shortLabel: 'Appearance',
-    description: 'Choose a theme or build a custom reading palette.',
     icon: PaletteIcon,
     group: 'general',
   },
@@ -51,7 +48,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'account',
     label: 'Account',
     shortLabel: 'Account',
-    description: 'Manage your profile, email, password, usage, and account data.',
     icon: UserIcon,
     group: 'general',
   },
@@ -59,7 +55,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'users',
     label: 'Users',
     shortLabel: 'Users',
-    description: 'Approve accounts, inspect usage, and manage access.',
     icon: UserIcon,
     group: 'admin',
   },
@@ -67,7 +62,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'providers',
     label: 'Providers',
     shortLabel: 'Providers',
-    description: 'Credentials, models, and shared access.',
     icon: KeyIcon,
     group: 'admin',
   },
@@ -75,7 +69,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'instance',
     label: 'Instance',
     shortLabel: 'Instance',
-    description: 'Defaults, sign-ups, and feature access.',
     icon: SettingsIcon,
     group: 'admin',
   },
@@ -83,7 +76,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'compute',
     label: 'Compute',
     shortLabel: 'Compute',
-    description: 'Limits, playback, retries, and cache.',
     icon: SpeedometerIcon,
     group: 'admin',
   },
@@ -91,7 +83,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'email',
     label: 'Email',
     shortLabel: 'Email',
-    description: 'Verification, recovery, and Resend delivery.',
     icon: MailIcon,
     group: 'admin',
   },
@@ -99,7 +90,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     id: 'maintenance',
     label: 'Maintenance',
     shortLabel: 'Maintenance',
-    description: 'Cleanup schedules and recent results.',
     icon: ClockIcon,
     group: 'admin',
   },
@@ -280,14 +270,9 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
           <main className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
             {currentSection ? (
               <div className={`mx-auto w-full p-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-5 lg:p-8 ${currentSection.group === 'admin' ? 'max-w-6xl' : 'max-w-4xl'}`}>
-                <div className="mb-4 sm:mb-5">
-                  <h2 className="text-lg font-semibold tracking-tight text-foreground">
-                    {currentSection.label}
-                  </h2>
-                  <p className="mt-0.5 text-xs leading-5 text-soft sm:text-sm">
-                    {currentSection.description}
-                  </p>
-                </div>
+                <h2 className="mb-4 text-lg font-semibold tracking-tight text-foreground sm:mb-5">
+                  {currentSection.label}
+                </h2>
 
                 <div role="tabpanel" aria-label={currentSection.label}>
                   {runtimeConfig.enableTtsProvidersTab && activeSection === 'api' ? (

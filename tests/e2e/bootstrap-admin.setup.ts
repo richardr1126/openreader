@@ -16,7 +16,8 @@ test('one-time first administrator changes the initial password', async ({ page 
   await page.goto('/app/settings?section=account');
   await expect(page.getByText('Finish administrator setup')).toBeVisible();
   await expect(page.getByText('admin-e2e@example.test').first()).toBeVisible();
-  await expect(page.getByText('Email verification and address changes are unavailable')).toBeVisible();
+  // With account email off, the email row offers no change action.
+  await expect(page.getByRole('button', { name: 'Change', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await page.getByLabel('Display name').fill('First Administrator');
   await page.getByRole('button', { name: 'Save', exact: true }).click();

@@ -138,7 +138,6 @@ export function AppearanceSettingsPanel() {
       </div>
 
       <div className="space-y-1.5">
-        <label className="block text-xs font-medium text-soft uppercase tracking-wide">Custom</label>
         <div className="space-y-1.5">
           <div className="flex items-center gap-1">
             <ThemeChoice

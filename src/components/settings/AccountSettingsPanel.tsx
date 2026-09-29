@@ -42,10 +42,8 @@ function TtsUsageCard() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <h4 id="tts-usage-heading" className="text-sm font-medium text-foreground">TTS generation</h4>
-              <p className="mt-0.5 text-xs text-soft">
-                Only newly generated segments count. Replaying cached audio is always free.
-              </p>
+              <h4 id="tts-usage-heading" className="text-sm font-medium text-foreground">TTS usage</h4>
+              <p className="mt-0.5 text-xs text-soft">Replaying cached audio is always free.</p>
             </div>
             <Button
               variant="ghost"
@@ -95,10 +93,7 @@ function TtsUsageCard() {
               </div>
             </div>
           ) : (
-            <div className="mt-3 rounded-md border border-line-soft bg-surface-sunken px-3 py-2">
-              <p className="text-xs font-medium text-foreground">No TTS generation limit</p>
-              <p className="mt-0.5 text-xs text-soft">Your administrator is not limiting generated characters.</p>
-            </div>
+            <p className="mt-3 text-xs text-soft">No generation limit.</p>
           )}
         </div>
       </div>
@@ -143,15 +138,9 @@ export function AccountSettingsPanel() {
       <div className="space-y-2">
         {session?.user && !session.user.isAnonymous ? <AccountSecurityPanel /> : (
           <div className="rounded-lg bg-background border border-line p-4 space-y-2">
-            <h4 className="text-sm font-medium text-foreground">Current Session</h4>
-            <div className="text-sm space-y-1">
-              <p className="text-soft">Logged in as:</p>
-              {session?.user ? (
-                <p className="font-medium text-foreground">Anonymous session</p>
-              ) : (
-                <p className="font-medium text-foreground">No active session</p>
-              )}
-            </div>
+            <h4 className="text-sm font-medium text-foreground">
+              {session?.user ? 'Anonymous session' : 'Not signed in'}
+            </h4>
           </div>
         )}
 
@@ -169,7 +158,7 @@ export function AccountSettingsPanel() {
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-foreground">Export My Data</p>
               <p className="text-xs text-soft">
-                {isExporting ? 'Preparing your ZIP export...' : 'Download all your data as a ZIP file'}
+                {isExporting ? 'Preparing ZIP…' : 'Download everything as a ZIP'}
               </p>
             </div>
           </ChoiceTile>
@@ -191,9 +180,6 @@ export function AccountSettingsPanel() {
                 >
                   Delete Account
                 </Button>
-                <p className="text-xs text-soft mt-2">
-                  Permanently deletes your account and all data.
-                </p>
               </div>
             </>
           ) : (
@@ -201,11 +187,9 @@ export function AccountSettingsPanel() {
               <p className="text-sm text-soft mb-3">
                 {session?.user?.isAnonymous
                   ? (runtimeConfig.signupPolicy !== 'closed'
-                    ? 'You are using an anonymous session. Sign up to save your progress permanently, your current data is automatically transferred.'
-                    : 'You are using an anonymous session. New account sign-ups are currently disabled by the site administrator.')
-                  : (runtimeConfig.signupPolicy !== 'closed'
-                    ? 'No active session. Please sign in or sign up.'
-                    : 'No active session. Please sign in.')}
+                    ? 'Sign up to keep your progress. Your current data transfers automatically.'
+                    : 'Sign-ups are currently disabled.')
+                  : 'Sign in to continue.'}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Link href="/signin">

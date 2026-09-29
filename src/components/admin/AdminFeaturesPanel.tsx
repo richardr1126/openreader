@@ -227,7 +227,6 @@ export function AdminFeaturesPanel({
     <div className="space-y-4">
       {showInstanceSettings ? <Section
         title="TTS defaults"
-        subtitle="Defaults for new users."
         action={<Badge tone="foreground">Defaults</Badge>}
       >
         <div className="space-y-1.5 pb-2 border-b border-offbase">
@@ -281,7 +280,6 @@ export function AdminFeaturesPanel({
 
       {showComputeSettings ? <Section
         title="Rate limiting"
-        subtitle="Direct controls for usage, requests, workers, and TTS providers."
         action={<Badge tone="foreground">Limits</Badge>}
       >
         <div className="space-y-3 px-0.5 py-1.5 border-b border-offbase">
@@ -332,7 +330,6 @@ export function AdminFeaturesPanel({
 
       {showComputeSettings ? <Section
         title="TTS playback"
-        subtitle="Worker generation behavior for progressive playback."
         action={<Badge tone="foreground">Playback</Badge>}
       >
         <div className="space-y-1.5 pb-2 border-b border-offbase">
@@ -368,7 +365,6 @@ export function AdminFeaturesPanel({
 
       {showInstanceSettings ? <Section
         title="Site features"
-        subtitle="Feature flags for all users."
         action={<Badge tone="foreground">Feature Flags</Badge>}
       >
         <div className="space-y-1.5 pb-2 border-b border-offbase">
@@ -430,7 +426,6 @@ export function AdminFeaturesPanel({
 
       {showComputeSettings ? <Section
         title="TTS upstream"
-        subtitle="Server-side retry, timeout, and cache controls for TTS generation."
         action={<Badge tone="foreground">Upstream</Badge>}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 px-0.5 py-1.5">
@@ -523,7 +518,6 @@ function AdminFeaturesSkeleton() {
     <div className="space-y-4 animate-pulse" aria-label="Loading feature settings" aria-busy="true">
       <Section
         title="TTS defaults"
-        subtitle="Defaults for new users."
         action={<div className="h-4 w-16 rounded bg-offbase" />}
       >
         <div className="space-y-1.5 pb-2 border-b border-offbase">
@@ -545,7 +539,6 @@ function AdminFeaturesSkeleton() {
 
       <Section
         title="Site features"
-        subtitle="Feature flags for all users."
         action={<div className="h-4 w-24 rounded bg-offbase" />}
       >
         <div className="space-y-2">

@@ -96,7 +96,6 @@ export function AdminEmailPanel() {
     <div className="space-y-4">
       <Section
         title="Account email delivery"
-        subtitle="Verification and password recovery use Resend through the durable compute queue."
         action={<Badge tone={settings.enabled ? 'accent' : 'muted'}>{settings.enabled ? 'Enabled' : 'Off by default'}</Badge>}
       >
         <div className="space-y-4">
@@ -127,7 +126,7 @@ export function AdminEmailPanel() {
           )}
         </div>
       </Section>
-      <Section title="Resend setup" subtitle="Domain ownership and API key permissions are managed in Resend.">
+      <Section title="Resend setup">
         <ol className="list-decimal space-y-2 pl-5 text-sm text-soft">
           <li>Verify the sender domain in Resend.</li>
           <li>Create a sending-only API key, preferably restricted to that domain.</li>
@@ -143,7 +142,6 @@ function EmailSettingsSkeleton() {
     <div className="space-y-4 animate-pulse" aria-label="Loading email settings" aria-busy="true">
       <Section
         title="Account email delivery"
-        subtitle="Verification and password recovery use Resend through the durable compute queue."
         action={<div className="h-4 w-20 rounded bg-offbase" />}
       >
         <div className="rounded-md border border-line px-2.5 py-2">
@@ -172,7 +170,6 @@ function EmailSettingsSkeleton() {
 
       <Section
         title="Resend setup"
-        subtitle="Domain ownership and API key permissions are managed in Resend."
       >
         <div className="space-y-2">
           {[0, 1, 2].map((index) => (

@@ -35,7 +35,7 @@ export function ToggleRow({
   variant = 'card',
 }: {
   label: string;
-  description: string;
+  description?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
@@ -59,7 +59,7 @@ export function ToggleRow({
           onClick={handleTextToggle}
         >
           <span id={labelId} className="block text-sm font-medium leading-5 text-foreground">{label}</span>
-          <span id={descId} className="block text-xs leading-4 text-soft">{description}</span>
+          {description ? <span id={descId} className="block text-xs leading-4 text-soft">{description}</span> : null}
         </div>
         {right ? <div className="shrink-0 self-start pl-1.5">{right}</div> : null}
         <Switch
@@ -68,7 +68,7 @@ export function ToggleRow({
           disabled={disabled}
           size="md"
           ariaLabelledBy={labelId}
-          ariaDescribedBy={descId}
+          ariaDescribedBy={description ? descId : undefined}
         />
       </div>
     </div>

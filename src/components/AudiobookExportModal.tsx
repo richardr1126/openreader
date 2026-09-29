@@ -11,7 +11,7 @@ import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
-import { Badge, Button, IconButton, RangeField, Section, SegmentedControl } from '@/components/ui';
+import { Badge, Button, Field, IconButton, RangeField, Section, SegmentedControl } from '@/components/ui';
 import {
   triggerDownload,
   useAudiobookExport,
@@ -297,13 +297,11 @@ export function AudiobookExportModal({
         onClose={() => setIsOpen(false)}
         ariaLabel="Export audiobook"
         title="Export Audiobook"
-        subtitle="Generation keeps running in the background until you stop it."
         bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]"
       >
         <div className="space-y-4">
-          <Section title="Voice" subtitle="Narration used for this export." variant="flat">
-            <div className="space-y-1.5">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-faint">Voice</span>
+          <Section title="Settings" variant="flat">
+            <Field label="Voice">
               <VoicesControlBase
                 availableVoices={availableVoices}
                 voice={voice}
@@ -314,17 +312,14 @@ export function AudiobookExportModal({
                 variant="field"
                 disabled={isGenerating}
               />
-            </div>
+            </Field>
             {languageWarnings.map((warning) => (
               <p key={warning} className="text-xs text-warning">
                 {warning}
               </p>
             ))}
-          </Section>
 
-          <Section title="Format & Speed" subtitle="File type and playback pace." variant="flat">
-            <div className="space-y-1.5">
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-faint">File format</span>
+            <Field label="Format">
               <SegmentedControl<ExportFormat>
                 value={exportFormat}
                 options={EXPORT_FORMAT_OPTIONS}
@@ -332,11 +327,11 @@ export function AudiobookExportModal({
                 ariaLabel="Audiobook export format"
                 className="grid-cols-2"
               />
-            </div>
+            </Field>
 
-            {nativeSpeedSupported ? (
+            {nativeSpeedSupported && (
               <RangeField
-                label="Native model speed"
+                label="Model speed"
                 value={voiceSpeed}
                 min={0.5}
                 max={3}
@@ -345,8 +340,6 @@ export function AudiobookExportModal({
                 onChange={(value) => setSpeedAndRestart(value)}
                 disabled={isGenerating}
               />
-            ) : (
-              <p className="text-xs text-faint">Native model speed is not available for this model.</p>
             )}
 
             <RangeField
@@ -363,13 +356,12 @@ export function AudiobookExportModal({
               disabled={isBuilding}
             />
             {isGenerating && (
-              <p className="text-xs text-faint">Stop generation to change the voice or native speed.</p>
+              <p className="text-xs text-faint">Voice and model speed are locked while generating.</p>
             )}
           </Section>
 
           <Section
             title="Export"
-            subtitle="Generate audio, then download the book or single chapters."
             variant="flat"
             action={<Badge tone={badge.tone}>{badge.label}</Badge>}
           >
@@ -435,8 +427,8 @@ export function AudiobookExportModal({
           {chapters.length > 0 && (
             <Section
               title={documentType === 'pdf' ? 'Pages' : 'Chapters'}
-              subtitle={`${chapters.filter(chapterIsSettled).length}/${chapters.length} ready · download any finished one.`}
               variant="flat"
+              action={<span className="text-xs text-faint tabular-nums">{chapters.filter(chapterIsSettled).length}/{chapters.length} ready</span>}
             >
               <ul
                 aria-label="Audiobook chapters"
