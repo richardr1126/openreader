@@ -86,7 +86,8 @@ docker run --name openreader \
   ghcr.io/richardr1126/openreader:latest
 ```
 
-- Add **`-p 8081:8081`** and **`-e COMPUTE_WORKER_HOST=0.0.0.0`**. Without both, the app loads but audio never plays: the embedded worker listens on the container's loopback by default, so a published port cannot reach it.
+- Add **`-p 8081:8081`**. Without it the app loads but audio never plays, because browsers reach the worker on that port.
+- Images before v5.1 also need **`-e COMPUTE_WORKER_HOST=0.0.0.0`**: their embedded worker listens on the container's loopback, so a published port cannot reach it. Later images set it already, and keeping the line does no harm.
 - Keep `AUTH_SECRET` identical. It also decrypts your saved provider keys.
 - Off localhost, add `-e COMPUTE_WORKER_PUBLIC_URL=http://<your-host>:8081` (or your HTTPS worker URL).
 - Keep any `API_BASE` / `API_KEY` lines you had. They only seed a shared provider on first boot.
