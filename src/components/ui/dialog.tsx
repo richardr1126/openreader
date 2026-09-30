@@ -49,6 +49,9 @@ export function ModalFrame({
         as="div"
         role={undefined}
         className={cn('relative z-50', !open && 'pointer-events-none', className)}
+        // Headless UI keeps a leaving dialog mounted and marked open until its
+        // transition ends; this lets callers tell it apart from a live one.
+        data-closing={open ? undefined : ''}
         onClose={onClose}
         onKeyDown={onKeyDown}
       >

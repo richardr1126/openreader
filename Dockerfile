@@ -94,9 +94,14 @@ ENV PORT=3003
 # loopback credential broker. Bind the app on every container interface while
 # BASE_URL continues to define its public authentication origin.
 ENV HOSTNAME=0.0.0.0
+# The embedded worker serves playback audio straight to browsers. Its default
+# loopback bind is unreachable through a published container port, so listen on
+# every container interface. Nothing is exposed unless the operator publishes
+# 8081, and playback URLs stay HMAC-signed.
+ENV COMPUTE_WORKER_HOST=0.0.0.0
 
-# Expose the port the app runs on
-EXPOSE 3003
+# Expose the app port and the embedded worker's playback port
+EXPOSE 3003 8081
 
 # Start the application
 ENTRYPOINT ["node", "/opt/openreader/bootstrap/src/cli.mjs", "--"]
