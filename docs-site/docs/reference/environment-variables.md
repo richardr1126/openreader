@@ -93,7 +93,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `NATS_CREDS` | Standalone worker | unset | Raw NATS credentials; mutually exclusive in practice with `NATS_CREDS_FILE` |
 | `NATS_CREDS_FILE` | Standalone worker | unset | Path to a NATS credentials file |
 | `COMPUTE_LOG_LEVEL` | Compute | `info` | Compute worker log level |
-| `COMPUTE_WORKER_HOST` | Compute worker HTTP | `127.0.0.1` embedded; `0.0.0.0` standalone | Override worker bind host |
+| `COMPUTE_WORKER_HOST` | Compute worker HTTP | `127.0.0.1` embedded; `0.0.0.0` standalone and in the Docker image | Override worker bind host |
 | `PORT` | Standalone worker / container | `8081` in worker; `3003` in app image | Usually injected by the hosting platform |
 | `COMPUTE_WHISPER_TIMEOUT_MS` | Compute | `30000` | Whisper alignment timeout budget |
 | `COMPUTE_PDF_TIMEOUT_MS` | Compute | `300000` | PDF parse timeout budget |
@@ -439,7 +439,7 @@ Compute worker log level.
 
 Compute worker HTTP bind host.
 
-- Embedded default: `127.0.0.1`
+- Embedded default: `127.0.0.1`. The official Docker image sets `0.0.0.0` so a published port `8081` reaches the worker; images before v5.1 need it set explicitly.
 - Standalone default: `0.0.0.0`
 
 ### PORT

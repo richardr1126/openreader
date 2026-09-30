@@ -86,7 +86,7 @@ export function evaluateBrowserChecks(input: {
         label: 'Playback audio URL (this browser)',
         status: 'error',
         detail: `This browser cannot reach ${worker.origin}, so playback audio will not load.`,
-        fix: 'Publish worker port 8081 and set COMPUTE_WORKER_PUBLIC_URL to an address this browser can reach, for example http://<host>:8081.',
+        fix: 'Publish worker port 8081 and set COMPUTE_WORKER_PUBLIC_URL to an address this browser can reach, for example http://<host>:8081. In a container, also make sure the worker listens on all interfaces (COMPUTE_WORKER_HOST=0.0.0.0).',
       });
     }
   }
