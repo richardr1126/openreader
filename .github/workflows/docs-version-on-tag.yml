@@ -16,6 +16,7 @@ on:
         type: string
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -85,3 +86,22 @@ jobs:
           git checkout -B docs-version-publish origin/main
           git cherry-pick "${SNAPSHOT_COMMIT}"
           git push origin HEAD:main
+
+      # Commits pushed with GITHUB_TOKEN do not trigger the push-based Docs Deploy,
+      # and the release-triggered deploy usually builds main before this snapshot
+      # lands. Deploy once more from here so the new version goes live. The full
+      # reconcile also picks up the release notes whichever of the two finished
+      # first.
+      - name: Deploy docs with the new snapshot
+        if: steps.commit_snapshot.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${REPO}/actions/workflows/docs-deploy.yml/dispatches" \
+            -f ref=main \
+            -f "inputs[full_reconcile]=true"
