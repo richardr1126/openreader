@@ -29,7 +29,8 @@ export function SelectionActionBar({ actions }: { actions: DocumentActions }) {
         selectAll();
       } else if (event.key === 'Escape' && selectionSize > 0) {
         // Leave Escape to an open menu or dialog; only clear when nothing else owns it.
-        if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+        // A dialog still fading out no longer owns it.
+        if (document.querySelector('[role="dialog"]:not([data-closing]), [role="menu"]')) return;
         clear();
       }
     };

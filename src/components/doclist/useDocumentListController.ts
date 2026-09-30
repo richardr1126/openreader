@@ -207,8 +207,7 @@ export function useDocumentListController() {
     updateListState({ sidebarFilter: `folder:${folderId}` });
     selection.clear();
     try {
-      const { folder } = await folderState.create.mutateAsync({ id: folderId, name, documentIds });
-      updateListState({ sidebarFilter: `folder:${folder.id}` });
+      await folderState.create.mutateAsync({ id: folderId, name, documentIds });
     } catch (error) {
       console.error('Failed to create folder:', error);
       updateListState({ sidebarFilter: 'all' });
@@ -238,8 +237,7 @@ export function useDocumentListController() {
     updateListState({ sidebarFilter: `folder:${folderId}` });
     selection.clear();
     try {
-      const { folder } = await folderState.create.mutateAsync({ id: folderId, name, documentIds });
-      updateListState({ sidebarFilter: `folder:${folder.id}` });
+      await folderState.create.mutateAsync({ id: folderId, name, documentIds });
     } catch (error) {
       console.error('Failed to create folder:', error);
       updateListState({ sidebarFilter: 'all' });
