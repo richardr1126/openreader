@@ -22,6 +22,7 @@ import {
   Select,
 } from '@/components/ui';
 import { RefreshIcon } from '@/components/icons/Icons';
+import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
 import { Button } from '@/components/ui';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
 import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
@@ -129,6 +130,20 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
       ? { sentence: htmlHighlightEnabled, word: htmlWordHighlightEnabled, sentenceKey: 'htmlHighlightEnabled' as const, wordKey: 'htmlWordHighlightEnabled' as const }
       : { sentence: pdfHighlightEnabled, word: pdfWordHighlightEnabled, sentenceKey: 'pdfHighlightEnabled' as const, wordKey: 'pdfWordHighlightEnabled' as const };
   const [localMaxBlockLength, setLocalMaxBlockLength] = useState(ttsSegmentMaxBlockLength);
+  const { confirmPlanChange, planChangeDialog } = usePlanChangeConfirm();
+
+  // The slider only previews while dragging; the plan is rebuilt once on release.
+  const commitMaxBlockLength = () => {
+    if (localMaxBlockLength === ttsSegmentMaxBlockLength) return;
+    confirmPlanChange({
+      setting: 'the maximum segment length',
+      apply: () => {
+        void updateConfigKey('ttsSegmentMaxBlockLength', localMaxBlockLength)
+          .then(reacquirePlaybackPlan);
+      },
+      onCancel: () => setLocalMaxBlockLength(ttsSegmentMaxBlockLength),
+    });
+  };
 
   useEffect(() => {
     setLocalMaxBlockLength(ttsSegmentMaxBlockLength);
@@ -194,7 +209,13 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
             <div className="space-y-1.5">
               <Select
                 value={selectedLanguage}
-                onChange={(option) => onLanguageChange(option.value)}
+                onChange={(option) => {
+                  if (option.value === selectedLanguage.value) return;
+                  confirmPlanChange({
+                    setting: 'the document language',
+                    apply: () => onLanguageChange(option.value),
+                  });
+                }}
                 options={DOCUMENT_LANGUAGE_OPTIONS}
               />
               {language === 'auto' && detectedLanguage ? (
@@ -262,12 +283,9 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
             max={TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX}
             step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}
             valueWidth="w-14"
-            onChange={(value) => {
-              const next = clampTtsSegmentMaxBlockLength(value);
-              setLocalMaxBlockLength(next);
-              void updateConfigKey('ttsSegmentMaxBlockLength', next)
-                .then(reacquirePlaybackPlan);
-            }}
+            onChange={(value) => setLocalMaxBlockLength(clampTtsSegmentMaxBlockLength(value))}
+            onPointerUp={commitMaxBlockLength}
+            onKeyUp={commitMaxBlockLength}
           />
           {documentId ? (
             <div className="flex items-center justify-between gap-3">
@@ -320,7 +338,10 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
                     key={option.kind}
                     label={option.label}
                     checked={pdf.skipBlockKinds.includes(option.kind)}
-                    onChange={(enabled) => pdf.onToggleSkipKind(option.kind, enabled)}
+                    onChange={(enabled) => confirmPlanChange({
+                      setting: 'which PDF blocks are skipped',
+                      apply: () => pdf.onToggleSkipKind(option.kind, enabled),
+                    })}
                   />
                 ))}
               </div>
@@ -328,6 +349,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           </Section>
         )}
       </div>
+      {planChangeDialog}
     </ReaderSidebarShell>
   );
 }

@@ -348,6 +348,13 @@ owns document/config inputs that are outside the media controller:
 
 - Playback plan request construction through the Next proxy.
 - Settings mutations for voice, speed, provider, language, and PDF skip kinds.
+  Voice, native speed, language, max segment length, and PDF skip kinds change
+  the plan/audio identity, so each is gated by `usePlanChangeConfirm`
+  (`src/components/PlanChangeConfirm.tsx`) before it re-plans. Audio player
+  speed is a browser playback rate and is never gated.
+  A change writes under a new `settingsHash`/`planSignature`; the previous
+  plan, audio, and sidecars are kept and hit again if the user switches back.
+  Only Clear cached audio or document deletion removes them.
 - Segment/word highlight state and current document anchor.
 - EPUB cursor-follow navigation guards.
 - Non-playback interaction busy state for navigation and settings changes.

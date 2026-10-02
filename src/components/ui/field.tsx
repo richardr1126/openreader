@@ -142,17 +142,21 @@ export function RangeField({
   valueWidth = 'w-10',
   formatter = (next) => String(next),
   onChange,
+  id,
   ...inputProps
 }: RangeFieldProps) {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
-        <label className="text-sm font-medium text-foreground">{label}</label>
+        <label htmlFor={inputId} className="text-sm font-medium text-foreground">{label}</label>
         <span className={cn(valueWidth, 'text-sm text-right text-soft tabular-nums')}>
           {formatter(value)}
         </span>
       </div>
       <RangeInput
+        id={inputId}
         min={min}
         max={max}
         step={step}
