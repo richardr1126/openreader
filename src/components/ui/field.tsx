@@ -142,9 +142,11 @@ export function RangeField({
   valueWidth = 'w-10',
   formatter = (next) => String(next),
   onChange,
+  id,
   ...inputProps
 }: RangeFieldProps) {
-  const inputId = useId();
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
