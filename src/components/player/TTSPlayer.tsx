@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTTS, useTTSPlaybackProgress } from '@/contexts/TTSContext';
 import { measurePlaybackBuffer } from '@openreader/tts/playback-buffer';
 import {
@@ -14,6 +14,7 @@ import { VoicesControl } from '@/components/player/VoicesControl';
 import { SpeedControl } from '@/components/player/SpeedControl';
 import { Navigator } from '@/components/player/Navigator';
 import { IconButton } from '@/components/ui';
+import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 
@@ -47,6 +48,13 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
     playbackDurationSec,
     playbackSeekLayout,
   } = useTTSPlaybackProgress();
+  const { confirmPlanChange, planChangeDialog } = usePlanChangeConfirm();
+  const confirmVoiceChange = useCallback((voice: string) => {
+    confirmPlanChange({ setting: 'the voice', apply: () => setVoiceAndRestart(voice) });
+  }, [confirmPlanChange, setVoiceAndRestart]);
+  const confirmNativeSpeedChange = useCallback((speed: number, onCancel: () => void) => {
+    confirmPlanChange({ setting: 'native model speed', apply: () => setSpeedAndRestart(speed), onCancel });
+  }, [confirmPlanChange, setSpeedAndRestart]);
   const [previewSec, setPreviewSec] = useState<number | null>(null);
   const shownSec = previewSec ?? playbackTimeSec;
   const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);
@@ -147,7 +155,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
           <div className="col-start-1 row-start-2 justify-self-start">
             <SpeedControl
               disabled={isProcessing}
-              setSpeedAndRestart={setSpeedAndRestart}
+              setSpeedAndRestart={confirmNativeSpeedChange}
               setAudioPlayerSpeedAndRestart={setAudioPlayerSpeedAndRestart}
             />
           </div>
@@ -155,7 +163,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
             <VoicesControl
               availableVoices={availableVoices}
               disabled={isProcessing}
-              setVoiceAndRestart={setVoiceAndRestart}
+              setVoiceAndRestart={confirmVoiceChange}
             />
           </div>
         </div>
@@ -230,6 +238,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
           )}
         </div>
       </div>
+      {planChangeDialog}
     </div>
   );
 }

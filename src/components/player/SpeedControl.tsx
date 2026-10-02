@@ -12,7 +12,7 @@ export const SpeedControl = ({
   setAudioPlayerSpeedAndRestart 
 }: {
   disabled?: boolean;
-  setSpeedAndRestart: (speed: number) => void;
+  setSpeedAndRestart: (speed: number, onCancel: () => void) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
 }) => {
   const { voiceSpeed, audioPlayerSpeed, providerType, ttsModel } = useConfig();
@@ -43,7 +43,7 @@ export const SpeedControl = ({
 
   const handleVoiceSpeedChangeComplete = useCallback(() => {
     if (localVoiceSpeed !== voiceSpeed) {
-      setSpeedAndRestart(localVoiceSpeed);
+      setSpeedAndRestart(localVoiceSpeed, () => setLocalVoiceSpeed(voiceSpeed));
     }
   }, [localVoiceSpeed, voiceSpeed, setSpeedAndRestart]);
 

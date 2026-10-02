@@ -216,6 +216,22 @@ test('anonymous user controls playback across every accepted document journey', 
     .find((voice) => voice && !initialVoiceLabel?.includes(voice));
   expect(alternativeVoice).toBeTruthy();
   await page.getByRole('option', { name: alternativeVoice!, exact: true }).click();
+
+  // A voice change rebuilds the playback plan, so it asks first. Cancelling
+  // leaves the voice alone.
+  const planChangeDialog = (title: string) => page
+    .getByTestId('confirm-dialog-panel')
+    .filter({ has: page.getByRole('heading', { name: title, exact: true }) });
+  const voiceDialog = planChangeDialog('Change the voice?');
+  await expect(voiceDialog).toHaveCSS('opacity', '1');
+  await voiceDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(voiceDialog).toBeHidden();
+  await expect(voiceButton).toHaveAttribute('aria-label', initialVoiceLabel!);
+
+  await voiceButton.click();
+  await page.getByRole('option', { name: alternativeVoice!, exact: true }).click();
+  await expect(voiceDialog).toHaveCSS('opacity', '1');
+  await voiceDialog.getByRole('button', { name: 'Change and regenerate', exact: true }).click();
   await expect(voiceButton).not.toHaveAttribute('aria-label', initialVoiceLabel!);
   const changedVoiceLabel = await voiceButton.getAttribute('aria-label');
   expect(changedVoiceLabel).toBeTruthy();
@@ -227,16 +243,43 @@ test('anonymous user controls playback across every accepted document journey', 
 
   await nativeSpeed.focus();
   await nativeSpeed.press('ArrowRight');
+  const speedDialog = planChangeDialog('Change native model speed?');
+  await expect(speedDialog).toHaveCSS('opacity', '1');
+  await speedDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(speedDialog).toBeHidden();
+
+  // The dialog takes focus from the popover, so reopen it; the slider reverted.
+  await page.getByRole('button', { name: '1x', exact: true }).click();
+  await expect(nativeSpeed).toHaveValue('1');
+  await nativeSpeed.focus();
+  await nativeSpeed.press('ArrowRight');
+  await expect(speedDialog).toHaveCSS('opacity', '1');
+  await speedDialog.getByRole('button', { name: 'Change and regenerate', exact: true }).click();
   const changedSpeedButton = page.getByRole('button', { name: '1.1x', exact: true });
   await expect(changedSpeedButton).toBeEnabled({ timeout: 60_000 });
 
-  // A speed change re-plans in place, so the open popover survives it.
+  await changedSpeedButton.click();
   await expect(audioSpeed).toBeVisible();
   await audioSpeed.focus();
   await audioSpeed.press('ArrowRight');
   await expect(page.getByRole('button', { name: '1.1x • 1.1x', exact: true })).toBeVisible();
 
   await startAndCancelPlayback(page);
+
+  // Reader Settings rebuild the plan too, and the segment slider commits once
+  // on release instead of once per tick.
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  const readerSettings = page.getByLabel('Document settings');
+  const segmentLength = readerSettings.getByRole('slider', { name: 'Max segment length', exact: true });
+  const initialSegmentLength = await segmentLength.inputValue();
+  await segmentLength.focus();
+  await segmentLength.press('ArrowRight');
+  const segmentDialog = planChangeDialog('Change the maximum segment length?');
+  await expect(segmentDialog).toHaveCSS('opacity', '1');
+  await segmentDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(segmentDialog).toBeHidden();
+  await expect(segmentLength).toHaveValue(initialSegmentLength);
+  await page.keyboard.press('Escape');
 
   await page.reload();
   await expect(
