@@ -50,8 +50,8 @@ export function usePlanChangeConfirm(): {
       title={`Change ${request?.setting ?? 'this setting'}?`}
       message={
         'This changes how the document is turned into audio. '
-        + 'Playback will stop, and audio already generated with the current settings will not be used. '
-        + 'New audio is generated as you listen, which may take a moment and use your TTS provider.'
+        + 'Playback will stop and new audio is generated as you listen, which may take a moment and use your TTS provider. '
+        + 'Audio already generated with your current settings stays cached and is used again if you switch back.'
       }
       confirmText="Change and regenerate"
       cancelText="Cancel"
