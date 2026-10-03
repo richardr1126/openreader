@@ -114,7 +114,8 @@ export function useEpubDocument(
   const [metadataLanguage, setMetadataLanguage] = useState<string | null>(null);
   const [placementLifecycle, setPlacementLifecycle] = useState<EpubPlacementLifecycle>(IDLE_EPUB_PLACEMENT);
   const [renderedTextRevision, setRenderedTextRevision] = useState(0);
-  const [isRenditionReady, setIsRenditionReady] = useState(false);
+  // Advances for every new rendition so a replacement book re-runs startup display.
+  const [renditionGeneration, setRenditionGeneration] = useState(0);
 
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | undefined>(undefined);
@@ -335,6 +336,7 @@ export function useEpubDocument(
       startupDisplayOwnerRef.current === owner
       && bookRef.current === book
       && renditionRef.current === rendition
+      && book.isOpen
     );
 
     try {
@@ -392,7 +394,7 @@ export function useEpubDocument(
     void refreshRenderedPlacement({
       preservePlaybackCursor: shouldPreserveEpubPlaybackCursor(placementIntentRef.current),
     });
-  }, [isRenditionReady, issueInitialDisplay, playbackPlanReady, refreshRenderedPlacement]);
+  }, [renditionGeneration, issueInitialDisplay, playbackPlanReady, refreshRenderedPlacement]);
 
   const failPlacement = useCallback((error: Error) => {
     placementOwnerRef.current += 1;
@@ -406,7 +408,7 @@ export function useEpubDocument(
     const book = rendition.book;
     bookRef.current = book;
     renditionRef.current = rendition;
-    setIsRenditionReady(true);
+    setRenditionGeneration((generation) => generation + 1);
     committedLocationRef.current = null;
     completedPlacementCfiRef.current = null;
     placementOwnerRef.current += 1;
