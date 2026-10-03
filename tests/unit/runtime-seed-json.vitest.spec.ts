@@ -213,6 +213,27 @@ describe('runtime seed JSON parsing', () => {
       accountEmail: { enabled: false, unexpected: true },
     }))).toThrow(/accountEmail.*unknown/i);
   });
+
+  test('accepts a Gutendex catalog seed with an optional key', () => {
+    const parsed = __seedInternals.parseRuntimeSeedDocument(JSON.stringify({
+      version: 1,
+      gutendex: { serverUrl: 'https://gutendex.example.com/books/', apiKey: 'gutendex_seed_key' },
+    }));
+
+    expect(parsed.seed.gutendex).toEqual({
+      enabled: true,
+      serverUrl: 'https://gutendex.example.com',
+      apiKey: 'gutendex_seed_key',
+    });
+    expect(__seedInternals.parseRuntimeSeedDocument(JSON.stringify({
+      version: 1,
+      gutendex: { enabled: false, serverUrl: 'https://gutendex.com', apiKey: null },
+    })).seed.gutendex).toEqual({ enabled: false, serverUrl: 'https://gutendex.com', apiKey: null });
+    expect(() => __seedInternals.parseRuntimeSeedDocument(JSON.stringify({
+      version: 1,
+      gutendex: { serverUrl: 'https://gutendex.com', token: 'x' },
+    }))).toThrow(/gutendex.*unknown/i);
+  });
 });
 
 describe('runtime config JSON seeding', () => {

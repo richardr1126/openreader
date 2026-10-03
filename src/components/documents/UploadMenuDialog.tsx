@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useDocuments } from '@/contexts/DocumentContext';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { importUrl } from '@/lib/client/api/documents';
 import {
   SidebarDialog,
@@ -17,10 +18,12 @@ import {
   FileIcon,
   RefreshIcon,
   BrowserIcon,
+  EPUBIcon,
 } from '@/components/icons/Icons';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { DocumentSelectionModal } from './DocumentSelectionModal';
 import { DocumentUploader } from './DocumentUploader';
+import { GutenbergCatalogPanel } from './GutenbergCatalogPanel';
 import { useLibraryImport } from './useLibraryImport';
 
 interface UploadMenuDialogProps {
@@ -29,7 +32,7 @@ interface UploadMenuDialogProps {
   folderId?: string;
 }
 
-type TabValue = 'file' | 'create' | 'url' | 'library';
+type TabValue = 'file' | 'create' | 'url' | 'gutenberg' | 'library';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
@@ -45,6 +48,7 @@ const SIDEBAR_SECTIONS: SidebarSection[] = [
   { id: 'file', label: 'Upload Files', icon: UploadIcon },
   { id: 'create', label: 'Create Document', icon: FileIcon },
   { id: 'url', label: 'Import from Web', icon: BrowserIcon },
+  { id: 'gutenberg', label: 'Project Gutenberg', icon: EPUBIcon },
   { id: 'library', label: 'Server Library', icon: DownloadIcon },
 ];
 
@@ -54,6 +58,10 @@ export function UploadMenuDialog({
   folderId,
 }: UploadMenuDialogProps) {
   const { uploadDocuments } = useDocuments();
+  const { gutenbergCatalogEnabled } = useRuntimeConfig();
+  const sections = gutenbergCatalogEnabled
+    ? SIDEBAR_SECTIONS
+    : SIDEBAR_SECTIONS.filter((section) => section.id !== 'gutenberg');
   const libraryImport = useLibraryImport(folderId);
   const [activeTab, setActiveTab] = useState<TabValue>('file');
 
@@ -170,7 +178,7 @@ export function UploadMenuDialog({
         open={isOpen}
         onClose={handleClose}
         headerTitle="Add Documents"
-        sections={SIDEBAR_SECTIONS}
+        sections={sections}
         activeSectionId={activeTab}
         onSectionChange={handleTabChange}
         className="h-[480px]"
@@ -357,6 +365,10 @@ export function UploadMenuDialog({
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === 'gutenberg' && gutenbergCatalogEnabled && (
+        <GutenbergCatalogPanel folderId={folderId} />
       )}
 
       {activeTab === 'library' && (

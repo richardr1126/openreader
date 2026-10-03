@@ -26,6 +26,7 @@ export interface RuntimeConfig {
   ttsUpstreamTimeoutMs: number;
   computeAvailable: boolean;
   accountEmailsEnabled: boolean;
+  gutenbergCatalogEnabled: boolean;
 }
 
 const RUNTIME_DEFAULTS: RuntimeConfig = {
@@ -43,6 +44,7 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   ttsUpstreamTimeoutMs: 285_000,
   computeAvailable: true,
   accountEmailsEnabled: false,
+  gutenbergCatalogEnabled: false,
 };
 
 declare global {

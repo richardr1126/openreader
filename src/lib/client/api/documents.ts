@@ -675,3 +675,54 @@ export async function importUrl(
 
   return (await res.json()) as { title: string; content: string };
 }
+
+export type GutenbergBook = {
+  id: number;
+  title: string;
+  authors: string[];
+  languages: string[];
+  downloadCount: number;
+  coverUrl: string | null;
+};
+
+export type GutenbergSearchPage = {
+  count: number;
+  page: number;
+  hasNextPage: boolean;
+  books: GutenbergBook[];
+};
+
+export async function searchGutenberg(
+  search: string,
+  page = 1,
+  options?: { signal?: AbortSignal },
+): Promise<GutenbergSearchPage> {
+  const params = new URLSearchParams({ page: String(page) });
+  if (search.trim()) params.set('search', search.trim());
+  const res = await fetch(`/api/gutenberg/books?${params.toString()}`, { signal: options?.signal });
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to search Project Gutenberg');
+  }
+  return (await res.json()) as GutenbergSearchPage;
+}
+
+/** The server downloads the book into a temp upload, because neither the
+ * browser (no CORS on gutenberg.org) nor a function response (4.5 MB) can
+ * carry it; finalizing here then files it like any other upload. */
+export async function importGutenbergBook(id: number, options?: UploadOptions): Promise<BaseDocument[]> {
+  options?.onProgress?.({ phase: 'preparing' });
+  const res = await fetch('/api/gutenberg/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+    signal: options?.signal,
+  });
+  if (!res.ok) {
+    throw await parseApiError(res, 'Failed to import the book');
+  }
+  const staged = (await res.json()) as { token: string; name: string; lastModified: number };
+  return finalizeUploadedSources(
+    [{ token: staged.token, name: staged.name, type: 'epub', lastModified: staged.lastModified }],
+    options,
+  );
+}

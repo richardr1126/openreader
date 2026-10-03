@@ -36,6 +36,7 @@ When the logged-in user is an admin, an **Admin** tab appears in **Settings → 
 - **Users** — registered and anonymous accounts, status, usage, approval, role management, and deletion.
 - **Site features** — runtime-editable replacements for what were previously build-time public env flags.
 - **Email** — Resend delivery, sender identity, test delivery, verification, and password recovery.
+- **Catalog** — the Project Gutenberg catalog in Add Documents, and the Gutendex server and API key it searches through.
 - **Compute** — admission, usage, queue, and worker execution limits.
 - **Maintenance** — scheduled cleanup and recent task status.
 
@@ -82,6 +83,24 @@ identifiers. A dedicated worker consumer (concurrency one) resolves the current
 Resend key through the credential-broker authentication boundary and calls
 Resend over HTTPS. Verification and recovery messages stop when the feature is
 disabled; administrator tests remain available before activation.
+
+## Project Gutenberg catalog
+
+**Add Documents → Project Gutenberg** searches the Project Gutenberg catalog
+and adds public domain EPUBs to a reader's library. It is on by default and
+searches the public [Gutendex](https://github.com/garethbjohnson/gutendex)
+server at `https://gutendex.com`, which needs no key but is shared and can be
+slow to search.
+
+In **Admin → Catalog** you can turn it off, or point it at a self-hosted
+Gutendex server and save that server's API key. The key is encrypted the same
+way as the Resend key, the API returns only its final four characters, and it
+is sent as `X-API-Key` from this server; it never reaches a browser.
+
+Search and the download both run on the server. Books are fetched from
+gutenberg.org only, whatever the catalog server answers, are held to
+`maxUploadMb`, and are staged as a temp upload that the browser finalizes like
+any other upload.
 
 ## Shared TTS providers
 

@@ -8,10 +8,12 @@ import {
 } from '@/lib/server/admin/settings';
 import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
+import { isGutenbergCatalogEnabled } from '@/lib/server/admin/gutendex-settings';
 
 export type ResolvedRuntimeConfig = RuntimeConfig & {
   computeAvailable: boolean;
   accountEmailsEnabled: boolean;
+  gutenbergCatalogEnabled: boolean;
 };
 
 export type PublicRuntimeConfig = Omit<ResolvedRuntimeConfig, 'computeLimitPolicies'>;
@@ -41,6 +43,7 @@ export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig>
     ...values,
     computeAvailable: isComputeWorkerAvailable(),
     accountEmailsEnabled: await isAccountEmailEnabled().catch(() => false),
+    gutenbergCatalogEnabled: await isGutenbergCatalogEnabled().catch(() => false),
   };
 }
 
