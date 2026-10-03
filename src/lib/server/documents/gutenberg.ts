@@ -76,21 +76,20 @@ async function catalogRequest(path: string, params?: URLSearchParams): Promise<u
   // Redirects are followed by hand because fetch strips Authorization on a
   // cross-origin hop but keeps a custom X-API-Key, so a catalog server could
   // otherwise forward the key to another host or down to plain http.
+  // One timeout for the whole request, redirects included.
+  const signal = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
   let current = url;
   let response: Response;
   for (let hop = 0; ; hop += 1) {
     try {
-      response = await fetch(current, {
-        headers,
-        redirect: 'manual',
-        signal: AbortSignal.timeout(SEARCH_TIMEOUT_MS),
-        cache: 'no-store',
-      });
+      response = await fetch(current, { headers, redirect: 'manual', signal, cache: 'no-store' });
     } catch (error) {
       throw catalogUnavailable('The Project Gutenberg catalog did not respond', error);
     }
     const location = response.headers.get('location');
     if (response.status < 300 || response.status >= 400 || !location) break;
+    // An unread body holds its connection open in undici.
+    await response.body?.cancel();
     if (hop >= MAX_REDIRECTS) throw catalogUnavailable('Too many redirects from the Gutendex server');
     const next = new URL(location, current);
     if (next.host !== url.host || (current.protocol === 'https:' && next.protocol !== 'https:')) {
@@ -224,6 +223,7 @@ async function fetchFromGutenberg(url: string, signal: AbortSignal): Promise<Res
     const response = await fetch(current, { redirect: 'manual', signal, cache: 'no-store' });
     const location = response.headers.get('location');
     if (response.status >= 300 && response.status < 400 && location) {
+      await response.body?.cancel();
       current = new URL(location, current).href;
       continue;
     }
