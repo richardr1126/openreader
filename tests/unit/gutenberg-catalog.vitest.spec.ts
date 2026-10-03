@@ -121,6 +121,17 @@ describe('gutendex settings', () => {
     await expect(getGutendexSettings()).resolves.toMatchObject({ apiKey: null });
   });
 
+  test('refuses to send a key to a plain http server', async () => {
+    await expect(updateGutendexSettings({ serverUrl: 'http://10.0.0.5:8000' })).resolves.toMatchObject({
+      serverUrl: 'http://10.0.0.5:8000',
+    });
+    await expect(updateGutendexSettings({ apiKey: 'gutendex-secret-key' })).rejects.toThrow(/https/);
+    await expect(seedGutendexSettings(parseGutendexSettingsSeed({
+      serverUrl: 'http://10.0.0.5:8000',
+      apiKey: 'gutendex-secret-key',
+    }))).rejects.toThrow(/https/);
+  });
+
   test('seeds from the runtime JSON and rejects unknown keys', async () => {
     const seed = parseGutendexSettingsSeed({ serverUrl: 'gutendex.example.com', apiKey: 'seeded-key' });
     expect(seed).toEqual({ enabled: true, serverUrl: 'https://gutendex.example.com', apiKey: 'seeded-key' });
@@ -160,6 +171,23 @@ describe('gutenberg catalog', () => {
         coverUrl: 'https://www.gutenberg.org/cache/epub/1342/pg1342.cover.medium.jpg',
       }],
     });
+  });
+
+  test('does not follow a catalog redirect that would carry the key elsewhere', async () => {
+    await updateGutendexSettings({ serverUrl: 'https://gutendex.example.com', apiKey: 'gutendex-secret-key' });
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 301, headers: { location: '/books/?page=1' } }))
+      .mockResolvedValueOnce(json({ count: 0, next: null, results: [] }));
+    await expect(searchGutenberg({ search: '', page: 1 })).resolves.toMatchObject({ count: 0 });
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://attacker.example/books/' } }));
+    await expect(searchGutenberg({ search: '', page: 1 })).rejects.toThrow(/redirected away/);
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'http://gutendex.example.com/books/' } }));
+    await expect(searchGutenberg({ search: '', page: 1 })).rejects.toThrow(/redirected away/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('sends no key header when none is configured', async () => {

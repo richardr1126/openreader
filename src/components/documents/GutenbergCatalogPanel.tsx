@@ -35,7 +35,9 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The request that failed, so "Try Again" repeats it — a failed "Load more"
+  // retries that page instead of starting over from whatever is in the box.
+  const [failed, setFailed] = useState<{ search: string; page: number; message: string } | null>(null);
   const [imports, setImports] = useState<Record<number, ImportState>>({});
   const searchRef = useRef<AbortController | null>(null);
 
@@ -44,7 +46,7 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
     const controller = new AbortController();
     searchRef.current = controller;
     setLoading(true);
-    setError(null);
+    setFailed(null);
     try {
       const result = await searchGutenberg(search, nextPage, { signal: controller.signal });
       setBooks((previous) => nextPage === 1 ? result.books : [...previous, ...result.books]);
@@ -53,7 +55,11 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
       setHasNextPage(result.hasNextPage);
     } catch (err) {
       if (isAbortError(err)) return;
-      setError(err instanceof Error ? err.message : 'Failed to search Project Gutenberg');
+      setFailed({
+        search,
+        page: nextPage,
+        message: err instanceof Error ? err.message : 'Failed to search Project Gutenberg',
+      });
     } finally {
       if (searchRef.current === controller) setLoading(false);
     }
@@ -104,12 +110,12 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
       </form>
 
       <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-line bg-surface-sunken" aria-busy={loading}>
-        {error ? (
+        {failed ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-            <p className="text-sm text-danger">{error}</p>
+            <p className="text-sm text-danger">{failed.message}</p>
             <button
               type="button"
-              onClick={() => void runSearch(query, 1)}
+              onClick={() => void runSearch(failed.search, failed.page)}
               className="flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
             >
               <RefreshIcon className="h-3 w-3" /> Try Again

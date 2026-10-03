@@ -118,6 +118,14 @@ export function normalizeGutendexServerUrl(value: unknown): string {
   return `${url.origin}${path}`;
 }
 
+/** The key travels as a request header, so plain http would hand it to anyone
+ * on the path. A keyless http server stays allowed for a private network. */
+function requireHttpsForApiKey(serverUrl: string, hasApiKey: boolean): void {
+  if (hasApiKey && new URL(serverUrl).protocol !== 'https:') {
+    throw new GutendexSettingsError('A Gutendex API key needs an https server address');
+  }
+}
+
 function normalizeApiKey(value: unknown): string {
   const apiKey = typeof value === 'string' ? value.trim() : '';
   if (!apiKey) throw new GutendexSettingsError('Gutendex API key is required');
@@ -176,6 +184,7 @@ export function parseGutendexSettingsSeed(value: unknown): GutendexSettingsSeed 
 
 /** First-boot seed. Existing catalog settings, including admin edits, always win. */
 export async function seedGutendexSettings(input: GutendexSettingsSeed): Promise<boolean> {
+  requireHttpsForApiKey(input.serverUrl, Boolean(input.apiKey));
   const existing = await db
     .select({ key: adminSettings.key })
     .from(adminSettings)
@@ -233,6 +242,7 @@ export async function updateGutendexSettings(
     }
     next.enabled = patch.enabled;
   }
+  requireHttpsForApiKey(next.serverUrl, Boolean(next.apiKeyCiphertext && next.apiKeyIv));
 
   await db.insert(adminSettings).values({
     key: GUTENDEX_SETTINGS_KEY,
