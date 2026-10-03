@@ -3,9 +3,10 @@
 import { useMemo, type ComponentType, type SVGProps } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckIcon, ClockIcon, DocumentIcon, InfoIcon, KeyIcon, MailIcon,
+import { CheckIcon, ClockIcon, DocumentIcon, EPUBIcon, InfoIcon, KeyIcon, MailIcon,
   PaletteIcon, SettingsIcon, SpeedometerIcon, UserIcon } from '@/components/icons/Icons';
 import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
+import { AdminGutendexPanel } from '@/components/admin/AdminGutendexPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminSystemPanel } from '@/components/admin/AdminSystemPanel';
@@ -21,7 +22,7 @@ import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'email' | 'system' | 'maintenance';
+export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'email' | 'catalog' | 'system' | 'maintenance';
 type SettingsSection = {
   id: SettingsSectionId;
   label: string;
@@ -87,6 +88,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     icon: MailIcon,
     group: 'admin',
   },
+  { id: 'catalog', label: 'Catalog', shortLabel: 'Catalog', icon: EPUBIcon, group: 'admin' },
   {
     id: 'system',
     label: 'System',
@@ -299,6 +301,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                   {isAdmin && activeSection === 'instance' ? <AdminFeaturesPanel scope="instance" /> : null}
                   {isAdmin && activeSection === 'compute' ? <AdminFeaturesPanel scope="compute" /> : null}
                   {isAdmin && activeSection === 'email' ? <AdminEmailPanel /> : null}
+                  {isAdmin && activeSection === 'catalog' ? <AdminGutendexPanel /> : null}
                   {isAdmin && activeSection === 'system' ? <AdminSystemPanel /> : null}
                   {isAdmin && activeSection === 'maintenance' ? <AdminTasksPanel /> : null}
                 </div>

@@ -636,6 +636,7 @@ Supported top-level keys:
 - `runtimeConfig` (optional object, strict-validated against runtime schema)
 - `providers` (optional array of shared provider seed entries)
 - `accountEmail` (optional complete Resend account-email delivery seed)
+- `gutendex` (optional Project Gutenberg catalog server and API key)
 
 Example:
 
@@ -673,6 +674,11 @@ Example:
     "senderEmail": "mail@example.com",
     "replyTo": "support@example.com",
     "apiKey": "REPLACE_WITH_RESEND_API_KEY"
+  },
+  "gutendex": {
+    "enabled": true,
+    "serverUrl": "https://gutendex.example.com",
+    "apiKey": "REPLACE_WITH_GUTENDEX_API_KEY"
   }
 }
 ```
@@ -691,12 +697,20 @@ Account email seed behavior:
 - The seed only creates the account-email record when it is missing. Later Email-panel changes are never overwritten.
 - The shipped `examples/openreader-seed.json` includes a disabled account-email block with a placeholder key. Replace the placeholder and sender address, then set `enabled` to `true` when configuring Resend.
 
+Project Gutenberg catalog seed behavior:
+
+- `gutendex` requires `serverUrl`, the root of a [Gutendex](https://github.com/garethbjohnson/gutendex) server; a pasted `/books/` endpoint is trimmed back to the root. `enabled` defaults to `true` and `apiKey` is optional and may be `null`.
+- Without a seed or admin edits, the catalog is on and searches the public `https://gutendex.com` with no key.
+- The API key is encrypted with `AUTH_SECRET` before it is stored and is sent as `X-API-Key` from the server only. Keep it out of committed seed files.
+- The seed only creates the catalog record when it is missing. Later Catalog-panel changes are never overwritten.
+
 Precedence summary:
 
 - Runtime reads: admin DB runtime rows override built-in defaults.
 - Seed input (`RUNTIME_SEED_JSON*`) only populates missing runtime rows on first boot; it does not overwrite existing/admin-edited rows.
 - Provider bootstrap order: JSON `providers` section > `API_BASE`/`API_KEY`/`API_MODEL_NAME` fallback > no provider bootstrap.
 - Account email bootstrap: JSON `accountEmail` section > no account-email bootstrap.
+- Gutenberg catalog bootstrap: JSON `gutendex` section > the public gutendex.com with no key.
 
 ## Platform-Supplied Signals
 
