@@ -35,6 +35,19 @@ const cloneMappedChar = <TPos>(char: string, source: MappedChar<TPos>): MappedCh
   pos: source.pos,
 });
 
+// Append by index, never by spreading: a long chapter has more characters than
+// an engine accepts as call arguments, and iPad Safari's smaller stack overflows
+// ("Maximum call stack size exceeded") where macOS does not.
+const appendTokens = <TPos>(
+  target: MappedChar<TPos>[],
+  tokens: MappedChar<TPos>[],
+  start: number,
+  end = tokens.length,
+): void => {
+  const stop = Math.min(end, tokens.length);
+  for (let index = Math.max(0, start); index < stop; index += 1) target.push(tokens[index]);
+};
+
 const replaceMappedUrls = <TPos>(tokens: MappedChar<TPos>[]): MappedChar<TPos>[] => {
   const text = tokens.map((token) => token.char).join('');
   const replaced: MappedChar<TPos>[] = [];
@@ -45,7 +58,7 @@ const replaceMappedUrls = <TPos>(tokens: MappedChar<TPos>[]): MappedChar<TPos>[]
   while ((match = URL_PATTERN.exec(text)) !== null) {
     const start = match.index;
     const end = start + match[0].length;
-    replaced.push(...tokens.slice(cursor, start));
+    appendTokens(replaced, tokens, cursor, start);
 
     const anchor = tokens[start] ?? tokens[Math.max(0, end - 1)];
     if (anchor) {
@@ -63,7 +76,7 @@ const replaceMappedUrls = <TPos>(tokens: MappedChar<TPos>[]): MappedChar<TPos>[]
     cursor = end;
   }
 
-  replaced.push(...tokens.slice(cursor));
+  appendTokens(replaced, tokens, cursor);
   return replaced;
 };
 
@@ -81,13 +94,13 @@ const removeMappedHyphenation = <TPos>(tokens: MappedChar<TPos>[]): MappedChar<T
     const second = match[2];
     const secondOffset = full.lastIndexOf(second);
 
-    replaced.push(...tokens.slice(cursor, start));
-    replaced.push(...tokens.slice(start, start + first.length));
-    replaced.push(...tokens.slice(start + secondOffset, start + secondOffset + second.length));
+    appendTokens(replaced, tokens, cursor, start);
+    appendTokens(replaced, tokens, start, start + first.length);
+    appendTokens(replaced, tokens, start + secondOffset, start + secondOffset + second.length);
     cursor = start + full.length;
   }
 
-  replaced.push(...tokens.slice(cursor));
+  appendTokens(replaced, tokens, cursor);
   return replaced;
 };
 
