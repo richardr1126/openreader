@@ -84,7 +84,11 @@ export function useEPUBLocationController({
     await drainLatestNavigation(
       locatorNavigationStateRef.current,
       async (pending) => {
-        const cfi = await resolveLocatorToCfi(pending.location);
+        // A failed resolve must not end the drain while a newer locator is queued.
+        const cfi = await resolveLocatorToCfi(pending.location).catch((error: unknown) => {
+          console.warn('EPUB locator resolution failed:', error);
+          return null;
+        });
         if (!cfi) console.warn('Unable to resolve EPUB locator to CFI:', pending.location);
         return cfi;
       },

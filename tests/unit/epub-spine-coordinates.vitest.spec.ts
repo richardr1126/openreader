@@ -1,4 +1,5 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import { parseHTML } from 'linkedom';
 import type { Book } from 'epubjs';
 
 import type { MappedChar } from '@/lib/client/highlight-char-map';
@@ -11,6 +12,7 @@ import {
   clearEpubWindowIndex,
   findIndexedEpubWindowForLocator,
   registerEpubWindowIndexEntry,
+  resolveEpubLocatorToCfi,
 } from '@/lib/client/epub/location-index';
 
 function makeFakeBook(items: Array<{ index: number; href: string; cfiBase: string }>): Book {
@@ -140,5 +142,55 @@ describe('EPUB location index', () => {
       spineIndex: 0,
       charOffset: 45,
     })).toBeNull();
+  });
+
+  test('resolves an unindexed locator on a private parse after the rendition unloaded the section', async () => {
+    const { window, document } = parseHTML('<html><head></head><body><p>alpha beta</p></body></html>');
+    vi.stubGlobal('Node', window.Node);
+    vi.stubGlobal('NodeFilter', { SHOW_TEXT: 4 });
+    // linkedom ranges cannot be positioned; record the start point instead.
+    Object.assign(document, {
+      createRange: () => {
+        const range = {
+          startContainer: null as Node | null,
+          startOffset: 0,
+          setStart(node: Node, offset: number) {
+            range.startContainer = node;
+            range.startOffset = offset;
+          },
+          setEnd() {},
+        };
+        return range;
+      },
+    });
+    try {
+      const section = {
+        index: 0,
+        href: 'ch.xhtml',
+        url: '/OEBPS/ch.xhtml',
+        // The rendition already unloaded the shared section document.
+        load: vi.fn(async () => undefined),
+        cfiFromRange: (range: Range) => (
+          `cfi:${range.startContainer?.textContent}:${range.startOffset}`
+        ),
+      };
+      const load = vi.fn(async () => document);
+      const book = {
+        isOpen: true,
+        spine: { get: (target: unknown) => (target === 'ch.xhtml' ? section : null) },
+        load,
+      } as unknown as Book;
+
+      await expect(resolveEpubLocatorToCfi(book, {
+        readerType: 'epub',
+        spineHref: 'ch.xhtml',
+        spineIndex: 0,
+        charOffset: 6,
+      })).resolves.toBe('cfi:alpha beta:6');
+      expect(load).toHaveBeenCalledWith('/OEBPS/ch.xhtml');
+      expect(section.load).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

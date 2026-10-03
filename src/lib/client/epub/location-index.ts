@@ -13,8 +13,7 @@ type DomPosition = {
 };
 
 type SectionLike = Section & {
-  load?: ((request?: unknown) => Promise<Element | Document> | Element | Document) | undefined;
-  unload?: () => void;
+  url?: string;
   cfiFromRange?: (range: Range) => string;
 };
 
@@ -113,28 +112,19 @@ export async function resolveEpubLocatorToCfi(
   if (indexed) return indexed.startCfi;
 
   const section = book.spine.get(locator.spineHref as never) as SectionLike | undefined;
-  if (!section || typeof section.load !== 'function' || typeof section.cfiFromRange !== 'function') {
-    return null;
-  }
+  if (!section?.url || typeof section.cfiFromRange !== 'function') return null;
 
-  try {
-    const loaded = await Promise.resolve(section.load(book.load.bind(book)));
-    const normalized = normalizeMappedChars(collectMappedText(loaded));
-    if (normalized.length === 0) return null;
+  // Parse a private copy of the section. Section.load/unload share one cached
+  // document with the rendition, so a concurrent unload could empty it here.
+  const loaded = await Promise.resolve(book.load(section.url)) as Document | Element | undefined;
+  if (!loaded || !book.isOpen) return null;
+  const normalized = normalizeMappedChars(collectMappedText(loaded));
+  if (normalized.length === 0) return null;
 
-    const target = Math.max(0, Math.min(Math.floor(locator.charOffset), normalized.length - 1));
-    const mapped = normalized[target];
-    if (!mapped) return null;
-    const range = rangeFromPosition(mapped.pos);
-    if (!range) return null;
-    return section.cfiFromRange(range);
-  } catch {
-    return null;
-  } finally {
-    try {
-      section.unload?.();
-    } catch {
-      // no-op
-    }
-  }
+  const target = Math.max(0, Math.min(Math.floor(locator.charOffset), normalized.length - 1));
+  const mapped = normalized[target];
+  if (!mapped) return null;
+  const range = rangeFromPosition(mapped.pos);
+  if (!range) return null;
+  return section.cfiFromRange(range);
 }
