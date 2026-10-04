@@ -45,8 +45,13 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   await zoomControls.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await expect(zoomControls).toContainText('100%');
 
-  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   const readerSettings = page.getByRole('dialog', { name: 'Document settings', exact: true });
+  // The panel slides in; a click during the slide can miss its moving target.
+  const openReaderSettings = async () => {
+    await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+    await expect(readerSettings).toBeInViewport({ ratio: 1 });
+  };
+  await openReaderSettings();
   await expect(readerSettings.getByRole('radio', { name: 'Single Page', exact: true })).toBeChecked();
   await readerSettings.getByRole('radio', { name: 'Two Pages', exact: true }).click();
   await expect(readerSettings.getByRole('radio', { name: 'Two Pages', exact: true })).toBeChecked();
@@ -54,7 +59,7 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   await expect(pageOne).toBeInViewport();
   await expect(pageTwo).toBeInViewport();
 
-  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  await openReaderSettings();
   await readerSettings.getByRole('radio', { name: 'Continuous Scroll', exact: true }).click();
   await expect(
     readerSettings.getByRole('radio', { name: 'Continuous Scroll', exact: true }),
