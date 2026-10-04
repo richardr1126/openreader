@@ -11,5 +11,10 @@ test('the Project Gutenberg catalog is reachable from Add Documents', async ({ p
   await dialog.getByRole('button', { name: 'Project Gutenberg', exact: true }).click();
 
   await expect(dialog.getByRole('searchbox', { name: 'Search Project Gutenberg' })).toBeVisible();
+  // English by default, as on iOS, with every language one choice away.
+  await dialog.getByRole('button', { name: 'English' }).click();
+  await expect(page.getByRole('option', { name: 'All languages' })).toBeVisible();
+  await expect(page.getByRole('option', { name: 'French' })).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(dialog.getByRole('link', { name: 'Project Gutenberg', exact: true })).toHaveAttribute('href', 'https://www.gutenberg.org');
 });

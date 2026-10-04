@@ -8,10 +8,30 @@ import {
   searchGutenberg,
   type GutenbergBook,
 } from '@/lib/client/api/documents';
-import { Button, SearchField } from '@/components/ui';
+import { Button, SearchField, Select, type SelectOption } from '@/components/ui';
 import { EPUBIcon, RefreshIcon } from '@/components/icons/Icons';
 
 type ImportState = 'importing' | 'added';
+
+/** The same languages the iOS app offers, which between them cover nearly all
+ * of the catalog. English is the default there too: unfiltered, the popular
+ * list opens on a mix most readers cannot read. */
+const LANGUAGE_CODES = ['en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'sv', 'zh', 'ja'] as const;
+
+function languageOptions(): SelectOption[] {
+  let names: Intl.DisplayNames | null = null;
+  try {
+    names = new Intl.DisplayNames(undefined, { type: 'language' });
+  } catch {
+    names = null;
+  }
+  return [
+    { value: '', label: 'All languages' },
+    ...LANGUAGE_CODES.map((code) => ({ value: code, label: names?.of(code) ?? code })),
+  ];
+}
+
+type SearchRequest = { search: string; language: string; page: number };
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
@@ -28,35 +48,38 @@ function isAbortError(error: unknown): boolean {
 export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
   const { refreshDocuments } = useDocuments();
   const [query, setQuery] = useState('');
+  const [language, setLanguage] = useState<string>('en');
+  const [languages] = useState(languageOptions);
   // What the list shows, so "Load more" pages the search that produced it
   // rather than whatever has since been typed into the box.
-  const [shownQuery, setShownQuery] = useState('');
+  const [shown, setShown] = useState<Omit<SearchRequest, 'page'>>({ search: '', language: 'en' });
   const [books, setBooks] = useState<GutenbergBook[]>([]);
   const [page, setPage] = useState(1);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [loading, setLoading] = useState(false);
   // The request that failed, so "Try Again" repeats it — a failed "Load more"
   // retries that page instead of starting over from whatever is in the box.
-  const [failed, setFailed] = useState<{ search: string; page: number; message: string } | null>(null);
+  const [failed, setFailed] = useState<(SearchRequest & { message: string }) | null>(null);
   const [imports, setImports] = useState<Record<number, ImportState>>({});
   const searchRef = useRef<AbortController | null>(null);
 
-  const runSearch = useCallback(async (search: string, nextPage: number) => {
+  const runSearch = useCallback(async ({ search, language, page: nextPage }: SearchRequest) => {
     searchRef.current?.abort();
     const controller = new AbortController();
     searchRef.current = controller;
     setLoading(true);
     setFailed(null);
     try {
-      const result = await searchGutenberg(search, nextPage, { signal: controller.signal });
+      const result = await searchGutenberg(search, nextPage, { signal: controller.signal, language });
       setBooks((previous) => nextPage === 1 ? result.books : [...previous, ...result.books]);
       setPage(nextPage);
-      setShownQuery(search);
+      setShown({ search, language });
       setHasNextPage(result.hasNextPage);
     } catch (err) {
       if (isAbortError(err)) return;
       setFailed({
         search,
+        language,
         page: nextPage,
         message: err instanceof Error ? err.message : 'Failed to search Project Gutenberg',
       });
@@ -68,7 +91,7 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
   // An empty search lists the most downloaded books, which is a better
   // opening screen than an empty box.
   useEffect(() => {
-    void runSearch('', 1);
+    void runSearch({ search: '', language: 'en', page: 1 });
     return () => searchRef.current?.abort();
   }, [runSearch]);
 
@@ -95,7 +118,7 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
         className="flex shrink-0 gap-2"
         onSubmit={(event) => {
           event.preventDefault();
-          void runSearch(query, 1);
+          void runSearch({ search: query, language, page: 1 });
         }}
       >
         <SearchField
@@ -106,6 +129,18 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
           className="flex-1 py-1.5"
           inputClassName="text-sm"
         />
+        <div className="w-36 shrink-0">
+          <Select
+            value={languages.find((option) => option.value === language)}
+            options={languages}
+            onChange={(option) => {
+              setLanguage(option.value);
+              // Like iOS, a new language applies straight away, to the search
+              // the list is showing rather than to unsubmitted text in the box.
+              void runSearch({ search: shown.search, language: option.value, page: 1 });
+            }}
+          />
+        </div>
         <Button type="submit" variant="primary" disabled={loading}>Search</Button>
       </form>
 
@@ -115,7 +150,7 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
             <p className="text-sm text-danger">{failed.message}</p>
             <button
               type="button"
-              onClick={() => void runSearch(failed.search, failed.page)}
+              onClick={() => void runSearch(failed)}
               className="flex items-center gap-1 text-[11px] font-medium text-accent hover:underline"
             >
               <RefreshIcon className="h-3 w-3" /> Try Again
@@ -161,11 +196,12 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
             })}
             {loading ? (
               <li className="flex items-center justify-center gap-2 p-4 text-xs text-soft">
-                <RefreshIcon className="h-4 w-4 animate-spin text-accent" /> Searching…
+                <RefreshIcon className="h-4 w-4 animate-spin text-accent" />
+                <span>Searching… A search nobody has made recently can take a minute or two.</span>
               </li>
             ) : hasNextPage ? (
               <li className="flex justify-center p-3">
-                <Button size="sm" variant="secondary" onClick={() => void runSearch(shownQuery, page + 1)}>Load more</Button>
+                <Button size="sm" variant="secondary" onClick={() => void runSearch({ ...shown, page: page + 1 })}>Load more</Button>
               </li>
             ) : null}
           </ul>
@@ -177,6 +213,7 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
         <a href="https://www.gutenberg.org" target="_blank" rel="noreferrer" className="text-accent hover:underline">Project Gutenberg</a>
         , searched with{' '}
         <a href="https://github.com/garethbjohnson/gutendex" target="_blank" rel="noreferrer" className="text-accent hover:underline">Gutendex</a>.
+        {' '}Public domain in the United States; copyright may differ elsewhere.
       </p>
     </div>
   );

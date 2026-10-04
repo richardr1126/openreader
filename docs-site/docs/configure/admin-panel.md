@@ -87,10 +87,13 @@ disabled; administrator tests remain available before activation.
 ## Project Gutenberg catalog
 
 **Add Documents → Project Gutenberg** searches the Project Gutenberg catalog
-and adds public domain EPUBs to a reader's library. It is on by default and
+and adds public domain EPUBs to a reader's library. Readers can filter it by
+language; it opens on English, and books still under US copyright are left
+out. It is on by default and
 searches the public [Gutendex](https://github.com/garethbjohnson/gutendex)
-server at `https://gutendex.com`, which needs no key but is shared and can be
-slow to search.
+server at `https://gutendex.com`, which needs no key but is shared: a query it
+has not answered recently can take a minute or more, so catalog requests wait
+up to 100 seconds.
 
 In **Admin → Catalog** you can turn it off, or point it at a self-hosted
 Gutendex server and save that server's API key. The key is encrypted the same

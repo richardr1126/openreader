@@ -695,10 +695,11 @@ export type GutenbergSearchPage = {
 export async function searchGutenberg(
   search: string,
   page = 1,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; language?: string },
 ): Promise<GutenbergSearchPage> {
   const params = new URLSearchParams({ page: String(page) });
   if (search.trim()) params.set('search', search.trim());
+  if (options?.language) params.set('language', options.language);
   const res = await fetch(`/api/gutenberg/books?${params.toString()}`, { signal: options?.signal });
   if (!res.ok) {
     throw await parseApiError(res, 'Failed to search Project Gutenberg');

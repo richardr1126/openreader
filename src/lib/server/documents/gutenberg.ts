@@ -13,7 +13,13 @@ import { createServerAppError } from '@/lib/server/errors/contract';
  */
 
 const EPUB_MIME = 'application/epub+zip';
-const SEARCH_TIMEOUT_MS = 15_000;
+/** gutendex.com answers from Cloudflare's four-hour cache in a tenth of a
+ * second and from its origin in 25-80 s (measured October 2026 for a second
+ * page, a Dutch listing, a French search), sending nothing until it is done.
+ * A language filter makes an uncached query the usual case, and a 15 s limit
+ * gave up on requests that were about to succeed. 100 s is Cloudflare's own
+ * limit, past which it answers 524 itself. The iOS app settled on the same. */
+const CATALOG_TIMEOUT_MS = 100_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 const MAX_REDIRECTS = 5;
 
@@ -45,6 +51,7 @@ type GutendexBook = {
   authors?: unknown;
   languages?: unknown;
   download_count?: unknown;
+  copyright?: unknown;
   formats?: unknown;
 };
 
@@ -76,15 +83,24 @@ async function catalogRequest(path: string, params?: URLSearchParams): Promise<u
   // Redirects are followed by hand because fetch strips Authorization on a
   // cross-origin hop but keeps a custom X-API-Key, so a catalog server could
   // otherwise forward the key to another host or down to plain http.
-  // One timeout for the whole request, redirects included.
-  const signal = AbortSignal.timeout(SEARCH_TIMEOUT_MS);
+  // One timeout for the whole request, redirects and the retry included.
+  const signal = AbortSignal.timeout(CATALOG_TIMEOUT_MS);
   let current = url;
   let response: Response;
+  let retried = false;
   for (let hop = 0; ; hop += 1) {
     try {
       response = await fetch(current, { headers, redirect: 'manual', signal, cache: 'no-store' });
     } catch (error) {
       throw catalogUnavailable('The Project Gutenberg catalog did not respond', error);
+    }
+    // Under load gutendex.com turns a request away with a 502 or 503 while one
+    // beside it succeeds, so that refusal is worth one more try. A 504 or 524
+    // already waited the full time, and repeating it would double the wait.
+    if (!retried && (response.status === 502 || response.status === 503)) {
+      await response.body?.cancel();
+      retried = true;
+      continue;
     }
     const location = response.headers.get('location');
     if (response.status < 300 || response.status >= 400 || !location) break;
@@ -142,10 +158,22 @@ function toBook(raw: GutendexBook): GutenbergBook | null {
   };
 }
 
-export async function searchGutenberg(input: { search: string; page: number }): Promise<GutenbergSearchPage> {
+/** The catalog's language filter takes ISO 639 codes, and `''` means every
+ * language. Anything else is refused rather than passed through to Gutendex. */
+export function isGutenbergLanguage(value: string): boolean {
+  return value === '' || /^[a-z]{2,3}$/.test(value);
+}
+
+export async function searchGutenberg(
+  input: { search: string; page: number; language?: string },
+): Promise<GutenbergSearchPage> {
   const params = new URLSearchParams();
   const search = input.search.trim();
   if (search) params.set('search', search);
+  if (input.language) params.set('languages', input.language);
+  // A handful of Gutenberg's books are still under copyright in the US, and
+  // the library is only meant to offer the public domain ones.
+  params.set('copyright', 'false');
   // Gutendex matches mime_type as a prefix. Only books that can be imported
   // are worth listing, and nearly all of Gutenberg has an EPUB.
   params.set('mime_type', 'application/epub');
@@ -247,6 +275,15 @@ export async function downloadGutenbergEpub(
       message: 'That book is not in the Project Gutenberg catalog',
       errorClass: 'validation',
       httpStatus: 404,
+    });
+  }
+  // Search already leaves these out; an id posted directly gets the same rule.
+  if (raw.copyright === true) {
+    throw createServerAppError({
+      code: 'GUTENBERG_BOOK_COPYRIGHTED',
+      message: 'This book is still under copyright in the United States',
+      errorClass: 'validation',
+      httpStatus: 422,
     });
   }
   const epubUrl = formatsOf(raw)[EPUB_MIME];

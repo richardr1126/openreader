@@ -46,6 +46,7 @@ import {
   updateGutendexSettings,
 } from '../../src/lib/server/admin/gutendex-settings';
 import { downloadGutenbergEpub, searchGutenberg } from '../../src/lib/server/documents/gutenberg';
+import { GET as searchBooks } from '../../src/app/api/gutenberg/books/route';
 import { POST as importBook } from '../../src/app/api/gutenberg/import/route';
 
 const fetchMock = vi.fn<typeof fetch>();
@@ -156,7 +157,7 @@ describe('gutenberg catalog', () => {
     const page = await searchGutenberg({ search: 'austen', page: 1 });
 
     const [url, init] = fetchMock.mock.calls[0]!;
-    expect(String(url)).toBe('https://gutendex.example.com/books/?search=austen&mime_type=application%2Fepub');
+    expect(String(url)).toBe('https://gutendex.example.com/books/?search=austen&copyright=false&mime_type=application%2Fepub');
     expect((init?.headers as Record<string, string>)['X-API-Key']).toBe('gutendex-secret-key');
     expect(page).toEqual({
       count: 1,
@@ -171,6 +172,29 @@ describe('gutenberg catalog', () => {
         coverUrl: 'https://www.gutenberg.org/cache/epub/1342/pg1342.cover.medium.jpg',
       }],
     });
+  });
+
+  test('filters by language, and the route refuses anything but a language code', async () => {
+    fetchMock.mockResolvedValue(json({ count: 0, next: null, results: [] }));
+    await searchGutenberg({ search: '', page: 2, language: 'fr' });
+    expect(String(fetchMock.mock.calls[0]![0]))
+      .toBe('https://gutendex.com/books/?languages=fr&copyright=false&mime_type=application%2Fepub&page=2');
+
+    const refused = await searchBooks(new NextRequest('http://localhost/api/gutenberg/books?language=fr%2Cen%26x%3D1'));
+    expect(refused.status).toBe(400);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('asks once more when the catalog turns a request away under load', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 503 }))
+      .mockResolvedValueOnce(json({ count: 0, next: null, results: [] }));
+    await expect(searchGutenberg({ search: '', page: 1 })).resolves.toMatchObject({ count: 0 });
+
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(new Response(null, { status: 503 }));
+    await expect(searchGutenberg({ search: '', page: 1 })).rejects.toThrow(/returned 503/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   test('does not follow a catalog redirect that would carry the key elsewhere', async () => {
@@ -221,6 +245,12 @@ describe('gutenberg catalog', () => {
       .mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'http://169.254.169.254/latest/meta-data' } }));
     await expect(downloadGutenbergEpub(1342, 1024)).rejects.toThrow(/outside Project Gutenberg/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('will not import a book still under copyright', async () => {
+    fetchMock.mockResolvedValueOnce(json({ ...prideAndPrejudice, copyright: true }));
+    await expect(downloadGutenbergEpub(1342, 1024)).rejects.toMatchObject({ httpStatus: 422 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   test('stops reading a book that is over the upload limit', async () => {
