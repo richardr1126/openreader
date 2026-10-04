@@ -110,12 +110,12 @@ export function AdminEmailPanel() {
           onChange={(enabled) => setDraft({ ...draft, enabled })}
           variant="plain"
         />
-        {emailField('Sender name', <Input aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} />)}
-        {emailField('Sender email', <Input aria-label="Sender email" type="email" value={draft.senderEmail} placeholder="reader@example.com" onChange={(event) => setDraft({ ...draft, senderEmail: event.target.value })} />)}
-        {emailField('Reply-to (optional)', <Input aria-label="Reply-to (optional)" type="email" value={draft.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setDraft({ ...draft, replyTo: event.target.value || null })} />)}
+        {emailField('Sender name', <Input disabled={saving} aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} />)}
+        {emailField('Sender email', <Input disabled={saving} aria-label="Sender email" type="email" value={draft.senderEmail} placeholder="reader@example.com" onChange={(event) => setDraft({ ...draft, senderEmail: event.target.value })} />)}
+        {emailField('Reply-to (optional)', <Input disabled={saving} aria-label="Reply-to (optional)" type="email" value={draft.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setDraft({ ...draft, replyTo: event.target.value || null })} />)}
         {emailField(
           'Resend API key',
-          <Input aria-label="Resend API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 're_…'} onChange={(event) => setApiKey(event.target.value)} />,
+          <Input disabled={saving} aria-label="Resend API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 're_…'} onChange={(event) => setApiKey(event.target.value)} />,
           settings.apiKeyConfigured ? `Saved key: ${settings.apiKeyMask}` : 'No key saved',
         )}
         <div className="space-y-2">

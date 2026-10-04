@@ -89,11 +89,11 @@ export function AdminGutendexPanel() {
         />
         {field(
           'Gutendex server',
-          <Input aria-label="Gutendex server" type="url" value={serverUrl} placeholder="https://gutendex.com" onChange={(event) => setServerUrl(event.target.value)} />,
+          <Input disabled={saving} aria-label="Gutendex server" type="url" value={serverUrl} placeholder="https://gutendex.com" onChange={(event) => setServerUrl(event.target.value)} />,
         )}
         {field(
           'API key (optional)',
-          <Input aria-label="Gutendex API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 'Only for servers that require one'} onChange={(event) => setApiKey(event.target.value)} />,
+          <Input disabled={saving} aria-label="Gutendex API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 'Only for servers that require one'} onChange={(event) => setApiKey(event.target.value)} />,
           settings.apiKeyConfigured ? `Saved key: ${settings.apiKeyMask}` : 'No key saved',
         )}
         <div className="flex flex-wrap gap-2">
