@@ -34,11 +34,9 @@ When the logged-in user is an admin, an **Admin** tab appears in **Settings → 
 
 - **Shared providers** — server-side TTS provider instances visible to all users.
 - **Users** — registered and anonymous accounts, status, usage, approval, role management, and deletion.
-- **Site features** — runtime-editable replacements for what were previously build-time public env flags.
-- **Email** — Resend delivery, sender identity, test delivery, verification, and password recovery.
-- **Catalog** — the Project Gutenberg catalog in Add Documents, and the Gutendex server and API key it searches through.
+- **Instance** — runtime-editable replacements for what were previously build-time public env flags, account email (Resend delivery, sender identity, test delivery, verification, and password recovery), and the Project Gutenberg catalog in Add Documents and the Gutendex server and API key it searches through.
 - **Compute** — admission, usage, queue, and worker execution limits.
-- **Maintenance** — scheduled cleanup and recent task status.
+- **Maintenance** — the system check, plus scheduled cleanup and recent task status.
 
 ## Managing users
 
@@ -63,14 +61,14 @@ separate deployment opt-in.
 
 ## Account email through Resend
 
-Account email is disabled by default. In **Admin → Email**:
+Account email is disabled by default. In **Admin → Instance → Account email**:
 
 1. Verify your sending domain in Resend.
 2. Create a sending-only API key, preferably restricted to that domain.
 3. Save the sender name, sender email, optional reply-to, and API key.
 4. Send a test and wait for **Accepted by Resend**. This means the API accepted
    the request; it is not a claim that the message reached the inbox.
-5. Enable account emails.
+5. Turn on **Enable account emails** and save.
 
 The saved key is encrypted with the same `AUTH_SECRET`-derived AES-256-GCM
 helper used for other administrator-managed secrets. APIs return only whether a
@@ -95,7 +93,7 @@ server at `https://gutendex.com`, which needs no key but is shared: a query it
 has not answered recently can take a minute or more, so catalog requests wait
 up to 100 seconds.
 
-In **Admin → Catalog** you can turn it off, or point it at a self-hosted
+In **Admin → Instance → Project Gutenberg** you can turn it off, or point it at a self-hosted
 Gutendex server and save that server's API key. The key is encrypted the same
 way as the Resend key, the API returns only its final four characters, and it
 is sent as `X-API-Key` from this server; it never reaches a browser.
@@ -187,7 +185,7 @@ In v4 these settings are admin-only and are no longer configurable through envir
 
 ## System check
 
-**Settings → Admin → System** verifies the instance from where it matters. It checks that the app
+**Settings → Admin → Maintenance** verifies the instance from where it matters. It checks that the app
 can reach the compute worker and object storage, that a playback signing secret is available, that at
 least one shared provider is enabled, and, from your browser, that the address you opened matches
 `BASE_URL` and that the worker's playback address is reachable (and not blocked as mixed content).

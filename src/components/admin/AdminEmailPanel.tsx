@@ -36,7 +36,7 @@ export function AdminEmailPanel() {
     }).catch(() => toast.error('Failed to load email settings')).finally(() => setLoading(false));
   }, []);
 
-  const save = async (patch: Record<string, unknown>, syncDraft = false) => {
+  const save = async (patch: Record<string, unknown>) => {
     setSaving(true);
     try {
       const response = await fetch('/api/admin/email', {
@@ -45,7 +45,7 @@ export function AdminEmailPanel() {
       const body = await response.json() as EmailSettings & { error?: string };
       if (!response.ok) throw new Error(body.error || 'Unable to save email settings');
       setSettings(body);
-      if (syncDraft) setDraft(emailSettingsDraftFromResponse(body));
+      setDraft(emailSettingsDraftFromResponse(body));
       if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) setApiKey('');
       toast.success('Email settings saved');
     } catch (error) {
@@ -92,20 +92,22 @@ export function AdminEmailPanel() {
   };
 
   if (loading) return <EmailSettingsSkeleton />;
+  const saved = emailSettingsDraftFromResponse(settings);
+  const changed = Boolean(apiKey.trim()) || (Object.keys(saved) as (keyof EmailSettingsDraft)[])
+    .some((key) => draft[key] !== saved[key]);
   const emailField = (label: string, input: ReactNode, meta?: ReactNode) => (
     <SettingRow label={label} meta={meta} controlClassName="w-[min(20rem,60%)]">
       {input}
     </SettingRow>
   );
   return (
-    <div className="space-y-5">
-      <Section title="Account email delivery" variant="group">
+    <Section title="Account email" variant="group">
         <ToggleRow
           label="Enable account emails"
           description="Require verified email addresses for password sign-in and enable password recovery. Existing sessions stay active."
-          checked={settings.enabled}
+          checked={draft.enabled}
           disabled={saving}
-          onChange={(enabled) => void save({ enabled })}
+          onChange={(enabled) => setDraft({ ...draft, enabled })}
           variant="plain"
         />
         {emailField('Sender name', <Input aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} />)}
@@ -118,7 +120,7 @@ export function AdminEmailPanel() {
         )}
         <div className="space-y-2">
           <div className="flex flex-wrap gap-2">
-            <Button variant="primary" size="sm" disabled={saving} onClick={() => void save(buildEmailSettingsPatch(draft, apiKey), true)}>Save configuration</Button>
+            <Button variant="primary" size="sm" disabled={saving || !changed} onClick={() => void save(buildEmailSettingsPatch(draft, apiKey))}>Save</Button>
             {settings.apiKeyConfigured && <Button variant="outline" size="sm" disabled={saving} onClick={() => void save({ apiKey: null })}>Remove saved key</Button>}
             <Button variant="outline" size="sm" disabled={saving || !settings.apiKeyConfigured || !settings.senderEmail || testState === 'queued'} onClick={sendTest}>Send test email</Button>
           </div>
@@ -128,22 +130,17 @@ export function AdminEmailPanel() {
             </p>
           )}
         </div>
+        <p className="text-xs text-soft">
+          Verify the sender domain in Resend and create a sending-only API key restricted to it. Save the key and sender, then send a test before enabling account emails.
+        </p>
       </Section>
-      <Section title="Resend setup" variant="group">
-        <ol className="list-inside list-decimal space-y-1.5 text-sm text-soft">
-          <li>Verify the sender domain in Resend.</li>
-          <li>Create a sending-only API key, preferably restricted to that domain.</li>
-          <li>Save the key and sender above, then send a test before enabling account emails.</li>
-        </ol>
-      </Section>
-    </div>
   );
 }
 
 function EmailSettingsSkeleton() {
   return (
-    <div className="space-y-5 animate-pulse" aria-label="Loading email settings" aria-busy="true">
-      <Section title="Account email delivery" variant="group">
+    <div className="animate-pulse" aria-label="Loading email settings" aria-busy="true">
+      <Section title="Account email" variant="group">
         {[0, 1, 2, 3].map((index) => (
           <div key={index} className="flex items-center justify-between gap-3">
             <div className="h-4 w-32 rounded bg-offbase" />

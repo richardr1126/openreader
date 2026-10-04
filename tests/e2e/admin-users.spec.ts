@@ -33,8 +33,9 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await expect(page.getByText(adminEmail).first()).toBeVisible();
   await expect(page.getByText('Anonymous', { exact: true }).first()).toBeVisible();
 
-  await page.getByRole('button', { name: 'System', exact: true }).first().click();
-  await expect(page.getByRole('heading', { name: 'System', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Maintenance', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Maintenance', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Scheduled tasks', exact: true })).toBeVisible();
   const systemChecks = page.getByRole('list', { name: 'System check results' });
   await expect(systemChecks.getByText('Compute worker')).toBeVisible();
   await expect(systemChecks.getByText('Object storage')).toBeVisible();
@@ -42,6 +43,18 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await expect(systemChecks.getByText('Address you opened')).toBeVisible();
 
   await page.getByRole('button', { name: 'Instance', exact: true }).first().click();
+  // Account email and the Gutenberg catalog save on their own, and only once edited.
+  await expect(page.getByRole('heading', { name: 'Account email', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Project Gutenberg', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Save', exact: true })).toHaveCount(2);
+  for (const save of await page.getByRole('button', { name: 'Save', exact: true }).all()) {
+    await expect(save).toBeDisabled();
+  }
+  const catalogSwitch = page.getByRole('switch', { name: 'Enable the Project Gutenberg catalog' });
+  await catalogSwitch.click();
+  await expect(page.getByRole('button', { name: 'Save', exact: true }).last()).toBeEnabled();
+  await catalogSwitch.click();
+  await expect(page.getByRole('button', { name: 'Save', exact: true }).last()).toBeDisabled();
   await page.getByRole('radio', { name: 'Approve', exact: true }).click();
   const savePolicy = page.getByRole('button', { name: /^Save \(1\)$/ });
   if (await savePolicy.isVisible()) {

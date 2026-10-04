@@ -30,7 +30,7 @@ AUTH_SECRET=<paste-the-generated-value> # keep it stable; it also encrypts saved
 Off localhost, also set `COMPUTE_WORKER_PUBLIC_URL` to the address browsers use for port `8081`.
 In a single container, startup generates the worker and credential-broker tokens and derives the playback secret, so you set none of them.
 Startup checks the configuration and lists every problem at once. After startup, **Settings → Admin →
-System** re-checks the worker, storage, providers, and addresses from your browser.
+Maintenance** re-checks the worker, storage, providers, and addresses from your browser.
 
 Upgrading a v4 instance? Follow [Upgrade from v4](../deploy/upgrade-from-v4).
 
@@ -702,7 +702,7 @@ Project Gutenberg catalog seed behavior:
 - `gutendex` requires `serverUrl`, the root of a [Gutendex](https://github.com/garethbjohnson/gutendex) server; a pasted `/books/` endpoint is trimmed back to the root. `enabled` defaults to `true` and `apiKey` is optional and may be `null`.
 - Without a seed or admin edits, the catalog is on and searches the public `https://gutendex.com` with no key.
 - The API key is encrypted with `AUTH_SECRET` before it is stored and is sent as `X-API-Key` from the server only. Keep it out of committed seed files.
-- The seed only creates the catalog record when it is missing. Later Catalog-panel changes are never overwritten.
+- The seed only creates the catalog record when it is missing. Later Instance-tab changes are never overwritten.
 
 Precedence summary:
 

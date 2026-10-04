@@ -20,6 +20,7 @@ const EMPTY: GutendexSettings = {
 
 export function AdminGutendexPanel() {
   const [settings, setSettings] = useState<GutendexSettings>(EMPTY);
+  const [enabled, setEnabled] = useState(EMPTY.enabled);
   const [serverUrl, setServerUrl] = useState(EMPTY.serverUrl);
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,7 @@ export function AdminGutendexPanel() {
       if (!response.ok) throw new Error('Unable to load catalog settings');
       const loaded = await response.json() as GutendexSettings;
       setSettings(loaded);
+      setEnabled(loaded.enabled);
       setServerUrl(loaded.serverUrl);
     }).catch(() => toast.error('Failed to load catalog settings')).finally(() => setLoading(false));
   }, []);
@@ -43,6 +45,7 @@ export function AdminGutendexPanel() {
       const body = await response.json() as GutendexSettings & { error?: string };
       if (!response.ok) throw new Error(body.error || 'Unable to save catalog settings');
       setSettings(body);
+      setEnabled(body.enabled);
       setServerUrl(body.serverUrl);
       if (Object.prototype.hasOwnProperty.call(patch, 'apiKey')) setApiKey('');
       toast.success('Catalog settings saved');
@@ -55,7 +58,7 @@ export function AdminGutendexPanel() {
 
   if (loading) {
     return (
-      <div className="space-y-5 animate-pulse" aria-label="Loading catalog settings" aria-busy="true">
+      <div className="animate-pulse" aria-label="Loading catalog settings" aria-busy="true">
         <Section title="Project Gutenberg" variant="group">
           {[0, 1, 2].map((index) => (
             <div key={index} className="flex items-center justify-between gap-3">
@@ -68,20 +71,20 @@ export function AdminGutendexPanel() {
     );
   }
 
+  const changed = enabled !== settings.enabled || serverUrl !== settings.serverUrl || Boolean(apiKey.trim());
   const field = (label: string, input: ReactNode, meta?: ReactNode) => (
     <SettingRow label={label} meta={meta} controlClassName="w-[min(20rem,60%)]">
       {input}
     </SettingRow>
   );
   return (
-    <div className="space-y-5">
-      <Section title="Project Gutenberg" variant="group">
+    <Section title="Project Gutenberg" variant="group">
         <ToggleRow
           label="Enable the Project Gutenberg catalog"
           description="Adds a Project Gutenberg tab to Add Documents, where readers can search the catalog and add public domain books to their library."
-          checked={settings.enabled}
+          checked={enabled}
           disabled={saving}
-          onChange={(enabled) => void save({ enabled })}
+          onChange={setEnabled}
           variant="plain"
         />
         {field(
@@ -97,21 +100,18 @@ export function AdminGutendexPanel() {
           <Button
             variant="primary"
             size="sm"
-            disabled={saving}
-            onClick={() => void save({ serverUrl, ...(apiKey.trim() ? { apiKey } : {}) })}
+            disabled={saving || !changed}
+            onClick={() => void save({ enabled, serverUrl, ...(apiKey.trim() ? { apiKey } : {}) })}
           >
-            Save configuration
+            Save
           </Button>
           {settings.apiKeyConfigured && <Button variant="outline" size="sm" disabled={saving} onClick={() => void save({ apiKey: null })}>Remove saved key</Button>}
         </div>
-      </Section>
-      <Section title="About Gutendex" variant="group">
-        <p className="text-sm text-soft">
+        <p className="text-xs text-soft">
           Search goes through a <a href="https://github.com/garethbjohnson/gutendex" target="_blank" rel="noreferrer" className="text-accent hover:underline">Gutendex</a> server.
           The public one at gutendex.com needs no key but is shared, and searching it can be slow; a self-hosted server can require an API key, which is sent as <code>X-API-Key</code> from this server only and never reaches a browser.
           Books always download from gutenberg.org.
         </p>
       </Section>
-    </div>
   );
 }

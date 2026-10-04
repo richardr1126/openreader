@@ -3,7 +3,7 @@
 import { useMemo, type ComponentType, type SVGProps } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { CheckIcon, ClockIcon, DocumentIcon, EPUBIcon, InfoIcon, KeyIcon, MailIcon,
+import { ClockIcon, DocumentIcon, InfoIcon, KeyIcon,
   PaletteIcon, SettingsIcon, SpeedometerIcon, UserIcon } from '@/components/icons/Icons';
 import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
 import { AdminGutendexPanel } from '@/components/admin/AdminGutendexPanel';
@@ -22,7 +22,7 @@ import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'email' | 'catalog' | 'system' | 'maintenance';
+export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
 type SettingsSection = {
   id: SettingsSectionId;
   label: string;
@@ -79,21 +79,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Compute',
     shortLabel: 'Compute',
     icon: SpeedometerIcon,
-    group: 'admin',
-  },
-  {
-    id: 'email',
-    label: 'Email',
-    shortLabel: 'Email',
-    icon: MailIcon,
-    group: 'admin',
-  },
-  { id: 'catalog', label: 'Catalog', shortLabel: 'Catalog', icon: EPUBIcon, group: 'admin' },
-  {
-    id: 'system',
-    label: 'System',
-    shortLabel: 'System',
-    icon: CheckIcon,
     group: 'admin',
   },
   {
@@ -298,12 +283,20 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
                   {isAdmin && activeSection === 'users' ? <AdminUsersPanel /> : null}
                   {isAdmin && activeSection === 'providers' ? <AdminProvidersPanel /> : null}
-                  {isAdmin && activeSection === 'instance' ? <AdminFeaturesPanel scope="instance" /> : null}
+                  {isAdmin && activeSection === 'instance' ? (
+                    <div className="space-y-5">
+                      <AdminFeaturesPanel scope="instance" />
+                      <AdminEmailPanel />
+                      <AdminGutendexPanel />
+                    </div>
+                  ) : null}
                   {isAdmin && activeSection === 'compute' ? <AdminFeaturesPanel scope="compute" /> : null}
-                  {isAdmin && activeSection === 'email' ? <AdminEmailPanel /> : null}
-                  {isAdmin && activeSection === 'catalog' ? <AdminGutendexPanel /> : null}
-                  {isAdmin && activeSection === 'system' ? <AdminSystemPanel /> : null}
-                  {isAdmin && activeSection === 'maintenance' ? <AdminTasksPanel /> : null}
+                  {isAdmin && activeSection === 'maintenance' ? (
+                    <div className="space-y-5">
+                      <AdminSystemPanel />
+                      <AdminTasksPanel />
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}

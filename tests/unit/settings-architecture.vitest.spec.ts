@@ -30,7 +30,7 @@ describe('settings ownership', () => {
     expect(page).toContain('>General</SidebarNavGroup>');
     expect(page).toContain('>Admin</SidebarNavGroup>');
     expect(page).toContain('<AdminEmailPanel');
-    expect(page).toContain('icon: MailIcon');
+    expect(page).not.toContain("id: 'email'");
     expect(page).not.toContain('icon: DocumentIcon');
     expect(page).not.toContain('AdminSettingsPanel');
     expect(page).toContain('useSearchParams');

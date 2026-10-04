@@ -63,7 +63,7 @@ settings, compute, and maintenance.
 ## Email verification and password recovery
 
 Account email is opt-in and disabled by default. An administrator configures it
-under **Settings → Admin → Email** using a verified Resend sender and a
+under **Settings → Admin → Instance → Account email** using a verified Resend sender and a
 sending-only API key, sends a test, and then explicitly enables it.
 
 When enabled:
