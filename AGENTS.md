@@ -203,7 +203,7 @@ caused conflicts, high CPU, misleading failures, and overheating.
 - Keep the v4 upgrade page, the bootstrap notice, and the env reference in sync
   when upgrade behavior changes. Never reference pre-v5 storage prefixes from v5
   runtime code; `runV4Decommission` alone owns the legacy purge.
-- **Settings → Admin → System** (`/api/admin/system-check`) is the admin-facing
+- **Settings → Admin → Maintenance** (`/api/admin/system-check`) is the admin-facing
   health check. Prefer extending it over adding a setup wizard.
 - Example Compose files ship local-only defaults for some secrets. Do not add new
   known-default secrets; the slim files generate the broker token at startup.
@@ -212,7 +212,7 @@ caused conflicts, high CPU, misleading failures, and overheating.
 
 - v5.0.0 is released and the package version is `5.0.0`.
 - Work on `feat/upgrade-experience` adds the startup preflight, embedded playback
-  secret derivation, the System admin tab, and the restructured upgrade,
+  secret derivation, the System check admin section, and the restructured upgrade,
   environment-variable, and local-development docs.
 - Open follow-ups for the owner: whether the full Compose files should require
   worker/broker/playback secrets instead of shipping known defaults, and whether

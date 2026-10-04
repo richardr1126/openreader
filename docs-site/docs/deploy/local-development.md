@@ -317,7 +317,7 @@ For native `pnpm dev`/`pnpm start` with the embedded worker, `http://127.0.0.1:<
 If the worker is remote, configure a URL reachable from that host as well.
 :::
 
-Visit [http://localhost:3003](http://localhost:3003). Signed in as an admin, open **Settings → Admin → System** to confirm the worker, storage, and providers are healthy.
+Visit [http://localhost:3003](http://localhost:3003). Signed in as an admin, open **Settings → Admin → Maintenance** to confirm the worker, storage, and providers are healthy.
 
 ### Optional workflows
 

@@ -17,6 +17,7 @@ const response: EmailSettings = {
 describe('admin email settings form payload', () => {
   test('projects public response metadata out of editable draft state', () => {
     expect(emailSettingsDraftFromResponse(response)).toEqual({
+      enabled: false,
       senderName: 'OpenReader',
       senderEmail: 'updates@example.com',
       replyTo: null,
@@ -25,6 +26,7 @@ describe('admin email settings form payload', () => {
 
   test('never serializes read-only response fields in a configuration patch', () => {
     expect(buildEmailSettingsPatch(response, 're_test_key')).toEqual({
+      enabled: false,
       senderName: 'OpenReader',
       senderEmail: 'updates@example.com',
       replyTo: null,

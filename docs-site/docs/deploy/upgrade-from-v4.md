@@ -146,7 +146,7 @@ fix for each. Fix them all, then start it again.
 ## 5. Verify
 
 1. Sign in at your `BASE_URL`. Your library and progress should be there.
-2. Open **Settings → Admin → System**. Every row should read **OK**. Each **Check** or **Fix** row
+2. Open **Settings → Admin → Maintenance**. Every row should read **OK**. Each **Check** or **Fix** row
    says what is wrong and how to correct it. The most common ones:
    - *Address you opened* differs from `BASE_URL`: use the address in `BASE_URL`, or add the other one to `AUTH_TRUSTED_ORIGINS`.
    - *Playback audio URL (this browser)* fails: publish port `8081` and set `COMPUTE_WORKER_PUBLIC_URL`.
@@ -165,6 +165,6 @@ To skip the storage purge, set `RUN_V4_DECOMMISSION=false`. Database migrations 
 ## If something goes wrong
 
 - **Container exits immediately:** read the logs; the message lists what to fix.
-- **App loads but audio does not play:** port `8081` is not published, or `COMPUTE_WORKER_PUBLIC_URL` is wrong. **Settings → Admin → System** shows which.
+- **App loads but audio does not play:** port `8081` is not published, or `COMPUTE_WORKER_PUBLIC_URL` is wrong. **Settings → Admin → Maintenance** shows which.
 - **Cannot sign in as an admin:** the account is unchanged in v5. Confirm you kept the same `AUTH_SECRET` and database volume.
 - **Want to go back to v4:** stop v5, restore the backup from step 2, and start the v4 image.
