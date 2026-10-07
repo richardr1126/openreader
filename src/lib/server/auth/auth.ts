@@ -7,7 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { after, NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { db } from "@openreader/database";
-import { getOidcAuthConfig, getRequiredAuthEnv, isAnonymousAuthSessionsEnabled } from "@/lib/server/auth/config";
+import { getOidcAuthConfig, getRequiredAuthEnv } from "@/lib/server/auth/config";
 import { ensureInitialAdmin } from '@/lib/server/auth/bootstrap-admin';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { assertUserSignupAllowed, initialAccessStatus } from '@/lib/server/auth/signup-policy';
@@ -160,6 +160,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
           const isAnonymous = Boolean((user as { isAnonymous?: boolean }).isAnonymous);
           assertUserSignupAllowed({
             signupPolicy: runtimeConfig.signupPolicy,
+            allowAnonymousSessions: runtimeConfig.allowAnonymousSessions,
             isAnonymous,
           });
           return {
@@ -235,51 +236,50 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
     },
   },
   plugins: [
-    ...(isAnonymousAuthSessionsEnabled()
-      ? [
-        anonymous({
-          onLinkAccount: async ({ anonymousUser, newUser }) => {
-            try {
-              // Log when anonymous user links to a real account
-              serverLogger.info({
-                event: 'auth.link_account.started',
-                anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                newUserIdHash: hashForLog(newUser.user.id),
-                newUserEmailHash: hashForLog(newUser.user.email),
-              }, 'Anonymous user linked to account');
+    // Always registered so guest access follows the runtime
+    // `allowAnonymousSessions` setting without a restart; the user-create hook
+    // above refuses new anonymous users while it is off.
+    anonymous({
+      onLinkAccount: async ({ anonymousUser, newUser }) => {
+        try {
+          // Log when anonymous user links to a real account
+          serverLogger.info({
+            event: 'auth.link_account.started',
+            anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+            newUserIdHash: hashForLog(newUser.user.id),
+            newUserEmailHash: hashForLog(newUser.user.email),
+          }, 'Anonymous user linked to account');
 
-              // Lazy-load heavy modules only when account linking actually happens
-              const claimData = await import('@/lib/server/user/claim-data');
+          // Lazy-load heavy modules only when account linking actually happens
+          const claimData = await import('@/lib/server/user/claim-data');
 
-              const transferred = await claimData.claimAnonymousData(
-                newUser.user.id,
-                anonymousUser.user.id,
-                null,
-                { cleanupLegacySources: false },
-              );
-              const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
-              await deleteUserStorageData(anonymousUser.user.id, null);
-              serverLogger.info({
-                event: 'auth.link_account.transfer.succeeded',
-                transferred,
-                anonymousUserIdHash: hashForLog(anonymousUser.user.id),
-                newUserIdHash: hashForLog(newUser.user.id),
-              }, 'Transferred anonymous user data during account linking');
-            } catch (error) {
-              logServerError(serverLogger, {
-                event: 'auth.link_account.failed',
-                msg: 'onLinkAccount callback failed',
-                error,
-              });
-              // Better Auth deletes the anonymous user after this callback.
-              // Block linking when transfer is incomplete so data remains retryable.
-              throw error;
-            }
-            // Note: Anonymous user will be automatically deleted after this callback completes
-          },
-        }),
-      ]
-      : []),
+          const transferred = await claimData.claimAnonymousData(
+            newUser.user.id,
+            anonymousUser.user.id,
+            null,
+            { cleanupLegacySources: false },
+          );
+          const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
+          await deleteUserStorageData(anonymousUser.user.id, null);
+          serverLogger.info({
+            event: 'auth.link_account.transfer.succeeded',
+            transferred,
+            anonymousUserIdHash: hashForLog(anonymousUser.user.id),
+            newUserIdHash: hashForLog(newUser.user.id),
+          }, 'Transferred anonymous user data during account linking');
+        } catch (error) {
+          logServerError(serverLogger, {
+            event: 'auth.link_account.failed',
+            msg: 'onLinkAccount callback failed',
+            error,
+          });
+          // Better Auth deletes the anonymous user after this callback.
+          // Block linking when transfer is incomplete so data remains retryable.
+          throw error;
+        }
+        // Note: Anonymous user will be automatically deleted after this callback completes
+      },
+    }),
     ...(oidcAuthConfig
       ? [
         genericOAuth({

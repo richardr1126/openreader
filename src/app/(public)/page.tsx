@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import { getResolvedRuntimeConfigForRsc } from '@/lib/server/runtime-config-rsc';
-import { ButtonAnchor, ButtonLink } from '@/components/ui';
+import { ButtonAnchor } from '@/components/ui';
 
 export const metadata: Metadata = {
   title: 'Open Source Read-Along Workspace',
@@ -120,11 +120,11 @@ export default async function LandingPage() {
             </p>
 
             <div className="public-actions">
-              <ButtonLink href="/app" variant="primary" size="lg">Open the reader</ButtonLink>
+              <ButtonAnchor href="/app" variant="primary" size="lg">Open the reader</ButtonAnchor>
               {canSignUp ? (
-                <ButtonLink href="/signup" variant="outline" size="lg">Sign up</ButtonLink>
+                <ButtonAnchor href="/signup" variant="outline" size="lg">Sign up</ButtonAnchor>
               ) : (
-                <ButtonLink href="/signin" variant="outline" size="lg">Sign in</ButtonLink>
+                <ButtonAnchor href="/signin" variant="outline" size="lg">Sign in</ButtonAnchor>
               )}
               <ButtonAnchor href="https://docs.openreader.richardr.dev/" target="_blank" rel="noopener noreferrer" variant="ghost" size="lg">Read the docs →</ButtonAnchor>
             </div>

@@ -52,7 +52,6 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `BASE_URL` | Auth | unset | Required at startup |
 | `AUTH_SECRET` | App auth + provider encryption | unset | Required on the app; never configure it on a standalone worker |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
-| `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
 | `OIDC_CLIENT_ID` | Auth/OAuth | unset | Set with `OIDC_CLIENT_SECRET` and `OIDC_DISCOVERY_URL` to enable generic OIDC sign-in |
@@ -187,12 +186,6 @@ Additional allowed origins for auth requests.
 
 - Comma-separated list
 - `BASE_URL` origin is trusted automatically
-
-### USE_ANONYMOUS_AUTH_SESSIONS
-
-Controls whether auth-enabled deployments can create/use anonymous sessions.
-
-- Default: `false`
 
 ### GITHUB_CLIENT_ID
 
@@ -645,6 +638,7 @@ Example:
   "version": 1,
   "runtimeConfig": {
     "signupPolicy": "open",
+    "allowAnonymousSessions": false,
     "defaultTtsProvider": "custom-openai",
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,

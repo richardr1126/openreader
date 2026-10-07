@@ -87,7 +87,6 @@ const documentedEnvironmentVariables = [
   'S3_SECRET_ACCESS_KEY',
   'SQLITE_DB_PATH',
   'TTS_PLAYBACK_TOKEN_SECRET',
-  'USE_ANONYMOUS_AUTH_SESSIONS',
   'USE_EMBEDDED_WEED_MINI',
   'VERCEL',
   'WEED_MINI_ADVERTISE_HOST',
@@ -163,6 +162,7 @@ describe('shared runtime configuration boundary', () => {
     expect(rootExample).toContain('COMPUTE_WORKER_PUBLIC_URL=');
     expect(rootExample).toContain('TTS_PLAYBACK_TOKEN_SECRET=');
     expect(fullCompose).toContain('AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}');
+    // Legacy guest-session upgrade seed: deployments that set it must keep passing it through.
     expect(fullCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');
     const fullWorker = fullCompose.slice(fullCompose.indexOf('\n  compute-worker:'));
     expect(fullWorker).not.toContain('AUTH_SECRET:');

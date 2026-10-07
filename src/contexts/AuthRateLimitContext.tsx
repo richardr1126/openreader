@@ -24,7 +24,6 @@ export interface OidcAuthPublicConfig {
 interface AuthRateLimitContextType {
   // Auth Config
   authBaseUrl: string | null;
-  allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
   oidcAuth: OidcAuthPublicConfig | null;
 
@@ -48,8 +47,8 @@ export function useAuthRateLimit(): AuthRateLimitContextType {
 }
 
 export function useAuthConfig() {
-  const { authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth } = useAuthRateLimit();
-  return { baseUrl: authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth };
+  const { authBaseUrl, githubAuthEnabled, oidcAuth } = useAuthRateLimit();
+  return { baseUrl: authBaseUrl, githubAuthEnabled, oidcAuth };
 }
 
 function calculateTimeUntilReset(resetTimeMs: number): string {
@@ -107,7 +106,6 @@ export function formatCharCount(count: number): string {
 interface AuthRateLimitProviderProps {
   children: ReactNode;
   authBaseUrl: string | null;
-  allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
   oidcAuth: OidcAuthPublicConfig | null;
 }
@@ -115,7 +113,6 @@ interface AuthRateLimitProviderProps {
 export function AuthRateLimitProvider({
   children,
   authBaseUrl,
-  allowAnonymousAuthSessions,
   githubAuthEnabled,
   oidcAuth,
 }: AuthRateLimitProviderProps) {
@@ -171,7 +168,6 @@ export function AuthRateLimitProvider({
 
   const contextValue: AuthRateLimitContextType = {
     authBaseUrl,
-    allowAnonymousAuthSessions,
     githubAuthEnabled,
     oidcAuth,
     status,

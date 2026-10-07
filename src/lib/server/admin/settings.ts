@@ -92,6 +92,8 @@ export const RUNTIME_CONFIG_SCHEMA = {
   defaultTtsProvider: stringValue('custom-openai'),
   changelogFeedUrl: stringValue('https://docs.openreader.richardr.dev/changelog/manifest.json'),
   signupPolicy: enumValue(['open', 'approval', 'closed'] as const, 'open'),
+  // Guest (anonymous) sessions. Off by default; independent of signupPolicy.
+  allowAnonymousSessions: runtimeBoolean(false),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
   enableTtsProvidersTab: booleanFlag(true),

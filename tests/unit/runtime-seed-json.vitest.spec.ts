@@ -297,6 +297,38 @@ describe('runtime config JSON seeding', () => {
     }
   });
 
+  test('carries USE_ANONYMOUS_AUTH_SESSIONS=true into allowAnonymousSessions once', async () => {
+    const key = 'allowAnonymousSessions';
+    const snapshot = await snapshotSettings([key]);
+    try {
+      await db.delete(adminSettings).where(eq(adminSettings.key, key));
+      await withEnv({ USE_ANONYMOUS_AUTH_SESSIONS: 'false', RUNTIME_SEED_JSON: undefined, RUNTIME_SEED_JSON_PATH: undefined }, async () => {
+        await __seedInternals.runSeed();
+      });
+      expect(await snapshotSettings([key])).toHaveLength(0);
+
+      await withEnv({ USE_ANONYMOUS_AUTH_SESSIONS: 'true', RUNTIME_SEED_JSON: undefined, RUNTIME_SEED_JSON_PATH: undefined }, async () => {
+        await __seedInternals.runSeed();
+      });
+      const [seeded] = await snapshotSettings([key]);
+      expect(parseStoredValue(seeded?.valueJson)).toBe(true);
+      expect(seeded?.source).toBe('env-seed');
+
+      // An admin choice is never overwritten by the legacy variable.
+      await db.update(adminSettings)
+        .set({ valueJson: JSON.stringify(false) as never, source: 'admin' })
+        .where(eq(adminSettings.key, key));
+      await withEnv({ USE_ANONYMOUS_AUTH_SESSIONS: 'true', RUNTIME_SEED_JSON: undefined, RUNTIME_SEED_JSON_PATH: undefined }, async () => {
+        await __seedInternals.runSeed();
+      });
+      const [kept] = await snapshotSettings([key]);
+      expect(parseStoredValue(kept?.valueJson)).toBe(false);
+      expect(kept?.source).toBe('admin');
+    } finally {
+      await restoreSettings([key], snapshot);
+    }
+  });
+
   test('supports full runtime config JSON seeding across all keys', async () => {
     const keys: string[] = [...RUNTIME_KEYS];
     const snapshot = await snapshotSettings(keys);
@@ -304,6 +336,7 @@ describe('runtime config JSON seeding', () => {
       defaultTtsProvider: 'seed-shared-provider',
       changelogFeedUrl: 'https://example.com/changelog/manifest.json',
       signupPolicy: 'approval',
+      allowAnonymousSessions: true,
       enableTtsProvidersTab: false,
       enableAudiobookExport: false,
       enableDocxConversion: false,

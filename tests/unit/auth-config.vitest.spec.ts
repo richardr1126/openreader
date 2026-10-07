@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { getAuthBaseUrl, getOidcAuthConfig, getOidcPublicAuthConfig, getRequiredAuthEnv, isAnonymousAuthSessionsEnabled, isGithubAuthEnabled } from '../../src/lib/server/auth/config';
+import { getAuthBaseUrl, getOidcAuthConfig, getOidcPublicAuthConfig, getRequiredAuthEnv, isGithubAuthEnabled } from '../../src/lib/server/auth/config';
 import { withEnv } from './support/env';
 
 describe('auth config contract', () => {
@@ -15,41 +15,6 @@ describe('auth config contract', () => {
           baseUrl: 'http://localhost:3003',
         });
         expect(getAuthBaseUrl()).toBe('http://localhost:3003');
-      },
-    );
-  });
-
-  test.each([
-    { envValue: undefined, expected: false },
-    { envValue: 'true', expected: true },
-    { envValue: 'false', expected: false },
-    { envValue: '1', expected: false },
-    { envValue: 'TRUE', expected: true },
-  ])(
-    'anonymous sessions honor strict boolean parsing when auth is enabled (value: $envValue)',
-    async ({ envValue, expected }) => {
-      await withEnv(
-        {
-          AUTH_SECRET: 'unit-secret',
-          BASE_URL: 'http://localhost:3003',
-          USE_ANONYMOUS_AUTH_SESSIONS: envValue,
-        },
-        async () => {
-          expect(isAnonymousAuthSessionsEnabled()).toBe(expected);
-        },
-      );
-    },
-  );
-
-  test('anonymous session config returns false for non-true values', async () => {
-    await withEnv(
-      {
-        AUTH_SECRET: 'unit-secret',
-        BASE_URL: 'http://localhost:3003',
-        USE_ANONYMOUS_AUTH_SESSIONS: '1',
-      },
-      async () => {
-        expect(isAnonymousAuthSessionsEnabled()).toBe(false);
       },
     );
   });

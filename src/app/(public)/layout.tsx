@@ -1,8 +1,14 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { getResolvedRuntimeConfigForRsc } from '@/lib/server/runtime-config-rsc';
-import { ButtonAnchor, ButtonLink } from '@/components/ui';
+import { ButtonAnchor } from '@/components/ui';
 import './public.css';
+
+// Rebuilt at most once a minute so public pages stay CDN-cached while the
+// sign-up links follow admin edits. Links into the app are plain anchors: the
+// root layout's injected runtime config only refreshes on a full page load, so a
+// client-side navigation would carry these cached values into the app.
+export const revalidate = 60;
 
 export default async function PublicLayout({ children }: { children: ReactNode }) {
   const runtimeConfig = await getResolvedRuntimeConfigForRsc();
@@ -42,8 +48,8 @@ export default async function PublicLayout({ children }: { children: ReactNode }
                   GitHub
                 </a>
                 <span className="public-nav-divider" aria-hidden="true" />
-                <ButtonLink href="/signin" variant="ghost" size="sm">Sign in</ButtonLink>
-                <ButtonLink href="/app" variant="primary" size="sm">Open app</ButtonLink>
+                <ButtonAnchor href="/signin" variant="ghost" size="sm">Sign in</ButtonAnchor>
+                <ButtonAnchor href="/app" variant="primary" size="sm">Open app</ButtonAnchor>
               </nav>
             </header>
           </div>
@@ -66,7 +72,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
                 </p>
                 <div className="public-footer-cta">
                   {canSignUp ? (
-                    <ButtonLink href="/signup" variant="outline" size="sm">Sign up</ButtonLink>
+                    <ButtonAnchor href="/signup" variant="outline" size="sm">Sign up</ButtonAnchor>
                   ) : null}
                   <ButtonAnchor href="https://github.com/richardr1126/openreader" target="_blank" rel="noopener noreferrer" variant="ghost" size="sm">
                     Star on GitHub
@@ -77,8 +83,8 @@ export default async function PublicLayout({ children }: { children: ReactNode }
               <nav className="public-footer-cols" aria-label="Footer">
                 <div className="public-footer-col">
                   <p className="public-footer-col-title">Product</p>
-                  <Link href="/app">Open app</Link>
-                  <Link href="/signin">Sign in</Link>
+                  <a href="/app">Open app</a>
+                  <a href="/signin">Sign in</a>
                   <a href="https://docs.openreader.richardr.dev/" target="_blank" rel="noopener noreferrer">
                     Documentation
                   </a>

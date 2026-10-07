@@ -56,8 +56,8 @@ function SignInContent() {
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
-  const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth } = useAuthConfig();
-  const { accountEmailsEnabled, signupPolicy } = useRuntimeConfig();
+  const { baseUrl, githubAuthEnabled, oidcAuth } = useAuthConfig();
+  const { accountEmailsEnabled, signupPolicy, allowAnonymousSessions } = useRuntimeConfig();
   const canSignUp = signupPolicy !== 'closed';
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
@@ -175,7 +175,11 @@ function SignInContent() {
     setError(null);
     try {
       const client = getAuthClient(baseUrl);
-      await client.signIn.anonymous();
+      const result = await client.signIn.anonymous();
+      if (result.error) {
+        setError(result.error.message || 'Unable to continue anonymously. Please try again.');
+        return;
+      }
       await refreshRateLimit();
       router.push('/app');
     } catch (e) {
@@ -319,7 +323,7 @@ function SignInContent() {
           )}
 
           {/* Anonymous */}
-          {allowAnonymousAuthSessions && (
+          {allowAnonymousSessions && (
             <Button
               type="button"
               disabled={isAnyLoading}

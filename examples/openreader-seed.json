@@ -4,6 +4,7 @@
     "defaultTtsProvider": "custom-openai",
     "changelogFeedUrl": "https://docs.openreader.richardr.dev/changelog/manifest.json",
     "signupPolicy": "open",
+    "allowAnonymousSessions": false,
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,
     "enableDocxConversion": true,

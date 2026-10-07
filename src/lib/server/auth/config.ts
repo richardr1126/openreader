@@ -21,25 +21,6 @@ export function getRequiredAuthEnv(): RequiredAuthEnv {
   };
 }
 
-function parseBooleanEnv(name: string, defaultValue: boolean): boolean {
-  const raw = process.env[name];
-  if (!raw || raw.trim() === '') return defaultValue;
-
-  const normalized = raw.trim().toLowerCase();
-  if (normalized === 'true') return true;
-  if (normalized === 'false') return false;
-  return defaultValue;
-}
-
-/**
- * Anonymous sessions are opt-in.
- * Defaults to false when unset or invalid.
- */
-export function isAnonymousAuthSessionsEnabled(): boolean {
-  getRequiredAuthEnv();
-  return parseBooleanEnv('USE_ANONYMOUS_AUTH_SESSIONS', false);
-}
-
 /**
  * GitHub sign-in is available when both GITHUB_CLIENT_ID and
  * GITHUB_CLIENT_SECRET are set.
