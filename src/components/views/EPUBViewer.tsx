@@ -9,6 +9,7 @@ import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import { ListIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
 import { ToolbarButton } from '@/components/ui';
+import { hardenEpubSection } from '@/lib/client/epub/epub-section-hardening';
 
 interface EPUBViewerProps {
   className?: string;
@@ -64,7 +65,14 @@ function EpubRenditionHost({
         if (!active || !hostRef.current || !book.isOpen) return;
 
         callbacksRef.current.onToc(navigation.toc);
-        rendition = book.renderTo(hostRef.current, { width: '100%', height: '100%' });
+        // Sections are stripped of script so the frame can allow scripts:
+        // WebKit only dispatches the reader's listeners in a frame that does.
+        book.spine.hooks.content.register(hardenEpubSection);
+        rendition = book.renderTo(hostRef.current, {
+          width: '100%',
+          height: '100%',
+          allowScriptedContent: true,
+        });
         callbacksRef.current.onRendition(rendition);
         // Deliberately do not call display here. The document controller waits
         // for the authoritative plan, resolves its stable locator to one CFI,
