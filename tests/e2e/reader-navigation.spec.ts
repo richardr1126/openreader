@@ -18,7 +18,9 @@ test('tapping a sentence, contents and find in book move the Markdown reading po
 
   // Tap the start of a paragraph (not its link) to play from that sentence.
   await page.getByText(/for more information/).click({ position: { x: 4, y: 6 } });
-  await expect(sentence).toContainText('Visit');
+  // A sentence that crosses a link is painted as one span per text run.
+  await expect.poll(() => sentence.allTextContents().then((parts) => parts.join(' ')))
+    .toBe('Visit OpenAI for more information');
 
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
   const contents = page.getByRole('dialog', { name: 'Contents' });
@@ -44,7 +46,9 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
 
   const sentence = page.locator('.openreader-html-highlight-sentence');
   await page.getByText(/for more information/).click({ position: { x: 4, y: 6 } });
-  await expect(sentence).toContainText('Visit');
+  // A sentence that crosses a link is painted as one span per text run.
+  await expect.poll(() => sentence.allTextContents().then((parts) => parts.join(' ')))
+    .toBe('Visit OpenAI for more information');
 
   const toggle = page.getByRole('button', { name: 'Bookmark current sentence', exact: true });
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
@@ -63,7 +67,9 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
   const list = panel.getByRole('list', { name: 'Bookmarks' });
   await expect(list.getByRole('listitem')).toHaveCount(1);
   await list.getByRole('button', { name: /^Visit/ }).click();
-  await expect(sentence).toContainText('Visit');
+  // A sentence that crosses a link is painted as one span per text run.
+  await expect.poll(() => sentence.allTextContents().then((parts) => parts.join(' ')))
+    .toBe('Visit OpenAI for more information');
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
 
   await list.getByRole('button', { name: /^Rename bookmark/ }).click();

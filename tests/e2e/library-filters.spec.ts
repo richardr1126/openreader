@@ -15,7 +15,7 @@ test('anonymous user narrows the library by search words and reading status', as
   const markdownLink = page.getByRole('link', { name: 'sample.md', exact: true });
 
   // Every word must match, case-insensitively.
-  const search = page.getByRole('textbox', { name: 'Search documents' });
+  const search = page.getByRole('searchbox', { name: 'Search documents' });
   await search.fill('SAMPLE pdf');
   await expect(pdfLink).toBeVisible();
   await expect(markdownLink).toBeHidden();
