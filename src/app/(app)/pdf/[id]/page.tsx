@@ -29,7 +29,8 @@ import type { DocumentSettings as DocumentSettingsValue } from '@/types/document
 import { usePdfDocument } from './usePdfDocument';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PlanTextViewer } from '@/components/views/PlanTextViewer';
-import { ReaderNavigationSidebars, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import { usePdfOutline } from '@/hooks/pdf/usePdfOutline';
 
 // Dynamic import for client-side rendering only
@@ -95,6 +96,7 @@ function PdfReader({
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId, 'pdf');
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
@@ -202,9 +204,12 @@ function PdfReader({
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
               onOpenContents={() => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents')}
               onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
+              onOpenBookmarks={() => setActiveSidebar((prev) => prev === 'bookmarks' ? null : 'bookmarks')}
+              sentenceBookmark={sentenceBookmark}
               isSettingsOpen={activeSidebar === 'settings'}
               isContentsOpen={activeSidebar === 'contents'}
               isSearchOpen={activeSidebar === 'search'}
+              isBookmarksOpen={activeSidebar === 'bookmarks'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={50}
@@ -280,10 +285,12 @@ function PdfReader({
         }}
       />
       <ReaderNavigationSidebars
-        open={activeSidebar === 'contents' || activeSidebar === 'search' ? activeSidebar : null}
+        open={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
         onClose={() => setActiveSidebar(null)}
         outline={outline}
         documentTitle={currDocName || payload.document.name}
+        documentId={routeDocumentId}
+        readerType="pdf"
       />
       <ConfirmDialog
         isOpen={showForceReparseConfirm}

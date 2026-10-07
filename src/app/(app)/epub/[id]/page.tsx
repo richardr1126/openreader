@@ -22,7 +22,8 @@ import { useEpubDocument } from './useEpubDocument';
 import { epubTocOutline, findEpubTocTitle } from '@/lib/client/epub/toc-titles';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PlanTextViewer } from '@/components/views/PlanTextViewer';
-import { ReaderNavigationSidebars, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import type { TtsExportChapterProgress } from '@/types/tts-export';
 
 export default function EPUBPage() {
@@ -79,7 +80,8 @@ function EpubReader({
   const language = documentSettings.language ?? 'auto';
   const { readerShowsLayout } = useConfig();
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
-  const navigationPanel = activeSidebar === 'contents' || activeSidebar === 'search' ? activeSidebar : null;
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId, 'epub');
+  const navigationPanel = isReaderNavigationPanel(activeSidebar) ? activeSidebar : null;
   const openContents = useCallback(() => {
     setActiveSidebar((prev) => prev === 'contents' ? null : 'contents');
   }, []);
@@ -166,9 +168,12 @@ function EpubReader({
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
               onOpenContents={openContents}
               onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
+              onOpenBookmarks={() => setActiveSidebar((prev) => prev === 'bookmarks' ? null : 'bookmarks')}
+              sentenceBookmark={sentenceBookmark}
               isSettingsOpen={activeSidebar === 'settings'}
               isContentsOpen={activeSidebar === 'contents'}
               isSearchOpen={activeSidebar === 'search'}
+              isBookmarksOpen={activeSidebar === 'bookmarks'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={0}
@@ -218,6 +223,8 @@ function EpubReader({
         onClose={() => setActiveSidebar(null)}
         outline={navigationPanel === 'contents' ? epubTocOutline(tocRef.current ?? []) : []}
         documentTitle={currDocName || payload.document.name}
+        documentId={routeDocumentId}
+        readerType="epub"
       />
       <DocumentSettings
         epub
