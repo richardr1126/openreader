@@ -58,9 +58,8 @@ export async function PATCH(req: NextRequest, ctx: RouteContext) {
       .set({ label, updatedAt: nowTimestampMs() })
       .where(target.where)
       .returning(bookmarkSelection)) as BookmarkRow[];
-    const bookmark = updated ? toDocumentBookmark(updated) : null;
-    if (!bookmark) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json({ bookmark });
+    if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    return NextResponse.json({ bookmark: toDocumentBookmark(updated) });
   } catch (error) {
     serverLogger.error({
       event: 'documents.bookmarks.update.failed',

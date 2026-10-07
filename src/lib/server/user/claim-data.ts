@@ -25,8 +25,8 @@ type UserPreferenceRow = {
 type UserDocumentProgressRow = {
   userId: string;
   documentId: string;
-  readerType: string;
-  location: string;
+  segmentKey: string | null;
+  segmentOrdinal: number;
   progress: number | null;
   clientUpdatedAtMs: number;
   createdAt: number;
@@ -231,8 +231,8 @@ export async function transferUserProgress(fromUserId: string, toUserId: string)
       .onConflictDoUpdate({
         target: [userDocumentProgress.userId, userDocumentProgress.documentId],
         set: {
-          readerType: row.readerType,
-          location: row.location,
+          segmentKey: row.segmentKey,
+          segmentOrdinal: row.segmentOrdinal,
           progress: row.progress,
           clientUpdatedAtMs: row.clientUpdatedAtMs,
           updatedAt: row.updatedAt,

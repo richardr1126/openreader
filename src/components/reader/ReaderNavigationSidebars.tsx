@@ -8,9 +8,9 @@ import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { IconButton, Input, SearchField } from '@/components/ui';
 import { PencilIcon, SearchIcon } from '@/components/icons/Icons';
 import { TrashIcon } from '@/components/doclist/window/finderIcons';
-import { formatBookmarkAge, resolveBookmarkOrdinal } from '@/lib/client/reader/bookmarks';
+import { formatBookmarkAge } from '@/lib/client/reader/bookmarks';
+import { resolveReadingPositionOrdinal } from '@/lib/shared/reading-position';
 import type { DocumentBookmark } from '@/types/bookmarks';
-import type { ReaderType } from '@/types/user-state';
 import {
   BOOK_SEARCH_RESULT_LIMIT,
   buildBookSearchIndex,
@@ -40,14 +40,12 @@ export function ReaderNavigationSidebars({
   outline,
   documentTitle,
   documentId,
-  readerType,
 }: {
   open: ReaderNavigationPanel | null;
   onClose: () => void;
   outline: readonly OutlineEntry[];
   documentTitle: string;
   documentId: string;
-  readerType: ReaderType;
 }) {
   return (
     <>
@@ -79,7 +77,7 @@ export function ReaderNavigationSidebars({
         panelClassName="w-full sm:w-[24rem]"
         bodyClassName="flex-1 overflow-y-auto px-2 py-2"
       >
-        <BookmarksPanel documentId={documentId} readerType={readerType} />
+        <BookmarksPanel documentId={documentId} />
       </ReaderSidebarShell>
     </>
   );
@@ -190,14 +188,14 @@ function SearchPanel() {
   );
 }
 
-function BookmarksPanel({ documentId, readerType }: { documentId: string; readerType: ReaderType }) {
+function BookmarksPanel({ documentId }: { documentId: string }) {
   const { playbackSegments, skipToOrdinal } = useTTS();
-  const { bookmarks, isLoading, isError, rename, remove } = useDocumentBookmarks(documentId, readerType);
+  const { bookmarks, isLoading, isError, rename, remove } = useDocumentBookmarks(documentId);
   // Ages are relative to when the panel opened; it remounts on every open.
   const [now] = useState(() => Date.now());
 
   const seek = (bookmark: DocumentBookmark) => {
-    const ordinal = resolveBookmarkOrdinal(bookmark, playbackSegments);
+    const ordinal = resolveReadingPositionOrdinal(playbackSegments, bookmark);
     if (ordinal === null || !skipToOrdinal(ordinal)) {
       toast.error('This bookmark is not in the prepared document yet.');
     }

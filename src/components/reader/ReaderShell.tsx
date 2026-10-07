@@ -13,6 +13,7 @@ import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { useReaderSurfaceAdoption } from '@/hooks/useReaderSurfaceAdoption';
 import { readerSurfaceKey } from '@/lib/client/reader-readiness/surface-key';
 import { playbackPlanIdentity } from '@/lib/shared/playback-plan';
+import { readingPositionAt } from '@/lib/shared/reading-position';
 import type {
   ReaderBootstrapRestart,
   ReaderPayload,
@@ -42,11 +43,18 @@ export function ReaderShell<T extends ReaderType>({
 }) {
   const bootstrap = useReaderBootstrap(documentId);
   const { result } = bootstrap;
-  const { initializeReaderSession, adoptReplannedPlaybackPlan, playbackPlanKey } = useTTS();
+  const {
+    initializeReaderSession,
+    adoptReplannedPlaybackPlan,
+    playbackPlanKey,
+    currentSentenceOrdinal,
+    playbackSegments,
+  } = useTTS();
   const {
     disableProgressPersistence,
     enableProgressPersistence,
     restart: restartBootstrapQuery,
+    scheduleProgress,
   } = bootstrap;
   const surfaceKey = result.status === 'ready'
     ? readerSurfaceKey(result.payload)
@@ -128,6 +136,15 @@ export function ReaderShell<T extends ReaderType>({
   useEffect(() => {
     disableProgressPersistence();
   }, [attemptKey, disableProgressPersistence]);
+
+  // Reading progress is the committed playback cursor, for every reader type.
+  // Persistence is enabled only once the renderer has placed the saved
+  // position, so startup never overwrites it.
+  useEffect(() => {
+    if (!documentId || !rendererReady || currentSentenceOrdinal === null) return;
+    const position = readingPositionAt(playbackSegments, currentSentenceOrdinal);
+    if (position) scheduleProgress({ documentId, ...position });
+  }, [currentSentenceOrdinal, documentId, playbackSegments, rendererReady, scheduleProgress]);
 
   const handleReady = useCallback(() => {
     setReadyAttemptKey(attemptKey);

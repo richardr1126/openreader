@@ -107,10 +107,8 @@ export async function putDocumentProgress(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       documentId: payload.documentId,
-      readerType: payload.readerType,
-      ...(payload.readerType === 'epub'
-        ? { locator: payload.locator }
-        : { location: payload.location }),
+      segmentKey: payload.segmentKey,
+      segmentOrdinal: payload.segmentOrdinal,
       progress: payload.progress ?? null,
       clientUpdatedAtMs: payload.clientUpdatedAtMs ?? Date.now(),
     }),

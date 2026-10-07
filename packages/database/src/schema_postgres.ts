@@ -135,8 +135,12 @@ export const documentSettings = pgTable('document_settings', {
 export const userDocumentProgress = pgTable('user_document_progress', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   documentId: text('document_id').notNull(),
-  readerType: text('reader_type').notNull(), // pdf, epub, html
-  location: text('location').notNull(),
+  // The playback cursor: content identity plus an ordinal hint, resolved
+  // against the current plan (`resolveReadingPositionOrdinal`). Pages and
+  // chapters are derived from it, never stored. A null key (rows converted
+  // from the v5.0 page/location format) resolves by ordinal alone.
+  segmentKey: text('segment_key'),
+  segmentOrdinal: integer('segment_ordinal').notNull().default(0),
   progress: real('progress'),
   clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
@@ -146,20 +150,15 @@ export const userDocumentProgress = pgTable('user_document_progress', {
   index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
 ]);
 
-// Personal bookmarks. `location` uses the same per-reader encoding as
-// user_document_progress.location (EPUB stores the serialized progress
-// locator). `segment_key`/`segment_ordinal` anchor the bookmarked sentence in
-// the canonical playback plan when one was known: the key is content identity
-// and survives re-planning, the ordinal is only a hint. Rows are hard-deleted
-// and cascade with the owning document row.
+// Personal bookmarks, positioned exactly like reading progress: the segment
+// key is content identity and survives re-planning, the ordinal is a hint.
+// Rows are hard-deleted and cascade with the owning document row.
 export const userDocumentBookmarks = pgTable('user_document_bookmarks', {
   id: text('id').notNull(),
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   documentId: text('document_id').notNull(),
-  readerType: text('reader_type').notNull(), // pdf, epub, html
-  location: text('location').notNull(),
-  segmentKey: text('segment_key'),
-  segmentOrdinal: integer('segment_ordinal'),
+  segmentKey: text('segment_key').notNull(),
+  segmentOrdinal: integer('segment_ordinal').notNull(),
   label: text('label'),
   snippet: text('snippet').notNull().default(''),
   createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),

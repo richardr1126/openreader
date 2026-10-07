@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "af54b86d-a76f-4834-9ce9-5e20060379ab",
+  "id": "725ad289-2739-4885-b99a-1169f9745c5a",
   "prevId": "bb2d570b-d0f3-47b0-b960-d1ca60357a62",
   "tables": {
     "admin_providers": {
@@ -1103,32 +1103,18 @@
           "notNull": true,
           "autoincrement": false
         },
-        "reader_type": {
-          "name": "reader_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "location": {
-          "name": "location",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "segment_key": {
           "name": "segment_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "segment_ordinal": {
           "name": "segment_ordinal",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "label": {
@@ -1232,19 +1218,20 @@
           "notNull": true,
           "autoincrement": false
         },
-        "reader_type": {
-          "name": "reader_type",
+        "segment_key": {
+          "name": "segment_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
-        "location": {
-          "name": "location",
-          "type": "text",
+        "segment_ordinal": {
+          "name": "segment_ordinal",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": 0
         },
         "progress": {
           "name": "progress",

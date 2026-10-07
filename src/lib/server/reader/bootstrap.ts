@@ -16,15 +16,13 @@ import type { NextRequest } from 'next/server';
 import { APP_CONFIG_DEFAULTS, type AppConfigValues } from '@/types/config';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import type { BaseDocument } from '@/types/documents';
-import type { DocumentProgressRecord } from '@/types/user-state';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 import type {
   ReaderBootstrapResult,
   ReaderPayload,
 } from '@/types/reader-bootstrap';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
-import { parseEpubProgressLocator } from '@/lib/shared/epub-progress';
-import { parseReaderInitialPosition } from '@/lib/shared/reader-position';
+import type { ReadingPosition } from '@/lib/shared/reading-position';
 import {
   assertAuthoritativePlaybackPlan,
   normalizePlaybackPlan,
@@ -98,31 +96,16 @@ function storedRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function toProgress(row: {
-  documentId: string;
-  readerType: string;
-  location: string;
-  progress: number | null;
-  clientUpdatedAtMs: number;
-  updatedAt: number | null;
-} | undefined): DocumentProgressRecord | null {
+function toReadingPosition(row: {
+  segmentKey: string | null;
+  segmentOrdinal: number;
+} | undefined): ReadingPosition | null {
   if (!row) return null;
-  const base = {
-    documentId: row.documentId,
-    progress: row.progress == null ? null : Number(row.progress),
-    clientUpdatedAtMs: Number(row.clientUpdatedAtMs),
-    updatedAtMs: Number(row.updatedAt ?? 0),
+  return {
+    segmentKey: row.segmentKey ?? null,
+    segmentOrdinal: Math.max(0, Number(row.segmentOrdinal ?? 0)),
   };
-  if (row.readerType === 'epub') {
-    const locator = parseEpubProgressLocator(row.location);
-    return locator ? { ...base, readerType: 'epub', locator } : null;
-  }
-  if (row.readerType === 'pdf' || row.readerType === 'html') {
-    return { ...base, readerType: row.readerType, location: row.location };
-  }
-  return null;
 }
-
 
 async function ensurePdfReady(
   request: NextRequest,
@@ -403,12 +386,8 @@ export async function resolveReaderBootstrapState(
       eq(documentSettings.userId, scope.storageUserId),
     )).limit(1),
     db.select({
-      documentId: userDocumentProgress.documentId,
-      readerType: userDocumentProgress.readerType,
-      location: userDocumentProgress.location,
-      progress: userDocumentProgress.progress,
-      clientUpdatedAtMs: userDocumentProgress.clientUpdatedAtMs,
-      updatedAt: userDocumentProgress.updatedAt,
+      segmentKey: userDocumentProgress.segmentKey,
+      segmentOrdinal: userDocumentProgress.segmentOrdinal,
     }).from(userDocumentProgress).where(and(
       eq(userDocumentProgress.documentId, documentId),
       eq(userDocumentProgress.userId, scope.storageUserId),
@@ -431,7 +410,7 @@ export async function resolveReaderBootstrapState(
     DEFAULT_DOCUMENT_SETTINGS,
     storedRecord(settingsRows[0]?.dataJson),
   );
-  const progress = toProgress(progressRows[0]);
+  const initialPosition = toReadingPosition(progressRows[0]);
   const planResult = await resolvePlan(request, documentId, scope, settings, preferenceRows[0]?.dataJson);
   if ('result' in planResult) return planResult;
 
@@ -457,7 +436,7 @@ export async function resolveReaderBootstrapState(
       document: { ...document, type: 'pdf' },
       settings,
       plan: planResult.plan,
-      initialPosition: parseReaderInitialPosition('pdf', progress),
+      initialPosition,
       parsedDocument: parsedPdfDocument,
     };
   } else if (row.type === 'epub') {
@@ -467,7 +446,7 @@ export async function resolveReaderBootstrapState(
       document: { ...document, type: 'epub' },
       settings,
       plan: planResult.plan,
-      initialPosition: parseReaderInitialPosition('epub', progress),
+      initialPosition,
     };
   } else {
     payload = {
@@ -476,7 +455,7 @@ export async function resolveReaderBootstrapState(
       document: { ...document, type: 'html' },
       settings,
       plan: planResult.plan,
-      initialPosition: parseReaderInitialPosition('html', progress),
+      initialPosition,
     };
   }
   return {

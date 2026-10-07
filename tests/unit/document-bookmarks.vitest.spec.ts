@@ -5,7 +5,6 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { parseBookmarkCreateBody } from '@/lib/server/documents/bookmarks';
-import { serializeReaderPosition } from '@/lib/shared/reader-position';
 
 const state = vi.hoisted(() => ({
   sqlite: null as unknown as import('better-sqlite3').Database,
@@ -109,8 +108,6 @@ describe('document bookmarks API', () => {
 
   test('creates, lists newest first, renames, and deletes a PDF bookmark', async () => {
     const first = await create(PDF_ID, {
-      readerType: 'pdf',
-      location: serializeReaderPosition('pdf', 3, 12),
       snippet: '  The   first   marked sentence. ',
       segmentKey: 'v7:abc',
       segmentOrdinal: 12,
@@ -119,8 +116,6 @@ describe('document bookmarks API', () => {
     const { bookmark } = await first.json();
     expect(bookmark).toMatchObject({
       documentId: PDF_ID,
-      readerType: 'pdf',
-      location: '3:12',
       snippet: 'The first marked sentence.',
       label: null,
       segmentKey: 'v7:abc',
@@ -129,7 +124,7 @@ describe('document bookmarks API', () => {
 
     // Distinct creation times make the newest-first order observable.
     await new Promise((resolve) => setTimeout(resolve, 5));
-    await create(PDF_ID, { readerType: 'pdf', location: '5:40', snippet: 'Later', label: 'Key idea' });
+    await create(PDF_ID, { segmentKey: 'v7:later', segmentOrdinal: 40, snippet: 'Later', label: 'Key idea' });
 
     const listed = await (await listBookmarks(jsonRequest(`/api/documents/${PDF_ID}/bookmarks`, 'GET'), docParams(PDF_ID))).json();
     expect(listed.bookmarks.map((item: { snippet: string }) => item.snippet)).toEqual(['Later', 'The first marked sentence.']);
@@ -158,43 +153,46 @@ describe('document bookmarks API', () => {
     expect(await again.json()).toEqual({ deleted: false });
   });
 
-  test('stores EPUB locators in the progress encoding and returns them structured', async () => {
-    const locator = { schemaVersion: 1, spineHref: 'ch02.xhtml', spineIndex: 2, charOffset: 140 };
-    const response = await create(EPUB_ID, { readerType: 'epub', locator, snippet: 'Call me Ishmael.' });
+  test('stores only the segment position, whatever the reader type', async () => {
+    const response = await create(EPUB_ID, { segmentKey: 'v7:ishmael', segmentOrdinal: 3, snippet: 'Call me Ishmael.' });
     expect(response.status).toBe(201);
-    expect((await response.json()).bookmark.locator).toEqual(locator);
-    const stored = state.sqlite.prepare('SELECT location FROM user_document_bookmarks').get() as { location: string };
-    expect(stored.location.startsWith('epub:v1:')).toBe(true);
+    const { bookmark } = await response.json();
+    expect(bookmark).toMatchObject({ segmentKey: 'v7:ishmael', segmentOrdinal: 3 });
+    expect(bookmark).not.toHaveProperty('readerType');
+    const columns = state.sqlite.prepare("SELECT name FROM pragma_table_info('user_document_bookmarks')").all()
+      .map((row) => (row as { name: string }).name);
+    expect(columns).not.toContain('reader_type');
+    expect(columns).not.toContain('location');
   });
 
   test('a client-supplied id makes create idempotent', async () => {
     const id = '0f8fad5b-d9cb-469f-a165-70867728950e';
-    const body = { id, readerType: 'pdf', location: '1:0', snippet: 'Once' };
+    const body = { id, segmentKey: 'k', segmentOrdinal: 0, snippet: 'Once' };
     expect((await create(PDF_ID, body)).status).toBe(201);
     const retry = await create(PDF_ID, { ...body, snippet: 'Twice' });
     expect(retry.status).toBe(200);
     expect((await retry.json()).bookmark.snippet).toBe('Once');
-    expect((await create(EPUB_ID, { ...body, readerType: 'epub', locator: { schemaVersion: 1, spineHref: 'a', spineIndex: 0, charOffset: 0 } })).status).toBe(409);
+    expect((await create(EPUB_ID, body)).status).toBe(409);
   });
 
-  test('rejects invalid input, mismatched readers, and documents the user does not own', async () => {
-    expect((await create(PDF_ID, { readerType: 'pdf', location: 'nonsense', snippet: 'x' })).status).toBe(400);
-    expect((await create(PDF_ID, { readerType: 'epub', locator: { schemaVersion: 1, spineHref: 'a', spineIndex: 0, charOffset: 0 }, snippet: 'x' })).status).toBe(400);
-    expect((await create(OTHER_USERS_ID, { readerType: 'pdf', location: '1:0', snippet: 'x' })).status).toBe(404);
+  test('rejects invalid input and documents the user does not own', async () => {
+    expect((await create(PDF_ID, { segmentOrdinal: 0, snippet: 'x' })).status).toBe(400);
+    expect((await create(PDF_ID, { segmentKey: 'k', snippet: 'x' })).status).toBe(400);
+    expect((await create(OTHER_USERS_ID, { segmentKey: 'k', segmentOrdinal: 0, snippet: 'x' })).status).toBe(404);
     state.userId = null;
-    expect((await create(PDF_ID, { readerType: 'pdf', location: '1:0', snippet: 'x' })).status).toBe(401);
+    expect((await create(PDF_ID, { segmentKey: 'k', segmentOrdinal: 0, snippet: 'x' })).status).toBe(401);
   });
 
   test('bookmarks are hard-deleted with their document row', async () => {
-    await create(PDF_ID, { readerType: 'pdf', location: '1:0', snippet: 'Gone soon' });
+    await create(PDF_ID, { segmentKey: 'k', segmentOrdinal: 0, snippet: 'Gone soon' });
     state.sqlite.prepare('DELETE FROM documents WHERE id = ? AND user_id = ?').run(PDF_ID, 'reader');
     expect(state.sqlite.prepare('SELECT count(*) AS n FROM user_document_bookmarks').get()).toEqual({ n: 0 });
   });
 
   test('document list carries author, language, and reading progress without N+1 queries', async () => {
     state.sqlite.prepare(`
-      INSERT INTO user_document_progress (user_id, document_id, reader_type, location, progress, updated_at)
-      VALUES ('reader', ?, 'pdf', '2:0', 0.42, 1234)
+      INSERT INTO user_document_progress (user_id, document_id, segment_key, segment_ordinal, progress, updated_at)
+      VALUES ('reader', ?, 'k', 2, 0.42, 1234)
     `).run(PDF_ID);
     const response = await listDocuments(jsonRequest('/api/documents', 'GET'));
     const { documents } = await response.json();
@@ -213,15 +211,15 @@ describe('document bookmarks API', () => {
 describe('parseBookmarkCreateBody', () => {
   test('bounds label and snippet length and validates anchors', () => {
     const parsed = parseBookmarkCreateBody({
-      readerType: 'html',
-      location: serializeReaderPosition('html', 'section-2', 4),
+      segmentKey: 'k',
+      segmentOrdinal: 4,
       snippet: 'x'.repeat(900),
       label: 'y'.repeat(300),
     });
     expect(parsed.ok && parsed.value.snippet.length).toBe(500);
     expect(parsed.ok && parsed.value.label?.length).toBe(200);
-    expect(parseBookmarkCreateBody({ readerType: 'pdf', location: '1:0', snippet: 'x', segmentOrdinal: -1 }).ok).toBe(false);
-    expect(parseBookmarkCreateBody({ readerType: 'pdf', location: '1:0', snippet: 'x', id: 'not-a-uuid' }).ok).toBe(false);
-    expect(parseBookmarkCreateBody({ readerType: 'pdf', location: '1:0' }).ok).toBe(false);
+    expect(parseBookmarkCreateBody({ segmentKey: 'k', snippet: 'x', segmentOrdinal: -1 }).ok).toBe(false);
+    expect(parseBookmarkCreateBody({ segmentKey: 'k', segmentOrdinal: 0, snippet: 'x', id: 'not-a-uuid' }).ok).toBe(false);
+    expect(parseBookmarkCreateBody({ segmentKey: 'k', segmentOrdinal: 0 }).ok).toBe(false);
   });
 });

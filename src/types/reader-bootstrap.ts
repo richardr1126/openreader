@@ -1,6 +1,6 @@
 import type { DocumentSettings } from '@/types/document-settings';
 import type { BaseDocument } from '@/types/documents';
-import type { ReaderInitialPosition } from '@/lib/shared/reader-position';
+import type { ReadingPosition } from '@/lib/shared/reading-position';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 import type { ReaderType } from '@/types/user-state';
@@ -25,7 +25,8 @@ type ReaderPayloadBase<T extends ReaderType> = {
   document: BaseDocument & { type: T };
   settings: DocumentSettings;
   plan: TtsPlaybackPlan;
-  initialPosition: ReaderInitialPosition;
+  /** The saved playback cursor, resolved against `plan` by the client. */
+  initialPosition: ReadingPosition | null;
 };
 
 export type PdfReaderPayload = ReaderPayloadBase<'pdf'> & {

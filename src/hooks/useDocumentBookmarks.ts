@@ -14,7 +14,6 @@ import {
 import { queryKeys } from '@/lib/client/query-keys';
 import { bookmarkInputForSegment, findBookmarkForSegment } from '@/lib/client/reader/bookmarks';
 import type { CreateDocumentBookmarkInput, DocumentBookmark } from '@/types/bookmarks';
-import type { ReaderType } from '@/types/user-state';
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -25,12 +24,12 @@ function errorMessage(error: unknown, fallback: string): string {
  * playback sentence. Mutations update the list optimistically and roll back
  * on failure; every reader and the bookmarks panel share one cache entry.
  */
-export function useDocumentBookmarks(documentId: string, readerType: ReaderType) {
+export function useDocumentBookmarks(documentId: string) {
   const { data: session, isPending } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
   const key = queryKeys.documentBookmarks(sessionId, documentId);
   const queryClient = useQueryClient();
-  const { playbackSegments, currentSentenceOrdinal, currDocPage } = useTTS();
+  const { playbackSegments, currentSentenceOrdinal } = useTTS();
 
   const query = useQuery({
     queryKey: key,
@@ -53,16 +52,14 @@ export function useDocumentBookmarks(documentId: string, readerType: ReaderType)
     onMutate: async (input) => {
       const previous = await snapshot();
       const now = Date.now();
-      const optimistic = {
+      const optimistic: DocumentBookmark = {
         ...input,
         id: input.id ?? '',
         documentId,
         label: input.label ?? null,
-        segmentKey: input.segmentKey ?? null,
-        segmentOrdinal: input.segmentOrdinal ?? null,
         createdAtMs: now,
         updatedAtMs: now,
-      } as DocumentBookmark;
+      };
       queryClient.setQueryData<DocumentBookmark[]>(key, (rows = []) => [optimistic, ...rows]);
       return { previous };
     },
@@ -111,9 +108,6 @@ export function useDocumentBookmarks(documentId: string, readerType: ReaderType)
     [currentSentenceOrdinal, playbackSegments],
   );
   const currentBookmark = findBookmarkForSegment(bookmarks, currentSegment);
-  const currentInput = useMemo(() => (currentSegment
-    ? bookmarkInputForSegment({ readerType, segment: currentSegment, currentLocation: currDocPage, id: '' })
-    : null), [currDocPage, currentSegment, readerType]);
 
   const { mutate: createMutate } = create;
   const { mutate: removeMutate } = remove;
@@ -126,16 +120,16 @@ export function useDocumentBookmarks(documentId: string, readerType: ReaderType)
       removeMutate(currentBookmark.id);
       return;
     }
-    if (!currentInput) return;
-    createMutate({ ...currentInput, id: crypto.randomUUID() });
-  }, [createMutate, currentBookmark, currentInput, removeMutate, toggleBusy]);
+    if (!currentSegment) return;
+    createMutate(bookmarkInputForSegment({ segment: currentSegment, id: crypto.randomUUID() }));
+  }, [createMutate, currentBookmark, currentSegment, removeMutate, toggleBusy]);
 
   const isCurrentBookmarked = Boolean(currentBookmark);
   const sentenceBookmark = useMemo(() => ({
     isBookmarked: isCurrentBookmarked,
-    canToggle: isCurrentBookmarked || currentInput !== null,
+    canToggle: isCurrentBookmarked || currentSegment !== null,
     onToggle: toggleCurrent,
-  }), [currentInput, isCurrentBookmarked, toggleCurrent]);
+  }), [currentSegment, isCurrentBookmarked, toggleCurrent]);
 
   return {
     bookmarks,
