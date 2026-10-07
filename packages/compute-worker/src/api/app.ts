@@ -210,6 +210,9 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       objectExists: storageDisabled,
       deleteObject: storageDisabled,
       listPrefix: storageDisabled,
+      listPrefixPages: async function* () {
+        yield await storageDisabled();
+      },
       putObject: storageDisabled,
       putParsedPdf: storageDisabled,
     }

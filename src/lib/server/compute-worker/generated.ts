@@ -929,6 +929,163 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/tts-playback/cache/reclaim": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        storageUserId: string;
+                        documentId: string;
+                        keep: {
+                            documentVersion: number;
+                            settingsHash?: string;
+                        } | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            reclaimedVariants: number;
+                            deletedAudioObjects: number;
+                            deletedSidecarObjects: number;
+                            deletedExportObjects: number;
+                            invalidatedPlaybackSessions: number;
+                            invalidatedJobOperations: number;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/user-storage/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        storageUserId: string;
+                        includePlayback: boolean;
+                        documentId?: string;
+                        derivedDocumentIds: string[];
+                        namespace: string | null;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            documents: {
+                                documentId: string;
+                                variants: {
+                                    documentVersion: number;
+                                    settingsHash: string;
+                                    bytes: number;
+                                    objects: number;
+                                }[];
+                                exports: {
+                                    documentVersion: number | null;
+                                    settingsHash: string | null;
+                                    bytes: number;
+                                    objects: number;
+                                }[];
+                                derivedBytes: number;
+                                derivedObjects: number;
+                            }[];
+                            scannedObjects: number;
+                            truncated: boolean;
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/pdf-layout/clear": {
         parameters: {
             query?: never;

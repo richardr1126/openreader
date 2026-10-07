@@ -59,6 +59,41 @@ describe('compute worker API routes', () => {
     expect(invalid.statusCode).toBe(403);
   });
 
+  test('validates playback cache clear and reclaim scopes', async () => {
+    const documentId = 'd'.repeat(64);
+    const unversioned = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/cache/clear',
+      headers: AUTH,
+      payload: { storageUserId: 'user-1', documentId, settingsHash: 'abc', namespace: null },
+    });
+    expect(unversioned.statusCode).toBe(400);
+
+    const missingKeep = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/cache/reclaim',
+      headers: AUTH,
+      payload: { storageUserId: 'user-1', documentId },
+    });
+    expect(missingKeep.statusCode).toBe(400);
+
+    const reclaim = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/cache/reclaim',
+      headers: AUTH,
+      payload: { storageUserId: 'user-1', documentId, keep: { documentVersion: 3, settingsHash: 'abc' } },
+    });
+    expect(reclaim.statusCode).toBe(503);
+
+    const usage = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/user-storage/usage',
+      headers: AUTH,
+      payload: { storageUserId: 'user-1', derivedDocumentIds: ['not-a-document'], namespace: null },
+    });
+    expect(usage.statusCode).toBe(400);
+  });
+
   test('validates operation creation body and returns 400 for invalid payload', async () => {
     const response = await runtime.app.inject({
       method: 'POST',

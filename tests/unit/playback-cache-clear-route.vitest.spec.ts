@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const mocks = vi.hoisted(() => ({ clear: vi.fn(), warn: vi.fn() }));
+const mocks = vi.hoisted(() => ({ clear: vi.fn(), reclaim: vi.fn(), warn: vi.fn() }));
 vi.mock('@/lib/server/tts/segments-auth', () => ({
   resolveSegmentDocumentScope: async () => ({ storageUserId: 'user-1', documentVersion: 1, readerType: 'epub' }),
 }));
 vi.mock('@/lib/server/compute-worker/client', () => ({
   isComputeWorkerAvailable: () => true,
-  ComputeWorkerClient: class { clearTtsPlaybackScope = mocks.clear; },
+  ComputeWorkerClient: class {
+    clearTtsPlaybackScope = mocks.clear;
+    reclaimTtsPlaybackCache = mocks.reclaim;
+  },
 }));
 vi.mock('@/lib/server/logger', () => ({
   createRequestLogger: () => ({ logger: { warn: mocks.warn, error: vi.fn() } }),
@@ -20,7 +23,11 @@ const request = () => new NextRequest('http://localhost/api/tts/segments/clear',
 });
 
 describe('cache clear confirmation', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.reclaim.mockResolvedValue({ reclaimedVariants: 1, deletedAudioObjects: 2, deletedSidecarObjects: 1,
+      deletedExportObjects: 0, invalidatedPlaybackSessions: 0, invalidatedJobOperations: 0 });
+  });
 
   test('waits for cleanup completion before reporting success', async () => {
     let finish!: (value: unknown) => void;
@@ -34,7 +41,11 @@ describe('cache clear confirmation', () => {
       deletedExportObjects: 0, invalidatedPlaybackSessions: 1, invalidatedJobOperations: 2 });
     const result = await response;
     expect(result.status).toBe(200);
-    expect(await result.json()).toMatchObject({ deletedPlaybackObjects: 5 });
+    expect(await result.json()).toMatchObject({ deletedPlaybackObjects: 8, invalidatedPlaybackSessions: 1 });
+    expect(mocks.reclaim).toHaveBeenCalledWith(expect.objectContaining({
+      storageUserId: 'user-1',
+      keep: { documentVersion: 1 },
+    }), expect.anything());
   });
 
   test('reports an uncertain timeout instead of falsely confirming or retrying deletion', async () => {

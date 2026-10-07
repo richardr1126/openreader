@@ -15,6 +15,7 @@ import {
 } from '@/components/ui';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { queryKeys } from '@/lib/client/query-keys';
+import { formatBytes } from '@/lib/shared/format-bytes';
 
 type UserAccessStatus = 'active' | 'pending' | 'suspended';
 type UserKind = 'all' | 'account' | 'anonymous';
@@ -93,13 +94,6 @@ async function deleteUser(id: string): Promise<void> {
 
 function formatCount(value: number): string {
   return new Intl.NumberFormat(undefined, { notation: value >= 10_000 ? 'compact' : 'standard' }).format(value);
-}
-
-function formatBytes(value: number): string {
-  if (value <= 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const power = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
-  return `${(value / (1024 ** power)).toFixed(power === 0 ? 0 : 1)} ${units[power]}`;
 }
 
 function formatDate(value: string | null): string {

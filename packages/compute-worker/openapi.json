@@ -6346,6 +6346,334 @@
         }
       }
     },
+    "/v1/tts-playback/cache/reclaim": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "keep": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "documentVersion": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "settingsHash": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 256
+                          }
+                        },
+                        "required": [
+                          "documentVersion"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "storageUserId",
+                  "documentId",
+                  "keep"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reclaimedVariants": {
+                      "type": "number"
+                    },
+                    "deletedAudioObjects": {
+                      "type": "number"
+                    },
+                    "deletedSidecarObjects": {
+                      "type": "number"
+                    },
+                    "deletedExportObjects": {
+                      "type": "number"
+                    },
+                    "invalidatedPlaybackSessions": {
+                      "type": "number"
+                    },
+                    "invalidatedJobOperations": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "reclaimedVariants",
+                    "deletedAudioObjects",
+                    "deletedSidecarObjects",
+                    "deletedExportObjects",
+                    "invalidatedPlaybackSessions",
+                    "invalidatedJobOperations"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/user-storage/usage": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "includePlayback": {
+                    "type": "boolean"
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "derivedDocumentIds": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  },
+                  "namespace": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^[a-zA-Z0-9._-]{1,128}$"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "storageUserId",
+                  "includePlayback",
+                  "derivedDocumentIds",
+                  "namespace"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documents": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "documentId": {
+                            "type": "string"
+                          },
+                          "variants": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "documentVersion": {
+                                  "type": "number"
+                                },
+                                "settingsHash": {
+                                  "type": "string"
+                                },
+                                "bytes": {
+                                  "type": "number"
+                                },
+                                "objects": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "documentVersion",
+                                "settingsHash",
+                                "bytes",
+                                "objects"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "exports": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "documentVersion": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "settingsHash": {
+                                  "anyOf": [
+                                    {
+                                      "type": "string"
+                                    },
+                                    {
+                                      "type": "null"
+                                    }
+                                  ]
+                                },
+                                "bytes": {
+                                  "type": "number"
+                                },
+                                "objects": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "documentVersion",
+                                "settingsHash",
+                                "bytes",
+                                "objects"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "derivedBytes": {
+                            "type": "number"
+                          },
+                          "derivedObjects": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "documentId",
+                          "variants",
+                          "exports",
+                          "derivedBytes",
+                          "derivedObjects"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "scannedObjects": {
+                      "type": "number"
+                    },
+                    "truncated": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "documents",
+                    "scannedObjects",
+                    "truncated"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/pdf-layout/clear": {
       "post": {
         "requestBody": {

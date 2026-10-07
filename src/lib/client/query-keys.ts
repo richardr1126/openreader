@@ -17,6 +17,11 @@ export const queryKeys = {
   ttsVoices: (sessionId: string, providerRef: string, model: string) => ['tts-voices', sessionId, providerRef, model] as const,
   claimCounts: (sessionId: string) => ['claim-counts', sessionId] as const,
   computeLimits: (sessionId: string) => ['compute-limits', sessionId] as const,
+  storageUsage: (sessionId: string) => ['storage-usage', sessionId] as const,
+  documentStorageUsage: (sessionId: string, documentId: string, settingsKey: string) => (
+    ['storage-usage', sessionId, 'document', documentId, settingsKey] as const
+  ),
+  libraryStorageUsage: (sessionId: string) => ['storage-usage', sessionId, 'library'] as const,
   adminRoot: (sessionId: string) => ['admin', sessionId] as const,
   admin: (sessionId: string, scope: string) => ['admin', sessionId, scope] as const,
   // Changelog is public/global content, so it is keyed by URL rather than session.

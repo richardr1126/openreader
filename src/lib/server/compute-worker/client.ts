@@ -23,6 +23,10 @@ import type {
   TtsPlaybackCompletedSegment,
   TtsPlaybackSessionResolution,
   TtsPlaybackSessionResolveRequest,
+  TtsPlaybackCacheReclaimRequest,
+  TtsPlaybackCacheReclaimResponse,
+  UserStorageUsageReport,
+  UserStorageUsageRequest,
   ComputeOperation,
 } from './protocol';
 
@@ -272,6 +276,20 @@ export class ComputeWorkerClient {
     invalidatedJobOperations: number;
   }> {
     return this.requestJson('POST', '/v1/tts-playback/cache/clear', input, init);
+  }
+
+  reclaimTtsPlaybackCache(
+    input: TtsPlaybackCacheReclaimRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<TtsPlaybackCacheReclaimResponse> {
+    return this.requestJson('POST', '/v1/tts-playback/cache/reclaim', input, init);
+  }
+
+  getUserStorageUsage(
+    input: UserStorageUsageRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<UserStorageUsageReport> {
+    return this.requestJson('POST', '/v1/user-storage/usage', input, init);
   }
 
   cleanupUserStorage(input: {
