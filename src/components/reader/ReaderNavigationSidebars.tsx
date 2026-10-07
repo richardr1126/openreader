@@ -1,10 +1,16 @@
 'use client';
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
+import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { SearchField } from '@/components/ui';
-import { SearchIcon } from '@/components/icons/Icons';
+import { IconButton, Input, SearchField } from '@/components/ui';
+import { PencilIcon, SearchIcon } from '@/components/icons/Icons';
+import { TrashIcon } from '@/components/doclist/window/finderIcons';
+import { formatBookmarkAge, resolveBookmarkOrdinal } from '@/lib/client/reader/bookmarks';
+import type { DocumentBookmark } from '@/types/bookmarks';
+import type { ReaderType } from '@/types/user-state';
 import {
   BOOK_SEARCH_RESULT_LIMIT,
   buildBookSearchIndex,
@@ -16,24 +22,32 @@ import {
   type OutlineEntry,
 } from '@/lib/client/reader/chapters';
 
-export type ReaderNavigationPanel = 'contents' | 'search';
+export type ReaderNavigationPanel = 'contents' | 'search' | 'bookmarks';
+
+export function isReaderNavigationPanel(value: string | null): value is ReaderNavigationPanel {
+  return value === 'contents' || value === 'search' || value === 'bookmarks';
+}
 
 /**
- * Contents and find-in-book for every reader. Both resolve to worker-plan
- * ordinals and seek through the same command as tapping a sentence, so they
- * never create a playback session or move the view independently of the
- * playback cursor.
+ * Contents, find-in-book and bookmarks for every reader. Each resolves to a
+ * worker-plan ordinal and seeks through the same command as tapping a
+ * sentence, so none creates a playback session or moves the view
+ * independently of the playback cursor.
  */
 export function ReaderNavigationSidebars({
   open,
   onClose,
   outline,
   documentTitle,
+  documentId,
+  readerType,
 }: {
   open: ReaderNavigationPanel | null;
   onClose: () => void;
   outline: readonly OutlineEntry[];
   documentTitle: string;
+  documentId: string;
+  readerType: ReaderType;
 }) {
   return (
     <>
@@ -56,6 +70,16 @@ export function ReaderNavigationSidebars({
         bodyClassName="flex-1 min-h-0 flex flex-col"
       >
         <SearchPanel />
+      </ReaderSidebarShell>
+      <ReaderSidebarShell
+        isOpen={open === 'bookmarks'}
+        onClose={onClose}
+        ariaLabel="Bookmarks"
+        title="Bookmarks"
+        panelClassName="w-full sm:w-[24rem]"
+        bodyClassName="flex-1 overflow-y-auto px-2 py-2"
+      >
+        <BookmarksPanel documentId={documentId} readerType={readerType} />
       </ReaderSidebarShell>
     </>
   );
@@ -163,5 +187,133 @@ function SearchPanel() {
         ))}
       </ol>
     </>
+  );
+}
+
+function BookmarksPanel({ documentId, readerType }: { documentId: string; readerType: ReaderType }) {
+  const { playbackSegments, skipToOrdinal } = useTTS();
+  const { bookmarks, isLoading, isError, rename, remove } = useDocumentBookmarks(documentId, readerType);
+  // Ages are relative to when the panel opened; it remounts on every open.
+  const [now] = useState(() => Date.now());
+
+  const seek = (bookmark: DocumentBookmark) => {
+    const ordinal = resolveBookmarkOrdinal(bookmark, playbackSegments);
+    if (ordinal === null || !skipToOrdinal(ordinal)) {
+      toast.error('This bookmark is not in the prepared document yet.');
+    }
+  };
+
+  if (isLoading) return <p className="px-2 py-4 text-xs text-soft">Loading bookmarks…</p>;
+  if (isError && bookmarks.length === 0) {
+    return <p className="px-2 py-4 text-xs text-soft">Bookmarks could not be loaded.</p>;
+  }
+  if (bookmarks.length === 0) {
+    return (
+      <p className="px-2 py-4 text-xs leading-relaxed text-soft">
+        No bookmarks yet. Use the bookmark button in the toolbar to save the sentence being read.
+      </p>
+    );
+  }
+  return (
+    <ol className="space-y-0.5" aria-label="Bookmarks">
+      {bookmarks.map((bookmark) => (
+        <BookmarkRow
+          key={bookmark.id}
+          bookmark={bookmark}
+          age={formatBookmarkAge(bookmark.createdAtMs, now)}
+          onSeek={() => seek(bookmark)}
+          onRename={(label) => rename({ id: bookmark.id, label })}
+          onDelete={() => remove(bookmark.id)}
+        />
+      ))}
+    </ol>
+  );
+}
+
+function BookmarkRow({
+  bookmark,
+  age,
+  onSeek,
+  onRename,
+  onDelete,
+}: {
+  bookmark: DocumentBookmark;
+  age: string;
+  onSeek: () => void;
+  onRename: (label: string | null) => void;
+  onDelete: () => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const name = bookmark.label || bookmark.snippet || 'Bookmark';
+
+  const commit = () => {
+    if (draft === null) return;
+    const label = draft.trim() || null;
+    setDraft(null);
+    if (label !== bookmark.label) onRename(label);
+  };
+
+  return (
+    <li className="group flex items-start gap-1 rounded-md hover:bg-surface-sunken">
+      {draft !== null ? (
+        <div className="flex-1 px-2 py-1.5">
+          <Input
+            autoFocus
+            controlSize="sm"
+            aria-label="Bookmark name"
+            placeholder={bookmark.snippet}
+            value={draft}
+            maxLength={200}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commit}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') commit();
+              if (event.key === 'Escape') {
+                event.stopPropagation();
+                setDraft(null);
+              }
+            }}
+            className="w-full"
+          />
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onSeek}
+          aria-label={name}
+          className="min-w-0 flex-1 px-2 py-1.5 text-left transition-colors duration-fast"
+        >
+          {bookmark.label ? (
+            <span className="block truncate text-sm font-medium text-foreground">{bookmark.label}</span>
+          ) : null}
+          <span className={`line-clamp-2 text-xs leading-relaxed ${bookmark.label ? 'text-soft' : 'text-foreground'}`}>
+            {bookmark.snippet}
+          </span>
+          <span className="mt-0.5 block text-[11px] text-faint">{age}</span>
+        </button>
+      )}
+      {draft === null ? (
+        <div className="flex shrink-0 items-center gap-0.5 py-1.5 pr-1">
+          <IconButton
+            tone="ghost"
+            size="sm"
+            aria-label={`Rename bookmark ${name}`}
+            title="Rename"
+            onClick={() => setDraft(bookmark.label ?? '')}
+          >
+            <PencilIcon aria-hidden="true" className="h-3.5 w-3.5" />
+          </IconButton>
+          <IconButton
+            tone="danger"
+            size="sm"
+            aria-label={`Delete bookmark ${name}`}
+            title="Delete"
+            onClick={onDelete}
+          >
+            <TrashIcon aria-hidden="true" className="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
+      ) : null}
+    </li>
   );
 }

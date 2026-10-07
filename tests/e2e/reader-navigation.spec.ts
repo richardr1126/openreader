@@ -33,6 +33,49 @@ test('tapping a sentence, contents and find in book move the Markdown reading po
   await expect(sentence).toContainText('basic Markdown elements');
 });
 
+test('bookmarking the current sentence lists it, seeks to it, and deletes it', async ({ page }) => {
+  test.setTimeout(45_000);
+  await enterAnonymousLibrary(page);
+  await uploadLibraryFiles(page, resolve('tests/files/sample.md'));
+  await page.getByRole('link', { name: 'sample.md', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'sample.md', exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  const sentence = page.locator('.openreader-html-highlight-sentence');
+  await page.getByText(/for more information/).click({ position: { x: 4, y: 6 } });
+  await expect(sentence).toContainText('Visit');
+
+  const toggle = page.getByRole('button', { name: 'Bookmark current sentence', exact: true });
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+  // Move away, then return through the bookmarks panel.
+  await page.getByRole('button', { name: 'Open contents', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Contents' })
+    .getByRole('button', { name: 'Section One', exact: true }).click();
+  await expect(sentence).toContainText('Section One');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+
+  await page.getByRole('button', { name: 'Open bookmarks', exact: true }).click();
+  const panel = page.getByRole('dialog', { name: 'Bookmarks' });
+  const list = panel.getByRole('list', { name: 'Bookmarks' });
+  await expect(list.getByRole('listitem')).toHaveCount(1);
+  await list.getByRole('button', { name: /^Visit/ }).click();
+  await expect(sentence).toContainText('Visit');
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+
+  await list.getByRole('button', { name: /^Rename bookmark/ }).click();
+  await panel.getByRole('textbox', { name: 'Bookmark name' }).fill('Further reading');
+  await panel.getByRole('textbox', { name: 'Bookmark name' }).press('Enter');
+  await expect(list.getByRole('button', { name: 'Further reading', exact: true })).toBeVisible();
+
+  await list.getByRole('button', { name: 'Delete bookmark Further reading', exact: true }).click();
+  await expect(panel.getByText(/No bookmarks yet/)).toBeVisible();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+});
+
 test('a PDF can be read as flowing text and tapped to seek', async ({ page }) => {
   test.setTimeout(75_000);
   await enterAnonymousLibrary(page);

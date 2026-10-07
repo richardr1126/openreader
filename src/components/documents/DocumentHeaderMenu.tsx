@@ -1,9 +1,16 @@
 'use client';
 
-import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon, ListIcon, SearchIcon } from '@/components/icons/Icons';
+import { BookmarkIcon, BookmarksListIcon, DotsVerticalIcon, FileSettingsIcon, DownloadIcon, ListIcon, SearchIcon } from '@/components/icons/Icons';
 import { ZoomControl } from '@/components/documents/ZoomControl';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton } from '@/components/ui';
+
+export interface SentenceBookmarkControl {
+  isBookmarked: boolean;
+  /** False while there is no current sentence that can be bookmarked. */
+  canToggle: boolean;
+  onToggle: () => void;
+}
 
 interface DocumentHeaderMenuProps {
   zoomLevel: number;
@@ -13,9 +20,13 @@ interface DocumentHeaderMenuProps {
   onOpenAudiobook?: () => void;
   onOpenContents?: () => void;
   onOpenSearch?: () => void;
+  onOpenBookmarks?: () => void;
+  /** Toggles a bookmark on the current playback sentence. */
+  sentenceBookmark?: SentenceBookmarkControl;
   isSettingsOpen?: boolean;
   isContentsOpen?: boolean;
   isSearchOpen?: boolean;
+  isBookmarksOpen?: boolean;
   isAudiobookOpen?: boolean;
   showAudiobookExport?: boolean;
   minZoom?: number;
@@ -30,9 +41,12 @@ export function DocumentHeaderMenu({
   onOpenAudiobook,
   onOpenContents,
   onOpenSearch,
+  onOpenBookmarks,
+  sentenceBookmark,
   isSettingsOpen = false,
   isContentsOpen = false,
   isSearchOpen = false,
+  isBookmarksOpen = false,
   isAudiobookOpen = false,
   showAudiobookExport,
   minZoom = 0,
@@ -49,7 +63,7 @@ export function DocumentHeaderMenu({
         min={minZoom}
         max={maxZoom}
       />
-      {/* Reading navigation. A bookmark control belongs after search. */}
+      {/* Reading navigation. */}
       {onOpenContents && (
         <ToolbarButton
           onClick={onOpenContents}
@@ -68,6 +82,29 @@ export function DocumentHeaderMenu({
           title={isSearchOpen ? 'Hide Find' : 'Find in Book'}
         >
           <SearchIcon aria-hidden="true" className="w-4 h-4" />
+        </ToolbarButton>
+      )}
+      {sentenceBookmark && (
+        <ToolbarButton
+          onClick={sentenceBookmark.onToggle}
+          disabled={!sentenceBookmark.canToggle}
+          active={sentenceBookmark.isBookmarked}
+          aria-pressed={sentenceBookmark.isBookmarked}
+          aria-label="Bookmark current sentence"
+          className="disabled:cursor-not-allowed disabled:opacity-50"
+          title={sentenceBookmark.isBookmarked ? 'Remove Bookmark' : 'Bookmark Current Sentence'}
+        >
+          <BookmarkIcon aria-hidden="true" filled={sentenceBookmark.isBookmarked} className="w-4 h-4" />
+        </ToolbarButton>
+      )}
+      {onOpenBookmarks && (
+        <ToolbarButton
+          onClick={onOpenBookmarks}
+          active={isBookmarksOpen}
+          aria-label={isBookmarksOpen ? 'Hide bookmarks' : 'Open bookmarks'}
+          title={isBookmarksOpen ? 'Hide Bookmarks' : 'Bookmarks'}
+        >
+          <BookmarksListIcon aria-hidden="true" className="w-4 h-4" />
         </ToolbarButton>
       )}
       {showAudiobookExport && onOpenAudiobook && (
@@ -135,6 +172,22 @@ export function DocumentHeaderMenu({
                 <MenuActionItem onClick={onOpenSearch} activeOverride={isSearchOpen}>
                   <SearchIcon aria-hidden="true" className="h-4 w-4" />
                   {isSearchOpen ? 'Hide Find' : 'Find in Book'}
+                </MenuActionItem>
+              )}
+              {sentenceBookmark && (
+                <MenuActionItem
+                  onClick={sentenceBookmark.onToggle}
+                  disabled={!sentenceBookmark.canToggle}
+                  activeOverride={sentenceBookmark.isBookmarked}
+                >
+                  <BookmarkIcon aria-hidden="true" filled={sentenceBookmark.isBookmarked} className="h-4 w-4" />
+                  {sentenceBookmark.isBookmarked ? 'Remove Bookmark' : 'Bookmark Sentence'}
+                </MenuActionItem>
+              )}
+              {onOpenBookmarks && (
+                <MenuActionItem onClick={onOpenBookmarks} activeOverride={isBookmarksOpen}>
+                  <BookmarksListIcon aria-hidden="true" className="h-4 w-4" />
+                  {isBookmarksOpen ? 'Hide Bookmarks' : 'Bookmarks'}
                 </MenuActionItem>
               )}
               {showAudiobookExport && onOpenAudiobook && (

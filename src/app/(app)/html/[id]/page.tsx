@@ -20,7 +20,8 @@ import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
-import { ReaderNavigationSidebars, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import type { OutlineEntry } from '@/lib/client/reader/chapters';
 
 export default function HTMLPage() {
@@ -77,6 +78,7 @@ function HtmlReader({
       depth: (block.headingLevel ?? 1) - 1,
     })), [blocks]);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId, 'html');
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -159,9 +161,12 @@ function HtmlReader({
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
               onOpenContents={() => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents')}
               onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
+              onOpenBookmarks={() => setActiveSidebar((prev) => prev === 'bookmarks' ? null : 'bookmarks')}
+              sentenceBookmark={sentenceBookmark}
               isSettingsOpen={activeSidebar === 'settings'}
               isContentsOpen={activeSidebar === 'contents'}
               isSearchOpen={activeSidebar === 'search'}
+              isBookmarksOpen={activeSidebar === 'bookmarks'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={0}
@@ -204,10 +209,12 @@ function HtmlReader({
         onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
       />
       <ReaderNavigationSidebars
-        open={rendererReady && (activeSidebar === 'contents' || activeSidebar === 'search') ? activeSidebar : null}
+        open={rendererReady && isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
         onClose={() => setActiveSidebar(null)}
         outline={outline}
         documentTitle={currDocName || payload.document.name}
+        documentId={routeDocumentId}
+        readerType="html"
       />
       <DocumentSettings
         html

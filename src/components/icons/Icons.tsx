@@ -713,3 +713,42 @@ export function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+export function BookmarkIcon({ filled = false, ...props }: React.SVGProps<SVGSVGElement> & { filled?: boolean }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={props.width || "1.5em"}
+      height={props.height || "1.5em"}
+      {...props}
+    >
+      <path d="M6 4h12v16l-6-4-6 4z" />
+    </svg>
+  );
+}
+
+export function BookmarksListIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={props.width || "1.5em"}
+      height={props.height || "1.5em"}
+      {...props}
+    >
+      <path d="M4 4h9v15l-4.5-3L4 19z" />
+      <path d="M16 7h4M16 11h4M16 15h4" />
+    </svg>
+  );
+}
