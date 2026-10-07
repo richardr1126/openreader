@@ -56,8 +56,8 @@ function SignInContent() {
   const [error, setError] = useState<string | null>(null);
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
-  const { baseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth } = useAuthConfig();
-  const { accountEmailsEnabled, signupPolicy } = useRuntimeConfig();
+  const { baseUrl, githubAuthEnabled, oidcAuth } = useAuthConfig();
+  const { accountEmailsEnabled, signupPolicy, allowAnonymousSessions } = useRuntimeConfig();
   const canSignUp = signupPolicy !== 'closed';
   const { refresh: refreshRateLimit } = useAuthRateLimit();
 
@@ -319,7 +319,7 @@ function SignInContent() {
           )}
 
           {/* Anonymous */}
-          {allowAnonymousAuthSessions && (
+          {allowAnonymousSessions && (
             <Button
               type="button"
               disabled={isAnyLoading}

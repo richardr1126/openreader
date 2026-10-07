@@ -11,12 +11,11 @@ import { AuthLoader } from '@/components/auth/AuthLoader';
 interface ProvidersProps {
   children: ReactNode;
   authBaseUrl: string | null;
-  allowAnonymousAuthSessions: boolean;
   githubAuthEnabled: boolean;
   oidcAuth: OidcAuthPublicConfig | null;
 }
 
-export function Providers({ children, authBaseUrl, allowAnonymousAuthSessions, githubAuthEnabled, oidcAuth }: ProvidersProps) {
+export function Providers({ children, authBaseUrl, githubAuthEnabled, oidcAuth }: ProvidersProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -49,7 +48,6 @@ export function Providers({ children, authBaseUrl, allowAnonymousAuthSessions, g
       <RuntimeConfigProvider>
         <AuthRateLimitProvider
           authBaseUrl={authBaseUrl}
-          allowAnonymousAuthSessions={allowAnonymousAuthSessions}
           githubAuthEnabled={githubAuthEnabled}
           oidcAuth={oidcAuth}
         >

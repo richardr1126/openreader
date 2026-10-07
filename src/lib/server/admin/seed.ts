@@ -27,7 +27,9 @@ import type { TtsProviderId } from '@openreader/tts/provider-catalog';
  *  2) Legacy provider fallback: if providers were not supplied in JSON and
  *     no provider rows exist, seed default-openai from API_KEY/API_BASE and
  *     use API_MODEL_NAME for its default model when provided.
- *  3) Legacy row cleanup for historical defaultTtsProvider/defaultTtsModel rows.
+ *  3) Legacy anonymous-session fallback: USE_ANONYMOUS_AUTH_SESSIONS=true seeds
+ *     allowAnonymousSessions once so pre-toggle deployments keep guest access.
+ *  4) Legacy row cleanup for historical defaultTtsProvider/defaultTtsModel rows.
  */
 
 const RUNTIME_SEED_JSON = 'RUNTIME_SEED_JSON';
@@ -102,6 +104,8 @@ async function runSeed(): Promise<void> {
   if (shouldUseEnvProviderFallback(parsedSeed?.hasProvidersSection ?? false)) {
     await seedDefaultAdminProviderFromEnvFallback();
   }
+
+  await seedAnonymousSessionsFromEnvFallback();
 
   await cleanupLegacyDefaultTtsProviderSeedRow();
   await cleanupLegacyDefaultTtsModelRows();
@@ -367,6 +371,12 @@ async function seedDefaultAdminProviderFromEnvFallback(): Promise<void> {
       error,
     });
   }
+}
+
+async function seedAnonymousSessionsFromEnvFallback(): Promise<void> {
+  if (process.env.USE_ANONYMOUS_AUTH_SESSIONS?.trim().toLowerCase() !== 'true') return;
+  // Inserts only when absent, so a JSON seed or an admin edit always wins.
+  await seedRuntimeConfigFromValues({ allowAnonymousSessions: true }, 'env-seed');
 }
 
 async function cleanupLegacyDefaultTtsProviderSeedRow(): Promise<void> {

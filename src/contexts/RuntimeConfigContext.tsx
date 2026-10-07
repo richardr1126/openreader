@@ -16,6 +16,7 @@ export interface RuntimeConfig {
   changelogFeedUrl: string;
   appVersion: string;
   signupPolicy: 'open' | 'approval' | 'closed';
+  allowAnonymousSessions: boolean;
   enableTtsProvidersTab: boolean;
   enableAudiobookExport: boolean;
   enableDocxConversion: boolean;
@@ -34,6 +35,7 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   changelogFeedUrl: 'https://docs.openreader.richardr.dev/changelog/manifest.json',
   appVersion: '0.0.0',
   signupPolicy: 'open',
+  allowAnonymousSessions: false,
   enableTtsProvidersTab: true,
   enableAudiobookExport: true,
   enableDocxConversion: true,

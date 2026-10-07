@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, ReactNode } from 'react';
 import type { BetterFetchError } from 'better-auth/react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useSessionQueryReset } from '@/hooks/useSessionQueryReset';
 import { getAuthClient } from '@/lib/client/auth-client';
@@ -92,7 +93,8 @@ function isRateLimited(info: ErrorInfo | null): boolean {
 }
 
 export function AuthLoader({ children }: { children: ReactNode }) {
-  const { baseUrl, allowAnonymousAuthSessions } = useAuthConfig();
+  const { baseUrl } = useAuthConfig();
+  const { allowAnonymousSessions } = useRuntimeConfig();
   const { refresh: refreshRateLimit } = useAuthRateLimit();
   const { data: session, isPending, error: sessionError, refetch: refetchSession } = useAuthSession();
   // Evict a previous session's user-scoped query cache when the active user changes.
@@ -117,7 +119,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
     attemptedForNullSessionRef.current = false;
     setBootstrapError(null);
     setIsRedirecting(false);
-  }, [baseUrl, allowAnonymousAuthSessions, pathname]);
+  }, [baseUrl, allowAnonymousSessions, pathname]);
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -125,7 +127,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
 
       if (session) {
         hadSessionRef.current = true;
-        if (!allowAnonymousAuthSessions && session.user.isAnonymous) {
+        if (!allowAnonymousSessions && session.user.isAnonymous) {
           if (clearingDisallowedAnonymousRef.current) return;
           clearingDisallowedAnonymousRef.current = true;
           try {
@@ -147,7 +149,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (!allowAnonymousAuthSessions) {
+      if (!allowAnonymousSessions) {
         setIsAutoLoggingIn(false);
         setBootstrapError(null);
         if (!isAuthPage) {
@@ -261,7 +263,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
     session,
     isPending,
     baseUrl,
-    allowAnonymousAuthSessions,
+    allowAnonymousSessions,
     refreshRateLimit,
     refetchSession,
     retryNonce,
@@ -276,12 +278,12 @@ export function AuthLoader({ children }: { children: ReactNode }) {
   }, [sessionError]);
 
   const shouldBlockForProtectedNoSession =
-    !allowAnonymousAuthSessions && !isAuthPage && !session;
+    !allowAnonymousSessions && !isAuthPage && !session;
   const shouldBlockForDisallowedAnonymous =
-    !allowAnonymousAuthSessions && Boolean(session?.user?.isAnonymous);
+    !allowAnonymousSessions && Boolean(session?.user?.isAnonymous);
   const isLoading = (
-    (allowAnonymousAuthSessions && !isAuthPage && (isPending || isAutoLoggingIn || !session)) ||
-    (!allowAnonymousAuthSessions && !isAuthPage && (
+    (allowAnonymousSessions && !isAuthPage && (isPending || isAutoLoggingIn || !session)) ||
+    (!allowAnonymousSessions && !isAuthPage && (
       isPending || isRedirecting || shouldBlockForProtectedNoSession || shouldBlockForDisallowedAnonymous
     ))
   );

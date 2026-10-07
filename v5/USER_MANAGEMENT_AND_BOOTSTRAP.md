@@ -21,9 +21,16 @@ storage cleanup retains the account and ownership rows.
 
 - `open`: registered accounts become active immediately.
 - `approval`: new registered accounts are pending and cannot create a session
-  until approved. Anonymous sessions still require their separate deployment
-  opt-in.
+  until approved.
 - `closed`: new registered accounts are refused; existing accounts can sign in.
+
+Guest access is the separate `allowAnonymousSessions` runtime setting (default
+off), independent of `signupPolicy`. Middleware cannot read SQL, so it lets
+signed-out visitors reach app pages; the Better Auth user-create hook refuses
+new anonymous users while the setting is off, and `AuthLoader` redirects to
+sign-in and signs out lingering guest sessions. The legacy
+`USE_ANONYMOUS_AUTH_SESSIONS=true` variable only seeds the setting when no row
+exists, so pre-toggle deployments keep guest access across the upgrade.
 
 The migration maps an existing `enableUserSignups` database value to `open` or
 `closed`, gives existing users active status, and preserves existing admin

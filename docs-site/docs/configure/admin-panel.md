@@ -56,8 +56,9 @@ Approval is not email verification. If email ownership matters to your
 deployment, enable account email delivery and check verification before
 approval, or verify identity out of band. In **Site features**, set
 `signupPolicy=approval` for approve-only registration, `open` for immediate
-access, or `closed` to reject new registrations. Anonymous sessions are a
-separate deployment opt-in.
+access, or `closed` to reject new registrations. **Guest sessions**
+(`allowAnonymousSessions`) is a separate toggle: it lets visitors use the app
+without an account, regardless of the sign-up policy.
 
 ## Account email through Resend
 
@@ -146,6 +147,7 @@ Runtime-editable settings, one row per key:
 | `defaultTtsProvider` | Default provider id new users start with (built-in id or shared slug). |
 | `changelogFeedUrl` | Public changelog manifest URL used by the Settings modal changelog panel. |
 | `signupPolicy` | `open`, `approval`, or `closed`. Approval creates pending accounts that cannot sign in until approved under **Admin → Users**; closed refuses new accounts. |
+| `allowAnonymousSessions` | Guest sessions (default `false`). When on, signed-out visitors get an anonymous session and can later claim its data by signing up. Turning it off refuses new guest sessions and signs existing guests out on their next page load. |
 | `enableTtsProvidersTab` | Whether the user-facing TTS Provider tab in Settings is shown. |
 | `showAllProviderModels` | When `false`, users are restricted to each provider's default model (shared provider `defaultModel` or built-in provider default). |
 | `enableAudiobookExport` | Show the audiobook export entry points on PDF/EPUB pages. |

@@ -5,7 +5,7 @@ import { Toaster } from 'react-hot-toast';
 import { Providers } from '@/app/providers';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { AppMain, AppShell } from '@/components/layout';
-import { getAuthBaseUrl, getOidcPublicAuthConfig, isAnonymousAuthSessionsEnabled, isGithubAuthEnabled } from '@/lib/server/auth/config';
+import { getAuthBaseUrl, getOidcPublicAuthConfig, isGithubAuthEnabled } from '@/lib/server/auth/config';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,14 +25,12 @@ export const metadata: Metadata = {
 
 export default function AppLayout({ children }: { children: ReactNode }) {
   const authBaseUrl = getAuthBaseUrl();
-  const allowAnonymousAuthSessions = isAnonymousAuthSessionsEnabled();
   const githubAuthEnabled = isGithubAuthEnabled();
   const oidcAuth = getOidcPublicAuthConfig();
 
   return (
     <Providers
       authBaseUrl={authBaseUrl}
-      allowAnonymousAuthSessions={allowAnonymousAuthSessions}
       githubAuthEnabled={githubAuthEnabled}
       oidcAuth={oidcAuth}
     >

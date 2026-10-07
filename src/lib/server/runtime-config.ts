@@ -38,12 +38,16 @@ function assertServerRuntime(caller: string): void {
 export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig> {
   assertServerRuntime('getResolvedRuntimeConfig');
   await ensureAdminSeed();
-  const values = await getRuntimeConfig();
+  const [values, accountEmailsEnabled, gutenbergCatalogEnabled] = await Promise.all([
+    getRuntimeConfig(),
+    isAccountEmailEnabled().catch(() => false),
+    isGutenbergCatalogEnabled().catch(() => false),
+  ]);
   return {
     ...values,
     computeAvailable: isComputeWorkerAvailable(),
-    accountEmailsEnabled: await isAccountEmailEnabled().catch(() => false),
-    gutenbergCatalogEnabled: await isGutenbergCatalogEnabled().catch(() => false),
+    accountEmailsEnabled,
+    gutenbergCatalogEnabled,
   };
 }
 

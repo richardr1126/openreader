@@ -52,7 +52,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `BASE_URL` | Auth | unset | Required at startup |
 | `AUTH_SECRET` | App auth + provider encryption | unset | Required on the app; never configure it on a standalone worker |
 | `AUTH_TRUSTED_ORIGINS` | Auth | empty | Add extra allowed origins |
-| `USE_ANONYMOUS_AUTH_SESSIONS` | Auth | `false` | Set `true` to allow anonymous auth sessions |
+| `USE_ANONYMOUS_AUTH_SESSIONS` | Auth bootstrap seed | `false` | Legacy: `true` turns on the `allowAnonymousSessions` site feature on first boot |
 | `GITHUB_CLIENT_ID` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_SECRET` to enable GitHub sign-in |
 | `GITHUB_CLIENT_SECRET` | Auth/OAuth | unset | Set with `GITHUB_CLIENT_ID` to enable GitHub sign-in |
 | `OIDC_CLIENT_ID` | Auth/OAuth | unset | Set with `OIDC_CLIENT_SECRET` and `OIDC_DISCOVERY_URL` to enable generic OIDC sign-in |
@@ -190,9 +190,15 @@ Additional allowed origins for auth requests.
 
 ### USE_ANONYMOUS_AUTH_SESSIONS
 
-Controls whether auth-enabled deployments can create/use anonymous sessions.
+Legacy first-boot seed for guest (anonymous) sessions. Guest access is now the
+`allowAnonymousSessions` site feature under **Settings → Admin → Instance →
+Site features**.
 
 - Default: `false`
+- `true` seeds `allowAnonymousSessions=true` only when the setting has never been
+  saved, so existing deployments keep guest access after upgrading. After that,
+  the admin toggle (or a `runtimeConfig.allowAnonymousSessions` seed) wins.
+- `false` or unset does nothing; guest sessions stay off by default.
 
 ### GITHUB_CLIENT_ID
 
@@ -645,6 +651,7 @@ Example:
   "version": 1,
   "runtimeConfig": {
     "signupPolicy": "open",
+    "allowAnonymousSessions": false,
     "defaultTtsProvider": "custom-openai",
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,

@@ -61,12 +61,6 @@ function publicRouteResponse(pathname: string): NextResponse {
   return response;
 }
 
-function isAnonymousAuthEnabled(): boolean {
-  getRequiredAuthEnv();
-  const raw = process.env.USE_ANONYMOUS_AUTH_SESSIONS;
-  return raw?.trim().toLowerCase() === 'true';
-}
-
 function isRichardrDevProductionInstance(): boolean {
   return process.env.RICHARDRDEV_PRODUCTION?.trim().toLowerCase() === 'true';
 }
@@ -142,27 +136,10 @@ export function middleware(request: NextRequest) {
     return publicRouteResponse(pathname);
   }
 
-  // When anonymous auth is enabled, unauthenticated users need to reach
-  // the page so AuthLoader.tsx can bootstrap an anonymous session client-side.
-  if (isAnonymousAuthEnabled()) {
-    return NextResponse.next();
-  }
-
-  // Check for the presence of a session cookie.
-  const hasSession = SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
-
-  if (!hasSession) {
-    // API routes get a 401 instead of a redirect.
-    if (pathname.startsWith('/api/')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Page routes redirect to sign-in.
-    const signInUrl = request.nextUrl.clone();
-    signInUrl.pathname = '/signin';
-    return NextResponse.redirect(signInUrl);
-  }
-
+  // Guest sessions are the admin-editable `allowAnonymousSessions` runtime
+  // setting, which lives in SQL and cannot be read here. Signed-out visitors
+  // therefore reach the page: AuthLoader.tsx either bootstraps an anonymous
+  // session or redirects to /signin, and every API route authenticates itself.
   return NextResponse.next();
 }
 

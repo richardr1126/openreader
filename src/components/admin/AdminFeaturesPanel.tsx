@@ -327,6 +327,14 @@ export function AdminFeaturesPanel({
           />
         </SettingRow>
         <ToggleRow
+          label="Guest sessions"
+          description="Let visitors use the app without an account. Guests can keep their data by signing up later."
+          checked={Boolean(draft.allowAnonymousSessions)}
+          onChange={(checked) => updateDraft('allowAnonymousSessions', checked)}
+          meta={renderSource('allowAnonymousSessions')}
+          variant="plain"
+        />
+        <ToggleRow
           label="Audiobook export"
           description='Show "Export audiobook" on PDF/EPUB pages.'
           checked={Boolean(draft.enableAudiobookExport)}
