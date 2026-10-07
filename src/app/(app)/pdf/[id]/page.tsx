@@ -227,6 +227,7 @@ function PdfReader({
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         documentId={routeDocumentId}
         language={documentSettings.language ?? 'auto'}
+        detectedLanguage={payload.document.language}
         onLanguageChange={(language) => {
           const nextSettings: DocumentSettingsValue = {
             ...documentSettings,

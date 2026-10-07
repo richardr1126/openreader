@@ -196,7 +196,7 @@ function EpubReader({
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         documentId={routeDocumentId || ''}
         language={language}
-        detectedLanguage={metadataLanguage}
+        detectedLanguage={metadataLanguage ?? payload.document.language}
         onLanguageChange={(nextLanguage) => {
           void bootstrap.updateSettings({
             ...documentSettings,

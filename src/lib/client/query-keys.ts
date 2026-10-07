@@ -8,6 +8,7 @@ export const queryKeys = {
   readerDocumentSource: (sessionId: string, documentId: string, contentVersion: string) => (
     ['reader-document-source', sessionId, documentId, contentVersion] as const
   ),
+  documentBookmarks: (sessionId: string, documentId: string) => ['document-bookmarks', sessionId, documentId] as const,
   libraryDocuments: (sessionId: string) => ['documents', sessionId, 'library'] as const,
   preferences: (sessionId: string) => ['preferences', sessionId] as const,
   onboarding: (sessionId: string) => ['onboarding', sessionId] as const,

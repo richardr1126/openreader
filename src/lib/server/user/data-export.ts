@@ -26,6 +26,7 @@ export type UserExportManifest = {
     folders: unknown[];
     onboarding: unknown | null;
     readingHistory: unknown[];
+    bookmarks: unknown[];
     computeLimitAdmissions: unknown[];
     computeLimitEvents: unknown[];
     documentSettings: unknown[];
@@ -54,6 +55,7 @@ export type BuildUserExportManifestInput = {
   folders?: unknown[];
   onboarding?: unknown | null;
   readingHistory: unknown[];
+  bookmarks?: unknown[];
   computeLimitAdmissions: unknown[];
   computeLimitEvents: unknown[];
   documentSettings: unknown[];
@@ -86,6 +88,7 @@ export function buildUserExportManifest(input: BuildUserExportManifestInput): Us
     folders = [],
     onboarding = null,
     readingHistory,
+    bookmarks = [],
     computeLimitAdmissions,
     computeLimitEvents,
     documentSettings,
@@ -119,6 +122,7 @@ export function buildUserExportManifest(input: BuildUserExportManifestInput): Us
       folders,
       onboarding,
       readingHistory,
+      bookmarks,
       computeLimitAdmissions,
       computeLimitEvents,
       documentSettings,

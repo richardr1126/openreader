@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import {
   documentSettings,
   documents,
+  userDocumentBookmarks,
 } from '@openreader/database/schema-sqlite';
 import { transferUserDocumentSettings, transferUserDocuments } from '../../src/lib/server/user/claim-data';
 
@@ -27,8 +28,25 @@ describe('transferUserDocuments', () => {
         recently_opened_at INTEGER,
         parse_state TEXT,
         parsed_json_key TEXT,
+        author TEXT,
+        language TEXT,
         created_at INTEGER,
         PRIMARY KEY (id, user_id)
+      );
+      CREATE TABLE user_document_bookmarks (
+        id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        reader_type TEXT NOT NULL,
+        location TEXT NOT NULL,
+        segment_key TEXT,
+        segment_ordinal INTEGER,
+        label TEXT,
+        snippet TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (id, user_id),
+        FOREIGN KEY (document_id, user_id) REFERENCES documents(id, user_id) ON DELETE cascade
       );
     `);
 
@@ -68,6 +86,15 @@ describe('transferUserDocuments', () => {
       },
     ]);
 
+    await db.insert(userDocumentBookmarks).values({
+      id: 'mark-1',
+      userId: fromUserId,
+      documentId: 'doc-b',
+      readerType: 'html',
+      location: 'html:1:0',
+      snippet: 'Kept across the claim',
+    });
+
     const transferred = await transferUserDocuments(fromUserId, toUserId, { db });
     expect(transferred).toBe(2);
 
@@ -77,6 +104,10 @@ describe('transferUserDocuments', () => {
     const remainingTo = await db.select().from(documents).where(eq(documents.userId, toUserId));
     const ids = remainingTo.map((r) => r.id).sort();
     expect(ids).toEqual(['doc-a', 'doc-b']);
+
+    // The source document row cascades its bookmarks, so they must move first.
+    const bookmarks = await db.select().from(userDocumentBookmarks);
+    expect(bookmarks.map((row) => [row.id, row.userId, row.documentId])).toEqual([['mark-1', toUserId, 'doc-b']]);
   });
 
   test('moves document settings while preserving newer destination settings', async () => {

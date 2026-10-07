@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import { importUrl } from '@/lib/client/api/documents';
+import { DocumentImportFile, importUrl } from '@/lib/client/api/documents';
 import {
   SidebarDialog,
   SegmentedControl,
@@ -143,8 +143,9 @@ export function UploadMenuDialog({
         .replace(/^_+|_+$/g, '') // trim leading/trailing underscores
         .substring(0, 80);
       const filename = `${safeTitle}.md`;
-      const file = new File([scrapeResult.content], filename, {
+      const file = new DocumentImportFile([scrapeResult.content], filename, {
         type: 'text/markdown',
+        metadata: { author: scrapeResult.author, language: scrapeResult.language },
       });
 
       setWebUrl('');

@@ -15,6 +15,7 @@ export const userPreferences = usePostgres ? postgresSchema.userPreferences : sq
 export const userOnboarding = usePostgres ? postgresSchema.userOnboarding : sqliteSchema.userOnboarding;
 export const documentSettings = usePostgres ? postgresSchema.documentSettings : sqliteSchema.documentSettings;
 export const userDocumentProgress = usePostgres ? postgresSchema.userDocumentProgress : sqliteSchema.userDocumentProgress;
+export const userDocumentBookmarks = usePostgres ? postgresSchema.userDocumentBookmarks : sqliteSchema.userDocumentBookmarks;
 export const documentPreviews = usePostgres ? postgresSchema.documentPreviews : sqliteSchema.documentPreviews;
 export const adminProviders = usePostgres ? postgresSchema.adminProviders : sqliteSchema.adminProviders;
 export const adminSettings = usePostgres ? postgresSchema.adminSettings : sqliteSchema.adminSettings;

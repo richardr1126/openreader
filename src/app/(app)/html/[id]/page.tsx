@@ -189,6 +189,7 @@ function HtmlReader({
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         documentId={routeDocumentId}
         language={language}
+        detectedLanguage={payload.document.language}
         onLanguageChange={(nextLanguage) => {
           void bootstrap.updateSettings({
             ...documentSettings,

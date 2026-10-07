@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
       type: 'epub',
       lastModified: Date.now(),
       title: book.title,
+      // Import hints the client forwards to finalize; the catalog is more
+      // reliable than whatever the EPUB package declares.
+      author: book.authors.slice(0, 3).join(', ') || null,
+      language: book.languages[0] ?? null,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return errorResponse(error, {

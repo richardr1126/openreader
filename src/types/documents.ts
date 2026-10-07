@@ -10,6 +10,21 @@ export interface BaseDocument {
   type: DocumentType;
   scope?: 'user';
   folderId?: string;
+  /** Captured at import from document metadata or catalog; absent when unknown. */
+  author?: string;
+  /** BCP 47 tag captured at import (metadata or detected text); absent when unknown. */
+  language?: string;
+  /**
+   * The user's saved reading position summary. Absent means the document has
+   * never been opened far enough to save progress ("unread").
+   */
+  readingProgress?: DocumentReadingProgress;
+}
+
+export interface DocumentReadingProgress {
+  /** 0..1 through the document, or null when the reader could not compute it. */
+  fraction: number | null;
+  updatedAtMs: number;
 }
 
 export interface PDFDocument extends BaseDocument {
