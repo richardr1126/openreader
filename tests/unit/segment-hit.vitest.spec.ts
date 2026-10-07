@@ -6,8 +6,10 @@ import {
   createTapGuard,
   indexSegmentsBySource,
   pickSegmentForToken,
+  segmentSourceKey,
   tokenIndexAtCaret,
 } from '@/lib/client/reader/segment-hit';
+import { normalizePlaybackPlan, playbackPlanToCanonicalSegments } from '@/lib/shared/playback-plan';
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean);
 
@@ -31,20 +33,31 @@ describe('pickSegmentForToken', () => {
     expect(pickSegmentForToken(candidates, hyphenated, 10)?.ordinal).toBe(9);
   });
 
-  it('places sentences that cross a source boundary by their visible part', () => {
-    const index = indexSegmentsBySource([
-      { ordinal: 1, text: 'It began here and', startAnchor: { sourceKey: 'a' }, endAnchor: { sourceKey: 'b' } },
-      { ordinal: 2, text: 'Next one.', startAnchor: { sourceKey: 'b' }, endAnchor: { sourceKey: 'b' } },
-      { ordinal: 3, text: 'Last starts', startAnchor: { sourceKey: 'b' }, endAnchor: { sourceKey: 'c' } },
-    ]);
-    const unitB = index.get('b') ?? [];
-    expect(unitB.map((candidate) => [candidate.ordinal, candidate.part])).toEqual([
-      [1, 'tail'], [2, undefined], [3, 'head'],
-    ]);
-    const tokens = words('here and Next one. Last');
-    expect(pickSegmentForToken(unitB, tokens, 1)).toEqual({ ordinal: 1, startToken: 0, endToken: 1 });
-    expect(pickSegmentForToken(unitB, tokens, 3)).toEqual({ ordinal: 2, startToken: 2, endToken: 3 });
-    expect(pickSegmentForToken(unitB, tokens, 4)).toEqual({ ordinal: 3, startToken: 4, endToken: 4 });
+  it('indexes the client plan by the rendered PDF block or HTML anchor', () => {
+    // The real client shape: anchors carry segment keys, only locators name the unit.
+    const segments = playbackPlanToCanonicalSegments(normalizePlaybackPlan({
+      segments: [
+        { ordinal: 0, segmentKey: 'doc:pdf:v1:aaa', text: 'Chapter One', locator: { readerType: 'pdf', page: 1, blockId: 'p1-b0' } },
+        { ordinal: 1, segmentKey: 'doc:pdf:v1:bbb', text: 'First.', locator: { readerType: 'pdf', page: 1, blockId: 'p1-b1' } },
+        { ordinal: 2, segmentKey: 'doc:pdf:v1:ccc', text: 'Second.', locator: { readerType: 'pdf', page: 1, blockId: 'p1-b1' } },
+        { ordinal: 3, segmentKey: 'doc:html:v1:ddd', text: 'Heading', locator: { readerType: 'html', location: 'b-0002' } },
+        { ordinal: 4, segmentKey: 'doc:epub:v1:eee', text: 'Spine.', locator: { readerType: 'epub', spineHref: 'a.xhtml', spineIndex: 0, charOffset: 0 } },
+      ],
+    }));
+    const index = indexSegmentsBySource(segments);
+    expect([...index.keys()]).toEqual(['pdf:1:p1-b0', 'pdf:1:p1-b1', 'b-0002', 'segment:4']);
+    expect(index.get('pdf:1:p1-b1')?.map((candidate) => candidate.ordinal)).toEqual([1, 2]);
+    expect(segmentSourceKey(segments[3])).toBe('b-0002');
+  });
+
+  it('resolves a sentence continuing into the next unit proportionally', () => {
+    const tokens = words('Next one. Last starts');
+    const unit = [
+      { ordinal: 2, text: 'Next one.' },
+      { ordinal: 3, text: 'Last starts here and runs on' },
+    ];
+    expect(pickSegmentForToken(unit, tokens, 0)?.ordinal).toBe(2);
+    expect(pickSegmentForToken(unit, tokens, 3)?.ordinal).toBe(3);
   });
 
   it('takes a single candidate whole and rejects taps outside the unit', () => {

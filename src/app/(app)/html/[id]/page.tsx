@@ -22,6 +22,7 @@ import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
+import { ReaderToolbar, ReadingProgress } from '@/components/reader/ReaderToolbar';
 import type { OutlineEntry } from '@/lib/client/reader/chapters';
 
 export default function HTMLPage() {
@@ -159,14 +160,7 @@ function HtmlReader({
               onZoomDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
-              onOpenContents={() => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents')}
-              onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
-              onOpenBookmarks={() => setActiveSidebar((prev) => prev === 'bookmarks' ? null : 'bookmarks')}
-              sentenceBookmark={sentenceBookmark}
               isSettingsOpen={activeSidebar === 'settings'}
-              isContentsOpen={activeSidebar === 'contents'}
-              isSearchOpen={activeSidebar === 'search'}
-              isBookmarksOpen={activeSidebar === 'bookmarks'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={0}
@@ -175,17 +169,24 @@ function HtmlReader({
           </div>
         ) : null}
       />
-      <div className="relative overflow-hidden" style={{ height: containerHeight }}>
+      <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
+        <ReaderToolbar
+          hidden={!rendererReady}
+          activePanel={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
+          onTogglePanel={(panel) => setActiveSidebar((prev) => prev === panel ? null : panel)}
+          sentenceBookmark={sentenceBookmark}
+          navigation={<ReadingProgress />}
+        />
         {currDocData !== undefined ? (
           <div
-            className={rendererReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
+            className={rendererReady ? 'min-h-0 w-full flex-1' : 'min-h-0 w-full flex-1 opacity-0 pointer-events-none'}
             aria-hidden={!rendererReady}
             style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}
           >
             <HTMLViewer
               className="h-full"
               blocks={blocks}
-              isTxt={isTxt}
+              format={isTxt ? 'text' : 'markdown'}
               onReady={onReady}
               onError={onError}
             />

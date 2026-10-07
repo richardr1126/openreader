@@ -6,22 +6,16 @@ import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
-import { ListIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
-import { ToolbarButton } from '@/components/ui';
 import { hardenEpubSection } from '@/lib/client/epub/epub-section-hardening';
 
 interface EPUBViewerProps {
   className?: string;
   onReady?: () => void;
-  /** Opens the reader's shared Contents panel. */
-  onOpenContents?: () => void;
   onError?: (error: Error) => void;
   epubState: Pick<
     EpubDocumentState,
     | 'currDocData'
-    | 'currDocPage'
-    | 'currDocPages'
     | 'isPlaybackReady'
     | 'placementLifecycle'
     | 'renderedTextRevision'
@@ -103,11 +97,9 @@ function EpubRenditionHost({
   return <div ref={hostRef} className="h-full w-full" />;
 }
 
-export function EPUBViewer({ className = '', epubState, onReady, onError, onOpenContents }: EPUBViewerProps) {
+export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUBViewerProps) {
   const {
     currDocData,
-    currDocPage,
-    currDocPages,
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
@@ -239,37 +231,6 @@ export function EPUBViewer({ className = '', epubState, onReady, onError, onOpen
       data-placement-status={placementLifecycle.status}
       ref={containerRef}
     >
-      <div className="flex items-center justify-between px-2 py-1 border-b border-line-soft bg-surface text-xs text-soft">
-        <div className="flex items-center gap-2">
-          <ToolbarButton
-            type="button"
-            onClick={onOpenContents}
-            aria-label="Show chapters"
-            className="px-1"
-          >
-            <ListIcon className="w-4 h-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            type="button"
-            onClick={() => handleLocationChanged('prev')}
-            aria-label="Previous section"
-          >
-            <ChevronLeftIcon className="w-4 h-4" />
-          </ToolbarButton>
-        </div>
-        {currDocPages !== undefined && typeof currDocPage === 'number' && (
-          <span className="px-2 tabular-nums">
-            {currDocPage} / {currDocPages}
-          </span>
-        )}
-        <ToolbarButton
-          type="button"
-          onClick={() => handleLocationChanged('next')}
-          aria-label="Next section"
-        >
-          <ChevronRightIcon className="w-4 h-4" />
-        </ToolbarButton>
-      </div>
       <div className="flex-1 min-h-0">
         <EpubRenditionHost
           data={currDocData}

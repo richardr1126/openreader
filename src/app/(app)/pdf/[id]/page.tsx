@@ -28,7 +28,8 @@ import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
 import { useConfig } from '@/contexts/ConfigContext';
-import { PlanTextViewer } from '@/components/views/PlanTextViewer';
+import { PlanTextReader } from '@/components/views/HTMLViewer';
+import { PageJumpControl, ReaderPager, ReaderToolbar } from '@/components/reader/ReaderToolbar';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import { usePdfOutline } from '@/hooks/pdf/usePdfOutline';
@@ -92,6 +93,7 @@ function PdfReader({
     currentSentenceOrdinal,
     sentences,
     stop,
+    skipToLocation,
     setPdfSkipBlockKinds,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
@@ -202,14 +204,7 @@ function PdfReader({
               onZoomDecrease={handleZoomOut}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
-              onOpenContents={() => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents')}
-              onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
-              onOpenBookmarks={() => setActiveSidebar((prev) => prev === 'bookmarks' ? null : 'bookmarks')}
-              sentenceBookmark={sentenceBookmark}
               isSettingsOpen={activeSidebar === 'settings'}
-              isContentsOpen={activeSidebar === 'contents'}
-              isSearchOpen={activeSidebar === 'search'}
-              isBookmarksOpen={activeSidebar === 'bookmarks'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={50}
@@ -218,8 +213,30 @@ function PdfReader({
           </div>
         }
       />
-      <div className="relative overflow-hidden" style={{ height: containerHeight }}>
-        <div className={rendererReady ? 'h-full' : 'h-full opacity-0 pointer-events-none'}>
+      <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
+        <ReaderToolbar
+          hidden={!rendererReady}
+          activePanel={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
+          onTogglePanel={(panel) => setActiveSidebar((prev) => prev === panel ? null : panel)}
+          sentenceBookmark={sentenceBookmark}
+          navigation={currDocPages ? (
+            <ReaderPager
+              unit="page"
+              onPrevious={() => skipToLocation(currDocPage - 1, true)}
+              onNext={() => skipToLocation(currDocPage + 1, true)}
+              canPrevious={currDocPage > 1}
+              canNext={currDocPage < currDocPages}
+              position={(
+                <PageJumpControl
+                  currentPage={currDocPage}
+                  numPages={currDocPages}
+                  onGoToPage={(page) => skipToLocation(page, true)}
+                />
+              )}
+            />
+          ) : null}
+        />
+        <div className={rendererReady ? 'min-h-0 flex-1' : 'min-h-0 flex-1 opacity-0 pointer-events-none'}>
           {readerShowsLayout ? (
             <PDFViewer
               zoomLevel={zoomLevel}
@@ -228,7 +245,7 @@ function PdfReader({
               pdfState={pdfState}
             />
           ) : (
-            <PlanTextViewer readerType="pdf" onReady={onReady} />
+            <PlanTextReader className="h-full" readerType="pdf" onReady={onReady} onError={onError} />
           )}
         </div>
       </div>
@@ -242,7 +259,7 @@ function PdfReader({
         />
       )}
       {rendererReady ? (
-        <TTSPlayer currentPage={currDocPage} numPages={currDocPages} isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
+        <TTSPlayer isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
       ) : null}
       <VoiceSidebar
         isOpen={activeSidebar === 'voice'}

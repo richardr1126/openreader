@@ -405,19 +405,6 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0 1px;
 }
 
-/* Plain-text reading mode: each sentence is a tap-to-seek target. */
-.openreader-plan-sentence {
-  cursor: pointer;
-  border-radius: 2px;
-}
-@media (hover: hover) {
-  .openreader-plan-sentence:hover {
-    text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 3px;
-  }
-}
-
 /* Static prism gradient divider (no animation) */
 .prism-divider {
   width: 100%;

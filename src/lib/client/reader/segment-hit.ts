@@ -12,6 +12,7 @@
  */
 import { segmentWords } from '@openreader/tts/language';
 import { normalizeHighlightToken } from '@/lib/client/highlight-token-alignment';
+import type { TTSSegmentLocator } from '@/types/client';
 
 /** NodeFilter.SHOW_TEXT, spelled out so iframe documents need no global NodeFilter. */
 const SHOW_TEXT = 0x4;
@@ -26,38 +27,39 @@ export type HitToken = {
 export type SeekCandidate = {
   ordinal: number;
   text: string;
-  /**
-   * Which part of the sentence this unit renders when the sentence crosses a
-   * source boundary: its `tail` carried in from the previous unit, or its
-   * `head` continuing into the next one. Omitted when the unit holds it whole.
-   */
-  part?: 'head' | 'tail';
 };
 
-type AnchoredSegment = {
+type LocatedSegment = {
   ordinal: number;
   text: string;
-  startAnchor: { sourceKey: string };
-  endAnchor: { sourceKey: string };
+  ownerLocator: TTSSegmentLocator | null;
 };
 
-/** Group plan segments by every source unit they render text in, in plan order. */
-export function indexSegmentsBySource(segments: readonly AnchoredSegment[]): Map<string, SeekCandidate[]> {
+/**
+ * The rendered unit a plan segment is read from: a parsed PDF block
+ * (`pdf:<page>:<blockId>`, the worker's source key) or an HTML block anchor.
+ * The client plan carries only each segment's owner locator, so this is the
+ * one place a segment is tied to the element a reader renders it in. Readers
+ * without a block-shaped locator (EPUB) key every segment on its own.
+ */
+export function segmentSourceKey(segment: Pick<LocatedSegment, 'ordinal' | 'ownerLocator'>): string {
+  const locator = segment.ownerLocator;
+  if (locator?.readerType === 'pdf' && typeof locator.page === 'number' && locator.blockId) {
+    return `pdf:${locator.page}:${locator.blockId}`;
+  }
+  if (locator?.readerType === 'html' && locator.location) return locator.location;
+  return `segment:${segment.ordinal}`;
+}
+
+/** Group plan segments by the rendered unit that owns them, in plan order. */
+export function indexSegmentsBySource(segments: readonly LocatedSegment[]): Map<string, SeekCandidate[]> {
   const index = new Map<string, SeekCandidate[]>();
-  const add = (key: string, candidate: SeekCandidate) => {
+  for (const segment of segments) {
+    const key = segmentSourceKey(segment);
+    const candidate = { ordinal: segment.ordinal, text: segment.text };
     const list = index.get(key);
     if (list) list.push(candidate);
     else index.set(key, [candidate]);
-  };
-  for (const segment of segments) {
-    const start = segment.startAnchor.sourceKey;
-    const end = segment.endAnchor.sourceKey;
-    if (start === end) {
-      add(start, { ordinal: segment.ordinal, text: segment.text });
-    } else {
-      add(start, { ordinal: segment.ordinal, text: segment.text, part: 'head' });
-      add(end, { ordinal: segment.ordinal, text: segment.text, part: 'tail' });
-    }
   }
   return index;
 }
@@ -150,33 +152,14 @@ function matchesAt(unitTokens: readonly string[], at: number, pattern: readonly 
 
 /**
  * Exact in-order placement of every candidate's tokens, or null when the text
- * diverged. A carried-in tail must open the unit and a continuing head must
- * close it; the longest matching suffix/prefix of the sentence is used.
+ * diverged (including a sentence that continues into the next unit).
  */
-function exactWindows(candidates: readonly SeekCandidate[], candidateTokens: string[][], unitTokens: string[]): Array<[number, number]> | null {
+function exactWindows(candidateTokens: string[][], unitTokens: string[]): Array<[number, number]> | null {
   const windows: Array<[number, number]> = [];
   const count = unitTokens.length;
   let cursor = 0;
-  for (let index = 0; index < candidateTokens.length; index += 1) {
-    const pattern = candidateTokens[index];
-    const part = candidates[index].part;
+  for (const pattern of candidateTokens) {
     if (pattern.length === 0) return null;
-    if (part === 'tail' && index === 0) {
-      let length = Math.min(pattern.length, count);
-      while (length > 0 && !matchesAt(unitTokens, 0, pattern.slice(pattern.length - length))) length -= 1;
-      if (length === 0) return null;
-      windows.push([0, length - 1]);
-      cursor = length;
-      continue;
-    }
-    if (part === 'head' && index === candidateTokens.length - 1) {
-      let length = Math.min(pattern.length, count - cursor);
-      while (length > 0 && !matchesAt(unitTokens, count - length, pattern.slice(0, length))) length -= 1;
-      if (length === 0) return null;
-      windows.push([count - length, count - 1]);
-      cursor = count;
-      continue;
-    }
     let found = -1;
     for (let start = cursor; start + pattern.length <= count; start += 1) {
       if (matchesAt(unitTokens, start, pattern)) {
@@ -226,7 +209,7 @@ export function pickSegmentForToken(
   }
   const unitTokens = unitTokenTexts.map(normalizeHighlightToken);
   const candidateTokens = candidates.map((candidate) => tokenize(candidate.text, language));
-  const windows = exactWindows(candidates, candidateTokens, unitTokens)
+  const windows = exactWindows(candidateTokens, unitTokens)
     ?? proportionalWindows(candidateTokens, unitTokens.length);
 
   let best = 0;
@@ -292,7 +275,7 @@ export function createTapGuard() {
 
 /** Name of the hover affordance painted over the sentence a tap would seek to. */
 export const SEEK_HOVER_HIGHLIGHT = 'openreader-seek-hover';
-export const SEEK_HOVER_DECLARATIONS = 'text-decoration: underline dotted color-mix(in srgb, var(--accent, #ef4444) 70%, transparent); text-decoration-thickness: 2px; text-underline-offset: 3px; background-color: color-mix(in srgb, var(--accent, #ef4444) 8%, transparent);';
+export const SEEK_HOVER_DECLARATIONS = 'text-decoration: underline dotted color-mix(in srgb, var(--accent, #ef4444) 70%, transparent); text-decoration-thickness: 2px; text-underline-offset: 3px; background-color: color-mix(in srgb, var(--accent, #ef4444) 14%, transparent);';
 
 function pointIsOnToken(token: HitToken, x: number, y: number): boolean {
   try {

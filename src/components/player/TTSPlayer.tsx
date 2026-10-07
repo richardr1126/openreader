@@ -13,7 +13,6 @@ import {
 import { LoadingSpinner } from '@/components/Spinner';
 import { VoicesControl } from '@/components/player/VoicesControl';
 import { SpeedControl } from '@/components/player/SpeedControl';
-import { Navigator } from '@/components/player/Navigator';
 import { IconButton } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
@@ -29,13 +28,11 @@ import { useDocumentArtworkUrl, useMediaSession } from '@/hooks/audio/useMediaSe
 const SCRUB_UNDO_MS = 10_000;
 const SCRUB_READY_COLOR = 'color-mix(in srgb, var(--accent) 34%, transparent)';
 
-export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel }: {
+export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel }: {
   /** Opens the reader's voice panel; the reader page owns which sidebar is open. */
   onOpenVoicePanel: () => void;
-  currentPage?: number;
   /** Shown by the OS media controls (lock screen, hardware keys). */
   documentTitle?: string;
-  numPages?: number | undefined;
   isPlaybackReady?: boolean;
   hasReadableContent?: boolean;
 }) {
@@ -48,7 +45,6 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
     skipBackward,
     isProcessing,
     setAudioPlayerSpeedAndRestart,
-    skipToLocation,
     seekPlaybackTo,
     playbackPlanReady,
     activeReaderType,
@@ -269,17 +265,8 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
           </IconButton>
         </div>
 
-        {/* Right side: Page Navigator & Timer display */}
+        {/* Right side: timer and buffer display */}
         <div className="contents sm:flex sm:flex-1 sm:items-center sm:justify-end sm:gap-3">
-          {currentPage && numPages && (
-            <div className="col-span-3 row-start-3 mt-0.5 justify-self-center sm:mt-0">
-              <Navigator
-                currentPage={currentPage}
-                numPages={numPages}
-                skipToLocation={skipToLocation}
-              />
-            </div>
-          )}
           <div className="col-span-2 col-start-1 row-start-1 justify-self-start whitespace-nowrap font-mono text-[11px] tabular-nums text-soft select-none">
             {hasReadableContent
               ? playbackControl.statusText

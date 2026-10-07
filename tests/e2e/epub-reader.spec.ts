@@ -18,9 +18,12 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
   await expect(page.getByRole('heading', { name: 'sample.epub', exact: true })).toBeVisible({
     timeout: 60_000,
   });
-  await expect(page.getByRole('button', { name: 'Show chapters', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Previous section', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Next section', exact: true })).toBeVisible();
+  const toolbar = page.getByRole('toolbar', { name: 'Reader' });
+  await expect(toolbar.getByRole('button', { name: 'Open contents', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Find in book', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Previous section', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Next section', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Open bookmarks', exact: true })).toBeVisible();
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 

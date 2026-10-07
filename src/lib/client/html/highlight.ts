@@ -294,21 +294,31 @@ function wrapCharRange(chars: CharPosition[], start: number, end: number, classN
   return wraps;
 }
 
+/**
+ * Wrap the current sentence. `scope` names the blocks the plan says own it
+ * (its block and the one it may continue into); the sentence is matched there
+ * first so a long document is not searched end to end and a repeated sentence
+ * resolves to the right occurrence. The whole container is the fallback.
+ */
 export function highlightHtmlSentence(
   container: HTMLElement | null | undefined,
   sentence: string | null | undefined,
   language?: string,
+  scope: readonly HTMLElement[] = [],
 ): boolean {
   clearHtmlSentenceHighlight();
   if (!container || !sentence?.trim()) return false;
 
   const patternTokens = tokenizePattern(sentence, language);
-  if (!patternTokens.length) return false;
+  // Nothing speakable to paint (a lone symbol) is not a mapping failure.
+  if (!patternTokens.length) return true;
 
-  const domTokens = collectDomTokens(container, language);
-  if (!domTokens.length) return false;
-
-  const win = findBestWindow(domTokens, patternTokens);
+  let domTokens = scope.flatMap((root) => collectDomTokens(root, language));
+  let win = domTokens.length ? findBestWindow(domTokens, patternTokens) : null;
+  if (!win) {
+    domTokens = collectDomTokens(container, language);
+    win = domTokens.length ? findBestWindow(domTokens, patternTokens) : null;
+  }
   if (!win) return false;
 
   sentenceWraps = wrapTokenRange(domTokens, win.start, win.end, HTML_SENTENCE_CLASS);

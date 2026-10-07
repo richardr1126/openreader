@@ -92,10 +92,12 @@ test('a PDF can be read as flowing text and tapped to seek', async ({ page }) =>
   await expect(showPages).not.toBeChecked();
   await page.getByRole('button', { name: 'Hide settings', exact: true }).click();
 
-  const reader = page.getByTestId('plan-text-reader');
-  const target = reader.getByText('This is chapter one text used for integration tests.', { exact: true });
+  await expect(page.getByRole('toolbar', { name: 'Reader' })).toBeVisible();
+  const reader = page.getByTestId('text-reader');
+  const target = reader.getByText('This is chapter one text used for integration tests.');
   await expect(target).toBeVisible();
-  await target.click();
-  await expect(target).toHaveAttribute('aria-current', 'true');
+  await target.click({ position: { x: 4, y: 6 } });
+  await expect(reader.locator('.openreader-html-highlight-sentence').first())
+    .toContainText('This is chapter one text');
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 });
