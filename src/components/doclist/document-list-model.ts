@@ -3,6 +3,7 @@ import type {
   BaseDocument,
   DocumentListDocument,
   Folder,
+  ReadingStatusFilter,
   SidebarFilter,
   SortBy,
   SortDirection,
@@ -45,24 +46,75 @@ export function suggestFolderName(
   return `Folder ${date.toISOString().slice(0, 10)}`;
 }
 
+/** Lowercases and strips combining marks so "Brontë" and "bronte" compare equal. */
+export function foldSearchText(value: string): string {
+  return value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+}
+
+/**
+ * Whether a document answers a library search: every whitespace-separated word
+ * must appear in its name or author, ignoring case and diacritics, so more
+ * words narrow the result instead of widening it.
+ */
+export function matchesDocumentSearch(
+  document: Pick<DocumentListDocument, 'name' | 'author'>,
+  query: string,
+): boolean {
+  const words = foldSearchText(query).split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = foldSearchText(`${document.name} ${document.author ?? ''}`);
+  return words.every((word) => haystack.includes(word));
+}
+
+/** "In progress" means the user has a saved reading position; absent means unread. */
+export function matchesReadingStatus(
+  document: Pick<DocumentListDocument, 'readingProgress'>,
+  status: ReadingStatusFilter,
+): boolean {
+  if (status === 'reading') return document.readingProgress !== undefined;
+  if (status === 'unread') return document.readingProgress === undefined;
+  return true;
+}
+
+const compareText = (a: string, b: string) =>
+  a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+
+/**
+ * Sorts by the chosen key in the chosen direction. Documents missing the key
+ * (no author, never opened) stay last in either direction, and ties fall back
+ * to name A→Z so the order holds still between renders.
+ */
 export function sortDocuments(
   documents: DocumentListDocument[],
   sortBy: SortBy,
   direction: SortDirection,
 ): DocumentListDocument[] {
-  const sorted = [...documents].sort((a, b) => {
+  const sign = direction === 'asc' ? 1 : -1;
+  const primary = (a: DocumentListDocument, b: DocumentListDocument): number => {
     switch (sortBy) {
       case 'name':
-        return a.name.localeCompare(b.name);
+        return sign * compareText(a.name, b.name);
       case 'type':
-        return a.type.localeCompare(b.type);
+        return sign * a.type.localeCompare(b.type);
       case 'size':
-        return a.size - b.size;
+        return sign * (a.size - b.size);
+      case 'author': {
+        const left = a.author?.trim() ?? '';
+        const right = b.author?.trim() ?? '';
+        if (!left || !right) return Number(!left) - Number(!right);
+        return sign * compareText(left, right);
+      }
+      case 'opened': {
+        const left = a.recentlyOpenedAt ?? 0;
+        const right = b.recentlyOpenedAt ?? 0;
+        if (left <= 0 || right <= 0) return Number(left <= 0) - Number(right <= 0);
+        return sign * (left - right);
+      }
       default:
-        return a.lastModified - b.lastModified;
+        return sign * (a.lastModified - b.lastModified);
     }
-  });
-  return direction === 'asc' ? sorted : sorted.reverse();
+  };
+  return [...documents].sort((a, b) => primary(a, b) || compareText(a.name, b.name));
 }
 
 export function deriveDocumentListModel({
@@ -71,6 +123,7 @@ export function deriveDocumentListModel({
   htmlDocuments,
   serverFolders,
   sidebarFilter,
+  statusFilter,
   query,
   sortBy,
   sortDirection,
@@ -80,6 +133,7 @@ export function deriveDocumentListModel({
   htmlDocuments: SupportedDocument[];
   serverFolders: ServerFolder[];
   sidebarFilter: SidebarFilter;
+  statusFilter: ReadingStatusFilter;
   query: string;
   sortBy: SortBy;
   sortDirection: SortDirection;
@@ -140,11 +194,11 @@ export function deriveDocumentListModel({
       : [];
   }
 
-  const normalizedQuery = query.trim().toLowerCase();
-  if (normalizedQuery) {
-    visibleDocuments = visibleDocuments.filter((doc) =>
-      doc.name.toLowerCase().includes(normalizedQuery),
-    );
+  if (statusFilter !== 'any') {
+    visibleDocuments = visibleDocuments.filter((doc) => matchesReadingStatus(doc, statusFilter));
+  }
+  if (query.trim()) {
+    visibleDocuments = visibleDocuments.filter((doc) => matchesDocumentSearch(doc, query));
   }
   if (sidebarFilter !== 'recents') {
     visibleDocuments = sortDocuments(visibleDocuments, sortBy, sortDirection);

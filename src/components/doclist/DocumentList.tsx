@@ -80,6 +80,8 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           })}
           query={controller.query}
           onQueryChange={controller.setQuery}
+          statusFilter={controller.statusFilter}
+          onStatusFilterChange={controller.setStatusFilter}
           onToggleSidebar={controller.toggleSidebar}
           isSidebarOpen={controller.effectiveSidebarOpen}
           showSortControls={sidebarFilter !== 'recents'}
@@ -228,6 +230,13 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
               actions={actions}
               onMergeIntoFolder={controller.requestMergeIntoFolder}
             />
+          )}
+          {viewMode !== 'gallery'
+            && model.visibleDocuments.length === 0
+            && (controller.query.trim() !== '' || controller.statusFilter !== 'any') && (
+            <p className="pointer-events-none absolute inset-x-0 top-1/3 px-6 text-center text-[12px] text-soft">
+              No documents match the current search or filter
+            </p>
           )}
           <SelectionActionBar actions={actions} />
         </DocumentUploader>

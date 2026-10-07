@@ -8,7 +8,7 @@ import { useFolders } from '@/hooks/useFolders';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { putUserPreferences, type PreferencesResponse } from '@/lib/client/api/user-state';
 import { queryKeys } from '@/lib/client/query-keys';
-import type { DocumentListDocument } from '@/types/documents';
+import type { DocumentListDocument, ReadingStatusFilter } from '@/types/documents';
 import { useDocumentSelection } from './dnd/DocumentSelectionContext';
 import type { DocumentDragItem } from './dnd/dndTypes';
 import { documentIdentityKey } from './dnd/dndTypes';
@@ -31,6 +31,8 @@ type PendingMerge = {
 export function useDocumentListController() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
+  // Like the search query, the status filter is session-only (see ReadingStatusFilter).
+  const [statusFilter, setStatusFilter] = useState<ReadingStatusFilter>('any');
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [documentsToDelete, setDocumentsToDelete] = useState<DocumentListDocument[]>([]);
   const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null);
@@ -143,6 +145,7 @@ export function useDocumentListController() {
     htmlDocuments: htmlDocs,
     serverFolders: folderState.query.data ?? [],
     sidebarFilter: listState.sidebarFilter,
+    statusFilter,
     query,
     sortBy: listState.sortBy,
     sortDirection: listState.sortDirection,
@@ -155,6 +158,7 @@ export function useDocumentListController() {
     listState.sortDirection,
     pdfDocs,
     query,
+    statusFilter,
   ]);
 
   const requestDeleteDocuments = useCallback((documents: DocumentListDocument[]) => {
@@ -274,6 +278,8 @@ export function useDocumentListController() {
     model,
     query,
     setQuery,
+    statusFilter,
+    setStatusFilter,
     updateListState,
     isNarrow,
     effectiveSidebarOpen: isNarrow ? mobileSidebarOpen : !listState.sidebarCollapsed,

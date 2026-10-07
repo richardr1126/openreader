@@ -7,6 +7,7 @@ import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import type { DocumentListDocument, IconSize } from '@/types/documents';
 import { DocumentPreview } from '@/components/doclist/DocumentPreview';
 import { DocumentActionsMenu } from '../DocumentActionsMenu';
+import { ReadingProgressBar } from '../ReadingProgressBar';
 import type { DocumentActions } from '../document-actions';
 import { SelectCheck } from '../SelectCheck';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
@@ -176,6 +177,7 @@ export function DocumentTile({
       >
         <DocumentPreview doc={doc} />
       </Link>
+      <ReadingProgressBar doc={doc} />
       <SelectCheck
         checked={isSelected}
         selectionActive={selection.selectionSize > 0}
