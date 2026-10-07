@@ -9,6 +9,7 @@ import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { Header } from '@/components/Header';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -86,7 +87,7 @@ function PdfReader({
     setPdfSkipBlockKinds,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice'>(null);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
@@ -215,13 +216,18 @@ function PdfReader({
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
+          onChangeVoice={() => setActiveSidebar('voice')}
           documentType="pdf"
           documentId={routeDocumentId}
         />
       )}
       {rendererReady ? (
-        <TTSPlayer currentPage={currDocPage} numPages={currDocPages} isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} />
+        <TTSPlayer currentPage={currDocPage} numPages={currDocPages} isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
       ) : null}
+      <VoiceSidebar
+        isOpen={activeSidebar === 'voice'}
+        onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}

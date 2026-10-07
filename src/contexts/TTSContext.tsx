@@ -107,9 +107,9 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   resolveEpubPlanLocator: (savedLocator: TTSSegmentLocator | null) => EpubPlanLocatorResult;
   setDocumentPlaybackAnchor: (location: TTSLocation, hasReadableText: boolean, locator?: TTSSegmentLocator | null) => void;
   setCurrDocPages: (num: number | undefined) => void;
-  setSpeedAndRestart: (speed: number) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
-  setVoiceAndRestart: (voice: string) => void;
+  /** Commit a voice and/or model-speed change with one plan restart. */
+  setVoiceSettingsAndRestart: (change: { voice?: string; nativeSpeed?: number }) => void;
   /** Reacquire the server-owned bootstrap payload after plan-affecting settings change. */
   reacquirePlaybackPlan: () => Promise<void>;
   initializeReaderSession: (input: {
@@ -618,8 +618,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const {
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
-    setSpeedAndRestart,
-    setVoiceAndRestart,
+    setVoiceSettingsAndRestart,
   } = useTtsPlaybackSettings({
     isPlaying,
     restartSeqRef,
@@ -667,9 +666,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,
     setCurrDocPages,
-    setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
-    setVoiceAndRestart,
+    setVoiceSettingsAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
@@ -710,9 +708,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolveEpubPlanLocator,
     setDocumentPlaybackAnchor,
     setCurrDocPages,
-    setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
-    setVoiceAndRestart,
+    setVoiceSettingsAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,

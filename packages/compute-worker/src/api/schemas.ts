@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { isTtsProviderType, type TtsProviderType } from '@openreader/tts/provider-catalog';
+import { TTS_VOICE_PREVIEW_MAX_TEXT_CHARS } from '../jobs/playback/voice-preview';
 
 const bboxSchema = z.tuple([z.number(), z.number(), z.number(), z.number()]);
 const parsedPdfBlockKindSchema = z.enum([
@@ -144,6 +146,20 @@ export const ttsPlaybackOperationCreateSchema = ttsPlaybackPlanOperationCreateSc
 
 export const ttsPlaybackSessionPrepareSchema = ttsPlaybackOperationCreateSchema.extend({
   generationRunId: z.string().trim().min(1).max(128),
+}).strict();
+
+/** One short in-memory voice sample; never part of a playback session. */
+export const ttsVoicePreviewRequestSchema = z.object({
+  settings: z.object({
+    providerRef: z.string().trim().min(1).max(256),
+    providerType: z.string().refine((value): value is TtsProviderType => isTtsProviderType(value)),
+    ttsModel: z.string().trim().min(1).max(256),
+    voice: z.string().trim().min(1).max(512),
+    nativeSpeed: z.number().min(0.5).max(3),
+    ttsInstructions: z.string().max(4000).optional(),
+    language: z.string().trim().min(1).max(64).optional(),
+  }).strict(),
+  text: z.string().trim().min(1).max(TTS_VOICE_PREVIEW_MAX_TEXT_CHARS),
 }).strict();
 
 export const ttsPlaybackCursorUpdateSchema = z.object({

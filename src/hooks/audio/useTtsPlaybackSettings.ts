@@ -96,21 +96,25 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     setIsProcessing,
   ]);
 
-  const setSpeedAndRestart = useCallback((speed: number) => {
+  /**
+   * Applies a voice and/or model-speed change as one restart: a single plan
+   * reset and reacquire, so committing both from the voice panel never
+   * re-plans twice.
+   */
+  const setVoiceSettingsAndRestart = useCallback((change: { voice?: string; nativeSpeed?: number }) => {
+    if (change.voice === undefined && change.nativeSpeed === undefined) return;
     void restartAfterConfigUpdate(
-      () => setSpeed(speed),
-      () => updateConfigKey('voiceSpeed', speed),
+      () => {
+        if (change.voice !== undefined) setVoice(change.voice);
+        if (change.nativeSpeed !== undefined) setSpeed(change.nativeSpeed);
+      },
+      async () => {
+        if (change.nativeSpeed !== undefined) await updateConfigKey('voiceSpeed', change.nativeSpeed);
+        if (change.voice !== undefined) await updateConfigKey('voice', change.voice);
+      },
       { resetPlan: true },
     );
-  }, [restartAfterConfigUpdate, setSpeed, updateConfigKey]);
-
-  const setVoiceAndRestart = useCallback((voice: string) => {
-    void restartAfterConfigUpdate(
-      () => setVoice(voice),
-      () => updateConfigKey('voice', voice),
-      { resetPlan: true },
-    );
-  }, [restartAfterConfigUpdate, setVoice, updateConfigKey]);
+  }, [restartAfterConfigUpdate, setSpeed, setVoice, updateConfigKey]);
 
   const setAudioPlayerSpeedAndRestart = useCallback((speed: number) => {
     // Browser playback rate is deliberately not part of the generated-audio
@@ -126,7 +130,6 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
   return {
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
-    setSpeedAndRestart,
-    setVoiceAndRestart,
+    setVoiceSettingsAndRestart,
   };
 }

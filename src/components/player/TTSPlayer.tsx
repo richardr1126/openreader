@@ -15,7 +15,6 @@ import { VoicesControl } from '@/components/player/VoicesControl';
 import { SpeedControl } from '@/components/player/SpeedControl';
 import { Navigator } from '@/components/player/Navigator';
 import { IconButton } from '@/components/ui';
-import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 import {
@@ -30,7 +29,9 @@ import { useDocumentArtworkUrl, useMediaSession } from '@/hooks/audio/useMediaSe
 const SCRUB_UNDO_MS = 10_000;
 const SCRUB_READY_COLOR = 'color-mix(in srgb, var(--accent) 34%, transparent)';
 
-export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle }: {
+export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel }: {
+  /** Opens the reader's voice panel; the reader page owns which sidebar is open. */
+  onOpenVoicePanel: () => void;
   currentPage?: number;
   /** Shown by the OS media controls (lock screen, hardware keys). */
   documentTitle?: string;
@@ -46,10 +47,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
     skipForward,
     skipBackward,
     isProcessing,
-    setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
-    setVoiceAndRestart,
-    availableVoices,
     skipToLocation,
     seekPlaybackTo,
     playbackPlanReady,
@@ -63,13 +61,6 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
     playbackDurationSec,
     playbackSeekLayout,
   } = useTTSPlaybackProgress();
-  const { confirmPlanChange, planChangeDialog } = usePlanChangeConfirm();
-  const confirmVoiceChange = useCallback((voice: string) => {
-    confirmPlanChange({ setting: 'the voice', apply: () => setVoiceAndRestart(voice) });
-  }, [confirmPlanChange, setVoiceAndRestart]);
-  const confirmNativeSpeedChange = useCallback((speed: number, onCancel: () => void) => {
-    confirmPlanChange({ setting: 'native model speed', apply: () => setSpeedAndRestart(speed), onCancel });
-  }, [confirmPlanChange, setSpeedAndRestart]);
   const [previewSec, setPreviewSec] = useState<number | null>(null);
   const shownSec = previewSec ?? playbackTimeSec;
   const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);
@@ -230,16 +221,11 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
           <div className="col-start-1 row-start-2 justify-self-start">
             <SpeedControl
               disabled={isProcessing}
-              setSpeedAndRestart={confirmNativeSpeedChange}
               setAudioPlayerSpeedAndRestart={setAudioPlayerSpeedAndRestart}
             />
           </div>
           <div className="col-start-3 row-start-2 justify-self-end">
-            <VoicesControl
-              availableVoices={availableVoices}
-              disabled={isProcessing}
-              setVoiceAndRestart={confirmVoiceChange}
-            />
+            <VoicesControl onOpen={onOpenVoicePanel} />
           </div>
         </div>
 
@@ -313,7 +299,6 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
           )}
         </div>
       </div>
-      {planChangeDialog}
     </div>
   );
 }
