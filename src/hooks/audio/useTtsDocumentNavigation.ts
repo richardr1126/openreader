@@ -65,6 +65,7 @@ type UseTtsDocumentNavigationInput = {
   setIsProcessing: (isProcessing: boolean) => void;
   setPlaybackAnchor: (anchor: PlaybackAnchor | null) => void;
   setSelectedOrdinal: (ordinal: number | null) => void;
+  syncPlaybackLocator: (locator: TTSSegmentLocator | null) => void;
 };
 
 export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
@@ -95,6 +96,7 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     setIsProcessing,
     setPlaybackAnchor,
     setSelectedOrdinal,
+    syncPlaybackLocator,
   } = input;
 
   useEffect(() => {
@@ -363,6 +365,34 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     await advance(true);
   }, [abortAudio, advance, currentIndex, invalidatePlaybackRun, isPlaying, playbackSegmentsRef, seekPlaybackToOrdinal, setIsProcessing]);
 
+  /**
+   * Move playback to one worker-plan ordinal: a tapped sentence, a search hit,
+   * or a chapter. It is the same command the previous/next sentence buttons
+   * issue — a seek within the canonical session when a seek layout exists, or a
+   * plain cursor move otherwise — so it never creates a playback session and
+   * keeps the current play/pause intent.
+   */
+  const skipToOrdinal = useCallback((ordinal: number): boolean => {
+    const segment = playbackSegmentsRef.current.find((entry) => entry.ordinal === ordinal);
+    if (!segment) return false;
+    if (seekPlaybackToOrdinal(segment.ordinal)) return true;
+    if (isPlaying) setIsProcessing(true);
+    invalidatePlaybackRun();
+    abortAudio();
+    selectPlaybackSegment(segment);
+    syncPlaybackLocator(segment.ownerLocator);
+    return true;
+  }, [
+    abortAudio,
+    invalidatePlaybackRun,
+    isPlaying,
+    playbackSegmentsRef,
+    seekPlaybackToOrdinal,
+    selectPlaybackSegment,
+    setIsProcessing,
+    syncPlaybackLocator,
+  ]);
+
   return {
     pause,
     reconcileEpubRenderedAnchor,
@@ -371,5 +401,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     skipBackward,
     skipForward,
     skipToLocation,
+    skipToOrdinal,
   };
 }

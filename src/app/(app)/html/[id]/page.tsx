@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
 import {
   ReaderShell,
@@ -20,6 +20,8 @@ import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
+import { ReaderNavigationSidebars, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import type { OutlineEntry } from '@/lib/client/reader/chapters';
 
 export default function HTMLPage() {
   const { id } = useParams();
@@ -66,7 +68,15 @@ function HtmlReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice'>(null);
+  // Markdown headings name the contents; plain text has none and reads as one flow.
+  const outline = useMemo<OutlineEntry[]>(() => blocks
+    .filter((block) => block.kind === 'heading')
+    .map((block) => ({
+      title: block.headingText || block.plainText,
+      target: { readerType: 'html', location: block.anchorId },
+      depth: (block.headingLevel ?? 1) - 1,
+    })), [blocks]);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -147,7 +157,11 @@ function HtmlReader({
               onZoomDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
+              onOpenContents={() => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents')}
+              onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
               isSettingsOpen={activeSidebar === 'settings'}
+              isContentsOpen={activeSidebar === 'contents'}
+              isSearchOpen={activeSidebar === 'search'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={0}
@@ -188,6 +202,12 @@ function HtmlReader({
       <VoiceSidebar
         isOpen={activeSidebar === 'voice'}
         onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
+      <ReaderNavigationSidebars
+        open={rendererReady && (activeSidebar === 'contents' || activeSidebar === 'search') ? activeSidebar : null}
+        onClose={() => setActiveSidebar(null)}
+        outline={outline}
+        documentTitle={currDocName || payload.document.name}
       />
       <DocumentSettings
         html

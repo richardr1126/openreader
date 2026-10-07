@@ -301,6 +301,44 @@ function collectSpanNodesForParsedBlock(
   return collected.length > 0 ? collected : null;
 }
 
+/**
+ * The parsed block under a viewport point, with the text-layer spans that
+ * render it. Blocks are plan source units keyed `pdf:<page>:<blockId>`, so
+ * this is the unit tap-to-seek resolves a sentence within.
+ */
+export function resolvePdfBlockAtPoint(
+  container: HTMLElement,
+  parsedDocument: ParsedPdfDocument,
+  point: { clientX: number; clientY: number; target: EventTarget | null },
+): { sourceKey: string; spans: HTMLElement[] } | null {
+  const target = point.target as Element | null;
+  const pageElement = target?.closest?.('.react-pdf__Page') as HTMLElement | null;
+  if (!pageElement || !container.contains(pageElement)) return null;
+  const pageNumber = Number(pageElement.getAttribute('data-page-number'));
+  if (!Number.isFinite(pageNumber)) return null;
+  const pageRect = pageElement.getBoundingClientRect();
+  if (!(pageRect.width > 0 && pageRect.height > 0)) return null;
+
+  for (const page of parsedDocument.pages) {
+    for (const block of page.blocks) {
+      const hit = block.fragments.some((fragment) => {
+        if (fragment.page !== pageNumber) return false;
+        const fragmentPage = parsedDocument.pages.find((candidate) => candidate.pageNumber === fragment.page);
+        if (!fragmentPage || fragmentPage.width <= 0 || fragmentPage.height <= 0) return false;
+        const x = ((point.clientX - pageRect.left) / pageRect.width) * fragmentPage.width;
+        const y = ((point.clientY - pageRect.top) / pageRect.height) * fragmentPage.height;
+        const [x0, y0, x1, y1] = fragment.bbox;
+        return x >= x0 && x <= x1 && y >= y0 && y <= y1;
+      });
+      if (!hit) continue;
+      const locator: TTSSegmentLocator = { readerType: 'pdf', page: page.pageNumber, blockId: block.id };
+      const spans = collectSpanNodesForParsedBlock(container, parsedDocument, locator);
+      return spans ? { sourceKey: `pdf:${page.pageNumber}:${block.id}`, spans } : null;
+    }
+  }
+  return null;
+}
+
 export function clearHighlights() {
   const overlays = document.querySelectorAll('.pdf-text-highlight-overlay');
   overlays.forEach((node) => {

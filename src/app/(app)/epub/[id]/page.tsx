@@ -19,7 +19,10 @@ import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useEpubDocument } from './useEpubDocument';
-import { findEpubTocTitle } from '@/lib/client/epub/toc-titles';
+import { epubTocOutline, findEpubTocTitle } from '@/lib/client/epub/toc-titles';
+import { useConfig } from '@/contexts/ConfigContext';
+import { PlanTextViewer } from '@/components/views/PlanTextViewer';
+import { ReaderNavigationSidebars, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import type { TtsExportChapterProgress } from '@/types/tts-export';
 
 export default function EPUBPage() {
@@ -74,7 +77,12 @@ function EpubReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice'>(null);
+  const { readerShowsLayout } = useConfig();
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
+  const navigationPanel = activeSidebar === 'contents' || activeSidebar === 'search' ? activeSidebar : null;
+  const openContents = useCallback(() => {
+    setActiveSidebar((prev) => prev === 'contents' ? null : 'contents');
+  }, []);
   const [containerHeight, setContainerHeight] = useState<string | null>(null);
   const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -156,7 +164,11 @@ function EpubReader({
               onZoomDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
+              onOpenContents={openContents}
+              onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
               isSettingsOpen={activeSidebar === 'settings'}
+              isContentsOpen={activeSidebar === 'contents'}
+              isSearchOpen={activeSidebar === 'search'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={0}
@@ -172,12 +184,17 @@ function EpubReader({
             aria-hidden={!rendererReady}
             style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}
           >
-            <EPUBViewer
-              className="h-full"
-              epubState={epubState}
-              onError={handleRendererError}
-              onReady={onReady}
-            />
+            {readerShowsLayout ? (
+              <EPUBViewer
+                className="h-full"
+                epubState={epubState}
+                onError={handleRendererError}
+                onReady={onReady}
+                onOpenContents={openContents}
+              />
+            ) : (
+              <PlanTextViewer className="h-full" readerType="epub" onReady={onReady} />
+            )}
           </div>
         ) : null}
       </div>
@@ -195,6 +212,12 @@ function EpubReader({
       <VoiceSidebar
         isOpen={activeSidebar === 'voice'}
         onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
+      <ReaderNavigationSidebars
+        open={rendererReady ? navigationPanel : null}
+        onClose={() => setActiveSidebar(null)}
+        outline={navigationPanel === 'contents' ? epubTocOutline(tocRef.current ?? []) : []}
+        documentTitle={currDocName || payload.document.name}
       />
       <DocumentSettings
         epub

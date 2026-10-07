@@ -91,6 +91,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
   const {
     viewType,
     epubTheme,
+    readerShowsLayout,
     ttsSegmentMaxBlockLength,
     updateConfigKey,
     pdfHighlightEnabled,
@@ -176,7 +177,14 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
 
         {isPdfMode || epub ? (
           <Section title="Display" variant="group">
-            {isPdfMode ? (
+            <ToggleRow
+              label={isPdfMode ? 'Show the pages' : 'Show the book'}
+              description="Turn off to read the text as flowing sentences."
+              checked={readerShowsLayout}
+              onChange={(checked) => updateConfigKey('readerShowsLayout', checked)}
+              variant="plain"
+            />
+            {isPdfMode && readerShowsLayout ? (
               <div className="space-y-1.5">
                 <SegmentedControl
                   value={selectedView.id as ViewType}
@@ -190,7 +198,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
                 ) : null}
               </div>
             ) : null}
-            {epub ? (
+            {epub && readerShowsLayout ? (
               <ToggleRow
                 label="Use app theme"
                 checked={epubTheme}

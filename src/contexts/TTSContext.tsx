@@ -73,13 +73,6 @@ type EpubLocationChangeHandler = (
   intent?: EpubLocationChangeIntent,
 ) => void;
 
-// Media globals
-declare global {
-  interface Window {
-    webkitAudioContext: typeof AudioContext;
-  }
-}
-
 /**
  * Interface defining all available methods and properties in the TTS context
  */
@@ -133,6 +126,9 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   /** Settings payload that identifies the document's current audio cache. */
   playbackPlanPayload: TtsPlaybackPlanPayload | null;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
+  /** Seek to a plan ordinal through the sentence-skip path; false if not in the plan. */
+  skipToOrdinal: (ordinal: number) => boolean;
+  playbackSegments: CanonicalTtsSegment[];
   registerLocationChangeHandler: (handler: EpubLocationChangeHandler | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
   /** Effective reader type used for worker playback/session scoping. */
@@ -241,6 +237,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanRef,
     playbackSegmentsRef,
     selectedOrdinalRef,
+    playbackSegments,
     sentences,
     currentIndex,
     currentSentence,
@@ -449,7 +446,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setDocumentPlaybackAnchor,
     skipBackward,
     skipForward,
-    skipToLocation,
+    skipToLocation, skipToOrdinal,
   } = useTtsDocumentNavigation({
     activeReaderType,
     currentIndex,
@@ -477,6 +474,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsProcessing,
     setPlaybackAnchor,
     setSelectedOrdinal,
+    syncPlaybackLocator,
   });
 
   const updateVoiceAndSpeed = useCallback(() => {
@@ -681,6 +679,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     clearSegmentCaches,
     playbackPlanPayload: playbackPlanRequest?.payload ?? null,
     skipToLocation,
+    skipToOrdinal, playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,
@@ -719,6 +718,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     clearSegmentCaches,
     playbackPlanRequest,
     skipToLocation,
+    skipToOrdinal, playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,
