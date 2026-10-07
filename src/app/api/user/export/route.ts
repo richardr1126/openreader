@@ -8,6 +8,7 @@ import {
   computeLimitAdmissions,
   computeLimitEvents,
   documentSettings,
+  userDocumentBookmarks,
   userDocumentProgress,
   userPreferences,
   userFolders,
@@ -144,6 +145,7 @@ export async function POST(req: NextRequest) {
       userDocs,
       folders,
       onboarding,
+      bookmarks,
     ] = await Promise.all([
       db.select().from(userPreferences).where(eq(userPreferences.userId, userId)).limit(1),
       db
@@ -177,6 +179,11 @@ export async function POST(req: NextRequest) {
         .orderBy(desc(documents.lastModified)),
       db.select().from(userFolders).where(eq(userFolders.userId, userId)).orderBy(userFolders.position),
       db.select().from(userOnboarding).where(eq(userOnboarding.userId, userId)).limit(1),
+      db
+        .select()
+        .from(userDocumentBookmarks)
+        .where(eq(userDocumentBookmarks.userId, userId))
+        .orderBy(desc(userDocumentBookmarks.createdAt)),
     ]);
 
     const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
@@ -220,6 +227,7 @@ export async function POST(req: NextRequest) {
       folders,
       onboarding: onboarding[0] ?? null,
       readingHistory: progress,
+      bookmarks,
       computeLimitAdmissions: limitAdmissions,
       computeLimitEvents: limitEvents,
       documentSettings: perDocumentSettings,

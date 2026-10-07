@@ -278,6 +278,8 @@ describe('server-state architecture', () => {
       '/api/auth/[...all]',
       '/api/compute-limits/status',
       '/api/documents',
+      '/api/documents/[id]/bookmarks',
+      '/api/documents/[id]/bookmarks/[bookmarkId]',
       '/api/documents/[id]/opened',
       '/api/documents/[id]/parsed',
       '/api/documents/[id]/reader-bootstrap',

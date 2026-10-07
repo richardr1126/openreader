@@ -1,15 +1,15 @@
 import { after, NextRequest, NextResponse } from 'next/server';
-import { and, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@openreader/database';
-import { documents } from '@openreader/database/schema';
+import { documents, userDocumentProgress } from '@openreader/database/schema';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { toDocumentTypeFromName } from '@/lib/server/documents/utils';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { isS3Configured } from '@/lib/server/storage/s3';
 import { deleteOwnedDocument } from '@/lib/server/documents/delete-owned';
-import type { BaseDocument, DocumentType } from '@/types/documents';
+import { toBaseDocument, type StoredDocumentRow } from '@/lib/server/documents/document-row';
+import type { BaseDocument } from '@/types/documents';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,13 +18,6 @@ function s3NotConfiguredResponse(): NextResponse {
     { error: 'Documents storage is not configured. Set S3_* environment variables.' },
     { status: 503 },
   );
-}
-
-function normalizeDocumentType(rawType: unknown, safeName: string): DocumentType {
-  if (rawType === 'pdf' || rawType === 'epub' || rawType === 'docx' || rawType === 'html') {
-    return rawType;
-  }
-  return toDocumentTypeFromName(safeName);
 }
 
 export async function GET(req: NextRequest) {
@@ -55,32 +48,37 @@ export async function GET(req: NextRequest) {
       inArray(documents.userId, allowedUserIds),
       ...(targetIds && targetIds.length > 0 ? [inArray(documents.id, targetIds)] : []),
     ];
-    const rows = (await db.select().from(documents).where(and(...conditions))) as Array<{
-      id: string;
-      userId: string;
-      name: string;
-      type: string;
-      size: number;
-      lastModified: number;
-      filePath: string;
-      folderId: string | null;
-      recentlyOpenedAt: number | null;
+    // One query: the progress row (if any) is the reading-status signal.
+    const rows = (await db
+      .select({
+        id: documents.id,
+        name: documents.name,
+        type: documents.type,
+        size: documents.size,
+        lastModified: documents.lastModified,
+        folderId: documents.folderId,
+        recentlyOpenedAt: documents.recentlyOpenedAt,
+        author: documents.author,
+        language: documents.language,
+        progress: userDocumentProgress.progress,
+        progressUpdatedAt: userDocumentProgress.updatedAt,
+        hasProgress: userDocumentProgress.documentId,
+      })
+      .from(documents)
+      .leftJoin(userDocumentProgress, and(
+        eq(userDocumentProgress.userId, documents.userId),
+        eq(userDocumentProgress.documentId, documents.id),
+      ))
+      .where(and(...conditions))) as Array<StoredDocumentRow & {
+      progress: number | null;
+      progressUpdatedAt: number | null;
+      hasProgress: string | null;
     }>;
 
-    const results: BaseDocument[] = rows.map((doc) => {
-      const type = normalizeDocumentType(doc.type, doc.name);
-      return {
-        id: doc.id,
-        name: doc.name,
-        size: Number(doc.size),
-        lastModified: Number(doc.lastModified),
-        type,
-        scope: 'user',
-        folderId: doc.folderId ?? undefined,
-        recentlyOpenedAt: doc.recentlyOpenedAt == null ? undefined : Number(doc.recentlyOpenedAt),
-        contentVersion: doc.id,
-      };
-    });
+    const results: BaseDocument[] = rows.map((row) => toBaseDocument(
+      row,
+      row.hasProgress ? { progress: row.progress, updatedAt: row.progressUpdatedAt } : null,
+    ));
 
     return NextResponse.json({ documents: results });
   } catch (error) {

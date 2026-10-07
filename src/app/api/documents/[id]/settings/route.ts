@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
-import { documentSettings, documents } from '@openreader/database/schema';
-import { requireAuthContext } from '@/lib/server/auth/auth';
+import { documentSettings } from '@openreader/database/schema';
+import { resolveOwnedDocumentAccess } from '@/lib/server/documents/access';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
@@ -33,31 +33,6 @@ function parseStored(value: unknown): DocumentSettings {
   return mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, value);
 }
 
-async function resolveDocumentAccess(req: NextRequest, documentId: string): Promise<
-  | { ownerUserId: string }
-  | Response
-> {
-  const authCtxOrRes = await requireAuthContext(req);
-  if (authCtxOrRes instanceof Response) return authCtxOrRes;
-  if (!authCtxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const storageUserId = authCtxOrRes.userId;
-
-  const rows = await db
-    .select({ userId: documents.userId })
-    .from(documents)
-    .where(and(eq(documents.id, documentId), eq(documents.userId, storageUserId)))
-    .limit(1);
-
-  if (!rows[0]) {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-
-  return {
-    ownerUserId: rows[0].userId,
-  };
-}
-
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
@@ -66,7 +41,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Invalid document id' }, { status: 400 });
     }
 
-    const scope = await resolveDocumentAccess(req, documentId);
+    const scope = await resolveOwnedDocumentAccess(req, documentId);
     if (scope instanceof Response) return scope;
 
     const rows = await db
@@ -109,7 +84,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       return NextResponse.json({ error: 'Invalid document id' }, { status: 400 });
     }
 
-    const scope = await resolveDocumentAccess(req, documentId);
+    const scope = await resolveOwnedDocumentAccess(req, documentId);
     if (scope instanceof Response) return scope;
 
     const body = (await req.json().catch(() => null)) as { settings?: unknown; clientUpdatedAtMs?: unknown } | null;

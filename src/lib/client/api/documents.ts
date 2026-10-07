@@ -11,7 +11,33 @@ export type UploadSource = {
   lastModified: number;
   contentType: string;
   body: Blob | ArrayBuffer | Uint8Array;
+  metadata?: DocumentImportMetadata;
 };
+
+/** Hints the server prefers over metadata it reads from the file itself. */
+export type DocumentImportMetadata = {
+  author?: string | null;
+  language?: string | null;
+};
+
+/**
+ * A file created by an import (for example a scraped web article) that knows
+ * its own author or language. Passing one through the normal upload path
+ * forwards that metadata to the server, including on retries.
+ */
+export class DocumentImportFile extends File {
+  readonly importMetadata: DocumentImportMetadata;
+
+  constructor(
+    parts: BlobPart[],
+    name: string,
+    options: FilePropertyBag & { metadata: DocumentImportMetadata },
+  ) {
+    const { metadata, ...fileOptions } = options;
+    super(parts, name, fileOptions);
+    this.importMetadata = metadata;
+  }
+}
 
 export type DocumentUploadProgressEvent =
   | { phase: 'preparing' }
@@ -37,7 +63,16 @@ type FinalizeUploadPayload = {
   name: string;
   type: DocumentType;
   lastModified: number;
+  author?: string;
+  language?: string;
 };
+
+function importMetadataPayload(metadata: DocumentImportMetadata | undefined): Pick<FinalizeUploadPayload, 'author' | 'language'> {
+  return {
+    ...(metadata?.author ? { author: metadata.author } : {}),
+    ...(metadata?.language ? { language: metadata.language } : {}),
+  };
+}
 
 type FinalizeResponse = {
   stored?: BaseDocument[];
@@ -435,6 +470,7 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
         name: source.name,
         type: source.type,
         lastModified: source.lastModified,
+        ...importMetadataPayload(source.metadata),
       })),
       requestOptions,
     );
@@ -466,6 +502,7 @@ export async function uploadDocuments(files: File[], options?: UploadOptions): P
       lastModified: Number.isFinite(file.lastModified) ? file.lastModified : Date.now(),
       contentType,
       body: file,
+      ...(file instanceof DocumentImportFile ? { metadata: file.importMetadata } : {}),
     });
   }
 
@@ -658,10 +695,17 @@ export function subscribeDocumentPreviewEvents(
   };
 }
 
+export type ImportedWebArticle = {
+  title: string;
+  content: string;
+  author: string | null;
+  language: string | null;
+};
+
 export async function importUrl(
   url: string,
   options?: { signal?: AbortSignal }
-): Promise<{ title: string; content: string }> {
+): Promise<ImportedWebArticle> {
   const res = await fetch('/api/documents/import-url', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -673,7 +717,7 @@ export async function importUrl(
     throw await parseApiError(res, 'Failed to import URL');
   }
 
-  return (await res.json()) as { title: string; content: string };
+  return (await res.json()) as ImportedWebArticle;
 }
 
 export type GutenbergBook = {
@@ -721,9 +765,21 @@ export async function importGutenbergBook(id: number, options?: UploadOptions): 
   if (!res.ok) {
     throw await parseApiError(res, 'Failed to import the book');
   }
-  const staged = (await res.json()) as { token: string; name: string; lastModified: number };
+  const staged = (await res.json()) as {
+    token: string;
+    name: string;
+    lastModified: number;
+    author?: string | null;
+    language?: string | null;
+  };
   return finalizeUploadedSources(
-    [{ token: staged.token, name: staged.name, type: 'epub', lastModified: staged.lastModified }],
+    [{
+      token: staged.token,
+      name: staged.name,
+      type: 'epub',
+      lastModified: staged.lastModified,
+      ...importMetadataPayload(staged),
+    }],
     options,
   );
 }

@@ -26,6 +26,11 @@ export const documents = sqliteTable('documents', {
   filePath: text('file_path').notNull(),
   folderId: text('folder_id'),
   recentlyOpenedAt: integer('recently_opened_at'),
+  // Bibliographic metadata captured at import time (EPUB/PDF metadata,
+  // catalog or article byline, detected text language). Null when unknown;
+  // documents imported before these columns existed are not backfilled.
+  author: text('author'),
+  language: text('language'),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
@@ -137,6 +142,34 @@ export const userDocumentProgress = sqliteTable('user_document_progress', {
 }, (table) => [
   primaryKey({ columns: [table.userId, table.documentId] }),
   index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
+]);
+
+// Personal bookmarks. `location` uses the same per-reader encoding as
+// user_document_progress.location (EPUB stores the serialized progress
+// locator). `segment_key`/`segment_ordinal` anchor the bookmarked sentence in
+// the canonical playback plan when one was known: the key is content identity
+// and survives re-planning, the ordinal is only a hint. Rows are hard-deleted
+// and cascade with the owning document row.
+export const userDocumentBookmarks = sqliteTable('user_document_bookmarks', {
+  id: text('id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  readerType: text('reader_type').notNull(), // pdf, epub, html
+  location: text('location').notNull(),
+  segmentKey: text('segment_key'),
+  segmentOrdinal: integer('segment_ordinal'),
+  label: text('label'),
+  snippet: text('snippet').notNull().default(''),
+  createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),
+  updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  foreignKey({
+    name: 'user_document_bookmarks_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
+  index('idx_user_document_bookmarks_user_document').on(table.userId, table.documentId),
 ]);
 
 export const documentPreviews = sqliteTable('document_previews', {

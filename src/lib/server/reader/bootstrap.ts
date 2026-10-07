@@ -68,18 +68,10 @@ import {
   type PreferenceNormalizationContext,
 } from '@/lib/server/user/preferences-normalize';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
+import { toBaseDocument, type StoredDocumentRow } from '@/lib/server/documents/document-row';
 import { resolvePdfOperationReadiness } from './bootstrap-progress';
 
-type DocumentRow = {
-  id: string;
-  userId: string;
-  name: string;
-  type: string;
-  size: number;
-  lastModified: number;
-  folderId: string | null;
-  recentlyOpenedAt: number | null;
-};
+type DocumentRow = StoredDocumentRow & { userId: string };
 
 export type ReaderBootstrapResolution = {
   result: ReaderBootstrapResult;
@@ -443,17 +435,7 @@ export async function resolveReaderBootstrapState(
   const planResult = await resolvePlan(request, documentId, scope, settings, preferenceRows[0]?.dataJson);
   if ('result' in planResult) return planResult;
 
-  const document: BaseDocument = {
-    id: row.id,
-    name: row.name,
-    type: row.type,
-    size: Number(row.size),
-    lastModified: Number(row.lastModified),
-    recentlyOpenedAt: row.recentlyOpenedAt == null ? undefined : Number(row.recentlyOpenedAt),
-    contentVersion: row.id,
-    scope: 'user',
-    folderId: row.folderId ?? undefined,
-  };
+  const document: BaseDocument = toBaseDocument(row);
   await db.update(documents).set({ recentlyOpenedAt: nowTimestampMs() }).where(and(
     eq(documents.id, documentId),
     eq(documents.userId, scope.storageUserId),
