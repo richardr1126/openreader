@@ -414,6 +414,15 @@ which supplies both projection timing and seek-layout state. Reads run at a
 bounded four-per-second cadence with one trailing refresh, so cached-segment
 bursts cannot monopolize browser JSON parsing or React delivery.
 
+The player scrubber draws three layers from that same seek layout: the rail is
+the whole document, ready bands are merged runs of generated segments, and the
+fill is the heard position. A committed scrub offers a ten-second "Undo scrub"
+that returns to the start of the sentence playing at touch-down through
+`seekPlaybackTo`. OS media controls (`useMediaSession`, owned by the player)
+route `seekto`/`seekforward`/`seekbackward` through the same seek path and keep
+`setPositionState` in sync on whole-second, rate, duration, and play/pause
+changes. None of these add a session, cursor writer, or polling loop.
+
 Full teardown has one entrypoint: `abortAudio` invalidates the active run,
 aborts session creation, stops recovery/foreground work, and resets the session
 and projection. That reset is idempotent so unmount and replacement races are

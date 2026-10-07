@@ -189,7 +189,7 @@ function EpubReader({
           resolveChapterTitle={resolveChapterTitle}
         />
       )}
-      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} />
+      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} />
       <DocumentSettings
         epub
         isOpen={rendererReady && activeSidebar === 'settings'}

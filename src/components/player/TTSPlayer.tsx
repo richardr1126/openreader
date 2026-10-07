@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
 import { useTTS, useTTSPlaybackProgress } from '@/contexts/TTSContext';
 import { measurePlaybackBuffer } from '@openreader/tts/playback-buffer';
 import {
@@ -17,9 +18,22 @@ import { IconButton } from '@/components/ui';
 import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
+import {
+  readyTimelineBands,
+  scrubUndoTargetSec,
+  timelineBandsGradient,
+  timelineFraction,
+} from '@/lib/client/tts/playback-timeline-track';
+import { useDocumentArtworkUrl, useMediaSession } from '@/hooks/audio/useMediaSession';
 
-export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true }: {
+/** How long the Undo chip stays after a committed scrub. */
+const SCRUB_UNDO_MS = 10_000;
+const SCRUB_READY_COLOR = 'color-mix(in srgb, var(--accent) 34%, transparent)';
+
+export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle }: {
   currentPage?: number;
+  /** Shown by the OS media controls (lock screen, hardware keys). */
+  documentTitle?: string;
   numPages?: number | undefined;
   isPlaybackReady?: boolean;
   hasReadableContent?: boolean;
@@ -39,6 +53,7 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
     skipToLocation,
     seekPlaybackTo,
     playbackPlanReady,
+    activeReaderType,
   } = useTTS();
   // A re-plan (voice, speed, language) keeps the reader mounted; playback waits
   // until the replacement plan is adopted.
@@ -72,35 +87,80 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
       playbackRate: audioSpeed,
     });
   }, [audioSpeed, playbackSeekLayout, playbackTimeSec]);
-  const scrubberTrackBackground = useMemo(() => {
-    if (!playbackSeekLayout || playbackSeekLayout.durationMs <= 0 || playbackSeekLayout.segments.length === 0) {
-      return 'color-mix(in srgb, var(--foreground) 14%, transparent)';
-    }
-    const durationMs = Math.max(1, playbackSeekLayout.durationMs);
-    const ready = 'color-mix(in srgb, var(--accent) 52%, var(--foreground))';
-    const estimated = 'color-mix(in srgb, var(--foreground) 14%, transparent)';
-    const stops: string[] = [];
-    for (const segment of playbackSeekLayout.segments) {
-      const start = Math.max(0, Math.min(100, (segment.startMs / durationMs) * 100));
-      const end = Math.max(start, Math.min(100, (segment.endMs / durationMs) * 100));
-      const color = segment.generated ? ready : estimated;
-      stops.push(`${color} ${start.toFixed(3)}%`, `${color} ${end.toFixed(3)}%`);
-    }
-    return `linear-gradient(to right, ${stops.join(', ')})`;
-  }, [playbackSeekLayout]);
+  // Ready bands come only from the SSE-refreshed seek layout, so they grow as
+  // generation lands and reappear from the cache after a seek or reload.
+  const readyBandBackground = useMemo(
+    () => timelineBandsGradient(readyTimelineBands(playbackSeekLayout), SCRUB_READY_COLOR),
+    [playbackSeekLayout],
+  );
+  const heardPercent = timelineFraction(shownSec, playbackDurationSec) * 100;
+
+  // Undo after scrub: the origin is the playhead when the scrub began, so
+  // playback advancing under a held thumb does not move it.
+  const scrubOriginSecRef = useRef<number | null>(null);
+  const [scrubUndo, setScrubUndo] = useState<{ targetSec: number; id: number } | null>(null);
+  useEffect(() => {
+    if (!scrubUndo) return undefined;
+    const timeout = setTimeout(() => {
+      setScrubUndo((current) => (current?.id === scrubUndo.id ? null : current));
+    }, SCRUB_UNDO_MS);
+    return () => clearTimeout(timeout);
+  }, [scrubUndo]);
+  const beginScrub = useCallback(() => {
+    scrubOriginSecRef.current ??= playbackTimeSec;
+  }, [playbackTimeSec]);
+  const commitScrub = useCallback((target: number) => {
+    const origin = scrubOriginSecRef.current ?? playbackTimeSec;
+    scrubOriginSecRef.current = null;
+    setPreviewSec(null);
+    const undoTargetSec = scrubUndoTargetSec(playbackSeekLayout, origin, target);
+    seekPlaybackTo(target);
+    setScrubUndo(undoTargetSec === null ? null : { targetSec: undoTargetSec, id: Date.now() });
+  }, [playbackSeekLayout, playbackTimeSec, seekPlaybackTo]);
+  const undoScrub = useCallback(() => {
+    if (!scrubUndo) return;
+    setScrubUndo(null);
+    seekPlaybackTo(scrubUndo.targetSec);
+  }, [scrubUndo, seekPlaybackTo]);
+
+  const { id: routeDocumentId } = useParams<{ id?: string | string[] }>();
+  const documentId = Array.isArray(routeDocumentId) ? routeDocumentId[0] ?? null : routeDocumentId ?? null;
+  const artworkUrl = useDocumentArtworkUrl(documentId, activeReaderType, isPlaying);
+  useMediaSession({
+    title: documentTitle ?? null,
+    artworkUrl,
+    isPlaying,
+    positionSec: playbackTimeSec,
+    durationSec: playbackDurationSec,
+    playbackRate: audioSpeed,
+    togglePlay,
+    skipForward,
+    skipBackward,
+    seekTo: seekPlaybackTo,
+  });
 
   return (
     <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-sm sm:shadow-none" data-app-ttsbar>
       {/* Top Edge Scrubber bar */}
       <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:-top-[5px] sm:h-2.5">
-        {/* Track Base Rail (Empty Track) */}
-        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-line-soft transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]" />
-        
-        {/* Generated Segments Track */}
+        {/* Rail: the whole document. Foreground-mixed so it stays visible in dark themes. */}
+        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--foreground)_16%,transparent)] transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]" />
+
+        {/* Ready bands: ranges with generated or cached audio. */}
+        {readyBandBackground && (
+          <div
+            aria-hidden
+            data-testid="scrubber-ready-bands"
+            className="pointer-events-none absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]"
+            style={{ background: readyBandBackground }}
+          />
+        )}
+
+        {/* Fill: what has been heard (or the scrub preview under the thumb). */}
         <div
           aria-hidden
-          className="pointer-events-none absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]"
-          style={{ background: scrubberTrackBackground }}
+          className="pointer-events-none absolute left-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-accent transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]"
+          style={{ width: `${heardPercent}%` }}
         />
         {/* Hidden active range slider overlay */}
         <input
@@ -111,17 +171,17 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
           step={0.25}
           value={Math.min(Math.max(0, shownSec), Math.max(0, playbackDurationSec))}
           disabled={!canSeek}
-          onChange={(event) => setPreviewSec(Number(event.currentTarget.value))}
+          onPointerDown={beginScrub}
+          onChange={(event) => {
+            beginScrub();
+            setPreviewSec(Number(event.currentTarget.value));
+          }}
           onPointerUp={(event) => {
-            const target = Number((event.currentTarget as HTMLInputElement).value);
-            setPreviewSec(null);
-            seekPlaybackTo(target);
+            commitScrub(Number((event.currentTarget as HTMLInputElement).value));
           }}
           onKeyUp={(event) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
-            const target = Number((event.currentTarget as HTMLInputElement).value);
-            setPreviewSec(null);
-            seekPlaybackTo(target);
+            commitScrub(Number((event.currentTarget as HTMLInputElement).value));
           }}
           className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40
             [&::-webkit-slider-runnable-track]:h-[2px] [&::-webkit-slider-runnable-track]:bg-transparent
@@ -146,6 +206,21 @@ export default function TTSPlayer({ currentPage, numPages, isPlaybackReady: rend
           >
             {formatPlaybackTime(shownSec)}
           </div>
+        )}
+        {scrubUndo && previewSec === null && (
+          <button
+            type="button"
+            onClick={undoScrub}
+            aria-label="Undo scrub"
+            title="Return to where you were before scrubbing"
+            className="absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-accent shadow-elev-2 hover:bg-accent-wash focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            <svg aria-hidden viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 4 3 7l3 3" />
+              <path d="M3 7h6.5a3.5 3.5 0 0 1 0 7H8" />
+            </svg>
+            Undo
+          </button>
         )}
       </div>
 
