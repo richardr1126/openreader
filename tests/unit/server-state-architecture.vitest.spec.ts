@@ -704,8 +704,8 @@ describe('server-state architecture', () => {
     expect(playbackHook).not.toContain('waitForAudioSeekReady');
     expect(context).not.toContain('return last');
     expect(context).not.toContain('?? initialSeekLayout.segments[0]');
-    expect(source('src/components/player/TTSPlayer.tsx')).toContain('scrubberTrackBackground');
-    expect(source('src/components/player/TTSPlayer.tsx')).toContain('segment.generated ? ready : estimated');
+    expect(source('src/components/player/TTSPlayer.tsx')).toContain('readyTimelineBands(playbackSeekLayout)');
+    expect(source('src/lib/client/tts/playback-timeline-track.ts')).toContain('segment.generated');
     expect(context).toContain('playbackSyncNavigationRef');
     expect(context).toContain('syncPlaybackLocator');
     expect(context).toContain("handler(locator, 'playback-follow')");

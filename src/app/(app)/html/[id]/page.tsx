@@ -181,7 +181,7 @@ function HtmlReader({
         />
       )}
       {rendererReady && (
-        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} />
+        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} />
       )}
       <DocumentSettings
         html

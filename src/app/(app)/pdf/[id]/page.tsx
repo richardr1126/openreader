@@ -220,7 +220,7 @@ function PdfReader({
         />
       )}
       {rendererReady ? (
-        <TTSPlayer currentPage={currDocPage} numPages={currDocPages} isPlaybackReady={isPlaybackReady} />
+        <TTSPlayer currentPage={currDocPage} numPages={currDocPages} isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} />
       ) : null}
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}

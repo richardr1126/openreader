@@ -29,7 +29,6 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useConfig } from '@/contexts/ConfigContext';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
-import { useMediaSession } from '@/hooks/audio/useMediaSession';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
 import {
@@ -739,13 +738,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currentSentenceAlignment,
     currentWordIndex,
   }), [currentSentence, currentSegment, currentSentenceAlignment, currentWordIndex]);
-
-  // Use media session hook
-  useMediaSession({
-    togglePlay,
-    skipForward,
-    skipBackward,
-  });
 
   /**
    * Renders the TTS context provider with its children

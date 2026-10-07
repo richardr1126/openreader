@@ -28,6 +28,19 @@ test('anonymous user opens a PDF and reads its visible page content', async ({ p
   await expect(page.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Next page', exact: true })).toBeEnabled();
 
+  // A committed scrub offers a short-lived way back to where the listener was.
+  const position = page.getByRole('slider', { name: 'Playback position', exact: true });
+  await expect.poll(async () => Number(await position.getAttribute('max'))).toBeGreaterThan(0);
+  await position.focus();
+  await position.press('End');
+  await position.press('Enter');
+  const undoScrub = page.getByRole('button', { name: 'Undo scrub', exact: true });
+  await expect(undoScrub).toBeVisible();
+  expect(Number(await position.inputValue())).toBeGreaterThan(0);
+  await undoScrub.click();
+  await expect(undoScrub).toBeHidden();
+  await expect(position).toHaveValue('0');
+
   await page.getByRole('link', { name: 'Back to documents', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole('link', { name: 'sample.pdf', exact: true })).toBeVisible();
