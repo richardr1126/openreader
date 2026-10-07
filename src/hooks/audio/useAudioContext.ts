@@ -2,6 +2,12 @@
 
 import { useState, useEffect } from 'react';
 
+declare global {
+  interface Window {
+    webkitAudioContext: typeof AudioContext;
+  }
+}
+
 // Type definition for AudioContext to handle browser compatibility
 type AudioContextType = typeof window extends undefined
   ? never

@@ -20,6 +20,8 @@ export interface AppConfigValues {
   audioPlayerSpeed: number;
   voice: string;
   epubTheme: boolean;
+  /** PDF/EPUB show their laid-out pages; off reads the plan as flowing text. */
+  readerShowsLayout: boolean;
   headerMargin: number;
   footerMargin: number;
   leftMargin: number;
@@ -58,6 +60,7 @@ export function getAppConfigDefaults(): AppConfigValues {
     audioPlayerSpeed: 1,
     voice: '',
     epubTheme: false,
+    readerShowsLayout: true,
     headerMargin: 0,
     footerMargin: 0,
     leftMargin: 0,

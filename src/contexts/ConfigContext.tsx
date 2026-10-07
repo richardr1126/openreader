@@ -18,6 +18,7 @@ interface ConfigContextType {
   audioPlayerSpeed: number;
   voice: string;
   epubTheme: boolean;
+  readerShowsLayout: boolean;
   ttsSegmentMaxBlockLength: number;
   headerMargin: number;
   footerMargin: number;
@@ -88,6 +89,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       audioPlayerSpeed: config.audioPlayerSpeed,
       voice: config.voice,
       epubTheme: config.epubTheme,
+      readerShowsLayout: config.readerShowsLayout,
       ttsSegmentMaxBlockLength: config.ttsSegmentMaxBlockLength,
       headerMargin: config.headerMargin,
       footerMargin: config.footerMargin,

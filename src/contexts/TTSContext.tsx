@@ -79,13 +79,6 @@ type EpubLocationChangeHandler = (
   intent?: EpubLocationChangeIntent,
 ) => void;
 
-// Media globals
-declare global {
-  interface Window {
-    webkitAudioContext: typeof AudioContext;
-  }
-}
-
 /**
  * Interface defining all available methods and properties in the TTS context
  */
@@ -137,13 +130,8 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   resolvedLanguage: string;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
-  /**
-   * Move playback to a worker-plan ordinal (tap a sentence, a search hit, a
-   * chapter) through the same seek path as the sentence skip buttons.
-   * Returns false when the ordinal is not in the adopted plan.
-   */
+  /** Seek to a plan ordinal through the sentence-skip path; false if not in the plan. */
   skipToOrdinal: (ordinal: number) => boolean;
-  /** Ordered segments of the adopted plan, for reader-side text views, search and contents. */
   playbackSegments: CanonicalTtsSegment[];
   registerLocationChangeHandler: (handler: EpubLocationChangeHandler | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
@@ -462,8 +450,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setDocumentPlaybackAnchor,
     skipBackward,
     skipForward,
-    skipToLocation,
-    skipToOrdinal,
+    skipToLocation, skipToOrdinal,
   } = useTtsDocumentNavigation({
     activeReaderType,
     currentIndex,
@@ -697,8 +684,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
-    skipToOrdinal,
-    playbackSegments,
+    skipToOrdinal, playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,
@@ -737,8 +723,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
-    skipToOrdinal,
-    playbackSegments,
+    skipToOrdinal, playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,

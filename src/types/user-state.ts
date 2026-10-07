@@ -6,6 +6,7 @@ export const SYNCED_PREFERENCE_KEYS = [
   'audioPlayerSpeed',
   'voice',
   'epubTheme',
+  'readerShowsLayout',
   'ttsSegmentMaxBlockLength',
   'headerMargin',
   'footerMargin',

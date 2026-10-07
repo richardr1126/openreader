@@ -20,6 +20,7 @@ import {
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import { useTTS } from '@/contexts/TTSContext';
+import { useConfig } from '@/contexts/ConfigContext';
 import {
   highlightPattern,
   clearHighlights,
@@ -96,6 +97,9 @@ export function usePdfDocument(
     currDocPages,
     setCurrDocPages,
   } = useTTS();
+  // Page text comes from the parsed blocks, so the plain-text reading mode
+  // anchors playback without loading pdf.js at all.
+  const { readerShowsLayout } = useConfig();
   const currDocId = document.id;
   const currDocData = document.data;
   const currDocName = document.name;
@@ -146,7 +150,7 @@ export function usePdfDocument(
     try {
       const generation = pdfDocGenerationRef.current;
       const currentPdf = pdfDocumentRef.current;
-      if (!currentPdf) return;
+      if (!currentPdf && readerShowsLayout) return;
       const seq = ++loadSeqRef.current;
       const pageNumber = currDocPageNumber;
       setIsPlaybackReady(false);
@@ -200,6 +204,7 @@ export function usePdfDocument(
     currDocText,
     parsedDocument,
     documentSettings,
+    readerShowsLayout,
   ]);
 
   /**
@@ -207,10 +212,15 @@ export function usePdfDocument(
    * Triggers text extraction and processing when either the document URL or page changes
    */
   useEffect(() => {
-    if (currDocData && pdfDocument) {
+    if (currDocData && (pdfDocument || !readerShowsLayout)) {
       loadCurrDocText();
     }
-  }, [currDocPageNumber, currDocData, pdfDocument, loadCurrDocText]);
+  }, [currDocPageNumber, currDocData, pdfDocument, loadCurrDocText, readerShowsLayout]);
+
+  useEffect(() => {
+    if (readerShowsLayout || currDocPages) return;
+    setCurrDocPages(parsedDocument.pages.length);
+  }, [currDocPages, parsedDocument, readerShowsLayout, setCurrDocPages]);
 
   const updateDocumentSettings = useCallback(async (settings: DocumentSettings): Promise<void> => {
     if (!currDocId) return;

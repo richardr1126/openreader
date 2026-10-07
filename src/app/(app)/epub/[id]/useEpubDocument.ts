@@ -40,7 +40,7 @@ import { normalizeTtsLocationKey } from '@openreader/tts/locator';
 import { normalizeOptionalLanguageTag } from '@openreader/tts/language';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import type { EPUBDocument } from '@/types/documents';
-import type { TTSSegmentLocator } from '@/types/client';
+import { isStableEpubLocator, type TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ScheduleDocumentProgress } from '@/types/user-state';
 import type { EpubProgressLocator } from '@/types/user-state';
@@ -107,8 +107,10 @@ export function useEpubDocument(
     reconcileEpubRenderedAnchor,
     resolveEpubPlanLocator,
     setIsEPUB,
+    currentSentenceOrdinal,
+    playbackSegments,
   } = useTTS();
-  const { epubHighlightEnabled } = useConfig();
+  const { epubHighlightEnabled, readerShowsLayout } = useConfig();
 
   const currDocData = document.data;
   const currDocName = document.name;
@@ -476,9 +478,59 @@ export function useEpubDocument(
     resolveLocatorToCfi,
   });
 
-  const isPlaybackReady = initialPlacementCommittedRef.current
-    || placementLifecycle.status === 'ready'
-    || placementLifecycle.status === 'empty-plan';
+  // Plain-text reading mode has no rendition to commit a placement, so the
+  // saved stable locator anchors the playback cursor directly against the plan.
+  const [planTextAnchored, setPlanTextAnchored] = useState(false);
+  useEffect(() => {
+    if (readerShowsLayout || planTextAnchored || !playbackPlanReady) return;
+    if (currentSentenceOrdinal === null) {
+      const saved = initialLocatorRef.current;
+      const resolution = resolveEpubPlanLocator(saved ? {
+        readerType: 'epub',
+        spineHref: saved.spineHref,
+        spineIndex: saved.spineIndex,
+        charOffset: saved.charOffset,
+      } : null);
+      if (resolution.status === 'waiting-plan') return;
+      if (resolution.status === 'selected') {
+        reconcileEpubRenderedAnchor({
+          locator: resolution.displayLocator,
+          hasReadableText: true,
+          shouldPause: false,
+        });
+      }
+    }
+    setPlanTextAnchored(true);
+  }, [
+    currentSentenceOrdinal,
+    planTextAnchored,
+    playbackPlanReady,
+    readerShowsLayout,
+    reconcileEpubRenderedAnchor,
+    resolveEpubPlanLocator,
+  ]);
+
+  // Without a rendition, reading progress follows the playback cursor. The
+  // startup locator follows too, so showing the book again opens here.
+  useEffect(() => {
+    if (readerShowsLayout || !planTextAnchored || currentSentenceOrdinal === null) return;
+    const locator = playbackSegments.find((segment) => segment.ordinal === currentSentenceOrdinal)?.ownerLocator;
+    if (!isStableEpubLocator(locator)) return;
+    const progress: EpubProgressLocator = {
+      schemaVersion: 1,
+      spineHref: locator.spineHref,
+      spineIndex: locator.spineIndex,
+      charOffset: locator.charOffset,
+    };
+    initialLocatorRef.current = progress;
+    if (documentId) scheduleProgress({ documentId, readerType: 'epub', locator: progress });
+  }, [currentSentenceOrdinal, documentId, planTextAnchored, playbackSegments, readerShowsLayout, scheduleProgress]);
+
+  const isPlaybackReady = readerShowsLayout
+    ? initialPlacementCommittedRef.current
+      || placementLifecycle.status === 'ready'
+      || placementLifecycle.status === 'empty-plan'
+    : planTextAnchored;
 
   return useMemo(() => ({
     currDocData,
