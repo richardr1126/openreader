@@ -13,6 +13,7 @@ import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { ButtonLink } from '@/components/ui';
 import { serializeReaderPosition } from '@/lib/shared/reader-position';
@@ -65,7 +66,7 @@ function HtmlReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice'>(null);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -176,13 +177,18 @@ function HtmlReader({
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
+          onChangeVoice={() => setActiveSidebar('voice')}
           documentType="html"
           documentId={routeDocumentId}
         />
       )}
       {rendererReady && (
-        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} />
+        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
       )}
+      <VoiceSidebar
+        isOpen={activeSidebar === 'voice'}
+        onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
       <DocumentSettings
         html
         isOpen={rendererReady && activeSidebar === 'settings'}

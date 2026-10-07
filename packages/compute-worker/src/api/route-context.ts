@@ -18,6 +18,7 @@ import type { ReconciliationStateStore } from '../operations/reconciliation';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { toErrorMessage } from '../infrastructure/errors';
 import type { TtsPlaybackStorage } from '../playback/storage';
+import type { TtsVoicePreviewDeps } from '../jobs/playback/voice-preview';
 
 export { toErrorMessage } from '../infrastructure/errors';
 
@@ -96,6 +97,8 @@ export interface ComputeWorkerRouteContext {
   releaseHttp: (request: FastifyRequest) => void;
   markActivity: (reason: string) => void;
   onActiveSseChanged: (delta: number) => void;
+  /** Credential broker, provider limiter, and synthesis bound for in-request voice previews. */
+  ttsVoicePreview: TtsVoicePreviewDeps;
 }
 
 export function errorCode(error: unknown): string | null {

@@ -26,6 +26,8 @@ export type PdfLayoutRequest =
 export type TtsPlaybackRequest =
   paths['/v1/tts-playback/sessions/jobs']['post']['requestBody']['content']['application/json']
   & { generationExtent?: 'window' | 'document' };
+export type TtsVoicePreviewRequest =
+  paths['/v1/tts-playback/voice-previews']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionPrepareRequest =
   paths['/v1/tts-playback/sessions/prepare']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionPrepareResponse =

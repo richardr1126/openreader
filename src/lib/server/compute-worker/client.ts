@@ -23,8 +23,13 @@ import type {
   TtsPlaybackCompletedSegment,
   TtsPlaybackSessionResolution,
   TtsPlaybackSessionResolveRequest,
+  TtsVoicePreviewRequest,
   ComputeOperation,
 } from './protocol';
+
+export type TtsVoicePreviewResult =
+  | { ok: true; audio: ArrayBuffer }
+  | { ok: false; status: number; code: string | null; retryAfterMs: number | null };
 
 class WorkerHttpError extends Error {
   constructor(
@@ -312,6 +317,37 @@ export class ComputeWorkerClient {
     documentId: string;
   }, init?: { signal?: AbortSignal }): Promise<{ deletedPlanObjects: number }> {
     return this.requestJson('POST', '/v1/tts-playback/plans/clear', input, init);
+  }
+
+  /**
+   * Synthesizes a short in-memory voice sample. Nothing is persisted, so the
+   * result never touches the canonical timeline or segment cache. A worker
+   * rejection is returned with its stable code instead of thrown, because the
+   * caller relays it to the browser.
+   */
+  async synthesizeTtsVoicePreview(
+    input: TtsVoicePreviewRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<TtsVoicePreviewResult> {
+    const response = await fetch(`${this.baseUrl}/v1/tts-playback/voice-previews`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+        Accept: 'audio/mpeg, application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(input),
+      ...(init?.signal ? { signal: init.signal } : {}),
+      cache: 'no-store',
+    });
+    if (response.ok) return { ok: true, audio: await response.arrayBuffer() };
+    const body = await response.json().catch(() => null) as { code?: unknown } | null;
+    return {
+      ok: false,
+      status: response.status,
+      code: typeof body?.code === 'string' ? body.code : null,
+      retryAfterMs: parseRetryAfterMs(response.headers.get('retry-after')),
+    };
   }
 
   async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {

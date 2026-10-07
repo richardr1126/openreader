@@ -13,6 +13,7 @@ import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
@@ -73,7 +74,7 @@ function EpubReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice'>(null);
   const [containerHeight, setContainerHeight] = useState<string | null>(null);
   const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -184,12 +185,17 @@ function EpubReader({
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
+          onChangeVoice={() => setActiveSidebar('voice')}
           documentType="epub"
           documentId={routeDocumentId || ''}
           resolveChapterTitle={resolveChapterTitle}
         />
       )}
-      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} />
+      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
+      <VoiceSidebar
+        isOpen={activeSidebar === 'voice'}
+        onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
       <DocumentSettings
         epub
         isOpen={rendererReady && activeSidebar === 'settings'}

@@ -119,4 +119,14 @@ test('downloads account data and an already-completed audiobook export', async (
   const audiobookDownload = await audiobookDownloadPromise;
   expect(audiobookDownload.suggestedFilename()).toMatch(/\.mp3$/);
   expect(resolveActions).toEqual(['resolve', 'resolve', 'start:0']);
+
+  // The export shows the applied voice read-only; Change hands off to the
+  // voice panel, the single owner of voice and model-speed edits.
+  await exportSidebar.getByRole('button', { name: 'Change voice', exact: true }).click();
+  const voicePanel = page.getByRole('dialog', { name: 'Voice', exact: true });
+  await expect(voicePanel.getByRole('heading', { name: 'Voice', exact: true })).toBeVisible();
+  await expect(exportSidebar).toBeHidden();
+  await expect(voicePanel.getByRole('searchbox', { name: 'Search voices' })).toBeVisible();
+  await voicePanel.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(voicePanel).toBeHidden();
 });

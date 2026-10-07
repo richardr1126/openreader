@@ -239,6 +239,7 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/sessions/jobs',
       'POST /v1/tts-playback/sessions/prepare',
       'POST /v1/tts-playback/sessions/resolve',
+      'POST /v1/tts-playback/voice-previews',
       'POST /v1/user-storage/cleanup',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
     ].sort());
@@ -315,6 +316,7 @@ describe('server-state architecture', () => {
       '/api/tts/stream/[sessionId]/events',
       '/api/tts/stream/[sessionId]/timeline',
       '/api/tts/stream/sessions',
+      '/api/tts/voice-preview',
       '/api/tts/voices',
       '/api/user/claim',
       '/api/user/export',
