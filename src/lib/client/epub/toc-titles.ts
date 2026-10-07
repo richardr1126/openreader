@@ -1,14 +1,19 @@
 import type { NavItem } from 'epubjs';
 
-function normalizeHref(href: string): string {
-  const path = href.split('#')[0] ?? '';
-  let decoded = path;
-  try {
-    decoded = decodeURIComponent(path);
-  } catch {
-    // Keep the raw path when the EPUB contains malformed escapes.
-  }
-  return decoded.replace(/^(\.\.\/|\.\/|\/)+/, '');
+import { epubHrefsMatch, type OutlineEntry } from '@/lib/client/reader/chapters';
+
+/** Flatten an EPUB table of contents into depth-tagged outline entries, in reading order. */
+export function epubTocOutline(toc: readonly NavItem[]): OutlineEntry[] {
+  const entries: OutlineEntry[] = [];
+  const visit = (items: readonly NavItem[], depth: number) => {
+    for (const item of items) {
+      const label = item.label?.trim();
+      if (label && item.href) entries.push({ title: label, target: { readerType: 'epub', href: item.href }, depth });
+      if (item.subitems?.length) visit(item.subitems, depth + 1);
+    }
+  };
+  visit(toc, 0);
+  return entries;
 }
 
 /**
@@ -17,17 +22,10 @@ function normalizeHref(href: string): string {
  * package, so paths are compared by suffix after dropping fragments.
  */
 export function findEpubTocTitle(toc: readonly NavItem[], spineHref: string): string | null {
-  const target = normalizeHref(spineHref);
-  if (!target) return null;
-  const stack = [...toc];
-  while (stack.length > 0) {
-    const item = stack.shift()!;
-    const href = normalizeHref(item.href ?? '');
-    const label = item.label?.trim();
-    if (label && href && (href === target || target.endsWith(`/${href}`) || href.endsWith(`/${target}`))) {
-      return label;
+  for (const entry of epubTocOutline(toc)) {
+    if (entry.target.readerType === 'epub' && epubHrefsMatch(entry.target.href, spineHref)) {
+      return entry.title;
     }
-    if (item.subitems?.length) stack.unshift(...item.subitems);
   }
   return null;
 }

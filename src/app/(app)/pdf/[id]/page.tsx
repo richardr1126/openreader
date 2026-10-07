@@ -26,6 +26,10 @@ import { forceReparsePdfDocument } from '@/lib/client/api/documents';
 import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
+import { useConfig } from '@/contexts/ConfigContext';
+import { PlanTextViewer } from '@/components/views/PlanTextViewer';
+import { ReaderNavigationSidebars, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { usePdfOutline } from '@/hooks/pdf/usePdfOutline';
 
 // Dynamic import for client-side rendering only
 const PDFViewer = dynamic(
@@ -78,7 +82,10 @@ function PdfReader({
     updateDocumentSettings,
     parsedOverlayEnabled,
     setParsedOverlayEnabled,
+    pdfDocument,
   } = pdfState;
+  const { readerShowsLayout } = useConfig();
+  const outline = usePdfOutline(pdfDocument);
   const {
     currentSentenceOrdinal,
     sentences,
@@ -86,7 +93,7 @@ function PdfReader({
     setPdfSkipBlockKinds,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | ReaderNavigationPanel>(null);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
@@ -192,7 +199,11 @@ function PdfReader({
               onZoomDecrease={handleZoomOut}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
+              onOpenContents={() => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents')}
+              onOpenSearch={() => setActiveSidebar((prev) => prev === 'search' ? null : 'search')}
               isSettingsOpen={activeSidebar === 'settings'}
+              isContentsOpen={activeSidebar === 'contents'}
+              isSearchOpen={activeSidebar === 'search'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
               minZoom={50}
@@ -203,12 +214,16 @@ function PdfReader({
       />
       <div className="relative overflow-hidden" style={{ height: containerHeight }}>
         <div className={rendererReady ? 'h-full' : 'h-full opacity-0 pointer-events-none'}>
-          <PDFViewer
-            zoomLevel={zoomLevel}
-            onReady={onReady}
-            onError={onError}
-            pdfState={pdfState}
-          />
+          {readerShowsLayout ? (
+            <PDFViewer
+              zoomLevel={zoomLevel}
+              onReady={onReady}
+              onError={onError}
+              pdfState={pdfState}
+            />
+          ) : (
+            <PlanTextViewer readerType="pdf" onReady={onReady} />
+          )}
         </div>
       </div>
       {canExportAudiobook && (
@@ -256,6 +271,12 @@ function PdfReader({
           },
           onForceReparse: requestForceReparse,
         }}
+      />
+      <ReaderNavigationSidebars
+        open={activeSidebar === 'contents' || activeSidebar === 'search' ? activeSidebar : null}
+        onClose={() => setActiveSidebar(null)}
+        outline={outline}
+        documentTitle={currDocName || payload.document.name}
       />
       <ConfirmDialog
         isOpen={showForceReparseConfirm}

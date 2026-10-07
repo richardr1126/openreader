@@ -6,13 +6,15 @@ import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
-import { DotsVerticalIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
+import { ListIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
 import { ToolbarButton } from '@/components/ui';
 
 interface EPUBViewerProps {
   className?: string;
   onReady?: () => void;
+  /** Opens the reader's shared Contents panel. */
+  onOpenContents?: () => void;
   onError?: (error: Error) => void;
   epubState: Pick<
     EpubDocumentState,
@@ -93,8 +95,7 @@ function EpubRenditionHost({
   return <div ref={hostRef} className="h-full w-full" />;
 }
 
-export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUBViewerProps) {
-  const [isTocOpen, setIsTocOpen] = useState(false);
+export function EPUBViewer({ className = '', epubState, onReady, onError, onOpenContents }: EPUBViewerProps) {
   const {
     currDocData,
     currDocPage,
@@ -234,11 +235,11 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
         <div className="flex items-center gap-2">
           <ToolbarButton
             type="button"
-            onClick={() => setIsTocOpen(open => !open)}
-            aria-label={isTocOpen ? 'Hide chapters' : 'Show chapters'}
+            onClick={onOpenContents}
+            aria-label="Show chapters"
             className="px-1"
           >
-            <DotsVerticalIcon className="w-4 h-4" />
+            <ListIcon className="w-4 h-4" />
           </ToolbarButton>
           <ToolbarButton
             type="button"
@@ -261,31 +262,6 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
           <ChevronRightIcon className="w-4 h-4" />
         </ToolbarButton>
       </div>
-      {isTocOpen && tocRef.current && tocRef.current.length > 0 && (
-        <div className="border-b border-line-soft bg-background text-xs overflow-y-auto max-h-64 p-2">
-          <div className="font-semibold text-soft pb-1">Skip to chapters</div>
-          <div className="flex flex-wrap gap-1 w-full">
-            {tocRef.current.map((item, index) => (
-              <button
-                key={`${item.href}-${index}`}
-                type="button"
-                onClick={() => {
-                  if (item.href) handleLocationChanged(item.href);
-                  setIsTocOpen(false);
-                }}
-                className="
-                  px-2 py-1 rounded-md font-medium text-foreground text-center bg-surface
-                  hover:bg-accent-wash hover:text-accent transition-colors duration-fast
-                  whitespace-nowrap
-                  flex-1 min-w-[140px]
-                "
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="flex-1 min-h-0">
         <EpubRenditionHost
           data={currDocData}

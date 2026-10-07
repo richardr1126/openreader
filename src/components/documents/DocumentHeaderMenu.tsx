@@ -1,6 +1,6 @@
 'use client';
 
-import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon } from '@/components/icons/Icons';
+import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon, ListIcon, SearchIcon } from '@/components/icons/Icons';
 import { ZoomControl } from '@/components/documents/ZoomControl';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton } from '@/components/ui';
@@ -11,7 +11,11 @@ interface DocumentHeaderMenuProps {
   onZoomDecrease: () => void;
   onOpenSettings: () => void;
   onOpenAudiobook?: () => void;
+  onOpenContents?: () => void;
+  onOpenSearch?: () => void;
   isSettingsOpen?: boolean;
+  isContentsOpen?: boolean;
+  isSearchOpen?: boolean;
   isAudiobookOpen?: boolean;
   showAudiobookExport?: boolean;
   minZoom?: number;
@@ -24,7 +28,11 @@ export function DocumentHeaderMenu({
   onZoomDecrease,
   onOpenSettings,
   onOpenAudiobook,
+  onOpenContents,
+  onOpenSearch,
   isSettingsOpen = false,
+  isContentsOpen = false,
+  isSearchOpen = false,
   isAudiobookOpen = false,
   showAudiobookExport,
   minZoom = 0,
@@ -41,6 +49,27 @@ export function DocumentHeaderMenu({
         min={minZoom}
         max={maxZoom}
       />
+      {/* Reading navigation. A bookmark control belongs after search. */}
+      {onOpenContents && (
+        <ToolbarButton
+          onClick={onOpenContents}
+          active={isContentsOpen}
+          aria-label={isContentsOpen ? 'Hide contents' : 'Open contents'}
+          title={isContentsOpen ? 'Hide Contents' : 'Contents'}
+        >
+          <ListIcon aria-hidden="true" className="w-4 h-4" />
+        </ToolbarButton>
+      )}
+      {onOpenSearch && (
+        <ToolbarButton
+          onClick={onOpenSearch}
+          active={isSearchOpen}
+          aria-label={isSearchOpen ? 'Hide find in book' : 'Find in book'}
+          title={isSearchOpen ? 'Hide Find' : 'Find in Book'}
+        >
+          <SearchIcon aria-hidden="true" className="w-4 h-4" />
+        </ToolbarButton>
+      )}
       {showAudiobookExport && onOpenAudiobook && (
         <ToolbarButton
           onClick={onOpenAudiobook}
@@ -96,6 +125,18 @@ export function DocumentHeaderMenu({
 
             {/* Actions Section */}
             <div className="p-1">
+              {onOpenContents && (
+                <MenuActionItem onClick={onOpenContents} activeOverride={isContentsOpen}>
+                  <ListIcon aria-hidden="true" className="h-4 w-4" />
+                  {isContentsOpen ? 'Hide Contents' : 'Contents'}
+                </MenuActionItem>
+              )}
+              {onOpenSearch && (
+                <MenuActionItem onClick={onOpenSearch} activeOverride={isSearchOpen}>
+                  <SearchIcon aria-hidden="true" className="h-4 w-4" />
+                  {isSearchOpen ? 'Hide Find' : 'Find in Book'}
+                </MenuActionItem>
+              )}
               {showAudiobookExport && onOpenAudiobook && (
                 <MenuActionItem onClick={onOpenAudiobook} activeOverride={isAudiobookOpen}>
                   <DownloadIcon className="h-4 w-4" />
