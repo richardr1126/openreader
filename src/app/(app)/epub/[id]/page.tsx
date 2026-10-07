@@ -49,14 +49,8 @@ function EpubReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const router = useRouter();
-  const {
-    disableProgressPersistence,
-    scheduleProgress,
-  } = bootstrap;
-  const initialLocator = payload.initialPosition?.readerType === 'epub'
-    ? payload.initialPosition.locator
-    : null;
-  const epubState = useEpubDocument(sourceDocument, initialLocator, scheduleProgress);
+  const { disableProgressPersistence } = bootstrap;
+  const epubState = useEpubDocument(sourceDocument, payload.initialPosition);
   const {
     currDocName,
     isPlaybackReady,
@@ -81,7 +75,7 @@ function EpubReader({
   const language = documentSettings.language ?? 'auto';
   const { readerShowsLayout } = useConfig();
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
-  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId, 'epub');
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const navigationPanel = isReaderNavigationPanel(activeSidebar) ? activeSidebar : null;
   const toggleNavigationPanel = useCallback((panel: ReaderNavigationPanel) => {
     setActiveSidebar((prev) => prev === panel ? null : panel);
@@ -233,7 +227,6 @@ function EpubReader({
         outline={navigationPanel === 'contents' ? epubTocOutline(tocRef.current ?? []) : []}
         documentTitle={currDocName || payload.document.name}
         documentId={routeDocumentId}
-        readerType="epub"
       />
       <DocumentSettings
         epub

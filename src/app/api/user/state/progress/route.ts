@@ -2,23 +2,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { userDocumentProgress } from '@openreader/database/schema';
-import type { ReaderType } from '@/types/user-state';
+import type { DocumentProgressRecord } from '@/types/user-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import {
-  normalizeEpubProgressLocator,
-  parseEpubProgressLocator,
-  serializeEpubProgressLocator,
-} from '@/lib/shared/epub-progress';
+import { parseReadingPositionInput } from '@/lib/shared/reading-position';
 
 export const dynamic = 'force-dynamic';
 
-function normalizeReaderType(value: unknown): ReaderType | null {
-  if (value === 'pdf' || value === 'epub' || value === 'html') return value;
-  return null;
+const progressSelection = {
+  documentId: userDocumentProgress.documentId,
+  segmentKey: userDocumentProgress.segmentKey,
+  segmentOrdinal: userDocumentProgress.segmentOrdinal,
+  progress: userDocumentProgress.progress,
+  clientUpdatedAtMs: userDocumentProgress.clientUpdatedAtMs,
+  updatedAt: userDocumentProgress.updatedAt,
+};
+
+type ProgressRow = {
+  documentId: string;
+  segmentKey: string | null;
+  segmentOrdinal: number;
+  progress: number | null;
+  clientUpdatedAtMs: number | null;
+  updatedAt: number | null;
+};
+
+function toProgressRecord(row: ProgressRow): DocumentProgressRecord {
+  return {
+    documentId: row.documentId,
+    segmentKey: row.segmentKey ?? null,
+    segmentOrdinal: Number(row.segmentOrdinal ?? 0),
+    progress: row.progress == null ? null : Number(row.progress),
+    clientUpdatedAtMs: Number(row.clientUpdatedAtMs ?? 0),
+    updatedAtMs: coerceTimestampMs(row.updatedAt, nowTimestampMs()),
+  };
 }
 
 function normalizeClientUpdatedAtMs(value: unknown): number {
@@ -37,54 +57,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid documentId' }, { status: 400 });
     }
 
-    const rows = await db
-      .select({
-        documentId: userDocumentProgress.documentId,
-        readerType: userDocumentProgress.readerType,
-        location: userDocumentProgress.location,
-        progress: userDocumentProgress.progress,
-        clientUpdatedAtMs: userDocumentProgress.clientUpdatedAtMs,
-        updatedAt: userDocumentProgress.updatedAt,
-      })
+    const rows = (await db
+      .select(progressSelection)
       .from(userDocumentProgress)
       .where(and(
         eq(userDocumentProgress.userId, scope.ownerUserId),
         eq(userDocumentProgress.documentId, documentId),
       ))
-      .limit(1);
+      .limit(1)) as ProgressRow[];
 
     const row = rows[0];
-    if (!row) {
-      return NextResponse.json({ progress: null });
-    }
-
-    if (row.readerType === 'epub') {
-      const locator = parseEpubProgressLocator(row.location);
-      if (!locator) {
-        return NextResponse.json({ progress: null, invalidated: true });
-      }
-      return NextResponse.json({
-        progress: {
-          documentId: row.documentId,
-          readerType: 'epub',
-          locator,
-          progress: row.progress == null ? null : Number(row.progress),
-          clientUpdatedAtMs: Number(row.clientUpdatedAtMs ?? 0),
-          updatedAtMs: coerceTimestampMs(row.updatedAt, nowTimestampMs()),
-        },
-      });
-    }
-
-    return NextResponse.json({
-      progress: {
-        documentId: row.documentId,
-        readerType: row.readerType,
-        location: row.location,
-        progress: row.progress == null ? null : Number(row.progress),
-        clientUpdatedAtMs: Number(row.clientUpdatedAtMs ?? 0),
-        updatedAtMs: coerceTimestampMs(row.updatedAt, nowTimestampMs()),
-      },
-    });
+    return NextResponse.json({ progress: row ? toProgressRecord(row) : null });
   } catch (error) {
     serverLogger.error({
       event: 'user.progress.load.failed',
@@ -105,9 +88,8 @@ export async function PUT(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as
       | {
         documentId?: unknown;
-        readerType?: unknown;
-        location?: unknown;
-        locator?: unknown;
+        segmentKey?: unknown;
+        segmentOrdinal?: unknown;
         progress?: unknown;
         clientUpdatedAtMs?: unknown;
       }
@@ -118,18 +100,10 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid documentId' }, { status: 400 });
     }
 
-    const readerType = normalizeReaderType(body?.readerType);
-    if (!readerType) {
-      return NextResponse.json({ error: "Invalid readerType. Expected 'pdf', 'epub', or 'html'." }, { status: 400 });
+    const position = parseReadingPositionInput(body);
+    if (!position) {
+      return NextResponse.json({ error: 'Invalid reading position' }, { status: 400 });
     }
-
-    const locator = readerType === 'epub' ? normalizeEpubProgressLocator(body?.locator) : null;
-    const location = readerType === 'epub'
-      ? (locator ? serializeEpubProgressLocator(locator) : '')
-      : (typeof body?.location === 'string' ? body.location.trim() : '');
-    if (!location) return NextResponse.json({
-      error: readerType === 'epub' ? 'Invalid EPUB progress locator' : 'Invalid location',
-    }, { status: 400 });
 
     const progress =
       body?.progress == null
@@ -139,62 +113,18 @@ export async function PUT(req: NextRequest) {
           : null;
     const clientUpdatedAtMs = normalizeClientUpdatedAtMs(body?.clientUpdatedAtMs);
 
-    const existingRows = await db
-      .select({
-        clientUpdatedAtMs: userDocumentProgress.clientUpdatedAtMs,
-        location: userDocumentProgress.location,
-        readerType: userDocumentProgress.readerType,
-        progress: userDocumentProgress.progress,
-        updatedAt: userDocumentProgress.updatedAt,
-      })
+    const existingRows = (await db
+      .select(progressSelection)
       .from(userDocumentProgress)
       .where(and(
         eq(userDocumentProgress.userId, scope.ownerUserId),
         eq(userDocumentProgress.documentId, documentId),
       ))
-      .limit(1);
+      .limit(1)) as ProgressRow[];
     const existing = existingRows[0];
-    const existingUpdated = Number(existing?.clientUpdatedAtMs ?? 0);
 
-    const responseProgress = (
-      storedReaderType: string,
-      storedLocation: string,
-      storedProgress: number | null,
-      storedClientUpdatedAtMs: number,
-      storedUpdatedAtMs: number,
-    ) => {
-      if (storedReaderType === 'epub') {
-        const storedLocator = parseEpubProgressLocator(storedLocation);
-        return storedLocator ? {
-          documentId,
-          readerType: 'epub' as const,
-          locator: storedLocator,
-          progress: storedProgress,
-          clientUpdatedAtMs: storedClientUpdatedAtMs,
-          updatedAtMs: storedUpdatedAtMs,
-        } : null;
-      }
-      return {
-        documentId,
-        readerType: storedReaderType,
-        location: storedLocation,
-        progress: storedProgress,
-        clientUpdatedAtMs: storedClientUpdatedAtMs,
-        updatedAtMs: storedUpdatedAtMs,
-      };
-    };
-
-    if (existing && clientUpdatedAtMs < existingUpdated) {
-      return NextResponse.json({
-        progress: responseProgress(
-          existing.readerType,
-          existing.location,
-          existing.progress == null ? null : Number(existing.progress),
-          existingUpdated,
-          coerceTimestampMs(existing.updatedAt, nowTimestampMs()),
-        ),
-        applied: false,
-      });
+    if (existing && clientUpdatedAtMs < Number(existing.clientUpdatedAtMs ?? 0)) {
+      return NextResponse.json({ progress: toProgressRecord(existing), applied: false });
     }
 
     const updatedAt = nowTimestampMs();
@@ -203,8 +133,8 @@ export async function PUT(req: NextRequest) {
       .values({
         userId: scope.ownerUserId,
         documentId,
-        readerType,
-        location,
+        segmentKey: position.segmentKey,
+        segmentOrdinal: position.segmentOrdinal,
         progress,
         clientUpdatedAtMs,
         updatedAt,
@@ -212,8 +142,8 @@ export async function PUT(req: NextRequest) {
       .onConflictDoUpdate({
         target: [userDocumentProgress.userId, userDocumentProgress.documentId],
         set: {
-          readerType,
-          location,
+          segmentKey: position.segmentKey,
+          segmentOrdinal: position.segmentOrdinal,
           progress,
           clientUpdatedAtMs,
           updatedAt,
@@ -222,7 +152,13 @@ export async function PUT(req: NextRequest) {
       });
 
     return NextResponse.json({
-      progress: responseProgress(readerType, location, progress, clientUpdatedAtMs, updatedAt),
+      progress: toProgressRecord({
+        documentId,
+        ...position,
+        progress,
+        clientUpdatedAtMs,
+        updatedAt,
+      }),
       applied: true,
     });
   } catch (error) {

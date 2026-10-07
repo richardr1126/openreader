@@ -16,7 +16,6 @@ import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { ButtonLink } from '@/components/ui';
-import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
@@ -47,10 +46,7 @@ function HtmlReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const router = useRouter();
-  const {
-    disableProgressPersistence,
-    scheduleProgress,
-  } = bootstrap;
+  const { disableProgressPersistence } = bootstrap;
   const htmlState = useHtmlDocument(sourceDocument);
   const {
     currDocData,
@@ -60,8 +56,6 @@ function HtmlReader({
     isTxt,
   } = htmlState;
   const {
-    currDocPage,
-    currentSentenceOrdinal,
     sentences,
     stop,
   } = useTTS();
@@ -79,27 +73,10 @@ function HtmlReader({
       depth: (block.headingLevel ?? 1) - 1,
     })), [blocks]);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
-  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId, 'html');
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
-
-  useEffect(() => {
-    if (!routeDocumentId || !rendererReady || !isPlaybackReady || sentences.length === 0) return;
-    scheduleProgress({
-      documentId: routeDocumentId,
-      readerType: 'html',
-      location: serializeReaderPosition('html', currDocPage, currentSentenceOrdinal ?? 0),
-    });
-  }, [
-    currDocPage,
-    currentSentenceOrdinal,
-    rendererReady,
-    isPlaybackReady,
-    routeDocumentId,
-    scheduleProgress,
-    sentences.length,
-  ]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -215,7 +192,6 @@ function HtmlReader({
         outline={outline}
         documentTitle={currDocName || payload.document.name}
         documentId={routeDocumentId}
-        readerType="html"
       />
       <DocumentSettings
         html

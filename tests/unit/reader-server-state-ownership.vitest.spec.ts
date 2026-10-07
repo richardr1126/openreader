@@ -117,7 +117,6 @@ describe('reader server-state ownership', () => {
     const epubDocument = source('src/app/(app)/epub/[id]/useEpubDocument.ts');
     expect(epubDocument).toContain("rendition.on('rendered', requestFromRendered)");
     expect(epubDocument).toContain("rendition.on('relocated', requestFromRelocated)");
-    expect(epubDocument).toContain('schemaVersion: 1');
     expect(epubDocument).toContain('startupDisplayStartedRef.current = true');
     expect(source('src/components/views/EPUBViewer.tsx')).toContain('Deliberately do not call display here');
     expect(epubDocument).not.toContain('setTimeout');
@@ -129,18 +128,29 @@ describe('reader server-state ownership', () => {
     expect(epubDocument).not.toContain('setTTSText');
   });
 
-  test('hard-cuts EPUB progress and startup to stable plan locators', () => {
-    const readerProgress = source('src/lib/shared/reader-position.ts');
-    expect(readerProgress).not.toContain('export {');
-    expect(readerProgress).not.toContain('const legacy = parsePositionToken(location)');
+  test('saves and restores reading progress as the playback cursor', () => {
+    expect(existsSync(resolve(root, 'src/lib/shared/reader-position.ts'))).toBe(false);
+    expect(existsSync(resolve(root, 'src/lib/shared/epub-progress.ts'))).toBe(false);
 
     const progressTypes = source('src/types/user-state.ts');
-    expect(progressTypes).toContain("{ readerType: 'epub'; locator: EpubProgressLocator }");
-    expect(progressTypes).not.toContain("{ readerType: 'epub'; location: string }");
+    expect(progressTypes).not.toContain('EpubProgressLocator');
+    expect(progressTypes).not.toContain('location: string');
 
     const progressRoute = source('src/app/api/user/state/progress/route.ts');
-    expect(progressRoute).toContain('normalizeEpubProgressLocator(body?.locator)');
-    expect(progressRoute).toContain('progress: null, invalidated: true');
+    expect(progressRoute).toContain('parseReadingPositionInput(body)');
+    expect(progressRoute).not.toContain('readerType');
+
+    // One writer: the shell saves the committed cursor for every reader type.
+    expect(source('src/components/reader/ReaderShell.tsx'))
+      .toContain('readingPositionAt(playbackSegments, currentSentenceOrdinal)');
+    for (const path of [
+      'src/app/(app)/pdf/[id]/page.tsx',
+      'src/app/(app)/epub/[id]/page.tsx',
+      'src/app/(app)/html/[id]/page.tsx',
+      'src/app/(app)/epub/[id]/useEpubDocument.ts',
+    ]) {
+      expect(source(path)).not.toContain('scheduleProgress');
+    }
 
     const page = source('src/app/(app)/epub/[id]/page.tsx');
     expect(page).not.toContain('viewerRevision');
@@ -151,7 +161,7 @@ describe('reader server-state ownership', () => {
     expect(viewer).not.toContain('rendition.display(');
 
     const controller = source('src/app/(app)/epub/[id]/useEpubDocument.ts');
-    expect(controller).toContain('resolveEpubPlanLocator(saved ?');
+    expect(controller).toContain('const saved = resolveSavedSegment();');
     expect(controller).toContain('await Promise.resolve(displayTarget ? rendition.display(displayTarget) : rendition.display())');
     expect(controller).not.toContain('initialLocation?: string');
     expect(controller).not.toContain('initialLocator?:');

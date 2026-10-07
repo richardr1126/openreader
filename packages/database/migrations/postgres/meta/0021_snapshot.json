@@ -1,5 +1,5 @@
 {
-  "id": "92b07082-6dc1-4f1b-96b9-62684222a356",
+  "id": "0e3c24c5-663a-44c2-af11-9e47856431cb",
   "prevId": "08f4b998-efc1-4166-807a-9bb55a2e3434",
   "version": "7",
   "dialect": "postgresql",
@@ -1206,29 +1206,17 @@
           "primaryKey": false,
           "notNull": true
         },
-        "reader_type": {
-          "name": "reader_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "location": {
-          "name": "location",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
         "segment_key": {
           "name": "segment_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "segment_ordinal": {
           "name": "segment_ordinal",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "label": {
           "name": "label",
@@ -1341,17 +1329,18 @@
           "primaryKey": false,
           "notNull": true
         },
-        "reader_type": {
-          "name": "reader_type",
+        "segment_key": {
+          "name": "segment_key",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
-        "location": {
-          "name": "location",
-          "type": "text",
+        "segment_ordinal": {
+          "name": "segment_ordinal",
+          "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": 0
         },
         "progress": {
           "name": "progress",

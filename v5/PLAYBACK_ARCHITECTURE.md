@@ -498,7 +498,7 @@ For EPUB specifically, the client owns only reader rendering/navigation concerns
 | 20 Export storage layout and retention | Done | Audiobook export artifacts are user/document-scoped, export retention runs as a worker-owned maintenance sweep with a scheduled Next trigger, and per-kind worker policy is a single registry. |
 | 21 Worker-owned document derived-artifact deletion | Done | Parsed PDF, preview, and playback-plan cleanup is worker-owned and control-plane-triggered. |
 | 22 EPUB plan-backed render handoff | Done | EPUB rendering now reconciles committed stable spine anchors against the applied worker plan; the client-text/setText branch and plan-clearing navigation paths are removed. |
-| 23 Plan-canonical EPUB resume progress | Done | Server-backed EPUB progress is a versioned stable spine locator; startup resolves it through the applied plan and issues one adapter-owned EPUB.js display command. |
+| 23 Plan-canonical EPUB resume progress | Done (superseded) | The EPUB stable-locator progress shape was replaced by the reader-independent segment cursor (see the Step 23 supersession note). The single adapter-owned startup display command remains. |
 | 24 Plan-selected surface commit | Done (superseded) | The rejected intermediate implementation remains historical context. The smaller unified bootstrap/readiness design in `READER_READINESS_STATE_MACHINE.md` superseded it and is complete across PDF, EPUB, and HTML. |
 
 ### v4.4 release-line reconciliation (2026-09-02)
@@ -514,9 +514,8 @@ reviewed against the rewritten architecture rather than copied mechanically:
 - PR #128's HTML/Markdown block-boundary behavior is preserved in the
   worker-owned planner. Shared parsing now yields one canonical source unit and
   stable `b-NNNN` locator per visible block, and HTML enables enforced source
-  boundaries. The legacy document-root location remains a compatibility anchor
-  for existing progress while saved ordinals continue to identify the exact
-  segment.
+  boundaries. Saved reading positions identify the exact segment by plan
+  segment key and ordinal (see the Step 23 supersession note).
 - PR #129's malformed-Xing repair is superseded by the stricter v5 stream
   invariant: every provider response, including MP3, is transcoded to the same
   headerless CBR/sample-rate/channel profile before it enters the progressive
@@ -1571,6 +1570,24 @@ The Chromium assertion passed. Its existing global teardown still exits nonzero
 afterward because the database package is loaded as CommonJS in an ES-module
 scope (`exports is not defined`), the same unrelated teardown defect recorded
 for Step 22.
+
+Superseded (iOS parity): saved reading progress and bookmarks no longer carry a
+reader type or reader-specific location. Every reader saves one position shape,
+`{ segmentKey, segmentOrdinal }` plus a `progress` fraction (ordinal index over
+plan length), written by `ReaderShell` from the single TTS cursor owner through
+the debounced bootstrap progress gate. `src/lib/shared/reading-position.ts` is
+the one resolver for progress and bookmarks: keep the saved ordinal while its
+segment key still matches, otherwise take the first segment with that key,
+otherwise clamp the ordinal into the plan. The reader opens at the page or
+section containing the resolved segment: PDF from the segment's page locator,
+HTML at its single anchor, EPUB by displaying the segment's stable spine
+locator once and then selecting the exact ordinal. The EPUB progress codec,
+the PDF/HTML location-token parser, and per-reader progress writers were
+deleted. Migration `0021_ios_parity` converts stored v5.0 rows in SQL: PDF
+`page:ordinal` and HTML `html:<location>:<ordinal>` tokens keep their ordinal
+with a null key (resolved by ordinal alone); EPUB locators and unrecognized
+values have no ordinal and resume at the start of the document while keeping
+their reading status and progress fraction.
 
 ---
 

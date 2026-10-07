@@ -6,18 +6,18 @@ import { requireAuthContext } from '@/lib/server/auth/auth';
 
 /**
  * Authenticate the request and confirm the session user owns `documentId`.
- * Returns the owning user id and stored document type, or a 401/404 response to return as-is.
+ * Returns the owning user id, or a 401/404 response to return as-is.
  */
 export async function resolveOwnedDocumentAccess(
   req: NextRequest,
   documentId: string,
-): Promise<{ ownerUserId: string; documentType: string } | Response> {
+): Promise<{ ownerUserId: string } | Response> {
   const authCtxOrRes = await requireAuthContext(req);
   if (authCtxOrRes instanceof Response) return authCtxOrRes;
   if (!authCtxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const rows = await db
-    .select({ userId: documents.userId, type: documents.type })
+    .select({ userId: documents.userId })
     .from(documents)
     .where(and(eq(documents.id, documentId), eq(documents.userId, authCtxOrRes.userId)))
     .limit(1);
@@ -26,5 +26,5 @@ export async function resolveOwnedDocumentAccess(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  return { ownerUserId: rows[0].userId, documentType: rows[0].type };
+  return { ownerUserId: rows[0].userId };
 }

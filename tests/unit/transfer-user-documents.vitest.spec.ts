@@ -37,10 +37,8 @@ describe('transferUserDocuments', () => {
         id TEXT NOT NULL,
         user_id TEXT NOT NULL,
         document_id TEXT NOT NULL,
-        reader_type TEXT NOT NULL,
-        location TEXT NOT NULL,
-        segment_key TEXT,
-        segment_ordinal INTEGER,
+        segment_key TEXT NOT NULL,
+        segment_ordinal INTEGER NOT NULL,
         label TEXT,
         snippet TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL DEFAULT 0,
@@ -90,8 +88,8 @@ describe('transferUserDocuments', () => {
       id: 'mark-1',
       userId: fromUserId,
       documentId: 'doc-b',
-      readerType: 'html',
-      location: 'html:1:0',
+      segmentKey: 'v7:kept',
+      segmentOrdinal: 0,
       snippet: 'Kept across the claim',
     });
 
