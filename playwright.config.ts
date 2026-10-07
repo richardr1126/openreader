@@ -57,6 +57,10 @@ export default defineConfig({
       AUTH_TRUSTED_ORIGINS: 'http://localhost:3003,http://127.0.0.1:3003',
       BOOTSTRAP_ADMIN_EMAIL: 'admin-e2e@example.test',
       BOOTSTRAP_ADMIN_PASSWORD: 'InitialAdminSecret#2026',
+      // Anonymous journeys need guest sessions. The empty path overrides any
+      // developer seed file so this inline seed always applies.
+      RUNTIME_SEED_JSON_PATH: '',
+      RUNTIME_SEED_JSON: JSON.stringify({ version: 1, runtimeConfig: { allowAnonymousSessions: true } }),
     },
   },
   projects: [

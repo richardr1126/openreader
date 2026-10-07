@@ -10,8 +10,7 @@ This page covers application-level configuration for provider access and authent
 - Keep `AUTH_TRUSTED_ORIGINS` empty to trust only `BASE_URL`.
 - Guest (anonymous) sessions are disabled by default. Turn them on with
   **Guest sessions** under **Settings → Admin → Instance → Site features**, or
-  seed `runtimeConfig.allowAnonymousSessions`. The legacy
-  `USE_ANONYMOUS_AUTH_SESSIONS=true` seeds that setting on first boot.
+  seed `runtimeConfig.allowAnonymousSessions`.
 
 ## Single sign-on (OAuth / OIDC)
 

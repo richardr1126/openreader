@@ -18,7 +18,6 @@ services:
       AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
-      USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}
       COMPUTE_CREDENTIAL_BROKER_TOKEN: ${COMPUTE_CREDENTIAL_BROKER_TOKEN:-local-credential-broker-token}
       POSTGRES_URL: postgres://openreader:openreader@postgres:5432/openreader
       COMPUTE_WORKER_URL: http://127.0.0.1:8081
