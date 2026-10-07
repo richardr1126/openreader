@@ -42,8 +42,11 @@ import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import type { EPUBDocument } from '@/types/documents';
 import { isStableEpubLocator, type TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
-import type { ScheduleDocumentProgress } from '@/types/user-state';
-import type { EpubProgressLocator } from '@/types/user-state';
+import {
+  readingPositionAt,
+  resolveReadingPositionOrdinal,
+  type ReadingPosition,
+} from '@/lib/shared/reading-position';
 import { useEpubTapToSeek } from '@/hooks/epub/useEpubTapToSeek';
 
 type EpubPlacementOptions = {
@@ -95,10 +98,8 @@ export interface EpubDocumentState {
  */
 export function useEpubDocument(
   document: EPUBDocument,
-  initialLocator: EpubProgressLocator | null,
-  scheduleProgress: ScheduleDocumentProgress,
+  initialPosition: ReadingPosition | null,
 ): EpubDocumentState {
-  const documentId = document.id;
   const {
     currDocPage,
     currDocPages,
@@ -109,6 +110,7 @@ export function useEpubDocument(
     setIsEPUB,
     currentSentenceOrdinal,
     playbackSegments,
+    skipToOrdinal,
   } = useTTS();
   const { epubHighlightEnabled, readerShowsLayout } = useConfig();
 
@@ -133,7 +135,12 @@ export function useEpubDocument(
   const initialPlacementCommittedRef = useRef(false);
   const playbackPlanReadyRef = useRef(false);
   const requestPlacementRef = useRef<RequestCommittedPlacement | null>(null);
-  const initialLocatorRef = useRef<EpubProgressLocator | null>(initialLocator);
+  // The saved playback cursor a new rendition opens at, and the resolved
+  // ordinal the first placement still has to select.
+  const initialPositionRef = useRef<ReadingPosition | null>(initialPosition);
+  const pendingInitialOrdinalRef = useRef<number | null>(null);
+  const playbackSegmentsRef = useRef<CanonicalTtsSegment[]>(playbackSegments);
+  playbackSegmentsRef.current = playbackSegments;
   const startupDisplayStartedRef = useRef(false);
   const startupDisplayOwnerRef = useRef(0);
 
@@ -249,18 +256,10 @@ export function useEpubDocument(
       if (result.status === 'unmapped-anchor') {
         throw new Error('The rendered EPUB position did not map to the authoritative playback plan.');
       }
-      if (result.status === 'selected' && documentId) {
-        scheduleProgress({
-          documentId,
-          readerType: 'epub',
-          locator: {
-            schemaVersion: 1,
-            spineHref: startAnchor.spineHref,
-            spineIndex: startAnchor.spineIndex,
-            charOffset: startAnchor.charOffset,
-          },
-        });
-      }
+      // The page showing the saved segment selects its first sentence; the
+      // first placement then moves the cursor onto the saved sentence itself.
+      const savedOrdinal = pendingInitialOrdinalRef.current;
+      pendingInitialOrdinalRef.current = null;
 
       completedPlacementCfiRef.current = startCfi;
       initialPlacementCommittedRef.current = true;
@@ -270,6 +269,9 @@ export function useEpubDocument(
         status: result.status === 'empty-plan' ? 'empty-plan' : 'ready',
         error: null,
       });
+      if (result.status === 'selected' && savedOrdinal !== null && savedOrdinal !== result.ordinal) {
+        skipToOrdinal(savedOrdinal);
+      }
     } catch (error) {
       const resolved = error instanceof Error ? error : new Error('Failed to place the EPUB reader');
       if (!ownsPlacement()) return;
@@ -281,8 +283,7 @@ export function useEpubDocument(
     playbackPlanReady,
     playbackPlanSegmentCount,
     reconcileEpubRenderedAnchor,
-    documentId,
-    scheduleProgress,
+    skipToOrdinal,
     setPlacementLifecycle,
     setRenderedTextMaps,
   ]);
@@ -323,6 +324,13 @@ export function useEpubDocument(
     await requestCommittedPlacement(book, rendition, location, options);
   }, [requestCommittedPlacement]);
 
+  /** The plan segment holding the saved cursor, or null to open at the start. */
+  const resolveSavedSegment = useCallback((): CanonicalTtsSegment | null => {
+    const plan = playbackSegmentsRef.current;
+    const ordinal = resolveReadingPositionOrdinal(plan, initialPositionRef.current);
+    return ordinal === null ? null : plan.find((segment) => segment.ordinal === ordinal) ?? null;
+  }, []);
+
   const issueInitialDisplay = useCallback(async (): Promise<void> => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
@@ -345,13 +353,10 @@ export function useEpubDocument(
     );
 
     try {
-      const saved = initialLocatorRef.current;
-      const resolution = resolveEpubPlanLocator(saved ? {
-        readerType: 'epub',
-        spineHref: saved.spineHref,
-        spineIndex: saved.spineIndex,
-        charOffset: saved.charOffset,
-      } : null);
+      const saved = resolveSavedSegment();
+      const resolution = resolveEpubPlanLocator(
+        isStableEpubLocator(saved?.ownerLocator) ? saved.ownerLocator : null,
+      );
       if (resolution.status === 'waiting-plan') {
         throw new Error('The authoritative EPUB plan was not available for initial placement.');
       }
@@ -371,6 +376,7 @@ export function useEpubDocument(
         }
         displayTarget = resolved;
       }
+      pendingInitialOrdinalRef.current = saved?.ordinal ?? null;
 
       await Promise.resolve(displayTarget ? rendition.display(displayTarget) : rendition.display());
       if (!ownsDisplay()) return;
@@ -380,7 +386,7 @@ export function useEpubDocument(
       console.error('Failed to issue the EPUB startup display:', resolved);
       setPlacementLifecycle({ status: 'failed', error: resolved });
     }
-  }, [resolveEpubPlanLocator]);
+  }, [resolveEpubPlanLocator, resolveSavedSegment]);
 
   useEffect(() => {
     const book = bookRef.current;
@@ -479,18 +485,15 @@ export function useEpubDocument(
   });
 
   // Plain-text reading mode has no rendition to commit a placement, so the
-  // saved stable locator anchors the playback cursor directly against the plan.
+  // saved cursor anchors playback directly against the plan.
   const [planTextAnchored, setPlanTextAnchored] = useState(false);
   useEffect(() => {
     if (readerShowsLayout || planTextAnchored || !playbackPlanReady) return;
     if (currentSentenceOrdinal === null) {
-      const saved = initialLocatorRef.current;
-      const resolution = resolveEpubPlanLocator(saved ? {
-        readerType: 'epub',
-        spineHref: saved.spineHref,
-        spineIndex: saved.spineIndex,
-        charOffset: saved.charOffset,
-      } : null);
+      const saved = resolveSavedSegment();
+      const resolution = resolveEpubPlanLocator(
+        isStableEpubLocator(saved?.ownerLocator) ? saved.ownerLocator : null,
+      );
       if (resolution.status === 'waiting-plan') return;
       if (resolution.status === 'selected') {
         reconcileEpubRenderedAnchor({
@@ -498,6 +501,7 @@ export function useEpubDocument(
           hasReadableText: true,
           shouldPause: false,
         });
+        if (saved && saved.ordinal !== resolution.ordinal) skipToOrdinal(saved.ordinal);
       }
     }
     setPlanTextAnchored(true);
@@ -508,23 +512,17 @@ export function useEpubDocument(
     readerShowsLayout,
     reconcileEpubRenderedAnchor,
     resolveEpubPlanLocator,
+    resolveSavedSegment,
+    skipToOrdinal,
   ]);
 
-  // Without a rendition, reading progress follows the playback cursor. The
-  // startup locator follows too, so showing the book again opens here.
+  // Without a rendition the cursor is the only position, so showing the book
+  // again opens the rendition where plain-text reading left off.
   useEffect(() => {
     if (readerShowsLayout || !planTextAnchored || currentSentenceOrdinal === null) return;
-    const locator = playbackSegments.find((segment) => segment.ordinal === currentSentenceOrdinal)?.ownerLocator;
-    if (!isStableEpubLocator(locator)) return;
-    const progress: EpubProgressLocator = {
-      schemaVersion: 1,
-      spineHref: locator.spineHref,
-      spineIndex: locator.spineIndex,
-      charOffset: locator.charOffset,
-    };
-    initialLocatorRef.current = progress;
-    if (documentId) scheduleProgress({ documentId, readerType: 'epub', locator: progress });
-  }, [currentSentenceOrdinal, documentId, planTextAnchored, playbackSegments, readerShowsLayout, scheduleProgress]);
+    const position = readingPositionAt(playbackSegments, currentSentenceOrdinal);
+    if (position) initialPositionRef.current = position;
+  }, [currentSentenceOrdinal, planTextAnchored, playbackSegments, readerShowsLayout]);
 
   const isPlaybackReady = readerShowsLayout
     ? initialPlacementCommittedRef.current

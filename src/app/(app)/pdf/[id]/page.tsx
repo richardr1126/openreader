@@ -24,7 +24,6 @@ import {
   FORCE_REPARSE_CONFIRM_TITLE,
 } from '@/lib/client/pdf/force-reparse';
 import { forceReparsePdfDocument } from '@/lib/client/api/documents';
-import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -65,10 +64,7 @@ function PdfReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const router = useRouter();
-  const {
-    disableProgressPersistence,
-    scheduleProgress,
-  } = bootstrap;
+  const { disableProgressPersistence } = bootstrap;
   const pdfState = usePdfDocument(
     sourceDocument,
     payload.settings,
@@ -89,14 +85,12 @@ function PdfReader({
   const { readerShowsLayout } = useConfig();
   const outline = usePdfOutline(pdfDocument);
   const {
-    currentSentenceOrdinal,
-    sentences,
     stop,
     setPdfSkipBlockKinds,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
-  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId, 'pdf');
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
@@ -104,23 +98,6 @@ function PdfReader({
   useEffect(() => {
     setPdfSkipBlockKinds(documentSettings.pdf?.skipBlockKinds ?? []);
   }, [documentSettings.pdf?.skipBlockKinds, setPdfSkipBlockKinds]);
-
-  useEffect(() => {
-    if (!routeDocumentId || !rendererReady || !isPlaybackReady || sentences.length === 0) return;
-    scheduleProgress({
-      documentId: routeDocumentId,
-      readerType: 'pdf',
-      location: serializeReaderPosition('pdf', currDocPage, currentSentenceOrdinal ?? 0),
-    });
-  }, [
-    currDocPage,
-    currentSentenceOrdinal,
-    rendererReady,
-    isPlaybackReady,
-    routeDocumentId,
-    scheduleProgress,
-    sentences.length,
-  ]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -290,7 +267,6 @@ function PdfReader({
         outline={outline}
         documentTitle={currDocName || payload.document.name}
         documentId={routeDocumentId}
-        readerType="pdf"
       />
       <ConfirmDialog
         isOpen={showForceReparseConfirm}

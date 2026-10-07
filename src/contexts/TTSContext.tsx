@@ -64,7 +64,7 @@ import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
 import { playbackPlanIdentity, type TtsPlaybackPlan } from '@/lib/shared/playback-plan';
-import type { ReaderInitialPosition } from '@/lib/shared/reader-position';
+import { resolveReadingPositionOrdinal, type ReadingPosition } from '@/lib/shared/reading-position';
 import { queryKeys } from '@/lib/client/query-keys';
 import type { EpubLocationChangeIntent } from '@/lib/client/epub/location-controller';
 
@@ -109,7 +109,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
     readerType: ReaderType;
     language: string;
     plan: TtsPlaybackPlan;
-    initialPosition: ReaderInitialPosition;
+    initialPosition: ReadingPosition | null;
   }) => void;
   /**
    * Swap in a plan the server re-planned for the open reader (voice, speed,
@@ -559,7 +559,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     readerType: ReaderType;
     language: string;
     plan: TtsPlaybackPlan;
-    initialPosition: ReaderInitialPosition;
+    initialPosition: ReadingPosition | null;
   }) => {
     stop();
     resetBootstrapPlanAdoption();
@@ -568,23 +568,28 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     acceptBootstrapPlaybackPlan(input.plan);
 
     if (input.readerType === 'epub') {
-      // EPUB establishes its cursor only after its saved stable locator has
-      // committed in the rendition.
+      // EPUB establishes its cursor only after the saved segment's location
+      // has committed in the rendition (useEpubDocument).
       setSelectedOrdinal(null);
       return;
     }
 
-    const matchingPosition = input.initialPosition?.readerType === input.readerType
-      ? input.initialPosition
-      : null;
-    const location = matchingPosition?.location ?? 1;
-    const requestedOrdinal = matchingPosition?.segmentOrdinal ?? null;
+    // The saved cursor resolves against the plan; the page is derived from the
+    // resolved segment. HTML is one scrolling surface, so its anchor is '1'.
+    const plan = playbackSegmentsRef.current;
+    const savedOrdinal = resolveReadingPositionOrdinal(plan, input.initialPosition);
+    const savedSegment = savedOrdinal === null
+      ? null
+      : plan.find((segment) => segment.ordinal === savedOrdinal) ?? null;
+    const location = input.readerType === 'pdf'
+      ? pdfLocatorPage(savedSegment?.ownerLocator) ?? 1
+      : 1;
     setCurrDocPage(location);
     setSelectedOrdinal(resolveDocumentAnchorSelectionOrdinal({
-      plan: playbackSegmentsRef.current,
+      plan,
       readerType: input.readerType,
       location,
-      selectedOrdinal: requestedOrdinal,
+      selectedOrdinal: savedOrdinal,
     }));
   }, [
     acceptBootstrapPlaybackPlan,

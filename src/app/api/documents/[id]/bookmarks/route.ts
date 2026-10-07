@@ -15,7 +15,6 @@ import {
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
-import type { DocumentBookmark } from '@/types/bookmarks';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,10 +40,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       ))
       .orderBy(desc(userDocumentBookmarks.createdAt))) as BookmarkRow[];
 
-    const bookmarks = rows
-      .map(toDocumentBookmark)
-      .filter((bookmark): bookmark is DocumentBookmark => bookmark !== null);
-    return NextResponse.json({ bookmarks });
+    return NextResponse.json({ bookmarks: rows.map(toDocumentBookmark) });
   } catch (error) {
     serverLogger.error({
       event: 'documents.bookmarks.list.failed',
@@ -68,9 +64,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     const parsed = parseBookmarkCreateBody(await req.json().catch(() => null));
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const input = parsed.value;
-    if (input.readerType !== scope.documentType) {
-      return NextResponse.json({ error: 'readerType does not match the document' }, { status: 400 });
-    }
 
     const ownedBookmark = (id: string) => and(
       eq(userDocumentBookmarks.id, id),
@@ -110,8 +103,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         id,
         userId: scope.ownerUserId,
         documentId,
-        readerType: input.readerType,
-        location: input.location,
         segmentKey: input.segmentKey,
         segmentOrdinal: input.segmentOrdinal,
         label: input.label,
@@ -126,11 +117,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       .from(userDocumentBookmarks)
       .where(ownedBookmark(id))
       .limit(1)) as BookmarkRow[];
-    const bookmark = stored ? toDocumentBookmark(stored) : null;
-    if (!bookmark || stored.documentId !== documentId) {
+    if (!stored || stored.documentId !== documentId) {
       return NextResponse.json({ error: 'Bookmark id already exists' }, { status: 409 });
     }
-    return NextResponse.json({ bookmark }, { status: 201 });
+    return NextResponse.json({ bookmark: toDocumentBookmark(stored) }, { status: 201 });
   } catch (error) {
     serverLogger.error({
       event: 'documents.bookmarks.create.failed',

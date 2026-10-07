@@ -23,7 +23,7 @@ describe('bookmarks client API', () => {
   });
 
   test('calls the document-scoped routes with the expected methods and bodies', async () => {
-    const bookmark = { id: MARK, documentId: DOC, readerType: 'pdf', location: '1:0', snippet: 's' };
+    const bookmark = { id: MARK, documentId: DOC, segmentKey: 'k', segmentOrdinal: 0, snippet: 's' };
     const fetchMock = stubFetch((url, init) => {
       if (init?.method === 'DELETE') return Response.json({ deleted: true });
       if (init?.method === 'POST' || init?.method === 'PATCH') return Response.json({ bookmark });
@@ -31,7 +31,7 @@ describe('bookmarks client API', () => {
     });
 
     await expect(listDocumentBookmarks(DOC)).resolves.toEqual([bookmark]);
-    await createDocumentBookmark(DOC, { readerType: 'pdf', location: '1:0', snippet: 's' });
+    await createDocumentBookmark(DOC, { segmentKey: 'k', segmentOrdinal: 0, snippet: 's' });
     await renameDocumentBookmark(DOC, MARK, 'Named');
     await expect(deleteDocumentBookmark(DOC, MARK)).resolves.toBe(true);
 
