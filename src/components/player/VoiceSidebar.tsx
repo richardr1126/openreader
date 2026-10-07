@@ -45,7 +45,7 @@ function PreviewButton({ previewKey, label, state, disabled, onPlay, onStop }: {
       className="h-7 w-7 shrink-0 rounded-full text-soft hover:text-accent"
     >
       {active && state.phase === 'loading'
-        ? <LoadingSpinner />
+        ? <LoadingSpinner className="h-3.5 w-3.5" />
         : active
           ? <PauseIcon className="h-3.5 w-3.5" />
           : <PlayIcon className="h-3.5 w-3.5" />}
