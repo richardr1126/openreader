@@ -1,7 +1,13 @@
 'use client';
 
 import { Listbox } from '@headlessui/react';
-import type { IconSize, SortBy, SortDirection, ViewMode } from '@/types/documents';
+import type {
+  IconSize,
+  ReadingStatusFilter,
+  SortBy,
+  SortDirection,
+  ViewMode,
+} from '@/types/documents';
 import {
   IconsViewIcon,
   ListViewIcon,
@@ -40,6 +46,8 @@ interface FinderToolbarProps {
   onSortDirectionToggle: () => void;
   query: string;
   onQueryChange: (q: string) => void;
+  statusFilter: ReadingStatusFilter;
+  onStatusFilterChange: (status: ReadingStatusFilter) => void;
   onToggleSidebar: () => void;
   isSidebarOpen: boolean;
   showSortControls?: boolean;
@@ -60,6 +68,14 @@ const SORT_OPTIONS: Array<{ value: SortBy; label: string; asc: string; desc: str
   { value: 'type', label: 'Kind', asc: 'A → Z', desc: 'Z → A' },
   { value: 'date', label: 'Modified', asc: 'Oldest', desc: 'Newest' },
   { value: 'size', label: 'Size', asc: 'Smallest', desc: 'Largest' },
+  { value: 'author', label: 'Author', asc: 'A → Z', desc: 'Z → A' },
+  { value: 'opened', label: 'Opened', asc: 'Oldest', desc: 'Newest' },
+];
+
+const STATUS_OPTIONS: Array<{ value: ReadingStatusFilter; label: string }> = [
+  { value: 'any', label: 'Any status' },
+  { value: 'reading', label: 'In progress' },
+  { value: 'unread', label: 'Not started' },
 ];
 
 const ICON_SIZES: Array<{ value: IconSize; label: string }> = [
@@ -89,6 +105,8 @@ export function FinderToolbar({
   onSortDirectionToggle,
   query,
   onQueryChange,
+  statusFilter,
+  onStatusFilterChange,
   onToggleSidebar,
   isSidebarOpen,
   showSortControls = true,
@@ -98,6 +116,7 @@ export function FinderToolbar({
 }: FinderToolbarProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const currentSort = SORT_OPTIONS.find((o) => o.value === sortBy) ?? SORT_OPTIONS[0];
+  const currentStatus = STATUS_OPTIONS.find((o) => o.value === statusFilter) ?? STATUS_OPTIONS[0];
   const directionLabel = sortDirection === 'asc' ? currentSort.asc : currentSort.desc;
   const CurrentViewIcon = VIEW_BUTTONS.find((b) => b.value === viewMode)?.Icon ?? IconsViewIcon;
   const closeSearch = () => {
@@ -212,6 +231,28 @@ export function FinderToolbar({
             </Listbox>
           </div>
         )}
+        <Listbox value={statusFilter} onChange={onStatusFilterChange}>
+          <SharedListboxButton
+            tone="toolbar"
+            aria-label={`Reading status: ${currentStatus.label}`}
+            className="shrink-0 gap-1 min-w-[96px] justify-between"
+          >
+            <span className="flex items-center gap-1.5">
+              {statusFilter !== 'any' && (
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
+              )}
+              {currentStatus.label}
+            </span>
+            <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
+          </SharedListboxButton>
+          <SharedListboxOptions anchor="bottom end" tone="compact">
+            {STATUS_OPTIONS.map((opt) => (
+              <SharedListboxOption key={opt.value} value={opt.value} tone="compact">
+                {opt.label}
+              </SharedListboxOption>
+            ))}
+          </SharedListboxOptions>
+        </Listbox>
         </div>
 
         <div className="flex-1 min-w-0" />
@@ -232,6 +273,7 @@ export function FinderToolbar({
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search"
+          aria-label="Search documents"
           className="hidden w-[160px] md:w-[200px] sm:flex"
           icon={<SearchIcon className="w-3.5 h-3.5" />}
         />
@@ -242,7 +284,7 @@ export function FinderToolbar({
             <SearchIcon className="w-4 h-4" />
           </ToolbarButton>
           <PopoverRoot className="relative">
-            <PopoverTrigger className={toolbarButtonStyles()} aria-label="View and sort options">
+            <PopoverTrigger className={toolbarButtonStyles()} aria-label="View, sort, and filter options">
               <CurrentViewIcon className="w-4 h-4" />
               <ChevronUpDownIcon className="ml-1 h-3 w-3 opacity-60" />
             </PopoverTrigger>
@@ -274,7 +316,7 @@ export function FinderToolbar({
                       ariaLabel="Sort by"
                       value={sortBy}
                       onChange={onSortByChange}
-                      className="grid-cols-4"
+                      className="grid-cols-3"
                       options={SORT_OPTIONS.map(({ value, label }) => ({ value, label }))}
                     />
                   </MobileOption>
@@ -292,6 +334,18 @@ export function FinderToolbar({
                   </MobileOption>
                 </>
               )}
+              <MobileOption label="Status">
+                <SegmentedControl
+                  ariaLabel="Reading status"
+                  value={statusFilter}
+                  onChange={onStatusFilterChange}
+                  className="grid-cols-3"
+                  options={STATUS_OPTIONS.map(({ value, label }) => ({
+                    value,
+                    label: value === 'any' ? 'Any' : label,
+                  }))}
+                />
+              </MobileOption>
             </PopoverSurface>
           </PopoverRoot>
         </div>

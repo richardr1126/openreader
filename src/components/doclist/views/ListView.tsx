@@ -166,16 +166,23 @@ function DocRow({
           onToggle={() => selection.toggle(doc)}
         />
       </span>
-      <Link
-        href={href}
-        prefetch={false}
-        draggable={false}
-        onClick={handleClick}
-        className="flex items-center gap-2 min-w-0 py-1.5 pr-2"
-      >
-        <KindIcon doc={doc} />
-        <span className="truncate">{doc.name}</span>
-      </Link>
+      <span className="flex items-center gap-2 min-w-0 pr-2">
+        <Link
+          href={href}
+          prefetch={false}
+          draggable={false}
+          onClick={handleClick}
+          className={'flex items-center gap-2 min-w-0 py-1.5' + (doc.author ? '' : ' flex-1')}
+        >
+          <KindIcon doc={doc} />
+          <span className="truncate">{doc.name}</span>
+        </Link>
+        {doc.author && (
+          <span className="hidden sm:block min-w-0 shrink-[2] truncate text-[11px] text-soft" title={doc.author}>
+            {doc.author}
+          </span>
+        )}
+      </span>
       <span className="px-2 text-[11px] text-soft uppercase tracking-wide">{doc.type}</span>
       <span className="px-2 text-[11px] text-soft text-right tabular-nums">
         {formatDocumentSize(doc.size)}

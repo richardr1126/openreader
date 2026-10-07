@@ -54,11 +54,18 @@ export interface Folder {
   documents: DocumentListDocument[];
 }
 
-export type SortBy = 'name' | 'type' | 'date' | 'size';
+export type SortBy = 'name' | 'type' | 'date' | 'size' | 'author' | 'opened';
 export type SortDirection = 'asc' | 'desc';
 
 export type ViewMode = 'icons' | 'list' | 'gallery';
 export type IconSize = 'sm' | 'md' | 'lg' | 'xl';
+
+/**
+ * Narrows the library by whether the user has started a document. Deliberately
+ * not persisted: it is something the user is doing right now, and a library
+ * that reopens hiding most of itself looks like it lost documents.
+ */
+export type ReadingStatusFilter = 'any' | 'reading' | 'unread';
 
 // Filter applied from the sidebar.
 // Examples: 'all', 'recents', 'pdf', 'epub', 'html', or `folder:<folderId>`.
