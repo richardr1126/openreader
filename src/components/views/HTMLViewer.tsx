@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
@@ -13,6 +13,9 @@ import {
   highlightHtmlWord,
   scrollSentenceIntoView,
 } from '@/lib/client/html/highlight';
+import { indexSegmentsBySource, resolvePointInUnit } from '@/lib/client/reader/segment-hit';
+import { bindTapToSeek } from '@/lib/client/reader/tap-to-seek';
+import { useLatestRef } from '@/hooks/useLatestRef';
 
 interface HTMLViewerProps {
   className?: string;
@@ -36,6 +39,8 @@ export function HTMLViewer({
     resolvedLanguage,
     playbackPlanReady,
     playbackPlanSegmentCount,
+    playbackSegments,
+    skipToOrdinal,
   } = useTTS();
   const {
     currentSentence,
@@ -45,6 +50,27 @@ export function HTMLViewer({
   const { htmlHighlightEnabled, htmlWordHighlightEnabled } = useConfig();
 
   const readySegmentRef = useRef<string | null>(null);
+
+  // Tap a sentence to play from it. Blocks are plan source units keyed by
+  // their anchor id, so a tap resolves within the block's own sentences.
+  const segmentsByBlock = useMemo(() => indexSegmentsBySource(playbackSegments), [playbackSegments]);
+  const tapStateRef = useLatestRef({ segmentsByBlock, resolvedLanguage, skipToOrdinal });
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    return bindTapToSeek(container, {
+      resolve: (point) => {
+        const target = point.target as Element | null;
+        const block = target?.closest?.('.openreader-html-block');
+        if (!block || !container.contains(block)) return null;
+        const { segmentsByBlock: index, resolvedLanguage: language } = tapStateRef.current;
+        return resolvePointInUnit([block], index.get(block.id) ?? [], point, language);
+      },
+      seek: (ordinal) => {
+        tapStateRef.current.skipToOrdinal(ordinal);
+      },
+    });
+  }, [tapStateRef]);
 
   // A surface commit is synchronous: React has committed the blocks, the
   // worker plan has committed a selection, and this layout effect applies that

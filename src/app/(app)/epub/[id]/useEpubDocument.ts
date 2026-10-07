@@ -44,6 +44,7 @@ import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ScheduleDocumentProgress } from '@/types/user-state';
 import type { EpubProgressLocator } from '@/types/user-state';
+import { useEpubTapToSeek } from '@/hooks/epub/useEpubTapToSeek';
 
 type EpubPlacementOptions = {
   preservePlaybackCursor?: boolean;
@@ -144,6 +145,8 @@ export function useEpubDocument(
     epubHighlightEnabled,
     renderedTextMapsRef,
   });
+
+  useEpubTapToSeek({ renditionRef, renditionGeneration, renderedTextMapsRef });
 
   useEffect(() => () => {
     // Imperative teardown only. The route-local provider and keyed renderer own

@@ -137,6 +137,14 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   resolvedLanguage: string;
   clearSegmentCaches: () => void;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
+  /**
+   * Move playback to a worker-plan ordinal (tap a sentence, a search hit, a
+   * chapter) through the same seek path as the sentence skip buttons.
+   * Returns false when the ordinal is not in the adopted plan.
+   */
+  skipToOrdinal: (ordinal: number) => boolean;
+  /** Ordered segments of the adopted plan, for reader-side text views, search and contents. */
+  playbackSegments: CanonicalTtsSegment[];
   registerLocationChangeHandler: (handler: EpubLocationChangeHandler | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
   /** Effective reader type used for worker playback/session scoping. */
@@ -245,6 +253,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanRef,
     playbackSegmentsRef,
     selectedOrdinalRef,
+    playbackSegments,
     sentences,
     currentIndex,
     currentSentence,
@@ -454,6 +463,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipBackward,
     skipForward,
     skipToLocation,
+    skipToOrdinal,
   } = useTtsDocumentNavigation({
     activeReaderType,
     currentIndex,
@@ -481,6 +491,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsProcessing,
     setPlaybackAnchor,
     setSelectedOrdinal,
+    syncPlaybackLocator,
   });
 
   const updateVoiceAndSpeed = useCallback(() => {
@@ -686,6 +697,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
+    skipToOrdinal,
+    playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,
@@ -724,6 +737,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     skipToLocation,
+    skipToOrdinal,
+    playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,
