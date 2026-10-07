@@ -162,6 +162,8 @@ describe('shared runtime configuration boundary', () => {
     expect(rootExample).toContain('COMPUTE_WORKER_PUBLIC_URL=');
     expect(rootExample).toContain('TTS_PLAYBACK_TOKEN_SECRET=');
     expect(fullCompose).toContain('AUTH_SECRET: ${AUTH_SECRET:-local-openreader-auth-secret-change-me}');
+    // Legacy guest-session upgrade seed: deployments that set it must keep passing it through.
+    expect(fullCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');
     const fullWorker = fullCompose.slice(fullCompose.indexOf('\n  compute-worker:'));
     expect(fullWorker).not.toContain('AUTH_SECRET:');
     expect(fullWorker).not.toContain('POSTGRES_URL:');
@@ -174,6 +176,7 @@ describe('shared runtime configuration boundary', () => {
     expect(playwrightWorkflow).toContain('TTS_PLAYBACK_TOKEN_SECRET:');
     for (const slimCompose of slimComposeFiles) {
       expect(slimCompose).toContain('COMPUTE_WORKER_HOST: 0.0.0.0');
+      expect(slimCompose).toContain('USE_ANONYMOUS_AUTH_SESSIONS: ${USE_ANONYMOUS_AUTH_SESSIONS:-false}');
       expect(slimCompose).toContain('COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}');
       expect(slimCompose).toContain('- "8081:8081"');
       // Embedded bootstrap generates the broker token; a published default would let

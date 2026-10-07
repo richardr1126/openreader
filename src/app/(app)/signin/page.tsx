@@ -175,7 +175,11 @@ function SignInContent() {
     setError(null);
     try {
       const client = getAuthClient(baseUrl);
-      await client.signIn.anonymous();
+      const result = await client.signIn.anonymous();
+      if (result.error) {
+        setError(result.error.message || 'Unable to continue anonymously. Please try again.');
+        return;
+      }
       await refreshRateLimit();
       router.push('/app');
     } catch (e) {
