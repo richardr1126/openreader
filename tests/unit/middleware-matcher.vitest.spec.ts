@@ -42,4 +42,22 @@ describe('middleware matcher', () => {
       else process.env.RICHARDRDEV_PRODUCTION = previous;
     }
   });
+  test('serves the iOS privacy policy outside the production region gate without a session', () => {
+    const previous = process.env.RICHARDRDEV_PRODUCTION;
+    process.env.RICHARDRDEV_PRODUCTION = 'true';
+    try {
+      const policy = middleware(new NextRequest('http://localhost/ios-privacy', {
+        headers: { 'x-vercel-ip-country': 'DE' },
+      }));
+      expect(policy.headers.get('x-middleware-next')).toBe('1');
+
+      const webPolicy = middleware(new NextRequest('http://localhost/privacy', {
+        headers: { 'x-vercel-ip-country': 'DE' },
+      }));
+      expect(webPolicy.status).toBe(451);
+    } finally {
+      if (previous === undefined) delete process.env.RICHARDRDEV_PRODUCTION;
+      else process.env.RICHARDRDEV_PRODUCTION = previous;
+    }
+  });
 });

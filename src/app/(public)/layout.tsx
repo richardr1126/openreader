@@ -98,6 +98,7 @@ export default async function PublicLayout({ children }: { children: ReactNode }
                 <div className="public-footer-col">
                   <p className="public-footer-col-title">Legal</p>
                   <Link href="/privacy">Privacy &amp; data</Link>
+                  <Link href="/ios-privacy">iOS app privacy</Link>
                   <a href="https://github.com/richardr1126/openreader/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
                     MIT license
                   </a>

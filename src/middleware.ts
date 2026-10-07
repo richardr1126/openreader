@@ -30,6 +30,13 @@ const PUBLIC_PATH_PREFIXES = [
   '/reset-password',
   '/privacy',
 ];
+/**
+ * Public pages served to every country, ahead of the production region gate.
+ * The iOS app's privacy policy is linked from its App Store listing, which is
+ * not limited to the United States, so App Review and international users
+ * must be able to read it.
+ */
+const REGION_UNRESTRICTED_PATHS = new Set(['/ios-privacy']);
 const SERVICE_AUTHENTICATED_PATHS = new Set([
   '/api/internal/compute/tts-credentials',
   '/api/internal/compute/email-execution',
@@ -86,6 +93,10 @@ export function middleware(request: NextRequest) {
   // headers, so cookie and public-instance region policy must not intercept
   // them before the route can validate that token.
   if (SERVICE_AUTHENTICATED_PATHS.has(pathname)) {
+    return NextResponse.next();
+  }
+
+  if (REGION_UNRESTRICTED_PATHS.has(pathname)) {
     return NextResponse.next();
   }
 
