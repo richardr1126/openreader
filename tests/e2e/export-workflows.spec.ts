@@ -9,6 +9,10 @@ test('downloads account data and an already-completed audiobook export', async (
   await enterAnonymousLibrary(page);
 
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Storage', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Library storage', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reclaim orphaned audio', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Delete all audio', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Account', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Account', exact: true })).toBeVisible();
 

@@ -43,16 +43,14 @@ import type { TtsExportResolveSnapshot } from '@/types/tts-export';
 import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
-import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
+import type { TtsPlaybackPlanPayload, TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { isPlaybackPhaseProcessing } from '@/lib/client/tts/playback-control';
 import {
   pdfLocatorPage,
   resolveDocumentAnchorSelectionOrdinal,
   type PlaybackAnchor,
 } from '@/lib/client/tts/playback-selection';
-import {
-  type CanonicalTtsSegment,
-} from '@openreader/tts/segment-plan';
+import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { resolveTtsLanguage } from '@openreader/tts/language';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
@@ -62,10 +60,7 @@ import type {
   TTSSentenceAlignment,
   TtsPlaybackPhase,
 } from '@/types/tts';
-import type {
-  TTSRequestHeaders,
-  TTSSegmentLocator,
-} from '@/types/client';
+import type { TTSRequestHeaders, TTSSegmentLocator } from '@/types/client';
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 
 import type { ReaderType } from '@/types/user-state';
@@ -136,6 +131,8 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   documentLanguage: string;
   resolvedLanguage: string;
   clearSegmentCaches: () => void;
+  /** Settings payload that identifies the document's current audio cache. */
+  playbackPlanPayload: TtsPlaybackPlanPayload | null;
   skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
   registerLocationChangeHandler: (handler: EpubLocationChangeHandler | null) => void;  // EPUB-only: Handles chapter navigation
   setIsEPUB: (isEPUB: boolean) => void;
@@ -685,6 +682,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     documentLanguage,
     resolvedLanguage,
     clearSegmentCaches,
+    playbackPlanPayload: playbackPlanRequest?.payload ?? null,
     skipToLocation,
     registerLocationChangeHandler,
     setIsEPUB,
@@ -723,6 +721,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     documentLanguage,
     resolvedLanguage,
     clearSegmentCaches,
+    playbackPlanRequest,
     skipToLocation,
     registerLocationChangeHandler,
     setIsEPUB,

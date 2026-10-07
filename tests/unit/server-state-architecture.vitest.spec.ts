@@ -231,6 +231,7 @@ describe('server-state architecture', () => {
       'POST /v1/pdf-layout/resolve',
       'POST /v1/tts-playback/sessions/:sessionId/cancel',
       'POST /v1/tts-playback/cache/clear',
+      'POST /v1/tts-playback/cache/reclaim',
       'POST /v1/tts-playback/exports/expire',
       'POST /v1/tts-playback/exports/jobs',
       'POST /v1/tts-playback/exports/resolve',
@@ -240,6 +241,7 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/sessions/prepare',
       'POST /v1/tts-playback/sessions/resolve',
       'POST /v1/user-storage/cleanup',
+      'POST /v1/user-storage/usage',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
     ].sort());
     expect(workerRoutes).not.toContain('/v1/tts-playback/cache/reset');
@@ -311,6 +313,10 @@ describe('server-state architecture', () => {
       '/api/tts/playback/plans/[planId]/seek-layout',
       '/api/tts/segments/clear',
       '/api/tts/shared-providers',
+      '/api/tts/storage',
+      '/api/tts/storage/document',
+      '/api/tts/storage/document/reclaim',
+      '/api/tts/storage/reclaim',
       '/api/tts/stream/[sessionId]/cursor',
       '/api/tts/stream/[sessionId]/events',
       '/api/tts/stream/[sessionId]/timeline',
@@ -382,11 +388,12 @@ describe('server-state architecture', () => {
 
   test('keeps legacy TTS manifest queries removed while centralizing other server state', () => {
     // The segments sidebar (the last legacy-manifest consumer) was removed; its
-    // only surviving capability — clearing cached audio — moved to reader settings.
+    // only surviving capability — clearing cached audio — moved to the reader settings storage section.
     expect(existsSync(path.join(root, 'src/components/reader/SegmentsSidebar.tsx'))).toBe(false);
     expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('queryKeys.ttsManifest');
     expect(sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n')).not.toContain('/api/tts/segments/manifest');
-    expect(source('src/components/documents/DocumentSettings.tsx')).toContain("'/api/tts/segments/clear'");
+    expect(source('src/lib/client/api/storage.ts')).toContain("'/api/tts/segments/clear'");
+    expect(source('src/components/documents/DocumentSettings.tsx')).toContain('<DocumentStorageSection');
     expect(source('src/contexts/AuthRateLimitContext.tsx')).toContain('queryKeys.computeLimits');
     expect(source('src/components/admin/AdminProvidersPanel.tsx')).toContain('queryKeys.admin(sessionId');
   });

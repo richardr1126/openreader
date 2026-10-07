@@ -3,7 +3,7 @@
 import { useMemo, type ComponentType, type SVGProps } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ClockIcon, DocumentIcon, InfoIcon, KeyIcon,
+import { AudioWaveIcon, ClockIcon, DocumentIcon, InfoIcon, KeyIcon,
   PaletteIcon, SettingsIcon, SpeedometerIcon, UserIcon } from '@/components/icons/Icons';
 import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
 import { AdminGutendexPanel } from '@/components/admin/AdminGutendexPanel';
@@ -19,10 +19,11 @@ import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { normalizeVersion } from '@/lib/shared/changelog';
 import { AccountSettingsPanel } from './AccountSettingsPanel';
+import { StorageSettingsPanel } from './StorageSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
+export type SettingsSectionId = 'api' | 'theme' | 'account' | 'storage' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
 type SettingsSection = {
   id: SettingsSectionId;
   label: string;
@@ -51,6 +52,13 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
     label: 'Account',
     shortLabel: 'Account',
     icon: UserIcon,
+    group: 'general',
+  },
+  {
+    id: 'storage',
+    label: 'Storage',
+    shortLabel: 'Storage',
+    icon: AudioWaveIcon,
     group: 'general',
   },
   {
@@ -281,6 +289,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                     </div>
                   ) : null}
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
+                  {activeSection === 'storage' ? <StorageSettingsPanel /> : null}
                   {isAdmin && activeSection === 'users' ? <AdminUsersPanel /> : null}
                   {isAdmin && activeSection === 'providers' ? <AdminProvidersPanel /> : null}
                   {isAdmin && activeSection === 'instance' ? (

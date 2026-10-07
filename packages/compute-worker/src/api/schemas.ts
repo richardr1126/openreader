@@ -180,6 +180,59 @@ export const ttsPlaybackSessionResolveSchema = z.object({
   purpose: z.enum(['live', 'export-document']),
 }).strict();
 
+export const ttsPlaybackCacheReclaimSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  /**
+   * The cache variant to keep. Omit `settingsHash` to keep every variant of
+   * that version; pass null to reclaim every variant of the document.
+   */
+  keep: z.object({
+    documentVersion: z.number().int().nonnegative(),
+    settingsHash: z.string().trim().min(1).max(256).optional(),
+  }).strict().nullable(),
+}).strict();
+
+export const ttsPlaybackCacheReclaimResponseSchema = z.object({
+  reclaimedVariants: z.number(),
+  deletedAudioObjects: z.number(),
+  deletedSidecarObjects: z.number(),
+  deletedExportObjects: z.number(),
+  invalidatedPlaybackSessions: z.number(),
+  invalidatedJobOperations: z.number(),
+});
+
+export const userStorageUsageSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  /** Scan the user's playback audio, sidecars, and exports. */
+  includePlayback: z.boolean(),
+  documentId: documentIdSchema.optional(),
+  derivedDocumentIds: z.array(documentIdSchema).max(100),
+  namespace: namespaceSchema,
+}).strict();
+
+export const userStorageUsageResponseSchema = z.object({
+  documents: z.array(z.object({
+    documentId: z.string(),
+    variants: z.array(z.object({
+      documentVersion: z.number(),
+      settingsHash: z.string(),
+      bytes: z.number(),
+      objects: z.number(),
+    })),
+    exports: z.array(z.object({
+      documentVersion: z.number().nullable(),
+      settingsHash: z.string().nullable(),
+      bytes: z.number(),
+      objects: z.number(),
+    })),
+    derivedBytes: z.number(),
+    derivedObjects: z.number(),
+  })),
+  scannedObjects: z.number(),
+  truncated: z.boolean(),
+});
+
 export const userStorageCleanupSchema = z.object({
   storageUserId: z.string().trim().min(1).max(256),
   namespace: z.string().trim().min(1).max(128).nullable(),

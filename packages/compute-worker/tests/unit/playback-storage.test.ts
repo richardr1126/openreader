@@ -67,6 +67,12 @@ class MemoryStorage implements ArtifactStorage {
     return [...this.objects.keys()].filter((key) => key.startsWith(prefix));
   }
 
+  async *listPrefixPages(prefix: string) {
+    yield [...this.objects.entries()]
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, value]) => ({ key, size: value.byteLength }));
+  }
+
   async putObject(key: string, body: Buffer | Uint8Array): Promise<void> {
     this.objects.set(key, Buffer.from(body));
   }
