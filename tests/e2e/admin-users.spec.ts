@@ -30,8 +30,14 @@ test('admin approves a pending user and inspects the user directory', async ({ b
 
   await page.goto('/app/settings?section=users');
   await expect(page.getByRole('heading', { name: 'Users', exact: true })).toBeVisible();
+  // Parallel guest journeys can push the oldest account past the first page.
+  const userSearch = page.getByRole('searchbox', { name: 'Search users' });
+  await userSearch.fill(adminEmail);
   await expect(page.getByText(adminEmail).first()).toBeVisible();
+  await userSearch.clear();
+  await page.getByRole('radio', { name: 'Anon', exact: true }).click();
   await expect(page.getByText('Anonymous', { exact: true }).first()).toBeVisible();
+  await page.getByRole('radio', { name: 'All', exact: true }).click();
 
   await page.getByRole('button', { name: 'Maintenance', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Maintenance', exact: true })).toBeVisible();

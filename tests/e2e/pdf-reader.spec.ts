@@ -29,7 +29,8 @@ test('anonymous user opens a PDF and reads its visible page content', async ({ p
   await expect(toolbar.getByRole('button', { name: 'Previous page', exact: true })).toBeDisabled();
   await expect(toolbar.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
   await expect(toolbar.getByRole('button', { name: 'Next page', exact: true })).toBeEnabled();
-  await expect(toolbar.getByRole('button', { name: 'Bookmark current sentence', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toHaveCount(1);
+  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toBeVisible();
 
   // A committed scrub offers a short-lived way back to where the listener was.
   const position = page.getByRole('slider', { name: 'Playback position', exact: true });

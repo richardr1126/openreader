@@ -10,7 +10,10 @@ import {
   ListIcon,
   SearchIcon,
 } from '@/components/icons/Icons';
-import { Input, PopoverRoot, PopoverSurface, PopoverTrigger, ToolbarButton, cn } from '@/components/ui';
+import {
+  Input, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger,
+  PopoverRoot, PopoverSurface, PopoverTrigger, ToolbarButton, cn,
+} from '@/components/ui';
 import type { ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 
 export interface SentenceBookmarkControl {
@@ -25,7 +28,7 @@ const compactButton = 'px-1.5 sm:px-2';
 /**
  * The reading toolbar under the document header, shared by every reader:
  * contents and find on the left, the reader's position cluster in the centre
- * (`navigation` slot), and the sentence bookmark with the bookmark list on the
+ * (`navigation` slot), and a menu for saving and viewing bookmarks on the
  * right. Document-level actions (zoom, export, settings) stay in the header.
  */
 export function ReaderToolbar({
@@ -49,6 +52,7 @@ export function ReaderToolbar({
     <div
       role="toolbar"
       aria-label="Reader"
+      data-reader-toolbar
       aria-hidden={hidden || undefined}
       className={cn(
         'flex h-10 shrink-0 items-center justify-between gap-2 border-b border-line-soft bg-surface px-4 text-xs text-soft',
@@ -76,28 +80,34 @@ export function ReaderToolbar({
         </ToolbarButton>
       </div>
       <div className="flex min-w-0 items-center justify-center">{navigation}</div>
-      <div className="flex items-center gap-1">
-        <ToolbarButton
-          onClick={sentenceBookmark.onToggle}
-          disabled={!sentenceBookmark.canToggle}
-          active={sentenceBookmark.isBookmarked}
-          aria-pressed={sentenceBookmark.isBookmarked}
-          aria-label="Bookmark current sentence"
-          title={sentenceBookmark.isBookmarked ? 'Remove Bookmark' : 'Bookmark Current Sentence'}
-          className={cn(compactButton, 'disabled:cursor-not-allowed disabled:opacity-50')}
-        >
-          <BookmarkIcon aria-hidden="true" filled={sentenceBookmark.isBookmarked} className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => onTogglePanel('bookmarks')}
-          active={bookmarksOpen}
-          aria-label={bookmarksOpen ? 'Hide bookmarks' : 'Open bookmarks'}
+      <MenuRoot as="div" className="relative inline-flex shrink-0 items-center text-left">
+        <MenuTrigger
+          as={ToolbarButton}
+          active={bookmarksOpen || sentenceBookmark.isBookmarked}
+          aria-label="Bookmarks"
           title="Bookmarks"
           className={compactButton}
         >
-          <BookmarksListIcon aria-hidden="true" className="h-4 w-4" />
-        </ToolbarButton>
-      </div>
+          <BookmarkIcon aria-hidden="true" filled={sentenceBookmark.isBookmarked} className="h-4 w-4" />
+        </MenuTrigger>
+        <MenuTransition>
+          <MenuItemsSurface anchor="bottom end" className="z-50 mt-1 min-w-[180px] focus:outline-none">
+            <MenuActionItem
+              onClick={sentenceBookmark.onToggle}
+              disabled={!sentenceBookmark.canToggle}
+            >
+              <BookmarkIcon aria-hidden="true" filled={sentenceBookmark.isBookmarked} className="h-4 w-4" />
+              {sentenceBookmark.isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+            </MenuActionItem>
+            <MenuActionItem onClick={() => {
+              if (!bookmarksOpen) onTogglePanel('bookmarks');
+            }}>
+              <BookmarksListIcon aria-hidden="true" className="h-4 w-4" />
+              View bookmarks
+            </MenuActionItem>
+          </MenuItemsSurface>
+        </MenuTransition>
+      </MenuRoot>
     </div>
   );
 }

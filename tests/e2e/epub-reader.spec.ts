@@ -23,7 +23,8 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
   await expect(toolbar.getByRole('button', { name: 'Find in book', exact: true })).toBeVisible();
   await expect(toolbar.getByRole('button', { name: 'Previous section', exact: true })).toBeVisible();
   await expect(toolbar.getByRole('button', { name: 'Next section', exact: true })).toBeVisible();
-  await expect(toolbar.getByRole('button', { name: 'Open bookmarks', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toHaveCount(1);
+  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toBeVisible();
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 

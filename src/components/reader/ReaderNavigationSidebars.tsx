@@ -208,7 +208,7 @@ function BookmarksPanel({ documentId }: { documentId: string }) {
   if (bookmarks.length === 0) {
     return (
       <p className="px-2 py-4 text-xs leading-relaxed text-soft">
-        No bookmarks yet. Use the bookmark button in the toolbar to save the sentence being read.
+        No bookmarks yet. Choose Save bookmark from the toolbar’s bookmark menu to save the sentence being read.
       </p>
     );
   }

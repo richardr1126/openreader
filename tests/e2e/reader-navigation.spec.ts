@@ -50,19 +50,24 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
   await expect.poll(() => sentence.allTextContents().then((parts) => parts.join(' ')))
     .toBe('Visit OpenAI for more information');
 
-  const toggle = page.getByRole('button', { name: 'Bookmark current sentence', exact: true });
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-  await toggle.click();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  const bookmarks = page.getByRole('toolbar', { name: 'Reader' })
+    .getByRole('button', { name: 'Bookmarks', exact: true });
+  await expect(bookmarks).toHaveCount(1);
+  await bookmarks.click();
+  await page.getByRole('menuitem', { name: 'Save bookmark', exact: true }).click();
+  await expect(page.getByRole('menu')).toBeHidden();
+  await bookmarks.click();
+  await expect(page.getByRole('menuitem', { name: 'Remove bookmark', exact: true })).toBeVisible();
+  await page.getByRole('menu').press('Escape');
 
   // Move away, then return through the bookmarks panel.
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
   await page.getByRole('dialog', { name: 'Contents' })
     .getByRole('button', { name: 'Section One', exact: true }).click();
   await expect(sentence).toContainText('Section One');
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
-
-  await page.getByRole('button', { name: 'Open bookmarks', exact: true }).click();
+  await bookmarks.click();
+  await expect(page.getByRole('menuitem', { name: 'Save bookmark', exact: true })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'View bookmarks', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Bookmarks' });
   const list = panel.getByRole('list', { name: 'Bookmarks' });
   await expect(list.getByRole('listitem')).toHaveCount(1);
@@ -70,7 +75,10 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
   // A sentence that crosses a link is painted as one span per text run.
   await expect.poll(() => sentence.allTextContents().then((parts) => parts.join(' ')))
     .toBe('Visit OpenAI for more information');
-  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+  await bookmarks.click();
+  await expect(page.getByRole('menuitem', { name: 'Remove bookmark', exact: true })).toBeVisible();
+  await page.getByRole('menuitem', { name: 'View bookmarks', exact: true }).click();
+  await expect(panel).toBeVisible();
 
   await list.getByRole('button', { name: /^Rename bookmark/ }).click();
   await panel.getByRole('textbox', { name: 'Bookmark name' }).fill('Further reading');
@@ -79,7 +87,9 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
 
   await list.getByRole('button', { name: 'Delete bookmark Further reading', exact: true }).click();
   await expect(panel.getByText(/No bookmarks yet/)).toBeVisible();
-  await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  await bookmarks.click();
+  await expect(page.getByRole('menuitem', { name: 'Save bookmark', exact: true })).toBeVisible();
+  await page.getByRole('menu').press('Escape');
 });
 
 test('a PDF can be read as flowing text and tapped to seek', async ({ page }) => {
