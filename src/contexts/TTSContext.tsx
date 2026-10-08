@@ -179,7 +179,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   // Audio and voice management hooks
   const audioContext = useAudioContext();
-  const { availableVoices } = useVoiceManagement(
+  const { availableVoices, voicesPending } = useVoiceManagement(
     configProviderRef,
     configProviderType,
     configTTSModel,
@@ -325,6 +325,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const advanceRef = useRef<((backwards?: boolean) => void | Promise<void>) | null>(null);
   const playbackPlanRequest = useMemo(() => {
     if (!documentId) return null;
+    // Settings identify the plan and audio cache. Wait for voice resolution
+    // (including a failed lookup's fallback) instead of publishing a
+    // voice-less placeholder that is replaced moments later.
+    if (!voice && (voicesPending || availableVoices.length > 0)) return null;
     const headers: TTSRequestHeaders = {
       'Content-Type': 'application/json',
       'x-tts-provider': configProviderRef,
@@ -351,6 +355,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     };
   }, [
     activeReaderType,
+    availableVoices.length,
     configProviderRef,
     configProviderType,
     documentId,
@@ -362,6 +367,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsModel,
     ttsSegmentMaxBlockLength,
     voice,
+    voicesPending,
   ]);
   const {
     acceptBootstrapPlaybackPlan,
