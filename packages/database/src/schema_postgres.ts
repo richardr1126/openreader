@@ -28,6 +28,11 @@ export const documents = pgTable('documents', {
   filePath: text('file_path').notNull(),
   folderId: text('folder_id'),
   recentlyOpenedAt: bigint('recently_opened_at', { mode: 'number' }),
+  // Bibliographic metadata captured at import time (EPUB/PDF metadata,
+  // catalog or article byline, detected text language). Null when unknown;
+  // documents imported before these columns existed are not backfilled.
+  author: text('author'),
+  language: text('language'),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.id, table.userId] }),
@@ -130,8 +135,12 @@ export const documentSettings = pgTable('document_settings', {
 export const userDocumentProgress = pgTable('user_document_progress', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   documentId: text('document_id').notNull(),
-  readerType: text('reader_type').notNull(), // pdf, epub, html
-  location: text('location').notNull(),
+  // The playback cursor: content identity plus an ordinal hint, resolved
+  // against the current plan (`resolveReadingPositionOrdinal`). Pages and
+  // chapters are derived from it, never stored. A null key (rows converted
+  // from the v5.0 page/location format) resolves by ordinal alone.
+  segmentKey: text('segment_key'),
+  segmentOrdinal: integer('segment_ordinal').notNull().default(0),
   progress: real('progress'),
   clientUpdatedAtMs: bigint('client_updated_at_ms', { mode: 'number' }).notNull().default(0),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
@@ -139,6 +148,29 @@ export const userDocumentProgress = pgTable('user_document_progress', {
 }, (table) => [
   primaryKey({ columns: [table.userId, table.documentId] }),
   index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
+]);
+
+// Personal bookmarks, positioned exactly like reading progress: the segment
+// key is content identity and survives re-planning, the ordinal is a hint.
+// Rows are hard-deleted and cascade with the owning document row.
+export const userDocumentBookmarks = pgTable('user_document_bookmarks', {
+  id: text('id').notNull(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  segmentKey: text('segment_key').notNull(),
+  segmentOrdinal: integer('segment_ordinal').notNull(),
+  label: text('label'),
+  snippet: text('snippet').notNull().default(''),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+  updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+}, (table) => [
+  primaryKey({ columns: [table.id, table.userId] }),
+  foreignKey({
+    name: 'user_document_bookmarks_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
+  index('idx_user_document_bookmarks_user_document').on(table.userId, table.documentId),
 ]);
 
 export const documentPreviews = pgTable('document_previews', {

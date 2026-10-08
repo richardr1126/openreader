@@ -26,6 +26,8 @@ export type PdfLayoutRequest =
 export type TtsPlaybackRequest =
   paths['/v1/tts-playback/sessions/jobs']['post']['requestBody']['content']['application/json']
   & { generationExtent?: 'window' | 'document' };
+export type TtsVoicePreviewRequest =
+  paths['/v1/tts-playback/voice-previews']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionPrepareRequest =
   paths['/v1/tts-playback/sessions/prepare']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionPrepareResponse =
@@ -132,3 +134,12 @@ export type PdfLayoutResolution = {
   artifact: { objectKey: string } | null;
   operation: ComputeOperation<PdfLayoutResult> | null;
 };
+
+export type TtsPlaybackCacheReclaimRequest =
+  paths['/v1/tts-playback/cache/reclaim']['post']['requestBody']['content']['application/json'];
+export type TtsPlaybackCacheReclaimResponse =
+  paths['/v1/tts-playback/cache/reclaim']['post']['responses'][200]['content']['application/json'];
+export type UserStorageUsageRequest =
+  paths['/v1/user-storage/usage']['post']['requestBody']['content']['application/json'];
+export type UserStorageUsageReport =
+  paths['/v1/user-storage/usage']['post']['responses'][200]['content']['application/json'];

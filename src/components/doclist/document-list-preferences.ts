@@ -29,6 +29,12 @@ export const DEFAULT_DOCUMENT_LIST_STATE: NormalizedDocumentListState = {
   sidebarCollapsed: false,
 };
 
+const SORT_KEYS: readonly SortBy[] = ['name', 'type', 'date', 'size', 'author', 'opened'];
+
+function normalizeSortBy(stored: DocumentListState['sortBy'] | undefined): SortBy {
+  return stored && SORT_KEYS.includes(stored) ? stored : DEFAULT_DOCUMENT_LIST_STATE.sortBy;
+}
+
 function normalizeViewMode(stored: DocumentListState['viewMode']): ViewMode {
   if (stored === 'list' || stored === 'gallery') return stored;
   return 'icons';
@@ -38,7 +44,7 @@ export function normalizeDocumentListState(
   stored: DocumentListState | undefined | null,
 ): NormalizedDocumentListState {
   return {
-    sortBy: stored?.sortBy ?? DEFAULT_DOCUMENT_LIST_STATE.sortBy,
+    sortBy: normalizeSortBy(stored?.sortBy),
     sortDirection: stored?.sortDirection ?? DEFAULT_DOCUMENT_LIST_STATE.sortDirection,
     iosBetaBannerDismissed:
       stored?.iosBetaBannerDismissed ?? DEFAULT_DOCUMENT_LIST_STATE.iosBetaBannerDismissed,

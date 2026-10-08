@@ -9,11 +9,21 @@ import {
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
 import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
+export interface StoredObjectSummary {
+  key: string;
+  size: number;
+}
+
 export interface ArtifactStorage {
   readObject(key: string): Promise<ArrayBuffer>;
   objectExists(key: string): Promise<boolean>;
   deleteObject(key: string): Promise<void>;
   listPrefix(prefix: string): Promise<string[]>;
+  /**
+   * Page through a prefix with object sizes, one ListObjectsV2 page at a time,
+   * so size aggregation never holds a whole prefix listing in memory.
+   */
+  listPrefixPages(prefix: string): AsyncIterable<StoredObjectSummary[]>;
   putObject(key: string, body: Buffer | Uint8Array, contentType?: string): Promise<void>;
   putParsedPdf(documentId: string, namespace: string | null, parsed: unknown): Promise<string>;
 }
@@ -133,6 +143,23 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
         continuationToken = response.NextContinuationToken;
       } while (continuationToken);
       return keys;
+    },
+    async *listPrefixPages(prefix) {
+      const safePrefix = safeKey(prefix);
+      let continuationToken: string | undefined;
+      do {
+        const response = await config.client.send(new ListObjectsV2Command({
+          Bucket: config.bucket,
+          Prefix: safePrefix,
+          ContinuationToken: continuationToken,
+        }));
+        const page: StoredObjectSummary[] = [];
+        for (const item of response.Contents ?? []) {
+          if (typeof item.Key === 'string') page.push({ key: item.Key, size: Math.max(0, Number(item.Size) || 0) });
+        }
+        if (page.length > 0) yield page;
+        continuationToken = response.NextContinuationToken;
+      } while (continuationToken);
     },
     async putObject(key, body, contentType) {
       await config.client.send(new PutObjectCommand({

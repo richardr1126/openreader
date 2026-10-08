@@ -82,6 +82,7 @@ function createFixture(planLength = 100) {
     async objectExists(key: string) { return objects.has(key); },
     async deleteObject() {},
     async listPrefix() { return []; },
+    async *listPrefixPages() {},
     async putObject() {},
     async putParsedPdf() { throw new Error('unused'); },
   } satisfies ArtifactStorage;

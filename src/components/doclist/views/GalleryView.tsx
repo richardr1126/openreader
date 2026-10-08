@@ -8,6 +8,7 @@ import { DocumentPreview } from '@/components/doclist/DocumentPreview';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
 import { ButtonLink } from '@/components/ui';
 import { DocumentActionsMenu } from '../DocumentActionsMenu';
+import { readingPercent } from '../ReadingProgressBar';
 import type { DocumentActions } from '../document-actions';
 import { SelectCheck } from '../SelectCheck';
 import { useDocumentSelection } from '../dnd/DocumentSelectionContext';
@@ -29,6 +30,12 @@ function formatDateTime(value: number | undefined): string {
     hour: 'numeric',
     minute: '2-digit',
   });
+}
+
+function formatProgress(doc: DocumentListDocument): string {
+  if (!doc.readingProgress) return 'Not started';
+  const percent = readingPercent(doc);
+  return percent === null ? 'In progress' : `${percent}%`;
 }
 
 function KindIcon({ doc, className }: { doc: DocumentListDocument; className?: string }) {
@@ -229,6 +236,9 @@ export function GalleryView({
                 <h2 className="text-[14px] font-semibold text-foreground truncate max-w-[320px]">
                   {activeDoc.name}
                 </h2>
+                {activeDoc.author && (
+                  <p className="text-[12px] text-soft truncate max-w-[320px]">{activeDoc.author}</p>
+                )}
                 <p className="text-[11px] text-soft">
                   {activeDoc.type.toUpperCase()} • {formatDocumentSize(activeDoc.size)}
                 </p>
@@ -245,6 +255,8 @@ export function GalleryView({
               <dd className="text-foreground text-right uppercase tracking-wide">{activeDoc.type}</dd>
               <dt className="text-soft">Size</dt>
               <dd className="text-foreground text-right tabular-nums">{formatDocumentSize(activeDoc.size)}</dd>
+              <dt className="text-soft">Progress</dt>
+              <dd className="text-foreground text-right tabular-nums">{formatProgress(activeDoc)}</dd>
               <dt className="text-soft">Last opened</dt>
               <dd className="text-foreground text-right">{formatDateTime(activeDoc.recentlyOpenedAt)}</dd>
               <dt className="text-soft">Last modified</dt>

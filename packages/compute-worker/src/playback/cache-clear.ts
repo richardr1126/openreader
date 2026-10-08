@@ -24,20 +24,29 @@ export async function clearTtsPlaybackArtifacts(input: {
   const version = typeof scope.documentVersion === 'number' && Number.isFinite(scope.documentVersion)
     ? Math.max(0, Math.floor(scope.documentVersion))
     : null;
+  const settingsHash = scope.settingsHash?.trim() || null;
+  if (settingsHash !== null && version === null) {
+    throw new Error('A settings-scoped playback clear requires a document version');
+  }
   const nsSegment = scope.namespace ? `ns/${scope.namespace}/` : '';
   const versionSegment = version === null ? '' : `${version}/`;
-  const audioPrefix = `${s3Prefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodeURIComponent(scope.storageUserId)}/docs/${scope.documentId}/${versionSegment}`;
-  const sidecarPrefix = `${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(scope.storageUserId)}/docs/${scope.documentId}/${versionSegment}`;
-  const planPrefix = version === null
-    ? `${s3Prefix}/tts_playback_plan_v1/${scope.documentId}/`
-    : scope.readerType
-      ? `${s3Prefix}/tts_playback_plan_v1/${scope.documentId}/${version}/${scope.readerType}/`
-      : `${s3Prefix}/tts_playback_plan_v1/${scope.documentId}/${version}/`;
+  const variantSegment = settingsHash === null ? versionSegment : `${versionSegment}${settingsHash}/`;
+  const audioPrefix = `${s3Prefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodeURIComponent(scope.storageUserId)}/docs/${scope.documentId}/${variantSegment}`;
+  const sidecarPrefix = `${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(scope.storageUserId)}/docs/${scope.documentId}/${variantSegment}`;
+  // Plans are voice-independent and shared by every settings variant, so a
+  // settings-scoped clear (reclaiming one unused variant) leaves them alone.
+  const planPrefix = settingsHash !== null
+    ? null
+    : version === null
+      ? `${s3Prefix}/tts_playback_plan_v1/${scope.documentId}/`
+      : scope.readerType
+        ? `${s3Prefix}/tts_playback_plan_v1/${scope.documentId}/${version}/${scope.readerType}/`
+        : `${s3Prefix}/tts_playback_plan_v1/${scope.documentId}/${version}/`;
 
   const [deletedAudioObjects, deletedSidecarObjects, deletedPlanObjects] = await Promise.all([
     deletePrefix(storage, audioPrefix),
     deletePrefix(storage, sidecarPrefix),
-    deletePrefix(storage, planPrefix),
+    planPrefix === null ? 0 : deletePrefix(storage, planPrefix),
   ]);
 
   // Export artifacts are user/document-scoped, so the whole scope prefix can
@@ -54,7 +63,8 @@ export async function clearTtsPlaybackArtifacts(input: {
     const exportPrefixes = await findExportArtifactPrefixesByMetadata({
       storage,
       exportRoot: exportScopePrefix,
-      ownsMetadata: (metadata) => Number(metadata.documentVersion) === version,
+      ownsMetadata: (metadata) => Number(metadata.documentVersion) === version
+        && (settingsHash === null || metadata.settingsHash === settingsHash),
     });
     deletedExportObjects = (await Promise.all(
       exportPrefixes.map((prefix) => deletePrefix(storage, prefix)),

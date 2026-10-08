@@ -3,6 +3,7 @@ import {
   documents,
   documentSettings,
   userPreferences,
+  userDocumentBookmarks,
   userDocumentProgress,
   userFolders,
   userOnboarding,
@@ -24,8 +25,8 @@ type UserPreferenceRow = {
 type UserDocumentProgressRow = {
   userId: string;
   documentId: string;
-  readerType: string;
-  location: string;
+  segmentKey: string | null;
+  segmentOrdinal: number;
   progress: number | null;
   clientUpdatedAtMs: number;
   createdAt: number;
@@ -113,7 +114,8 @@ export async function transferUserOnboarding(fromUserId: string, toUserId: strin
  * Transfer documents from one userId to another.
  *
  * This is used when an anonymous user upgrades to an authenticated account.
- * The source document blob is shared. TTS playback artifacts are session-scoped
+ * The source document blob is shared; bookmarks move with their documents.
+ * TTS playback artifacts are session-scoped
  * in worker storage and are intentionally not transferred between users.
  *
  * @returns number of document rows transferred
@@ -136,6 +138,15 @@ export async function transferUserDocuments(
       .insert(documents)
       .values({ ...row, userId: toUserId })
       .onConflictDoNothing();
+    // Bookmarks cascade with their document row, so re-point them at the
+    // destination copy before the source row is removed.
+    await database
+      .update(userDocumentBookmarks)
+      .set({ userId: toUserId })
+      .where(and(
+        eq(userDocumentBookmarks.userId, fromUserId),
+        eq(userDocumentBookmarks.documentId, row.id),
+      ));
     await database.delete(documents).where(and(
       eq(documents.userId, fromUserId),
       eq(documents.id, row.id),
@@ -220,8 +231,8 @@ export async function transferUserProgress(fromUserId: string, toUserId: string)
       .onConflictDoUpdate({
         target: [userDocumentProgress.userId, userDocumentProgress.documentId],
         set: {
-          readerType: row.readerType,
-          location: row.location,
+          segmentKey: row.segmentKey,
+          segmentOrdinal: row.segmentOrdinal,
           progress: row.progress,
           clientUpdatedAtMs: row.clientUpdatedAtMs,
           updatedAt: row.updatedAt,

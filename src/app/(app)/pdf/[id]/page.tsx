@@ -9,6 +9,7 @@ import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { Header } from '@/components/Header';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -23,9 +24,14 @@ import {
   FORCE_REPARSE_CONFIRM_TITLE,
 } from '@/lib/client/pdf/force-reparse';
 import { forceReparsePdfDocument } from '@/lib/client/api/documents';
-import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
+import { useConfig } from '@/contexts/ConfigContext';
+import { PlanTextReader } from '@/components/views/HTMLViewer';
+import { PageJumpControl, ReaderPager, ReaderToolbar } from '@/components/reader/ReaderToolbar';
+import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
+import { usePdfOutline } from '@/hooks/pdf/usePdfOutline';
 
 // Dynamic import for client-side rendering only
 const PDFViewer = dynamic(
@@ -59,10 +65,7 @@ function PdfReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const router = useRouter();
-  const {
-    disableProgressPersistence,
-    scheduleProgress,
-  } = bootstrap;
+  const { disableProgressPersistence } = bootstrap;
   const pdfState = usePdfDocument(
     sourceDocument,
     payload.settings,
@@ -78,15 +81,18 @@ function PdfReader({
     updateDocumentSettings,
     parsedOverlayEnabled,
     setParsedOverlayEnabled,
+    pdfDocument,
   } = pdfState;
+  const { readerShowsLayout } = useConfig();
+  const outline = usePdfOutline(pdfDocument);
   const {
-    currentSentenceOrdinal,
-    sentences,
     stop,
+    skipToLocation,
     setPdfSkipBlockKinds,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
@@ -94,23 +100,6 @@ function PdfReader({
   useEffect(() => {
     setPdfSkipBlockKinds(documentSettings.pdf?.skipBlockKinds ?? []);
   }, [documentSettings.pdf?.skipBlockKinds, setPdfSkipBlockKinds]);
-
-  useEffect(() => {
-    if (!routeDocumentId || !rendererReady || !isPlaybackReady || sentences.length === 0) return;
-    scheduleProgress({
-      documentId: routeDocumentId,
-      readerType: 'pdf',
-      location: serializeReaderPosition('pdf', currDocPage, currentSentenceOrdinal ?? 0),
-    });
-  }, [
-    currDocPage,
-    currentSentenceOrdinal,
-    rendererReady,
-    isPlaybackReady,
-    routeDocumentId,
-    scheduleProgress,
-    sentences.length,
-  ]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -201,32 +190,64 @@ function PdfReader({
           </div>
         }
       />
-      <div className="relative overflow-hidden" style={{ height: containerHeight }}>
-        <div className={rendererReady ? 'h-full' : 'h-full opacity-0 pointer-events-none'}>
-          <PDFViewer
-            zoomLevel={zoomLevel}
-            onReady={onReady}
-            onError={onError}
-            pdfState={pdfState}
-          />
+      <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
+        <ReaderToolbar
+          hidden={!rendererReady}
+          activePanel={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
+          onTogglePanel={(panel) => setActiveSidebar((prev) => prev === panel ? null : panel)}
+          sentenceBookmark={sentenceBookmark}
+          navigation={currDocPages ? (
+            <ReaderPager
+              unit="page"
+              onPrevious={() => skipToLocation(currDocPage - 1, true)}
+              onNext={() => skipToLocation(currDocPage + 1, true)}
+              canPrevious={currDocPage > 1}
+              canNext={currDocPage < currDocPages}
+              position={(
+                <PageJumpControl
+                  currentPage={currDocPage}
+                  numPages={currDocPages}
+                  onGoToPage={(page) => skipToLocation(page, true)}
+                />
+              )}
+            />
+          ) : null}
+        />
+        <div className={rendererReady ? 'min-h-0 flex-1' : 'min-h-0 flex-1 opacity-0 pointer-events-none'}>
+          {readerShowsLayout ? (
+            <PDFViewer
+              zoomLevel={zoomLevel}
+              onReady={onReady}
+              onError={onError}
+              pdfState={pdfState}
+            />
+          ) : (
+            <PlanTextReader className="h-full" readerType="pdf" onReady={onReady} onError={onError} />
+          )}
         </div>
       </div>
       {canExportAudiobook && (
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
+          onChangeVoice={() => setActiveSidebar('voice')}
           documentType="pdf"
           documentId={routeDocumentId}
         />
       )}
       {rendererReady ? (
-        <TTSPlayer currentPage={currDocPage} numPages={currDocPages} isPlaybackReady={isPlaybackReady} />
+        <TTSPlayer isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
       ) : null}
+      <VoiceSidebar
+        isOpen={activeSidebar === 'voice'}
+        onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
       <DocumentSettings
         isOpen={activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         documentId={routeDocumentId}
         language={documentSettings.language ?? 'auto'}
+        detectedLanguage={payload.document.language}
         onLanguageChange={(language) => {
           const nextSettings: DocumentSettingsValue = {
             ...documentSettings,
@@ -256,6 +277,13 @@ function PdfReader({
           },
           onForceReparse: requestForceReparse,
         }}
+      />
+      <ReaderNavigationSidebars
+        open={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
+        onClose={() => setActiveSidebar(null)}
+        outline={outline}
+        documentTitle={currDocName || payload.document.name}
+        documentId={routeDocumentId}
       />
       <ConfirmDialog
         isOpen={showForceReparseConfirm}

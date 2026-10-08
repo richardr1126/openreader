@@ -27,6 +27,8 @@ means restoring the backup from step 2. Do not skip it.
 | TTS audio cache | v4 cache | Deleted and rebuilt as you listen |
 
 Your users, documents, reading progress, folders, preferences, and shared providers are kept.
+When a saved position cannot be carried over (always for EPUB books), the document keeps its
+reading status but reopens at the start.
 
 ## 1. Export audiobooks you want to keep
 

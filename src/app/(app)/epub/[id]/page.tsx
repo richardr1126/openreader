@@ -13,12 +13,18 @@ import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useEpubDocument } from './useEpubDocument';
-import { findEpubTocTitle } from '@/lib/client/epub/toc-titles';
+import { epubTocOutline, findEpubTocTitle } from '@/lib/client/epub/toc-titles';
+import { useConfig } from '@/contexts/ConfigContext';
+import { PlanTextReader } from '@/components/views/HTMLViewer';
+import { ReaderPager, ReaderPosition, ReaderToolbar, ReadingProgress } from '@/components/reader/ReaderToolbar';
+import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import type { TtsExportChapterProgress } from '@/types/tts-export';
 
 export default function EPUBPage() {
@@ -43,14 +49,8 @@ function EpubReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const router = useRouter();
-  const {
-    disableProgressPersistence,
-    scheduleProgress,
-  } = bootstrap;
-  const initialLocator = payload.initialPosition?.readerType === 'epub'
-    ? payload.initialPosition.locator
-    : null;
-  const epubState = useEpubDocument(sourceDocument, initialLocator, scheduleProgress);
+  const { disableProgressPersistence } = bootstrap;
+  const epubState = useEpubDocument(sourceDocument, payload.initialPosition);
   const {
     currDocName,
     isPlaybackReady,
@@ -73,7 +73,13 @@ function EpubReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
+  const { readerShowsLayout } = useConfig();
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
+  const navigationPanel = isReaderNavigationPanel(activeSidebar) ? activeSidebar : null;
+  const toggleNavigationPanel = useCallback((panel: ReaderNavigationPanel) => {
+    setActiveSidebar((prev) => prev === panel ? null : panel);
+  }, []);
   const [containerHeight, setContainerHeight] = useState<string | null>(null);
   const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
@@ -164,19 +170,39 @@ function EpubReader({
           </div>
         ) : null}
       />
-      <div className="relative overflow-hidden" style={{ height: containerHeight ?? 0 }}>
+      <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight ?? 0 }}>
+        <ReaderToolbar
+          hidden={!rendererReady}
+          activePanel={navigationPanel}
+          onTogglePanel={toggleNavigationPanel}
+          sentenceBookmark={sentenceBookmark}
+          navigation={readerShowsLayout ? (
+            <ReaderPager
+              unit="section"
+              onPrevious={() => epubState.handleLocationChanged('prev')}
+              onNext={() => epubState.handleLocationChanged('next')}
+              position={typeof epubState.currDocPage === 'number' && epubState.currDocPages !== undefined
+                ? <ReaderPosition current={epubState.currDocPage} total={epubState.currDocPages} />
+                : null}
+            />
+          ) : <ReadingProgress />}
+        />
         {epubState.currDocData && containerHeight !== null ? (
           <div
-            className={rendererReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
+            className={rendererReady ? 'min-h-0 w-full flex-1' : 'min-h-0 w-full flex-1 opacity-0 pointer-events-none'}
             aria-hidden={!rendererReady}
             style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}
           >
-            <EPUBViewer
-              className="h-full"
-              epubState={epubState}
-              onError={handleRendererError}
-              onReady={onReady}
-            />
+            {readerShowsLayout ? (
+              <EPUBViewer
+                className="h-full"
+                epubState={epubState}
+                onError={handleRendererError}
+                onReady={onReady}
+              />
+            ) : (
+              <PlanTextReader className="h-full" readerType="epub" onReady={onReady} onError={onError} />
+            )}
           </div>
         ) : null}
       </div>
@@ -184,19 +210,31 @@ function EpubReader({
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
+          onChangeVoice={() => setActiveSidebar('voice')}
           documentType="epub"
           documentId={routeDocumentId || ''}
           resolveChapterTitle={resolveChapterTitle}
         />
       )}
-      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} />
+      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
+      <VoiceSidebar
+        isOpen={activeSidebar === 'voice'}
+        onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
+      <ReaderNavigationSidebars
+        open={rendererReady ? navigationPanel : null}
+        onClose={() => setActiveSidebar(null)}
+        outline={navigationPanel === 'contents' ? epubTocOutline(tocRef.current ?? []) : []}
+        documentTitle={currDocName || payload.document.name}
+        documentId={routeDocumentId}
+      />
       <DocumentSettings
         epub
         isOpen={rendererReady && activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         documentId={routeDocumentId || ''}
         language={language}
-        detectedLanguage={metadataLanguage}
+        detectedLanguage={metadataLanguage ?? payload.document.language}
         onLanguageChange={(nextLanguage) => {
           void bootstrap.updateSettings({
             ...documentSettings,

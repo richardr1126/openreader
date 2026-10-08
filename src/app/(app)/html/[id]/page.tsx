@@ -1,7 +1,7 @@
 'use client';
 
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
 import {
   ReaderShell,
@@ -13,12 +13,16 @@ import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
+import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { ButtonLink } from '@/components/ui';
-import { serializeReaderPosition } from '@/lib/shared/reader-position';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
+import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
+import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
+import { ReaderToolbar, ReadingProgress } from '@/components/reader/ReaderToolbar';
+import type { OutlineEntry } from '@/lib/client/reader/chapters';
 
 export default function HTMLPage() {
   const { id } = useParams();
@@ -42,10 +46,7 @@ function HtmlReader({
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
   const router = useRouter();
-  const {
-    disableProgressPersistence,
-    scheduleProgress,
-  } = bootstrap;
+  const { disableProgressPersistence } = bootstrap;
   const htmlState = useHtmlDocument(sourceDocument);
   const {
     currDocData,
@@ -55,8 +56,6 @@ function HtmlReader({
     isTxt,
   } = htmlState;
   const {
-    currDocPage,
-    currentSentenceOrdinal,
     sentences,
     stop,
   } = useTTS();
@@ -65,27 +64,19 @@ function HtmlReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook'>(null);
+  // Markdown headings name the contents; plain text has none and reads as one flow.
+  const outline = useMemo<OutlineEntry[]>(() => blocks
+    .filter((block) => block.kind === 'heading')
+    .map((block) => ({
+      title: block.headingText || block.plainText,
+      target: { readerType: 'html', location: block.anchorId },
+      depth: (block.headingLevel ?? 1) - 1,
+    })), [blocks]);
+  const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
+  const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
   const [padPct, setPadPct] = useState<number>(50); // 0..100 (50 = 50% default width)
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
-
-  useEffect(() => {
-    if (!routeDocumentId || !rendererReady || !isPlaybackReady || sentences.length === 0) return;
-    scheduleProgress({
-      documentId: routeDocumentId,
-      readerType: 'html',
-      location: serializeReaderPosition('html', currDocPage, currentSentenceOrdinal ?? 0),
-    });
-  }, [
-    currDocPage,
-    currentSentenceOrdinal,
-    rendererReady,
-    isPlaybackReady,
-    routeDocumentId,
-    scheduleProgress,
-    sentences.length,
-  ]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {
@@ -155,17 +146,24 @@ function HtmlReader({
           </div>
         ) : null}
       />
-      <div className="relative overflow-hidden" style={{ height: containerHeight }}>
+      <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
+        <ReaderToolbar
+          hidden={!rendererReady}
+          activePanel={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
+          onTogglePanel={(panel) => setActiveSidebar((prev) => prev === panel ? null : panel)}
+          sentenceBookmark={sentenceBookmark}
+          navigation={<ReadingProgress />}
+        />
         {currDocData !== undefined ? (
           <div
-            className={rendererReady ? 'h-full w-full' : 'h-full w-full opacity-0 pointer-events-none'}
+            className={rendererReady ? 'min-h-0 w-full flex-1' : 'min-h-0 w-full flex-1 opacity-0 pointer-events-none'}
             aria-hidden={!rendererReady}
             style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}
           >
             <HTMLViewer
               className="h-full"
               blocks={blocks}
-              isTxt={isTxt}
+              format={isTxt ? 'text' : 'markdown'}
               onReady={onReady}
               onError={onError}
             />
@@ -176,19 +174,32 @@ function HtmlReader({
         <AudiobookExportModal
           isOpen={activeSidebar === 'audiobook'}
           setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'audiobook' : (prev === 'audiobook' ? null : prev))}
+          onChangeVoice={() => setActiveSidebar('voice')}
           documentType="html"
           documentId={routeDocumentId}
         />
       )}
       {rendererReady && (
-        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} />
+        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
       )}
+      <VoiceSidebar
+        isOpen={activeSidebar === 'voice'}
+        onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
+      />
+      <ReaderNavigationSidebars
+        open={rendererReady && isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
+        onClose={() => setActiveSidebar(null)}
+        outline={outline}
+        documentTitle={currDocName || payload.document.name}
+        documentId={routeDocumentId}
+      />
       <DocumentSettings
         html
         isOpen={rendererReady && activeSidebar === 'settings'}
         setIsOpen={(isOpen) => setActiveSidebar((prev) => isOpen ? 'settings' : (prev === 'settings' ? null : prev))}
         documentId={routeDocumentId}
         language={language}
+        detectedLanguage={payload.document.language}
         onLanguageChange={(nextLanguage) => {
           void bootstrap.updateSettings({
             ...documentSettings,

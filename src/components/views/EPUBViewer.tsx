@@ -6,9 +6,8 @@ import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
-import { DotsVerticalIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
-import { ToolbarButton } from '@/components/ui';
+import { hardenEpubSection } from '@/lib/client/epub/epub-section-hardening';
 
 interface EPUBViewerProps {
   className?: string;
@@ -17,8 +16,6 @@ interface EPUBViewerProps {
   epubState: Pick<
     EpubDocumentState,
     | 'currDocData'
-    | 'currDocPage'
-    | 'currDocPages'
     | 'isPlaybackReady'
     | 'placementLifecycle'
     | 'renderedTextRevision'
@@ -62,7 +59,14 @@ function EpubRenditionHost({
         if (!active || !hostRef.current || !book.isOpen) return;
 
         callbacksRef.current.onToc(navigation.toc);
-        rendition = book.renderTo(hostRef.current, { width: '100%', height: '100%' });
+        // Sections are stripped of script so the frame can allow scripts:
+        // WebKit only dispatches the reader's listeners in a frame that does.
+        book.spine.hooks.content.register(hardenEpubSection);
+        rendition = book.renderTo(hostRef.current, {
+          width: '100%',
+          height: '100%',
+          allowScriptedContent: true,
+        });
         callbacksRef.current.onRendition(rendition);
         // Deliberately do not call display here. The document controller waits
         // for the authoritative plan, resolves its stable locator to one CFI,
@@ -94,11 +98,8 @@ function EpubRenditionHost({
 }
 
 export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUBViewerProps) {
-  const [isTocOpen, setIsTocOpen] = useState(false);
   const {
     currDocData,
-    currDocPage,
-    currDocPages,
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
@@ -230,62 +231,6 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
       data-placement-status={placementLifecycle.status}
       ref={containerRef}
     >
-      <div className="flex items-center justify-between px-2 py-1 border-b border-line-soft bg-surface text-xs text-soft">
-        <div className="flex items-center gap-2">
-          <ToolbarButton
-            type="button"
-            onClick={() => setIsTocOpen(open => !open)}
-            aria-label={isTocOpen ? 'Hide chapters' : 'Show chapters'}
-            className="px-1"
-          >
-            <DotsVerticalIcon className="w-4 h-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            type="button"
-            onClick={() => handleLocationChanged('prev')}
-            aria-label="Previous section"
-          >
-            <ChevronLeftIcon className="w-4 h-4" />
-          </ToolbarButton>
-        </div>
-        {currDocPages !== undefined && typeof currDocPage === 'number' && (
-          <span className="px-2 tabular-nums">
-            {currDocPage} / {currDocPages}
-          </span>
-        )}
-        <ToolbarButton
-          type="button"
-          onClick={() => handleLocationChanged('next')}
-          aria-label="Next section"
-        >
-          <ChevronRightIcon className="w-4 h-4" />
-        </ToolbarButton>
-      </div>
-      {isTocOpen && tocRef.current && tocRef.current.length > 0 && (
-        <div className="border-b border-line-soft bg-background text-xs overflow-y-auto max-h-64 p-2">
-          <div className="font-semibold text-soft pb-1">Skip to chapters</div>
-          <div className="flex flex-wrap gap-1 w-full">
-            {tocRef.current.map((item, index) => (
-              <button
-                key={`${item.href}-${index}`}
-                type="button"
-                onClick={() => {
-                  if (item.href) handleLocationChanged(item.href);
-                  setIsTocOpen(false);
-                }}
-                className="
-                  px-2 py-1 rounded-md font-medium text-foreground text-center bg-surface
-                  hover:bg-accent-wash hover:text-accent transition-colors duration-fast
-                  whitespace-nowrap
-                  flex-1 min-w-[140px]
-                "
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
       <div className="flex-1 min-h-0">
         <EpubRenditionHost
           data={currDocData}

@@ -32,20 +32,36 @@ export async function POST(request: NextRequest) {
     if (!isComputeWorkerAvailable()) {
       return NextResponse.json({ error: 'Compute worker is required to clear playback cache.' }, { status: 503 });
     }
-    const cleared = await new ComputeWorkerClient().clearTtsPlaybackScope({
+    const client = new ComputeWorkerClient();
+    const signal = AbortSignal.timeout(45_000);
+    // The current version gets the full playback reset (sessions, plan, audio,
+    // exports); audio left from older document versions is then reclaimed
+    // without touching the freshly reset version.
+    const cleared = await client.clearTtsPlaybackScope({
       storageUserId: scope.storageUserId,
       documentId: parsed.documentId,
       documentVersion: scope.documentVersion,
       readerType: scope.readerType,
       namespace: null,
-    }, { signal: AbortSignal.timeout(45_000) });
+    }, { signal });
+    const previousVersions = await client.reclaimTtsPlaybackCache({
+      storageUserId: scope.storageUserId,
+      documentId: parsed.documentId,
+      keep: { documentVersion: scope.documentVersion },
+    }, { signal });
+    const deletedAudioObjects = cleared.deletedAudioObjects + previousVersions.deletedAudioObjects;
+    const deletedSidecarObjects = cleared.deletedSidecarObjects + previousVersions.deletedSidecarObjects;
+    const deletedExportObjects = cleared.deletedExportObjects + previousVersions.deletedExportObjects;
 
     return NextResponse.json({
       documentId: parsed.documentId,
-      deletedSegments: 0,
-      requestedAudioObjects: cleared.deletedAudioObjects + cleared.deletedSidecarObjects,
-      deletedPlaybackObjects: cleared.deletedAudioObjects + cleared.deletedSidecarObjects + cleared.deletedPlanObjects + cleared.deletedExportObjects,
-      ...cleared,
+      deletedAudioObjects,
+      deletedSidecarObjects,
+      deletedPlanObjects: cleared.deletedPlanObjects,
+      deletedExportObjects,
+      deletedPlaybackObjects: deletedAudioObjects + deletedSidecarObjects + cleared.deletedPlanObjects + deletedExportObjects,
+      invalidatedPlaybackSessions: cleared.invalidatedPlaybackSessions + previousVersions.invalidatedPlaybackSessions,
+      invalidatedJobOperations: cleared.invalidatedJobOperations + previousVersions.invalidatedJobOperations,
     });
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {

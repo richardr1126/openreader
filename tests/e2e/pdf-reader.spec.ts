@@ -24,9 +24,26 @@ test('anonymous user opens a PDF and reads its visible page content', async ({ p
   ).toBeVisible();
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Previous page', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Next page', exact: true })).toBeEnabled();
+  const toolbar = page.getByRole('toolbar', { name: 'Reader' });
+  await expect(toolbar.getByRole('button', { name: 'Open contents', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Previous page', exact: true })).toBeDisabled();
+  await expect(toolbar.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: 'Next page', exact: true })).toBeEnabled();
+  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toHaveCount(1);
+  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toBeVisible();
+
+  // A committed scrub offers a short-lived way back to where the listener was.
+  const position = page.getByRole('slider', { name: 'Playback position', exact: true });
+  await expect.poll(async () => Number(await position.getAttribute('max'))).toBeGreaterThan(0);
+  await position.focus();
+  await position.press('End');
+  await position.press('Enter');
+  const undoScrub = page.getByRole('button', { name: 'Undo scrub', exact: true });
+  await expect(undoScrub).toBeVisible();
+  expect(Number(await position.inputValue())).toBeGreaterThan(0);
+  await undoScrub.click();
+  await expect(undoScrub).toBeHidden();
+  await expect(position).toHaveValue('0');
 
   await page.getByRole('link', { name: 'Back to documents', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);

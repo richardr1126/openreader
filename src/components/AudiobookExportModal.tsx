@@ -7,11 +7,11 @@ import { CheckIcon, ClockIcon, DownloadIcon, RefreshIcon, XCircleIcon } from '@/
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
-import { VoicesControlBase } from '@/components/player/VoicesControlBase';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 import { Badge, Button, IconButton, RangeField, Section, SegmentedControl, SettingRow } from '@/components/ui';
+import { displayVoiceName, formatModelSpeed } from '@/lib/client/tts/voice-draft';
 import {
   triggerDownload,
   useAudiobookExport,
@@ -28,6 +28,8 @@ import type { TtsExportChapterProgress, TtsExportGenerationState } from '@/types
 interface AudiobookExportModalProps {
   isOpen: boolean;
   setIsOpen: (isOpen: boolean) => void;
+  /** Opens the voice panel, which owns voice and model-speed changes. */
+  onChangeVoice: () => void;
   documentType: 'epub' | 'pdf' | 'html';
   documentId: string;
   /** Reader-provided chapter label (for example an EPUB TOC entry). */
@@ -139,6 +141,7 @@ export function AudiobookExportModal({
   documentType,
   documentId,
   resolveChapterTitle,
+  onChangeVoice,
 }: AudiobookExportModalProps) {
   const {
     isLoading,
@@ -150,10 +153,7 @@ export function AudiobookExportModal({
   } = useConfig();
   const {
     voice,
-    availableVoices,
     documentLanguage,
-    setVoiceAndRestart,
-    setSpeedAndRestart,
     setAudioPlayerSpeedAndRestart,
     resolveDocumentAudioExport,
   } = useTTS();
@@ -191,6 +191,9 @@ export function AudiobookExportModal({
     [providerRef, providerType, ttsModel],
   );
   const nativeSpeedSupported = providerModelPolicy.supportsNativeModelSpeed;
+  const voiceSummary = nativeSpeedSupported && voiceSpeed !== 1
+    ? `${displayVoiceName(voice)} · ${formatModelSpeed(voiceSpeed)} model speed`
+    : displayVoiceName(voice);
   const languageWarnings = useMemo(() => getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     voice,
@@ -301,17 +304,21 @@ export function AudiobookExportModal({
       >
         <div className="space-y-4">
           <Section title="Settings" variant="group">
-            <SettingRow label="Voice">
-              <VoicesControlBase
-                availableVoices={availableVoices}
-                voice={voice}
-                onChangeVoice={setVoiceAndRestart}
-                providerType={providerType}
-                ttsModel={ttsModel}
-                dropdownDirection="down"
-                variant="field"
+            <SettingRow
+              label="Voice"
+              description={voiceSummary}
+              meta={isGenerating ? 'Locked while generating. Stop the export to change it.' : undefined}
+              controlClassName="w-auto"
+            >
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onChangeVoice}
                 disabled={isGenerating}
-              />
+                aria-label="Change voice"
+              >
+                Change
+              </Button>
             </SettingRow>
             {languageWarnings.length > 0 && (
               <div className="space-y-1">
@@ -333,19 +340,6 @@ export function AudiobookExportModal({
               />
             </SettingRow>
 
-            {nativeSpeedSupported && (
-              <RangeField
-                label="Model speed"
-                value={voiceSpeed}
-                min={0.5}
-                max={3}
-                step={0.1}
-                formatter={(value) => `${formatSpeed(value)}x`}
-                onChange={(value) => setSpeedAndRestart(value)}
-                disabled={isGenerating}
-              />
-            )}
-
             <RangeField
               label="Audiobook speed"
               value={localAudioPlayerSpeed}
@@ -359,9 +353,6 @@ export function AudiobookExportModal({
               onTouchEnd={commitAudioPlayerSpeed}
               disabled={isBuilding}
             />
-            {isGenerating && (
-              <p className="text-xs text-faint">Voice and model speed are locked while generating.</p>
-            )}
           </Section>
 
           <Section

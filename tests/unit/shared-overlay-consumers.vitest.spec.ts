@@ -8,7 +8,7 @@ const STANDARD_OVERLAY_CONSUMERS = [
   'src/components/ColorPicker.tsx',
   'src/components/doclist/window/FinderSidebar.tsx',
   'src/components/documents/DocumentHeaderMenu.tsx',
-  'src/components/player/Navigator.tsx',
+  'src/components/reader/ReaderToolbar.tsx',
   'src/components/player/SpeedControl.tsx',
 ];
 

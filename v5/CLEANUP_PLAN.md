@@ -348,7 +348,6 @@ Do not delete a path merely because it contains words such as `legacy` or
 | browser `openreader-db` IndexedDB deletion | App provider startup; best-effort cleanup for clients predating server-backed state | Remove after the v4.4.0 release, which completes the documented full release cycle following v4.3.0 |
 | non-EPUB TTS locator `location`/`page` fallbacks | Shared TTS locator identity; PDF and HTML plans still use these fields | Remove only after a versioned plan migration guarantees all supported persisted plans use replacement typed locator fields |
 | `API_BASE` / `API_KEY` / `API_MODEL_NAME` provider bootstrap seed | Admin provider seeding; lets env-only v4 installations materialize their first shared provider row | Remove in OpenReader 5.0 with the env reference, templates, seed tests, and fallback branch after supported v4 upgrades are expected to have provider rows |
-| legacy HTML reader-position token parsing | Reader progress bootstrap; accepts pre-typed `page:ordinal` HTML positions until the next progress write stores the typed `html:<location>:<ordinal>` token | Remove after a migration rewrites stored HTML positions and the supported upgrade floor excludes unmigrated position tokens |
 | historical `defaultTtsProvider` / `defaultTtsModel` row cleanup | Admin startup seed; removes obsolete env-seed settings that conflict with provider-owned defaults | Remove after the supported database upgrade floor guarantees those rows were deleted by a versioned migration |
 
 Avoid open-ended “just in case” compatibility. When a removal condition is met,
@@ -883,6 +882,15 @@ through the existing authenticated operation SSE proxy and projects worker
 `fetching`, `converting`, and `uploading` phases into the same status model. The
 Finder sidebar presents that combined lifecycle with cancel, retry, completion,
 and failure states; no polling or second upload-progress source remains.
+
+### Post-roadmap reading-position hard cut
+
+Reading progress and bookmarks store only the playback segment cursor
+(`segment_key`, `segment_ordinal`). The `reader_type`/`location` progress columns,
+the EPUB progress codec, the shared PDF/HTML reader-position token parser
+(including its legacy `page:ordinal` HTML branch), per-reader progress writers,
+and bookmark reader-type filtering were removed. Migration `0021_ios_parity`
+rewrites stored positions once, so no runtime token parsing remains.
 
 ### Step Status
 

@@ -4,6 +4,7 @@ import { parseHTML } from 'linkedom';
 import { Readability } from '@mozilla/readability';
 import TurndownService from 'turndown';
 import { AntiSSRFPolicy, PolicyConfigOptions } from '@microsoft/antissrf';
+import { normalizeAuthor, normalizeLanguage } from '@/lib/server/documents/import-metadata';
 
 const MAX_BYTES = 2 * 1024 * 1024;
 const TIMEOUT_MS = 6000;
@@ -181,7 +182,7 @@ async function fetchWithLimit(
  */
 export async function fetchAndParseUrl(
   urlStr: string
-): Promise<{ title: string; content: string }> {
+): Promise<{ title: string; content: string; author: string | null; language: string | null }> {
   // 1. Fetch HTML content with limit. The AntiSSRF agent validates the
   //    destination (and every redirect hop) at connection time.
   const { html, finalUrl } = await fetchWithLimit(urlStr);
@@ -215,6 +216,9 @@ export async function fetchAndParseUrl(
     }
   }
 
+  // Read before Readability, which rewrites the document in place.
+  const declaredLanguage = document.documentElement?.getAttribute('lang') ?? null;
+
   // 3. Run Readability to extract core article text
   const reader = new Readability(document as unknown as Document);
   const article = reader.parse();
@@ -239,5 +243,7 @@ export async function fetchAndParseUrl(
   return {
     title: article.title?.trim() || 'Web Import',
     content: markdown,
+    author: normalizeAuthor(article.byline),
+    language: normalizeLanguage(article.lang) ?? normalizeLanguage(declaredLanguage),
   };
 }

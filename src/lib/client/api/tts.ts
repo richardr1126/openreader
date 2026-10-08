@@ -468,3 +468,33 @@ export const postTtsPlaybackCursor = async (
   }
   return response.json().catch(() => null);
 };
+
+/** A voice preview the server refused, with a message fit to show inline. */
+export class VoicePreviewRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code: string | null) {
+    super(message);
+    this.name = 'VoicePreviewRequestError';
+  }
+}
+
+/** Fetches a short, uncached MP3 sample of `text` spoken with draft settings. */
+export const fetchVoicePreview = async (
+  payload: { settings: TTSSegmentSettings; text: string },
+  signal?: AbortSignal,
+): Promise<Blob> => {
+  const response = await fetch('/api/tts/voice-preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+  if (!response.ok) {
+    const problem = await response.json().catch(() => null) as { code?: unknown } | null;
+    const code = typeof problem?.code === 'string' ? problem.code : null;
+    const message = response.status === 429
+      ? 'Previews are limited right now. Try again shortly.'
+      : 'Preview is unavailable right now.';
+    throw new VoicePreviewRequestError(message, response.status, code);
+  }
+  return await response.blob();
+};

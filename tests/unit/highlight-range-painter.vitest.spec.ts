@@ -6,9 +6,9 @@ import {
 
 describe('range highlight painter', () => {
   test('updates a named highlight without mutating the text range', () => {
-    const registry = { set: vi.fn(), delete: vi.fn(() => true) };
-    class FakeHighlight {
-      constructor(public range: Range) {}
+    const registry = { get: vi.fn(), set: vi.fn(), delete: vi.fn(() => true) };
+    class FakeHighlight extends Set<Range> {
+      constructor(range: Range) { super([range]); }
     }
     const styles: Array<{ dataset: Record<string, string>; textContent: string }> = [];
     const document = {
@@ -32,9 +32,9 @@ describe('range highlight painter', () => {
   });
 
   test('updates the injected rule when the active theme color changes', () => {
-    const registry = { set: vi.fn(), delete: vi.fn(() => true) };
-    class FakeHighlight {
-      constructor(public range: Range) {}
+    const registry = { get: vi.fn(), set: vi.fn(), delete: vi.fn(() => true) };
+    class FakeHighlight extends Set<Range> {
+      constructor(range: Range) { super([range]); }
     }
     const style = { dataset: {}, textContent: 'old rule' };
     const document = {
@@ -62,5 +62,42 @@ describe('range highlight painter', () => {
       startContainer: { nodeType: 3, ownerDocument: document },
     } as unknown as Range;
     expect(paintRangeHighlight(range, 'openreader-word', 'background: purple;')).toBe(false);
+  });
+
+  test('rapid hover updates invalidate old ranges without replacing the registered highlight', () => {
+    const registry = new Map<string, Set<Range>>();
+    const register = vi.spyOn(registry, 'set');
+    const document = {
+      defaultView: { CSS: { highlights: registry }, Highlight: Set },
+      head: { querySelector: () => ({ textContent: '' }) },
+    } as unknown as Document;
+    class FakeHighlight extends Set<Range> {
+      constructor(...ranges: Range[]) { super(ranges); }
+    }
+    Object.assign(document.defaultView!, { Highlight: FakeHighlight });
+    const range = () => ({
+      startContainer: { nodeType: 3, ownerDocument: document },
+    }) as unknown as Range;
+
+    const first = range();
+    paintRangeHighlight(first, 'hover', 'background: purple;');
+    const highlight = registry.get('hover')!;
+    const invalidate = vi.spyOn(highlight, 'clear');
+    for (let i = 0; i < 250; i += 1) {
+      const next = range();
+      paintRangeHighlight(next, 'hover', 'background: purple;');
+      expect(registry.get('hover')).toBe(highlight);
+      expect([...highlight]).toEqual([next]);
+      expect(highlight.has(first)).toBe(false);
+    }
+    expect(register).toHaveBeenCalledOnce();
+    expect(invalidate).toHaveBeenCalledTimes(250);
+
+    const otherRange = range();
+    paintRangeHighlight(otherRange, 'playing', 'background: blue;');
+    clearRangeHighlight(document, 'hover');
+    expect(highlight.size).toBe(0);
+    expect(registry.has('hover')).toBe(false);
+    expect([...registry.get('playing')!]).toEqual([otherRange]);
   });
 });

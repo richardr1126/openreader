@@ -29,9 +29,10 @@ describe('shared Select consumers', () => {
     expect(source).toContain('<Transition');
   });
 
-  test('audiobook export delegates voice dropdown rendering', () => {
+  test('audiobook export delegates voice changes to the voice panel', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/AudiobookExportModal.tsx'), 'utf8');
-    expect(source).toContain('<VoicesControlBase');
+    expect(source).toContain('onClick={onChangeVoice}');
+    expect(source).not.toContain('setVoiceSettingsAndRestart');
     expect(source).not.toContain('<Listbox');
     expect(source).not.toContain('<SharedListboxButton');
     expect(source).not.toContain('<SharedListboxOptions');

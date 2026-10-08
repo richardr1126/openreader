@@ -10,6 +10,10 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { usePDFResize } from '@/hooks/pdf/usePDFResize';
 import type { PdfDocumentState } from '@/app/(app)/pdf/[id]/usePdfDocument';
 import type { ParsedPdfBlock, ParsedPdfPage } from '@/types/parsed-pdf';
+import { resolvePdfBlockAtPoint } from '@/lib/client/pdf';
+import { indexSegmentsBySource, resolvePointInUnit } from '@/lib/client/reader/segment-hit';
+import { bindTapToSeek } from '@/lib/client/reader/tap-to-seek';
+import { useLatestRef } from '@/hooks/useLatestRef';
 
 interface PDFViewerProps {
   zoomLevel: number;
@@ -62,6 +66,8 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     resolvedLanguage,
     playbackPlanReady,
     playbackPlanSegmentCount,
+    playbackSegments,
+    skipToOrdinal,
   } = useTTS();
   const {
     currentSentence,
@@ -84,6 +90,27 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     parsedDocument,
     parsedOverlayEnabled,
   } = pdfState;
+
+  // Tap a sentence to play from it. Parsed blocks are plan source units, so a
+  // tap resolves within the block's own sentences on the rendered text layer.
+  const segmentsByBlock = useMemo(() => indexSegmentsBySource(playbackSegments), [playbackSegments]);
+  const tapStateRef = useLatestRef({ segmentsByBlock, parsedDocument, resolvedLanguage, skipToOrdinal });
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return bindTapToSeek(container, {
+      resolve: (point) => {
+        const { segmentsByBlock: index, parsedDocument: parsed, resolvedLanguage: language } = tapStateRef.current;
+        if (!parsed) return null;
+        const unit = resolvePdfBlockAtPoint(container, parsed, point);
+        if (!unit) return null;
+        return resolvePointInUnit(unit.spans, index.get(unit.sourceKey) ?? [], point, language);
+      },
+      seek: (ordinal) => {
+        tapStateRef.current.skipToOrdinal(ordinal);
+      },
+    });
+  }, [tapStateRef]);
 
   // IMPORTANT:
   // - pdf.js may transfer/detach ArrayBuffers when sending them to its worker, so we must clone.

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { isTtsProviderType, type TtsProviderType } from '@openreader/tts/provider-catalog';
+import { TTS_VOICE_PREVIEW_MAX_TEXT_CHARS } from '../jobs/playback/voice-preview';
 
 const bboxSchema = z.tuple([z.number(), z.number(), z.number(), z.number()]);
 const parsedPdfBlockKindSchema = z.enum([
@@ -146,6 +148,20 @@ export const ttsPlaybackSessionPrepareSchema = ttsPlaybackOperationCreateSchema.
   generationRunId: z.string().trim().min(1).max(128),
 }).strict();
 
+/** One short in-memory voice sample; never part of a playback session. */
+export const ttsVoicePreviewRequestSchema = z.object({
+  settings: z.object({
+    providerRef: z.string().trim().min(1).max(256),
+    providerType: z.string().refine((value): value is TtsProviderType => isTtsProviderType(value)),
+    ttsModel: z.string().trim().min(1).max(256),
+    voice: z.string().trim().min(1).max(512),
+    nativeSpeed: z.number().min(0.5).max(3),
+    ttsInstructions: z.string().max(4000).optional(),
+    language: z.string().trim().min(1).max(64).optional(),
+  }).strict(),
+  text: z.string().trim().min(1).max(TTS_VOICE_PREVIEW_MAX_TEXT_CHARS),
+}).strict();
+
 export const ttsPlaybackCursorUpdateSchema = z.object({
   sessionInstanceId: z.string().trim().min(1).max(256),
   ordinal: z.number().int().nonnegative(),
@@ -179,6 +195,59 @@ export const ttsPlaybackSessionResolveSchema = z.object({
   planObjectKey: z.string().trim().min(1).max(2048),
   purpose: z.enum(['live', 'export-document']),
 }).strict();
+
+export const ttsPlaybackCacheReclaimSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  /**
+   * The cache variant to keep. Omit `settingsHash` to keep every variant of
+   * that version; pass null to reclaim every variant of the document.
+   */
+  keep: z.object({
+    documentVersion: z.number().int().nonnegative(),
+    settingsHash: z.string().trim().min(1).max(256).optional(),
+  }).strict().nullable(),
+}).strict();
+
+export const ttsPlaybackCacheReclaimResponseSchema = z.object({
+  reclaimedVariants: z.number(),
+  deletedAudioObjects: z.number(),
+  deletedSidecarObjects: z.number(),
+  deletedExportObjects: z.number(),
+  invalidatedPlaybackSessions: z.number(),
+  invalidatedJobOperations: z.number(),
+});
+
+export const userStorageUsageSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  /** Scan the user's playback audio, sidecars, and exports. */
+  includePlayback: z.boolean(),
+  documentId: documentIdSchema.optional(),
+  derivedDocumentIds: z.array(documentIdSchema).max(100),
+  namespace: namespaceSchema,
+}).strict();
+
+export const userStorageUsageResponseSchema = z.object({
+  documents: z.array(z.object({
+    documentId: z.string(),
+    variants: z.array(z.object({
+      documentVersion: z.number(),
+      settingsHash: z.string(),
+      bytes: z.number(),
+      objects: z.number(),
+    })),
+    exports: z.array(z.object({
+      documentVersion: z.number().nullable(),
+      settingsHash: z.string().nullable(),
+      bytes: z.number(),
+      objects: z.number(),
+    })),
+    derivedBytes: z.number(),
+    derivedObjects: z.number(),
+  })),
+  scannedObjects: z.number(),
+  truncated: z.boolean(),
+});
 
 export const userStorageCleanupSchema = z.object({
   storageUserId: z.string().trim().min(1).max(256),

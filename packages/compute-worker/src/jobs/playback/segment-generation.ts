@@ -1,6 +1,4 @@
 import { generateTTSBuffer } from '@openreader/tts/generate';
-import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
-import { resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import {
   buildTtsPlaybackAudioContentHash,
   buildTtsPlaybackSegmentAudioKey,
@@ -10,7 +8,6 @@ import {
   normalizeSegmentText,
   probeAudioDurationMsFromBuffer,
 } from '@openreader/tts/segments';
-import type { TTSSegmentSettings } from '@openreader/tts/types';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
 import { runWhisperAlignmentFromAudioBuffer } from '../../inference/runtime';
 import { withTimeout } from '../../infrastructure/config';
@@ -18,6 +15,7 @@ import { requireTtsSegmentTextHashSecret } from '../../infrastructure/credential
 import type { TtsPlaybackStorage } from '../../playback/storage';
 import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
 import { parseTtsSettings, type TtsPlaybackSegmentInput } from './plan';
+import { resolveEffectiveTtsSettings } from './provider-settings';
 import type { TtsPlaybackRequest } from './schemas';
 import type { ModelDownloadProgressHandler } from '../../inference/model-download';
 import { ProviderCapacityWaitTimeoutError } from '../provider-capacity';
@@ -55,7 +53,7 @@ function bufferToArrayBuffer(buffer: Buffer): ArrayBuffer {
   return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength) as ArrayBuffer;
 }
 
-async function withAbortableTimeout<T>(
+export async function withAbortableTimeout<T>(
   run: (signal: AbortSignal) => Promise<T>,
   timeoutMs: number,
   label: string,
@@ -189,7 +187,6 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     throw error;
   }
   const effectiveProviderRef = requestCreds.providerRef;
-  const resolvedProviderType = requestCreds.providerType;
   const configuredProviderConcurrency = input.getProviderMaxConcurrent?.(effectiveProviderRef);
   const providerDepth = configuredProviderConcurrency == null
     ? TTS_SYNTHESIS_PIPELINE_DEPTH
@@ -199,30 +196,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   const synthesisPipelineDepth = input.request.generationExtent === 'document'
     ? Math.max(1, providerDepth - 1)
     : providerDepth;
-  const effectiveModel = resolveTtsModelForProvider({
-    providerRef: effectiveProviderRef,
-    providerType: resolvedProviderType,
-    model: settings.ttsModel,
-    sharedProviders: [{
-      slug: requestCreds.providerRef,
-      providerType: requestCreds.providerType,
-      defaultModel: requestCreds.defaultModel,
-      defaultInstructions: requestCreds.defaultInstructions,
-    }],
-    fallbackProviderRef: '',
-    showAllProviderModels: true,
-  });
-  const effectiveSettings: TTSSegmentSettings = {
-    ...settings,
-    providerRef: effectiveProviderRef,
-    providerType: resolvedProviderType,
-    ttsModel: effectiveModel,
-    ttsInstructions: resolveEffectiveTtsInstructions({
-      model: effectiveModel,
-      requestInstructions: settings.ttsInstructions,
-      sharedDefaultInstructions: requestCreds.defaultInstructions,
-    }) ?? '',
-  };
+  const effectiveSettings = resolveEffectiveTtsSettings(settings, requestCreds);
 
   const secret = requireTtsSegmentTextHashSecret();
   const normalized = input.segments.map((segment) => {

@@ -17,6 +17,9 @@ type RegisterUploadedDocumentInput = {
   size: number;
   lastModified: number;
   folderId?: string | null;
+  /** Import metadata; a null keeps whatever an earlier import of the same document stored. */
+  author?: string | null;
+  language?: string | null;
   schedulePreview?: (task: () => Promise<void>) => void;
 };
 
@@ -49,6 +52,8 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
       lastModified: input.lastModified,
       filePath: input.documentId,
       folderId: input.folderId ?? null,
+      author: input.author ?? null,
+      language: input.language ?? null,
     })
     .onConflictDoUpdate({
       target: [documents.id, documents.userId],
@@ -59,9 +64,11 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
         lastModified: input.lastModified,
         filePath: input.documentId,
         ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
+        ...(input.author ? { author: input.author } : {}),
+        ...(input.language ? { language: input.language } : {}),
       },
     })
-    .returning({ folderId: documents.folderId });
+    .returning({ folderId: documents.folderId, author: documents.author, language: documents.language });
 
   const enqueuePreview = async () => {
     await enqueueDocumentPreview(
@@ -96,5 +103,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
     lastModified: input.lastModified,
     scope: 'user',
     folderId: storedDocument?.folderId ?? undefined,
+    ...(storedDocument?.author ? { author: storedDocument.author } : {}),
+    ...(storedDocument?.language ? { language: storedDocument.language } : {}),
   };
 }

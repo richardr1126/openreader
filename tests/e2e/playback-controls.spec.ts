@@ -208,61 +208,56 @@ test('anonymous user controls playback across every accepted document journey', 
   const voiceButton = page.getByRole('button', { name: /^Voice: / }).first();
   const initialVoiceLabel = await voiceButton.getAttribute('aria-label');
   expect(initialVoiceLabel).toBeTruthy();
-  await voiceButton.click();
-  const voiceOptions = page.getByRole('option');
-  await expect(voiceOptions.first()).toBeVisible();
-  const alternativeVoice = (await voiceOptions.allTextContents())
-    .map((voice) => voice.trim())
-    .find((voice) => voice && !initialVoiceLabel?.includes(voice));
-  expect(alternativeVoice).toBeTruthy();
-  await page.getByRole('option', { name: alternativeVoice!, exact: true }).click();
 
-  // A voice change rebuilds the playback plan, so it asks first. Cancelling
-  // leaves the voice alone.
-  const planChangeDialog = (title: string) => page
-    .getByTestId('confirm-dialog-panel')
-    .filter({ has: page.getByRole('heading', { name: title, exact: true }) });
-  const voiceDialog = planChangeDialog('Change the voice?');
-  await expect(voiceDialog).toHaveCSS('opacity', '1');
-  await voiceDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(voiceDialog).toBeHidden();
+  // Voice and model speed regenerate audio, so the voice panel edits a draft
+  // that only Apply commits. Discard leaves the voice alone.
+  await voiceButton.click();
+  const voicePanel = page.getByRole('dialog', { name: 'Voice', exact: true });
+  await expect(voicePanel.getByRole('heading', { name: 'Voice', exact: true })).toBeVisible();
+  const alternativeVoiceRow = voicePanel.locator('button[aria-pressed="false"]').first();
+  const alternativeVoice = (await alternativeVoiceRow.textContent())?.trim();
+  expect(alternativeVoice).toBeTruthy();
+  await alternativeVoiceRow.click();
+  const pendingChanges = voicePanel.getByRole('region', { name: 'Pending voice changes' });
+  await expect(pendingChanges).toContainText(alternativeVoice!);
+  await pendingChanges.getByRole('button', { name: 'Discard', exact: true }).click();
+  await expect(pendingChanges).toBeHidden();
   await expect(voiceButton).toHaveAttribute('aria-label', initialVoiceLabel!);
 
-  await voiceButton.click();
-  await page.getByRole('option', { name: alternativeVoice!, exact: true }).click();
-  await expect(voiceDialog).toHaveCSS('opacity', '1');
-  await voiceDialog.getByRole('button', { name: 'Change and regenerate', exact: true }).click();
+  await voicePanel.getByRole('button', { name: alternativeVoice!, exact: true }).click();
+  await pendingChanges.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(pendingChanges).toBeHidden();
   await expect(voiceButton).not.toHaveAttribute('aria-label', initialVoiceLabel!);
-  const changedVoiceLabel = await voiceButton.getAttribute('aria-label');
-  expect(changedVoiceLabel).toBeTruthy();
   await expect(playButton).toBeEnabled({ timeout: 60_000 });
 
-  await page.getByRole('button', { name: '1x', exact: true }).click();
-  const nativeSpeed = page.getByRole('slider', { name: 'Native model speed', exact: true });
+  // Closing the panel discards an unapplied model speed.
+  const modelSpeed = voicePanel.getByRole('slider', { name: 'Model speed', exact: true });
+  await modelSpeed.focus();
+  await modelSpeed.press('ArrowRight');
+  await expect(pendingChanges).toContainText('Speed 1x → 1.1x');
+  await voicePanel.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(voicePanel).toBeHidden();
+  await voiceButton.click();
+  await expect(modelSpeed).toHaveValue('1');
+  await expect(pendingChanges).toBeHidden();
+  await modelSpeed.focus();
+  await modelSpeed.press('ArrowRight');
+  await pendingChanges.getByRole('button', { name: 'Apply', exact: true }).click();
+  await expect(voiceButton).toHaveAttribute('aria-label', / · 1\.1x$/);
+  const changedVoiceLabel = await voiceButton.getAttribute('aria-label');
+  expect(changedVoiceLabel).toBeTruthy();
+  await voicePanel.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(voicePanel).toBeHidden();
+  await expect(playButton).toBeEnabled({ timeout: 60_000 });
+
+  // Player speed is instant and stays in the dock.
+  await page.getByRole('button', { name: 'Playback speed 1x', exact: true }).click();
   const audioSpeed = page.getByRole('slider', { name: 'Audio player speed', exact: true });
-
-  await nativeSpeed.focus();
-  await nativeSpeed.press('ArrowRight');
-  const speedDialog = planChangeDialog('Change native model speed?');
-  await expect(speedDialog).toHaveCSS('opacity', '1');
-  await speedDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(speedDialog).toBeHidden();
-
-  // The dialog takes focus from the popover, so reopen it; the slider reverted.
-  await page.getByRole('button', { name: '1x', exact: true }).click();
-  await expect(nativeSpeed).toHaveValue('1');
-  await nativeSpeed.focus();
-  await nativeSpeed.press('ArrowRight');
-  await expect(speedDialog).toHaveCSS('opacity', '1');
-  await speedDialog.getByRole('button', { name: 'Change and regenerate', exact: true }).click();
-  const changedSpeedButton = page.getByRole('button', { name: '1.1x', exact: true });
-  await expect(changedSpeedButton).toBeEnabled({ timeout: 60_000 });
-
-  await changedSpeedButton.click();
   await expect(audioSpeed).toBeVisible();
   await audioSpeed.focus();
   await audioSpeed.press('ArrowRight');
-  await expect(page.getByRole('button', { name: '1.1x • 1.1x', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Playback speed 1.1x', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await startAndCancelPlayback(page);
 
@@ -274,7 +269,9 @@ test('anonymous user controls playback across every accepted document journey', 
   const initialSegmentLength = await segmentLength.inputValue();
   await segmentLength.focus();
   await segmentLength.press('ArrowRight');
-  const segmentDialog = planChangeDialog('Change the maximum segment length?');
+  const segmentDialog = page
+    .getByTestId('confirm-dialog-panel')
+    .filter({ has: page.getByRole('heading', { name: 'Change the maximum segment length?', exact: true }) });
   await expect(segmentDialog).toHaveCSS('opacity', '1');
   await segmentDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(segmentDialog).toBeHidden();
@@ -286,7 +283,7 @@ test('anonymous user controls playback across every accepted document journey', 
     page.getByRole('heading', { name: 'multilingual-sample.txt', exact: true }),
   ).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole('button', { name: changedVoiceLabel!, exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: '1.1x • 1.1x', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Playback speed 1.1x', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeEnabled({
     timeout: 30_000,
   });

@@ -1,4 +1,5 @@
 import type { AppConfigValues } from '@/types/config';
+import type { ReadingPosition } from '@/lib/shared/reading-position';
 
 export const SYNCED_PREFERENCE_KEYS = [
   'viewType',
@@ -6,6 +7,7 @@ export const SYNCED_PREFERENCE_KEYS = [
   'audioPlayerSpeed',
   'voice',
   'epubTheme',
+  'readerShowsLayout',
   'ttsSegmentMaxBlockLength',
   'headerMargin',
   'footerMargin',
@@ -31,35 +33,22 @@ export type SyncedPreferencesPatch = Partial<SyncedPreferences>;
 
 export type ReaderType = 'pdf' | 'epub' | 'html';
 
-export type EpubProgressLocator = {
-  schemaVersion: 1;
-  spineHref: string;
-  spineIndex: number;
-  charOffset: number;
-};
-
-type DocumentProgressRecordBase = {
+/** Saved reading progress: the playback cursor (see `@/lib/shared/reading-position`). */
+export type DocumentProgressRecord = ReadingPosition & {
   documentId: string;
+  /** Fraction of the plan before the cursor, for library display. */
   progress: number | null;
   clientUpdatedAtMs: number;
   updatedAtMs: number;
 };
 
-export type DocumentProgressRecord = DocumentProgressRecordBase & (
-  | { readerType: 'pdf' | 'html'; location: string }
-  | { readerType: 'epub'; locator: EpubProgressLocator }
-);
-
-type DocumentProgressPayloadBase = {
+export type DocumentProgressPayload = {
   documentId: string;
+  segmentKey: string;
+  segmentOrdinal: number;
   progress?: number | null;
   clientUpdatedAtMs?: number;
 };
-
-export type DocumentProgressPayload = DocumentProgressPayloadBase & (
-  | { readerType: 'pdf' | 'html'; location: string }
-  | { readerType: 'epub'; locator: EpubProgressLocator }
-);
 
 export type ScheduleDocumentProgress = (
   payload: DocumentProgressPayload,

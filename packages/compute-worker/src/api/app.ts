@@ -62,6 +62,8 @@ import { fetchComputeLimitPolicy } from '../jobs/compute-limit-policy-broker';
 import { notifyComputeAdmissionTerminal } from '../jobs/compute-limit-broker';
 import { cloneComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
 import { ProviderCapacityCoordinator } from '../jobs/provider-capacity';
+import { resolveTtsCredentialsFromBroker } from '../jobs/tts-credential-broker';
+import { generateTTSBuffer } from '@openreader/tts/generate';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
 import {
   ACCOUNT_EXPORT_JOBS_SUBJECT,
@@ -210,6 +212,9 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       objectExists: storageDisabled,
       deleteObject: storageDisabled,
       listPrefix: storageDisabled,
+      listPrefixPages: async function* () {
+        yield await storageDisabled();
+      },
       putObject: storageDisabled,
       putParsedPdf: storageDisabled,
     }
@@ -352,6 +357,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     },
   });
 
+  const providerCapacity = new ProviderCapacityCoordinator(
+    () => computePolicy,
+    async () => (await ensureConnected()).kv,
+    app.log,
+  );
+
   registerComputeWorkerRoutes({
     app,
     deps: {
@@ -371,13 +382,14 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     onActiveSseChanged: (delta) => {
       activeSse = Math.max(0, activeSse + delta);
     },
+    ttsVoicePreview: {
+      resolveCredentials: resolveTtsCredentialsFromBroker,
+      synthesize: generateTTSBuffer,
+      acquireProviderCapacity: (input) => providerCapacity.acquire(input),
+      synthesisTimeoutMs: ttsPlaybackSegmentTimeoutMs,
+    },
   });
 
-  const providerCapacity = new ProviderCapacityCoordinator(
-    () => computePolicy,
-    async () => (await ensureConnected()).kv,
-    app.log,
-  );
   const jobHandlers = createJobHandlers({
     storage,
     playbackStorage,

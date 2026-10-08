@@ -24,6 +24,7 @@ import {
   registerPlaybackJobRoutes,
   registerPlaybackSessionRoutes,
 } from './routes/playback/sessions';
+import { registerVoicePreviewRoutes } from './routes/playback/voice-preview';
 
 export type { ComputeWorkerRouteDeps } from './route-context';
 
@@ -46,6 +47,7 @@ export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext):
   registerPlaybackAudioRoutes(context, playbackReadModel, playbackController);
   registerDocumentJobRoutes(context);
   registerPlaybackJobRoutes(context, playbackController);
+  registerVoicePreviewRoutes(context);
   registerAccountExportRoutes(context);
   registerEmailDeliveryRoutes(context);
   registerPlaybackExportJobRoutes(context);

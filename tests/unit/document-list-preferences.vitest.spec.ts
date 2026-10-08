@@ -48,4 +48,13 @@ describe('document-list preferences', () => {
       sidebarCollapsed: true,
     });
   });
+
+  test('keeps the new author and recently-opened sorts and drops unknown sort keys', () => {
+    expect(normalizeDocumentListState({ sortBy: 'author', sortDirection: 'asc' }).sortBy).toBe('author');
+    expect(normalizeDocumentListState({ sortBy: 'opened', sortDirection: 'desc' }).sortBy).toBe('opened');
+    expect(normalizeDocumentListState({
+      sortBy: 'rating',
+      sortDirection: 'asc',
+    } as unknown as DocumentListState).sortBy).toBe('name');
+  });
 });

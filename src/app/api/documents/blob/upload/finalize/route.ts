@@ -24,6 +24,7 @@ import {
   headTempUploadForConversion,
 } from '@/lib/server/documents/docx-conversion-jobs';
 import { registerUploadedDocument } from '@/lib/server/documents/register-upload';
+import { extractImportMetadata, type ImportMetadata } from '@/lib/server/documents/import-metadata';
 import { withDocumentBlobLease } from '@/lib/server/documents/blob-lease';
 import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents/utils';
 import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
@@ -46,6 +47,8 @@ type FinalizeUpload = {
   type: DocumentType;
   lastModified: number;
   folderId: string | null | undefined;
+  /** Client-supplied import hints (catalog entry, article byline); validated in extractImportMetadata. */
+  hints: Partial<ImportMetadata>;
 };
 
 class UploadFolderError extends Error {
@@ -131,6 +134,10 @@ function parseFinalizePayload(body: unknown): FinalizeUpload[] {
       type: normalizeDocumentType(rec.type, name),
       lastModified: normalizeLastModified(rec.lastModified),
       folderId,
+      hints: {
+        author: typeof rec.author === 'string' ? rec.author : null,
+        language: typeof rec.language === 'string' ? rec.language : null,
+      },
     });
   }
   return uploads;
@@ -215,6 +222,7 @@ async function registerConvertedDocx(input: {
       size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : input.artifact.byteLength,
       lastModified: input.upload.lastModified,
       folderId: input.upload.folderId,
+      ...extractImportMetadata({ type: 'pdf', name: finalizedName, body: null, hints: input.upload.hints }),
       schedulePreview: input.schedulePreview,
     });
   });
@@ -356,6 +364,12 @@ async function finalizeOne(input: {
     : temp.contentType;
   const finalizedName = input.upload.name;
   const documentId = createHash('sha256').update(finalizedBody).digest('hex');
+  const metadata = extractImportMetadata({
+    type: finalizedType,
+    name: finalizedName,
+    body: finalizedBody,
+    hints: input.upload.hints,
+  });
 
   const stored = await withDocumentBlobLease(documentId, async () => {
     // Keep the canonical blob and ownership-row write under the same durable
@@ -389,6 +403,7 @@ async function finalizeOne(input: {
       size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : finalizedBody.byteLength,
       lastModified: input.upload.lastModified,
       folderId: input.upload.folderId,
+      ...metadata,
       schedulePreview: input.schedulePreview,
     });
   });

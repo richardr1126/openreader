@@ -1,12 +1,18 @@
 'use client';
 
+type RangeHighlight = {
+  clear: () => void;
+  add: (range: Range) => unknown;
+};
+
 type HighlightRegistry = {
-  set: (name: string, highlight: unknown) => void;
+  get: (name: string) => RangeHighlight | undefined;
+  set: (name: string, highlight: RangeHighlight) => void;
   delete: (name: string) => boolean;
 };
 
 type HighlightWindow = Window & {
-  Highlight?: new (...ranges: Range[]) => unknown;
+  Highlight?: new (...ranges: Range[]) => RangeHighlight;
   CSS: typeof CSS & { highlights?: HighlightRegistry };
 };
 
@@ -41,11 +47,23 @@ export function paintRangeHighlight(
     document.head.appendChild(style);
   }
 
-  registry.set(name, new Highlight(range));
+  // Keep the registered object and update its ranges. Replacing it with
+  // CSS.highlights.set(name, new Highlight(...)) can leave the previous range
+  // painted in WebKit during rapid hover updates (WebKit bug 321567).
+  const existingHighlight = registry.get(name);
+  if (existingHighlight) {
+    existingHighlight.clear();
+    existingHighlight.add(range);
+  } else {
+    registry.set(name, new Highlight(range));
+  }
   return true;
 }
 
 export function clearRangeHighlight(document: Document, name: string): void {
   const view = document.defaultView as HighlightWindow | null;
-  view?.CSS?.highlights?.delete(name);
+  const registry = view?.CSS?.highlights;
+  // Invalidate the painted ranges before unregistering their highlight.
+  registry?.get(name)?.clear();
+  registry?.delete(name);
 }

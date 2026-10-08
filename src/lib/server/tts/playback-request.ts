@@ -64,7 +64,7 @@ function readOptionalSkipBlockKinds(record: Record<string, unknown>): ParsedPdfB
   return Array.from(new Set(out));
 }
 
-function parseSettings(value: unknown): TTSSegmentSettings | null {
+export function parseTtsSegmentSettings(value: unknown): TTSSegmentSettings | null {
   if (!value || typeof value !== 'object') return null;
   const rec = value as Record<string, unknown>;
   if (typeof rec.providerRef !== 'string') return null;
@@ -89,7 +89,7 @@ export function parseTtsPlaybackRequestBody(value: unknown): ParsedTtsPlaybackRe
   if (!value || typeof value !== 'object') return null;
   const rec = value as Record<string, unknown>;
   const documentId = typeof rec.documentId === 'string' ? rec.documentId.trim().toLowerCase() : '';
-  const settings = parseSettings(rec.settings);
+  const settings = parseTtsSegmentSettings(rec.settings);
   if (!documentId || !settings) return null;
 
   const startRec = rec.startLocation === undefined
