@@ -72,6 +72,7 @@ describe('playback grid mapping', () => {
     const anchorSec = merged.segments[1].startMs / 1000;
     expect(projectPlaybackGridAtTime(merged, mediaTimeToDocumentTime(0.75, anchorSec)).wordIndex).toBe(1);
     expect(mergePlaybackGrid(merged, { ...overview, sessionId: 'replacement' }).segments[1].generated).toBe(false);
+    expect(mergePlaybackGrid(merged, { ...overview, status: 'canceled' }).segments[1].generated).toBe(false);
   });
   test('translates between a session-relative stream and whole-document time', () => {
     expect(mediaTimeToDocumentTime(2.5, 120)).toBe(122.5);

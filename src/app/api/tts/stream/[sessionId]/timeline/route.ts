@@ -46,7 +46,7 @@ export async function GET(
     if (minOrdinalRaw !== null || limitRaw !== null) {
       const minOrdinal = Number(minOrdinalRaw);
       const limit = Number(limitRaw);
-      if (minOrdinalRaw === null || limitRaw === null || !Number.isSafeInteger(minOrdinal)
+      if (!minOrdinalRaw?.trim() || !limitRaw?.trim() || !Number.isSafeInteger(minOrdinal)
         || minOrdinal < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 256) {
         return NextResponse.json({ error: 'Invalid playback timeline window' }, { status: 400 });
       }

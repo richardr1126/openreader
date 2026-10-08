@@ -49,7 +49,7 @@ test('an overview still reads every cached chapter', async () => {
   expect((await response.json()).readWindow).toBeUndefined();
 });
 
-test.each(['minOrdinal=-1&limit=64', 'minOrdinal=1&limit=257', 'minOrdinal=1', 'limit=64'])('rejects an invalid read window: %s', async (query) => {
+test.each(['minOrdinal=-1&limit=64', 'minOrdinal=1&limit=257', 'minOrdinal=1', 'limit=64', 'minOrdinal=&limit=64', 'minOrdinal=%20&limit=64'])('rejects an invalid read window: %s', async (query) => {
   const response = await GET(new NextRequest(`http://localhost/api/tts/stream/session/timeline?${query}`), {
     params: Promise.resolve({ sessionId: 'session' }),
   });

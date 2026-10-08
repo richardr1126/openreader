@@ -176,8 +176,10 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           if (!sidecar) return;
           if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return;
           if (sidecar.status === 'completed' && sidecar.audioKey) {
+            // An unverifiable source is left for generateSegment to recheck;
+            // one transient HEAD failure must not fail the whole document run.
             if (forceDocumentExtent && (sidecar.durationMs == null
-              || !await input.storage.objectExists(sidecar.audioKey))) return;
+              || !await input.storage.objectExists(sidecar.audioKey).catch(() => false))) return;
             completedOrdinals.add(sidecar.ordinal);
           } else if (sidecar.status === 'error' && !retryErroredSegments) {
             erroredOrdinals.add(sidecar.ordinal);

@@ -130,7 +130,8 @@ export function mergePlaybackGrid(
   previous: TtsPlaybackGrid | null,
   incoming: TtsPlaybackGrid,
 ): TtsPlaybackGrid {
-  if (!previous || previous.sessionId !== incoming.sessionId) return incoming;
+  // A canceled snapshot (for example after clearing audio) is authoritative.
+  if (!previous || previous.sessionId !== incoming.sessionId || incoming.status === 'canceled') return incoming;
   const old = new Map(previous.segments.map((segment) => [segment.ordinal, segment]));
   let cursorMs = 0;
   const segments = incoming.segments.map((segment) => {
