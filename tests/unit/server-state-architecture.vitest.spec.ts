@@ -232,7 +232,6 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/sessions/:sessionId/cancel',
       'POST /v1/tts-playback/cache/clear',
       'POST /v1/tts-playback/cache/reclaim',
-      'POST /v1/tts-playback/exports/expire',
       'POST /v1/tts-playback/exports/jobs',
       'POST /v1/tts-playback/exports/resolve',
       'POST /v1/tts-playback/plans/clear',
@@ -710,7 +709,7 @@ describe('server-state architecture', () => {
     expect(playbackHook).toContain('waitForPlaybackStartBuffer({');
     expect(playbackControl).toContain("layout.status === 'running' || layout.status === 'succeeded'");
     expect(playbackHook).toContain('initialSeekLayout.generationStartOrdinal');
-    expect(playbackHook).toContain('playbackStreamBaseSecRef.current = initialStartSec');
+    expect(playbackHook).toContain('setPlaybackStreamAnchor(initialSeekLayout.generationStartOrdinal, initialStartSec)');
     expect(playbackProjection).toContain('mediaTimeToDocumentTime');
     expect(playbackHook).not.toContain('waitForAudioSeekReady');
     expect(context).not.toContain('return last');
@@ -740,7 +739,7 @@ describe('server-state architecture', () => {
     expect(seekLayoutRoute).toContain('listCompletedTtsPlaybackSegments(session)');
     expect(seekLayoutRoute).not.toContain('minOrdinal');
     expect(streamTimelineRoute).toContain('buildPlaybackGrid');
-    expect(streamTimelineRoute).toContain('listCompletedTtsPlaybackSegments(session)');
+    expect(streamTimelineRoute).toContain('listCompletedTtsPlaybackSegments(session, readWindow)');
     expect(streamTimelineRoute).toContain("throw new Error('TTS playback timeline requires a canonical plan artifact')");
     expect(streamTimelineRoute).toContain('segments: layout.segments');
     expect(streamTimelineRoute).toContain('completedSegments');

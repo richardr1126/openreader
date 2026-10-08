@@ -2,11 +2,8 @@ import { isS3Configured } from '@/lib/server/storage/s3';
 import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import type { TaskContext, TaskResult } from '../types';
 
-// Completed export artifacts (account export ZIPs/manifests and audiobook
-// export files) are reusable snapshots, not permanent user data: a stale
-// artifact is regenerated on the next export request. Seven days comfortably
-// covers download retries and refreshes without letting storage grow with
-// every "Generate new export".
+// Account ZIPs are temporary snapshots. Completed audiobooks stay with their
+// source audio until explicit document/audio/account cleanup.
 const EXPORT_ARTIFACT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
@@ -22,14 +19,13 @@ export async function expireExportArtifacts(context: TaskContext): Promise<TaskR
     return { summary: 'Skipped: compute worker not configured', expiredArtifacts: 0 };
   }
   const client = getComputeWorkerClient();
-  const [accountExports, audiobookExports] = await Promise.all([
-    client.expireAccountExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }, { signal: context.signal }),
-    client.expireTtsPlaybackExportArtifacts({ maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }, { signal: context.signal }),
-  ]);
-  const expiredArtifacts = accountExports.expiredArtifacts + audiobookExports.expiredArtifacts;
+  const accountExports = await client.expireAccountExportArtifacts(
+    { maxAgeMs: EXPORT_ARTIFACT_MAX_AGE_MS }, { signal: context.signal },
+  );
+  const expiredArtifacts = accountExports.expiredArtifacts;
   return {
     summary: `Expired ${expiredArtifacts} export artifact(s)`,
     expiredArtifacts,
-    deletedObjects: accountExports.deletedObjects + audiobookExports.deletedObjects,
+    deletedObjects: accountExports.deletedObjects,
   };
 }

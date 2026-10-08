@@ -44,6 +44,33 @@ describe('playback audio-first segment generation', () => {
     vi.clearAllMocks();
   });
 
+  test('settles audiobook audio without invoking blocked word alignment', async () => {
+    mocks.runAlignment.mockImplementation(() => new Promise(() => undefined));
+    let sidecar: TtsPlaybackSegmentMetadata | null = null;
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    await generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-1', userId: 'user-1', storageUserId: 'user-1', documentId: 'document-1',
+        documentVersion: 1, readerType: 'html', settingsHash: 'settings-1', planObjectKey: 'plan-key',
+        generationExtent: 'document', planning: {},
+        settingsJson: { providerRef: 'local-kokoro', providerType: 'custom-openai', ttsModel: 'kokoro',
+          voice: 'af_heart', nativeSpeed: 1, ttsInstructions: '', language: 'en' },
+      },
+      sessionInstanceId: 'instance-1', s3Prefix: 'openreader',
+      segments: [{ ordinal: 0, text: 'An audiobook does not need word timing.', locator: { readerType: 'html', location: '1' } }],
+      putAudioObject: vi.fn(async () => undefined), audioObjectExists: vi.fn(async () => false),
+      playbackStorage: { artifacts: {
+        readSegmentMetadata: async () => sidecar,
+        putSegmentMetadata: async (metadata: TtsPlaybackSegmentMetadata) => { sidecar = metadata; return 'sidecar'; },
+        getScopeEpoch: async () => 0,
+      } } as unknown as TtsPlaybackStorage,
+      synthesisTimeoutMs: 30_000,
+    });
+    expect(sidecar).toMatchObject({ status: 'completed', durationMs: 12000, alignment: null });
+    expect(mocks.runAlignment).not.toHaveBeenCalled();
+    mocks.runAlignment.mockReset();
+  });
+
   test('reclaims leases from its own incarnation or a superseded run of the session', async () => {
     const { leaseReclaimableByRun } = await import('../../src/jobs/playback/segment-generation');
     const owner = JSON.stringify({

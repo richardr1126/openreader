@@ -174,6 +174,43 @@ describe('POST /api/tts/export/resolve', () => {
     }));
   });
 
+  test('finds a ready file without entering a slow chapter scan', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockImplementation(() => new Promise(() => undefined));
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 2234, skippedSegments: 0 }, operation: null,
+    });
+    const { status, json } = await post({ action: 'resolve', includeProgress: false });
+    expect(status).toBe(200);
+    expect(json.download.filename).toBe('book.mp3');
+    expect(json.progress).toBeNull();
+    expect(hoisted.exportProgress).not.toHaveBeenCalled();
+  });
+
+  test('acknowledges Stop without waiting for chapter storage', async () => {
+    hoisted.resolveSession.mockResolvedValueOnce({
+      session: { status: 'running', generationRunId: 'observed-run' },
+      operation: { opId: 'generation-op', status: 'running' },
+    }).mockResolvedValue({ session: { status: 'canceled' }, operation: null });
+    hoisted.exportProgress.mockImplementation(() => new Promise(() => undefined));
+    const { json } = await post({ action: 'stop', includeProgress: false });
+    expect(hoisted.cancelSession).toHaveBeenCalledWith('session-1', 'observed-run');
+    expect(json.generation.state).toBe('stopped');
+    expect(hoisted.exportProgress).not.toHaveBeenCalled();
+  });
+
+  test('detects a stale file using durable operation counts during fast discovery', async () => {
+    hoisted.resolveSession.mockResolvedValue({ ...completeSession,
+      progress: { completedCount: 2234, plannedCount: 2234, skippedCount: 0 },
+    });
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { generatedSegments: 2233, skippedSegments: 1 }, operation: null,
+    });
+    const { json } = await post({ action: 'resolve', includeProgress: false });
+    expect(json.artifact.state).toBe('stale');
+    expect(json.download).toBeNull();
+  });
+
   test('rechecks generation status before creating the artifact in the same request', async () => {
     hoisted.resolveSession
       .mockResolvedValueOnce({ session: null, operation: null, progress: null })

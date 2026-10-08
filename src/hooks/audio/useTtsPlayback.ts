@@ -117,12 +117,12 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
 
   const {
     playbackCursorOrdinalRef,
-    playbackStreamBaseSecRef,
     playbackTimeSec,
     documentTimeForAudio,
     projectPlaybackTime,
     publishPlaybackTimeSec,
     refreshPlaybackTimeline,
+    setPlaybackStreamAnchor,
     resetPlaybackProjection,
     setAudioDocumentTime,
     startPlaybackProjectionLoop,
@@ -142,7 +142,9 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     startPlaybackForegroundSync,
     stopPlaybackForegroundSync,
     updateWorkerPlaybackCursor,
+    refreshPlaybackOverview,
   } = usePlaybackForegroundSync({
+    audioRef: unlockedAudioRef,
     playbackCursorOrdinalRef,
     playbackRequestHeadersRef,
     playbackRunIdRef,
@@ -192,7 +194,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackSessionRef,
     projectPlaybackTime,
     publishPlaybackTimeSec,
-    refreshPlaybackTimeline,
     setAudioDocumentTime,
     setPlaybackPhase,
     setSelectedOrdinal,
@@ -278,6 +279,9 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
 
   const playWorkerPlaybackStream = useCallback(async () => {
     const runId = playbackRunIdRef.current;
+    const startupStartedAt = performance.now();
+    const startupTiming = { prepareMs: 0, activateMs: 0, readinessMs: 0 };
+    let startupReported = false;
     // React may flush the effect that requested this start immediately after
     // the user canceled it. The intent ref changes synchronously, so check it
     // before stale work can put the controls back into a processing state.
@@ -330,6 +334,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       })();
       if (runId !== playbackRunIdRef.current) return;
       if (!session.sessionInstanceId) throw new Error('Prepared TTS playback session was missing its instance identity');
+      startupTiming.prepareMs = performance.now() - startupStartedAt;
 
       playbackSessionRef.current = {
         sessionId: session.sessionId,
@@ -347,9 +352,12 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
 
       const requestedStartOrdinal = Math.max(0, Math.floor(Number(selectedOrdinal)));
       playbackCursorOrdinalRef.current = requestedStartOrdinal;
+      const activateStartedAt = performance.now();
       await setWorkerPlaybackActive(true, true);
+      startupTiming.activateMs = performance.now() - activateStartedAt;
       if (runId !== playbackRunIdRef.current || !isPlayingRef.current) return;
       startPlaybackForegroundSync(runId);
+      const readinessStartedAt = performance.now();
 
       const initialSeekLayout = await waitForPlaybackStartBuffer({
         sessionId: session.sessionId,
@@ -360,9 +368,8 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         playbackRate: audioSpeed,
       });
       if (runId !== playbackRunIdRef.current || !initialSeekLayout) return;
+      startupTiming.readinessMs = performance.now() - readinessStartedAt;
       setActivePlaybackSeekLayout(initialSeekLayout);
-      await refreshPlaybackTimeline(session.timelineUrl);
-      if (runId !== playbackRunIdRef.current) return;
 
       const initialStartSec = (() => {
         const startOrdinal = initialSeekLayout.generationStartOrdinal;
@@ -409,12 +416,23 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
           projectPlaybackTime(documentTimeSec);
         },
         onPlaying: () => {
+          if (!startupReported) {
+            startupReported = true;
+            const totalMs = performance.now() - startupStartedAt;
+            console.info('tts.playback.startup', {
+              ...startupTiming, totalMs,
+              mediaMs: Math.max(0, totalMs - startupTiming.prepareMs
+                - startupTiming.activateMs - startupTiming.readinessMs),
+              fromOrdinal: initialSeekLayout.generationStartOrdinal,
+            });
+          }
+          refreshPlaybackOverview();
           setPlaybackPhase('playing'); startPlaybackProjectionLoop(audio, runId);
         },
       });
 
       playbackActiveRef.current = true;
-      playbackStreamBaseSecRef.current = initialStartSec;
+      setPlaybackStreamAnchor(initialSeekLayout.generationStartOrdinal, initialStartSec);
       audio.src = session.audioUrl;
       audio.load();
       const activeSession = playbackSessionRef.current;
@@ -427,7 +445,10 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         getDocumentTime: () => documentTimeForAudio(audio),
         getOrdinal: () => playbackCursorOrdinalRef.current,
         getLayout: () => latestSeekLayoutRef.current,
-        setStreamBase: (seconds) => { playbackStreamBaseSecRef.current = seconds; },
+        setStreamBase: (seconds) => {
+          const ordinal = playbackCursorOrdinalRef.current;
+          if (ordinal !== null) setPlaybackStreamAnchor(ordinal, seconds);
+        },
         onBuffering: () => {
           setPlaybackPhase('buffering');
         },
@@ -487,16 +508,16 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackCursorOrdinalRef,
     playbackRunIdRef,
     playbackSegmentsRef,
-    playbackStreamBaseSecRef,
     projectPlaybackTime,
     publishPlaybackTimeSec,
-    refreshPlaybackTimeline,
+    refreshPlaybackOverview,
     resetPlaybackSession,
     setIsPlaying,
     setPlaybackPhase,
     setActivePlaybackSeekLayout,
     setPlaybackSeekLayout,
     setSelectedOrdinal,
+    setPlaybackStreamAnchor,
     setWorkerPlaybackActive,
     startPlaybackForegroundSync,
     startPlaybackProjectionLoop,

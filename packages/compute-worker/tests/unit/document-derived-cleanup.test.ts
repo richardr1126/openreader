@@ -7,6 +7,7 @@ import {
 } from '../../src/storage/document-derived-cleanup';
 
 class MemoryStorage implements ArtifactStorage {
+  async putFile(): Promise<void> { throw new Error('not implemented'); }
   readonly objects = new Map<string, Buffer>();
 
   async readObject(key: string): Promise<ArrayBuffer> {

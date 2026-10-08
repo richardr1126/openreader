@@ -36,7 +36,6 @@ export interface PlaybackSessionReadModel {
     options?: { minOrdinal?: number; limit?: number },
   ): Promise<PlaybackSegmentManifestRow[]>;
   readSegmentState(session: PlaybackSessionRow, ordinal: number): Promise<PlaybackSegmentState>;
-  listCompletedDurations(session: PlaybackSessionRow, planLength: number): Promise<Map<number, number>>;
   /** Every stored segment state for export progress, keyed by plan ordinal. */
   listSegmentStates(session: PlaybackSessionRow, planLength: number): Promise<Map<number, PlaybackSegmentSettledState>>;
   forgetCachedSidecar(session: PlaybackSessionRow, ordinal: number): Promise<void>;
@@ -59,6 +58,12 @@ function isStableCompletedSidecar(
   sidecar: TtsPlaybackSegmentMetadata | null | undefined,
 ): sidecar is TtsPlaybackSegmentMetadata {
   return sidecar?.status === 'completed' && Boolean(sidecar.alignment);
+}
+
+function isCompletedAudioSidecar(
+  sidecar: TtsPlaybackSegmentMetadata | null | undefined,
+): sidecar is TtsPlaybackSegmentMetadata {
+  return sidecar?.status === 'completed' && Boolean(sidecar.audioKey);
 }
 
 function serializeTimelineAlignment(input: {
@@ -153,10 +158,9 @@ export function createPlaybackSessionReadModel(input: {
     const cached = cache.get(ordinal);
     if (cached) return cached;
     const sidecar = await fetchSidecar(session, ordinal, cacheEpoch);
-    // A completed audio sidecar may still receive its best-effort alignment.
-    // Cache it only after word timing is present so a live timeline can observe
-    // the backfill instead of retaining the audio-first snapshot indefinitely.
-    if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
+    // Audio state is immutable within an epoch. Priority timeline windows
+    // independently refresh missing alignment; streaming need not refetch it.
+    if (isCompletedAudioSidecar(sidecar)) cache.set(ordinal, sidecar);
     return sidecar;
   };
 
@@ -174,8 +178,8 @@ export function createPlaybackSessionReadModel(input: {
       const result = new Map<number, TtsPlaybackSegmentMetadata>(cache);
       // List only this user/document/version/settings prefix. A deep cursor
       // must not turn thousands of ungenerated ordinals into serial S3 batches.
-      // Existing exact timing remains cached across chapter changes; unfinished
-      // sidecars are re-read so exact timing can appear as soon as it exists.
+      // Keep completed audio even without alignment. Word timing backfills are
+      // refreshed by explicit cursor windows, not repeated whole-book scans.
       const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(session).catch((error) => {
         logger?.warn({
           sessionId: session.sessionId,
@@ -183,7 +187,7 @@ export function createPlaybackSessionReadModel(input: {
         }, 'tts.playback.timeline_catalogue_read_failed');
         return [];
       }) ?? [])
-        .filter((ordinal) => ordinal < planLength && !isStableCompletedSidecar(cache.get(ordinal)));
+        .filter((ordinal) => ordinal < planLength && !isCompletedAudioSidecar(cache.get(ordinal)));
       for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
         const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
         const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
@@ -191,7 +195,7 @@ export function createPlaybackSessionReadModel(input: {
           const sidecar = fetched[batchIndex];
           if (!sidecar) return;
           result.set(ordinal, sidecar);
-          if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
+          if (isCompletedAudioSidecar(sidecar)) cache.set(ordinal, sidecar);
         });
       }
       return result;
@@ -283,7 +287,7 @@ export function createPlaybackSessionReadModel(input: {
           const sidecar = fetched[batchIndex];
           if (!sidecar) return;
           sidecars.set(ordinal, sidecar);
-          if (isStableCompletedSidecar(sidecar)) cache.set(ordinal, sidecar);
+          if (isCompletedAudioSidecar(sidecar)) cache.set(ordinal, sidecar);
         });
       }
       return [...sidecars.values()]
@@ -318,16 +322,6 @@ export function createPlaybackSessionReadModel(input: {
         };
       }
       return { status: 'pending', ordinal };
-    },
-    async listCompletedDurations(session, planLength) {
-      const sidecars = await collectScopeSidecars(session, planLength);
-      const durations = new Map<number, number>();
-      for (const sidecar of sidecars.values()) {
-        if (sidecar.status === 'completed' && sidecar.audioKey) {
-          durations.set(sidecar.ordinal, Math.max(1, Number(sidecar.durationMs ?? 1000)));
-        }
-      }
-      return durations;
     },
     async listSegmentStates(session, planLength) {
       const cacheEpoch = await getScopeEpoch(session);

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { readFile } from 'node:fs/promises';
 
 import type { ArtifactStorage } from '../../src/infrastructure/storage';
 import { createTtsPlaybackExportHandler } from '../../src/jobs/playback/export-job';
@@ -10,11 +11,14 @@ const { getCbrSilenceSecond } = vi.hoisted(() => ({
 vi.mock('@openreader/tts/audio-format', () => ({ getCbrSilenceSecond }));
 
 class MemoryStorage implements ArtifactStorage {
+  async putFile(key: string, path: string): Promise<void> {
+    this.objects.set(key, await readFile(path));
+  }
   readonly objects = new Map<string, Buffer>();
 
   async readObject(key: string): Promise<ArrayBuffer> {
     const value = this.objects.get(key);
-    if (!value) throw new Error('not found');
+    if (!value) throw Object.assign(new Error('not found'), { name: 'NoSuchKey' });
     return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
   }
 
@@ -113,7 +117,7 @@ describe('TTS playback export job', () => {
           status: 'succeeded',
           planObjectKey: request.planObjectKey,
         }) },
-        artifacts: { readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null },
+        artifacts: { getScopeEpoch: async () => 0, readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null },
       },
       s3Prefix: 'test',
     } as never);
@@ -125,7 +129,7 @@ describe('TTS playback export job', () => {
     });
     expect(storage.objects.get(result.artifact.objectKey)?.toString()).toBe('onepausetwo');
     expect(onProgress).toHaveBeenNthCalledWith(1, expect.objectContaining({
-      completedSegments: 1, plannedSegments: 3, skippedSegments: 1,
+      phase: 'assembling', completedSegments: 0, plannedSegments: 3,
     }));
     expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({
       completedSegments: 3, plannedSegments: 3, skippedSegments: 1,
@@ -148,7 +152,7 @@ describe('TTS playback export job', () => {
           status: 'succeeded',
           planObjectKey: request.planObjectKey,
         }) },
-        artifacts: { readSegmentMetadata: async () => sidecar(0, 'error', 'audio/0') },
+        artifacts: { getScopeEpoch: async () => 0, readSegmentMetadata: async () => sidecar(0, 'error', 'audio/0') },
       },
       s3Prefix: 'test',
     } as never);
@@ -183,7 +187,7 @@ describe('TTS playback export job', () => {
           status,
           planObjectKey: request.planObjectKey,
         }) },
-        artifacts: { readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null },
+        artifacts: { getScopeEpoch: async () => 0, readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null },
       },
       s3Prefix: 'test',
     } as never);
@@ -226,6 +230,82 @@ describe('TTS playback export job', () => {
     const rebuilt = await run({ ...request, chapterIndex: 0 }, 0);
     expect(rebuilt.artifact).toMatchObject({ generatedSegments: 2, skippedSegments: 0 });
     expect(storage.objects.get(rebuilt.artifact.objectKey)?.toString()).toBe('onetwo');
+  });
+
+  test('rebuilds a missing final file from settled cached sources', async () => {
+    const storage = pdfPlanStorage();
+    const run = handler(storage, new Map([
+      [0, sidecar(0, 'completed', 'audio/0')], [1, sidecar(1, 'completed', 'audio/1')],
+    ]));
+    const first = await run({ ...request, chapterIndex: 0 }, 0);
+    storage.objects.delete(first.artifact.objectKey);
+    const rebuilt = await run({ ...request, chapterIndex: 0 }, 0);
+    expect(storage.objects.get(rebuilt.artifact.objectKey)?.toString()).toBe('onetwo');
+    expect(rebuilt.artifact.objectKey).not.toBe(first.artifact.objectKey);
+  });
+
+  test('keeps source downloads bounded and output ordered when reads complete out of order', async () => {
+    const storage = new MemoryStorage();
+    const segments = Array.from({ length: 40 }, (_, ordinal) => ({ ordinal, text: 'Audio.', locator: { readerType: 'pdf', page: 1 } }));
+    storage.objects.set(request.planObjectKey, Buffer.from(JSON.stringify({ schemaVersion: 1, segments })));
+    const sidecars = new Map(segments.map(({ ordinal }) => [ordinal, sidecar(ordinal, 'completed', `audio/${ordinal}`)]));
+    for (const { ordinal } of segments) storage.objects.set(`audio/${ordinal}`, Buffer.from(`${ordinal},`));
+    const readObject = storage.readObject.bind(storage);
+    let active = 0;
+    let maximum = 0;
+    storage.readObject = async (key) => {
+      if (!key.startsWith('audio/')) return readObject(key);
+      active += 1;
+      maximum = Math.max(maximum, active);
+      await new Promise((resolve) => setTimeout(resolve, Number(key.slice(6)) % 4 === 0 ? 5 : 0));
+      try { return await readObject(key); } finally { active -= 1; }
+    };
+    const putFile = vi.spyOn(storage, 'putFile');
+    const result = await handler(storage, sidecars)(request, 0);
+    expect(maximum).toBeGreaterThan(1);
+    expect(maximum).toBeLessThanOrEqual(4);
+    expect(storage.objects.get(result.artifact.objectKey)?.toString()).toBe(segments.map(({ ordinal }) => `${ordinal},`).join(''));
+    expect(putFile).toHaveBeenCalledOnce();
+    const { stat } = await import('node:fs/promises');
+    await expect(stat(putFile.mock.calls[0][1])).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  test('surfaces temporary artifact reads instead of treating them as missing', async () => {
+    const storage = pdfPlanStorage();
+    const readObject = storage.readObject.bind(storage);
+    storage.readObject = async (key) => {
+      if (key.endsWith('metadata.json')) throw new Error('object storage unavailable');
+      return readObject(key);
+    };
+    const putFile = vi.spyOn(storage, 'putFile');
+    const run = handler(storage, new Map([
+      [0, sidecar(0, 'completed', 'audio/0')], [1, sidecar(1, 'completed', 'audio/1')],
+    ]));
+    await expect(run({ ...request, chapterIndex: 0 }, 0)).rejects.toThrow('object storage unavailable');
+    expect(putFile).not.toHaveBeenCalled();
+  });
+
+  test('discards its own uploaded file when cleanup invalidates the source', async () => {
+    const storage = pdfPlanStorage();
+    let epoch = 0;
+    let uploadedKey: string | null = null;
+    const putFile = storage.putFile.bind(storage);
+    storage.putFile = async (key, path) => {
+      await putFile(key, path);
+      uploadedKey = key;
+      epoch += 1;
+    };
+    const run = createTtsPlaybackExportHandler({
+      storage, s3Prefix: 'test', playbackStorage: {
+        sessions: { getSession: async () => ({ ...request, status: 'succeeded' }) },
+        artifacts: { getScopeEpoch: async () => epoch,
+          readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecar(ordinal, 'completed', `audio/${ordinal}`) },
+      },
+    } as never);
+    await expect(run({ ...request, chapterIndex: 0 }, 0)).rejects.toThrow('sources were cleared');
+    expect(uploadedKey).not.toBeNull();
+    expect(storage.objects.has(uploadedKey!)).toBe(false);
+    expect([...storage.objects.keys()].some((key) => key.endsWith('metadata.json'))).toBe(false);
   });
 
   test('refuses a whole-book export from a usage-limited run', async () => {

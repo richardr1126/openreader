@@ -16,7 +16,6 @@ import { registerEmailDeliveryRoutes } from './routes/email-deliveries';
 import { registerPlaybackAudioRoutes } from './routes/playback/audio';
 import {
   registerPlaybackExportJobRoutes,
-  registerPlaybackExportRetentionRoute,
   registerPlaybackExportRoutes,
   registerPlaybackExportSessionRoutes,
 } from './routes/playback/exports';
@@ -43,7 +42,6 @@ export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext):
   registerPlaybackExportSessionRoutes(context, playbackReadModel);
   registerCleanupRoutes(context, playbackReadModel);
   registerAccountExportRetentionRoute(context);
-  registerPlaybackExportRetentionRoute(context);
   registerPlaybackAudioRoutes(context, playbackReadModel, playbackController);
   registerDocumentJobRoutes(context);
   registerPlaybackJobRoutes(context, playbackController);

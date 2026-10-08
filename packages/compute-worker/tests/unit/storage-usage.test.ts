@@ -4,6 +4,7 @@ import { collectStorageUsage, reclaimableVariants } from '../../src/storage/stor
 import type { ArtifactStorage } from '../../src/infrastructure/storage';
 
 class MemoryStorage implements ArtifactStorage {
+  async putFile(): Promise<void> { throw new Error('not implemented'); }
   readonly objects = new Map<string, Buffer>();
   listedPages = 0;
 

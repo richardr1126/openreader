@@ -17,11 +17,13 @@ import type { TtsPlaybackGrid } from '@/lib/client/tts/playback-grid';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 
 type UsePlaybackForegroundSyncInput = {
+  audioRef: MutableRefObject<HTMLAudioElement | null>;
   playbackCursorOrdinalRef: MutableRefObject<number | null>;
   playbackRequestHeadersRef: MutableRefObject<TTSRequestHeaders | null>;
   playbackRunIdRef: MutableRefObject<number>;
   playbackSessionRef: MutableRefObject<PlaybackSessionState | null>;
-  refreshPlaybackTimeline: (timelineUrl: string, signal?: AbortSignal) => Promise<TtsPlaybackGrid>;
+  refreshPlaybackTimeline: (timelineUrl: string, signal?: AbortSignal,
+    readWindow?: { minOrdinal: number; limit: number }) => Promise<TtsPlaybackGrid>;
   setPlaybackSeekLayout: (layout: TtsPlaybackSeekLayout | null) => void;
 };
 
@@ -35,6 +37,7 @@ const MODEL_DOWNLOAD_TOAST_ID = 'tts-model-download';
 export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput) {
   const { refresh: refreshComputeUsage } = useAuthRateLimit();
   const {
+    audioRef,
     playbackCursorOrdinalRef,
     playbackRequestHeadersRef,
     playbackRunIdRef,
@@ -46,6 +49,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const playbackActivityWriteRef = useRef<Promise<void>>(Promise.resolve());
   const playbackRefreshRef = useRef<ReturnType<typeof createCoalescedPlaybackRefresh> | null>(null);
+  const playbackOverviewRefreshRef = useRef<ReturnType<typeof createCoalescedPlaybackRefresh> | null>(null);
   const playbackCursorWriteRef = useRef(false);
   const pendingCursorOrdinalRef = useRef<number | null>(null);
   const usageLimitRefreshRunRef = useRef<number | null>(null);
@@ -72,7 +76,9 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     const requestedOrdinal = ordinal ?? playbackCursorOrdinalRef.current;
     if (requestedOrdinal == null || !Number.isFinite(requestedOrdinal)) return;
     const cursor = Math.max(0, Math.floor(requestedOrdinal));
+    const cursorChanged = playbackCursorOrdinalRef.current !== cursor;
     playbackCursorOrdinalRef.current = cursor;
+    if (cursorChanged) playbackRefreshRef.current?.request({ supersede: true });
     pendingCursorOrdinalRef.current = cursor;
     if (playbackCursorWriteRef.current) return;
 
@@ -94,6 +100,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
             && playbackSessionRef.current === session
             && playbackEventsRef.current === events) {
             events?.update(updated.workerOpId);
+            playbackRefreshRef.current?.request();
           }
         }
       } finally {
@@ -111,6 +118,8 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
     playbackRefreshRef.current?.stop();
     playbackRefreshRef.current = null;
+    playbackOverviewRefreshRef.current?.stop();
+    playbackOverviewRefreshRef.current = null;
     pendingCursorOrdinalRef.current = null;
     if (playbackCursorIntervalRef.current) {
       clearInterval(playbackCursorIntervalRef.current);
@@ -132,12 +141,10 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
 
     stopPlaybackForegroundSync();
     usageLimitRefreshRunRef.current = null;
-    const refresh = createCoalescedPlaybackRefresh(async (signal) => {
-      if (runId !== playbackRunIdRef.current || playbackSessionRef.current !== activeSession) return;
-      const readSignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
-      const timeline = await refreshPlaybackTimeline(activeSession.timelineUrl, readSignal);
-      if (readSignal.aborted || runId !== playbackRunIdRef.current
-        || playbackSessionRef.current !== activeSession) return;
+    const isCurrent = () => runId === playbackRunIdRef.current
+      && playbackSessionRef.current === activeSession;
+    const publish = (timeline: TtsPlaybackGrid) => {
+      if (!isCurrent()) return;
       setPlaybackSeekLayout({
         planId: activeSession.planId,
         sessionId: timeline.sessionId,
@@ -147,6 +154,25 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
         durationMs: timeline.durationMs,
         segments: timeline.segments,
       });
+    };
+    const overview = createCoalescedPlaybackRefresh(async (signal) => {
+      if (!isCurrent()) return;
+      const timeline = await refreshPlaybackTimeline(activeSession.timelineUrl, signal);
+      if (!signal.aborted) publish(timeline);
+    }, { minIntervalMs: 1500 });
+    playbackOverviewRefreshRef.current = overview;
+    const refresh = createCoalescedPlaybackRefresh(async (signal) => {
+      if (!isCurrent()) return;
+      const readSignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
+      const timeline = await refreshPlaybackTimeline(activeSession.timelineUrl, readSignal, {
+        minOrdinal: Math.max(0, playbackCursorOrdinalRef.current ?? 0), limit: 64,
+      });
+      if (readSignal.aborted || !isCurrent()) return;
+      publish(timeline);
+      // Full cache visibility follows the priority read. It never blocks the
+      // next cursor window or first audio, and shares this SSE lifetime.
+      const audio = audioRef.current;
+      if (audio && !audio.paused && audio.readyState >= 2) overview.request();
     }, { minIntervalMs: 250 });
     playbackRefreshRef.current = refresh;
     refresh.request();
@@ -200,6 +226,8 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
       if (runId === playbackRunIdRef.current) updateWorkerPlaybackCursor();
     }, TTS_PLAYBACK_CURSOR_HEARTBEAT_MS);
   }, [
+    audioRef,
+    playbackCursorOrdinalRef,
     playbackRunIdRef,
     playbackSessionRef,
     refreshComputeUsage,
@@ -209,10 +237,15 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     updateWorkerPlaybackCursor,
   ]);
 
+  const refreshPlaybackOverview = useCallback(() => {
+    playbackOverviewRefreshRef.current?.request();
+  }, []);
+
   return {
     setWorkerPlaybackActive,
     startPlaybackForegroundSync,
     stopPlaybackForegroundSync,
     updateWorkerPlaybackCursor,
+    refreshPlaybackOverview,
   };
 }

@@ -9,7 +9,8 @@ const mocks = vi.hoisted(() => ({
   authorized: true,
 }));
 
-vi.mock('@/lib/server/compute-worker/client', () => ({
+vi.mock('@/lib/server/compute-worker/client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/server/compute-worker/client')>(),
   isComputeWorkerAvailable: () => mocks.workerAvailable,
   getComputeWorkerClient: () => ({
     getUserStorageUsage: mocks.usage,
@@ -94,6 +95,31 @@ describe('storage routes', () => {
     expect((await documentReclaim(post('/api/tts/storage/document/reclaim', { documentId: 'doc-1' }))).status).toBe(503);
     expect(mocks.usage).not.toHaveBeenCalled();
     expect(mocks.reclaim).not.toHaveBeenCalled();
+  });
+
+  test('reports a retryable measurement timeout instead of a generic storage error', async () => {
+    mocks.usage.mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'));
+    const response = await documentUsage(post('/api/tts/storage/document', { documentId: 'doc-1' }));
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Retry-After')).toBe('5');
+    expect((await response.json()).error).toContain('Try again');
+  });
+
+  test('explains an older worker missing the storage endpoint', async () => {
+    const { ComputeWorkerClient } = await import('@/lib/server/compute-worker/client');
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'Not found' }, { status: 404 })));
+    try {
+      const client = new ComputeWorkerClient({ baseUrl: 'http://worker.test', token: 'test-token' });
+      const error = await client.getUserStorageUsage({ storageUserId: 'user-1', includePlayback: true,
+        derivedDocumentIds: [], namespace: null })
+        .catch((error: unknown) => error);
+      mocks.usage.mockRejectedValueOnce(error);
+      const response = await documentUsage(post('/api/tts/storage/document', { documentId: 'doc-1' }));
+      expect(response.status).toBe(503);
+      expect((await response.json()).error).toContain('Redeploy the worker to match the web version');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test('reclaims a document while keeping the current version and settings', async () => {

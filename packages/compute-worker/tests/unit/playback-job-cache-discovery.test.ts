@@ -9,7 +9,42 @@ vi.mock('../../src/jobs/playback/segment-generation', () => ({ generateExplicitT
 describe('playback job cache discovery', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  test('starts a sparse long book without probing every ungenerated segment', async () => {
+  test('verifies cached audiobook sources once and generates only missing audio', async () => {
+    const plannedSegments = Array.from({ length: 2234 }, (_, ordinal) => ({ ordinal, text: 'A sentence.' }));
+    vi.mocked(resolveAndPersistTtsPlaybackPlan).mockResolvedValue({
+      planObjectKey: 'plan', plannedSegments, startOrdinal: 0,
+    } as never);
+    const session = { sessionId: 'session', status: 'running', generationRunId: 'run' };
+    const objectExists = vi.fn(async (key: string) => key !== 'audio/10');
+    const patchSessionIfGenerationRun = vi.fn(async () => true);
+    const onProgress = vi.fn();
+    const run = createTtsPlaybackHandler({
+      storage: { objectExists }, s3Prefix: 'test', ttsPlaybackSegmentTimeoutMs: 30_000,
+      playbackStorage: {
+        artifacts: {
+          getScopeEpoch: async () => 3,
+          listSegmentOrdinals: async () => plannedSegments.map((segment) => segment.ordinal),
+          readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => ({
+            ordinal, status: 'completed', audioKey: `audio/${ordinal}`, durationMs: 1000, alignment: null,
+            cacheEpoch: ordinal === 11 ? 2 : 3,
+          }),
+        },
+        sessions: { getSession: async () => session, patchSessionIfGenerationRun },
+      },
+    } as never);
+    await run({
+      userId: 'user', storageUserId: 'user', documentId: 'document', documentVersion: 1,
+      readerType: 'epub', settingsHash: 'settings', settingsJson: {}, planning: {},
+      sessionId: 'session', generationRunId: 'run', planObjectKey: 'plan', generationExtent: 'document',
+    }, 0, { onProgress });
+    expect(onProgress.mock.calls[0][0].phase).toBe('checking_cache');
+    expect(objectExists).toHaveBeenCalledTimes(2233);
+    expect(vi.mocked(generateExplicitTtsPlaybackSegments).mock.calls[0][0].segments.map((segment) => segment.ordinal))
+      .toEqual([10, 11]);
+    expect(patchSessionIfGenerationRun).toHaveBeenCalledWith('session', 'run', expect.objectContaining({ status: 'succeeded' }));
+  });
+
+  test('starts a long book without reading unrelated cached chapters', async () => {
     const plannedSegments = Array.from({ length: 10_000 }, (_, ordinal) => ({ ordinal, text: 'A sentence.' }));
     vi.mocked(resolveAndPersistTtsPlaybackPlan).mockResolvedValue({
       planObjectKey: 'plan', plannedSegments, startOrdinal: 8_000,
@@ -43,13 +78,14 @@ describe('playback job cache discovery', () => {
       readerType: 'epub', settingsHash: 'settings', settingsJson: {}, planning: {},
       sessionId: 'session', generationRunId: 'run', planObjectKey: 'plan',
     }, 0, { onProgress });
-    expect(listSegmentOrdinals).toHaveBeenCalledTimes(1);
-    expect(readSegmentMetadata.mock.calls.map(([scope]) => scope.ordinal)).toEqual([2, 7, 8_000]);
-    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ completedCount: 1, completedThroughOrdinal: 2 }));
+    expect(listSegmentOrdinals).not.toHaveBeenCalled();
+    expect(readSegmentMetadata).not.toHaveBeenCalled();
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ completedCount: 0, completedThroughOrdinal: -1 }));
     expect(generateExplicitTtsPlaybackSegments).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(generateExplicitTtsPlaybackSegments).mock.calls[0][0].segments[0].ordinal).toBe(8_000);
   });
 
-  test('continues with per-segment cache checks when catalogue discovery is unavailable', async () => {
+  test('starts interactive generation even when catalogue discovery never responds', async () => {
     vi.mocked(resolveAndPersistTtsPlaybackPlan).mockResolvedValue({
       planObjectKey: 'plan', plannedSegments: [{ ordinal: 8, text: 'A sentence.' }], startOrdinal: 8,
     } as never);
@@ -63,7 +99,7 @@ describe('playback job cache discovery', () => {
       playbackStorage: {
         artifacts: {
           getScopeEpoch: async () => 0,
-          listSegmentOrdinals: async () => { throw new Error('catalogue unavailable'); },
+          listSegmentOrdinals: async () => new Promise<number[]>(() => undefined),
           readSegmentMetadata: async () => null,
         },
         sessions: {
@@ -79,9 +115,7 @@ describe('playback job cache discovery', () => {
       sessionId: 'session', generationRunId: 'run', planObjectKey: 'plan',
     }, 0)).resolves.toMatchObject({ sessionId: 'session' });
     expect(generateExplicitTtsPlaybackSegments).toHaveBeenCalledOnce();
-    expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({
-      sessionId: 'session', error: 'catalogue unavailable',
-    }), 'tts.playback.cache_catalogue_read_failed');
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   test('finishes document export generation when the first segment is terminally unrenderable', async () => {

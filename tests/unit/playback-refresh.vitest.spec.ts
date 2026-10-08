@@ -8,6 +8,54 @@ function deferred<T>() {
 }
 
 describe('playback read-model delivery under network delay', () => {
+  test('a changed cursor supersedes slow window metadata while retaining the overview', async () => {
+    const pending = deferred<string>();
+    const session = { timelineUrl: '/timeline' };
+    const load = vi.fn((url: string, _signal: AbortSignal) => url.endsWith('limit=64')
+      && url.includes('minOrdinal=0') ? pending.promise : Promise.resolve('new-read'));
+    const apply = vi.fn();
+    const loader = createPlaybackTimelineLoader({ load, apply, getRunId: () => 1, getSession: () => session });
+    const oldWindow = loader.refresh('/timeline?minOrdinal=0&limit=64');
+    await loader.refresh('/timeline?minOrdinal=8000&limit=64');
+    expect(load.mock.calls[0][1].aborted).toBe(true);
+    pending.resolve('old-window');
+    await oldWindow;
+    expect(apply).toHaveBeenCalledExactlyOnceWith('new-read');
+  });
+
+  test('a superseding refresh aborts its old read and immediately delivers the trailing cursor', async () => {
+    const signals: AbortSignal[] = [];
+    const load = vi.fn(async (signal: AbortSignal) => {
+      signals.push(signal);
+      if (signals.length === 1) await new Promise<void>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      });
+    });
+    const refresh = createCoalescedPlaybackRefresh(load);
+    refresh.request();
+    refresh.request({ supersede: true });
+    await vi.waitFor(() => expect(load).toHaveBeenCalledTimes(2));
+    expect(signals[0].aborted).toBe(true);
+    expect(signals[1].aborted).toBe(false);
+    refresh.stop();
+    expect(signals[1].aborted).toBe(true);
+  });
+  test('cursor readiness can arrive while an unrelated full overview is blocked', async () => {
+    const slow = deferred<string>();
+    const session = { timelineUrl: '/timeline' };
+    const load = vi.fn((url: string, _signal: AbortSignal) => url === '/timeline' ? slow.promise : Promise.resolve('cursor-ready'));
+    const apply = vi.fn();
+    const loader = createPlaybackTimelineLoader({ load, apply, getRunId: () => 1, getSession: () => session });
+    const overview = loader.refresh('/timeline');
+    await expect(loader.refresh('/timeline?minOrdinal=8000&limit=64')).resolves.toBe('cursor-ready');
+    expect(load.mock.calls[0][1].aborted).toBe(false);
+    expect(apply).toHaveBeenCalledExactlyOnceWith('cursor-ready');
+    loader.reset();
+    expect(load.mock.calls[0][1].aborted).toBe(true);
+    slow.resolve('late-overview');
+    await overview;
+    expect(apply).toHaveBeenCalledTimes(1);
+  });
   test('follows refill operations once and ignores late events after replacement or pause', () => {
     const callbacks = new Map<string, (snapshot: string) => void>();
     const close = vi.fn();

@@ -1,7 +1,8 @@
 import { Button } from '@/components/ui';
 
 interface ProgressCardProps {
-  progress: number;
+  progress: number | null;
+  operationLabel?: string;
   estimatedTimeRemaining?: string;
   /** Omit for work that cannot be canceled from the card. */
   onCancel?: (e?: React.MouseEvent) => void;
@@ -20,7 +21,8 @@ export function ProgressCard({
   cancelText = 'Cancel',
   currentChapter,
   completedChapters,
-  statusMessage
+  statusMessage,
+  operationLabel: labelOverride,
 }: ProgressCardProps) {
   const getOperationLabel = () => {
     if (operationType === 'sync') return 'Saving to Server';
@@ -30,7 +32,7 @@ export function ProgressCard({
     return null;
   };
 
-  const operationLabel = getOperationLabel();
+  const operationLabel = labelOverride ?? getOperationLabel();
 
   return (
     <div className="bg-surface-sunken rounded-lg p-3 space-y-2">
@@ -67,10 +69,11 @@ export function ProgressCard({
       </div>
 
       {/* Progress bar */}
-      <div className="w-full bg-background rounded-full overflow-hidden h-1.5">
+      <div role="progressbar" aria-label={operationLabel ?? 'Progress'} aria-valuenow={progress ?? undefined}
+        className="w-full bg-background rounded-full overflow-hidden h-1.5">
         <div
-          className="progress-fill h-full bg-accent transition duration-slow ease-standard"
-          style={{ width: `${progress}%` }}
+          className={`progress-fill h-full bg-accent transition duration-slow ease-standard ${progress === null ? 'animate-pulse' : ''}`}
+          style={{ width: progress === null ? '100%' : `${progress}%` }}
         />
       </div>
 
@@ -82,7 +85,7 @@ export function ProgressCard({
             <span>•</span>
           </>
         )}
-        <span className="font-medium">{Math.round(progress)}%</span>
+        {progress !== null && <span className="font-medium">{Math.round(progress)}%</span>}
         {estimatedTimeRemaining && (
           <>
             <span>•</span>

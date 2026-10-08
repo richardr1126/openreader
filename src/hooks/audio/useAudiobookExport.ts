@@ -78,11 +78,14 @@ export function useAudiobookExport(input: {
   const [snapshot, setSnapshot] = useState<TtsExportResolveSnapshot | null>(null);
   const [liveCounts, setLiveCounts] = useState<AudiobookExportLiveCounts | null>(null);
   const [artifactProgress, setArtifactProgress] = useState<number | null>(null);
+  const [artifactPhase, setArtifactPhase] = useState<'assembling' | 'transcoding' | 'uploading' | null>(null);
+  const [checkingCache, setCheckingCache] = useState(false);
   const [pendingAction, setPendingAction] = useState<TtsExportAction | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [chapterDownloads, setChapterDownloads] = useState<Record<number, AudiobookChapterDownloadState>>({});
 
-  const exportKey = settingsKey ? `${settingsKey}|${format}|${speed.toFixed(2)}` : null;
+  const exportKey = settingsKey ? `${documentId}|${settingsKey}|${format}|${speed.toFixed(2)}` : null;
   const exportKeyRef = useLatestRef(exportKey);
   const isOpenRef = useLatestRef(isOpen);
   const requestControllerRef = useRef<AbortController | null>(null);
@@ -96,28 +99,42 @@ export function useAudiobookExport(input: {
   const lifecycleRef = useRef(0);
   const refreshFailuresRef = useRef(0);
   const onRefreshFailedRef = useRef<(failures: number) => void>(() => undefined);
+  const trailingRefreshRef = useRef<'lookup' | 'details' | null>(null);
+  const requestModeRef = useRef<'command' | 'lookup' | 'details' | null>(null);
+  const refreshRef = useRef<(mode: 'lookup' | 'details') => void>(() => undefined);
 
-  const run = useCallback(async (action: TtsExportAction, options?: { quiet?: boolean }) => {
+  const run = useCallback(async (action: TtsExportAction, options?: { quiet?: boolean; includeProgress?: boolean; urgent?: boolean }) => {
     const key = exportKeyRef.current;
     if (!key) return;
     // Background refreshes never preempt a user action (Stop, Resume, ...);
     // that action's own response is the newer snapshot.
-    if (options?.quiet && requestControllerRef.current) return;
+    if (options?.quiet && requestControllerRef.current
+      && !(options.urgent && requestModeRef.current === 'details')) {
+      if (options.urgent) trailingRefreshRef.current = 'lookup';
+      else trailingRefreshRef.current ??= 'details';
+      return;
+    }
     requestControllerRef.current?.abort();
     const controller = new AbortController();
     requestControllerRef.current = controller;
+    requestModeRef.current = options?.quiet
+      ? options.includeProgress ? 'details' : 'lookup' : 'command';
     if (!options?.quiet) setPendingAction(action);
     try {
-      const next = await resolve({ format, speed, action }, controller.signal);
+      const includeProgress = options?.includeProgress ?? Boolean(options?.quiet);
+      const next = await resolve({ format, speed, action, includeProgress }, controller.signal);
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
       lastRefreshAtRef.current = Date.now();
       refreshFailuresRef.current = 0;
-      setSnapshot(next);
-      setLiveCounts(null);
+      setSnapshot((previous) => ({ ...next, progress: next.progress ?? previous?.progress ?? null }));
+      if (includeProgress) setLiveCounts(null);
       if (!options?.quiet) setRequestError(null);
+      setRefreshError(null);
+      if (!includeProgress) trailingRefreshRef.current ??= 'details';
     } catch (error) {
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
       if (options?.quiet) {
+        setRefreshError(describeExportRequestError(error));
         refreshFailuresRef.current += 1;
         onRefreshFailedRef.current(refreshFailuresRef.current);
         return;
@@ -126,12 +143,22 @@ export function useAudiobookExport(input: {
     } finally {
       if (requestControllerRef.current === controller) {
         requestControllerRef.current = null;
+        requestModeRef.current = null;
         if (!options?.quiet) setPendingAction(null);
+        if (trailingRefreshRef.current) {
+          const mode = trailingRefreshRef.current;
+          trailingRefreshRef.current = null;
+          refreshRef.current(mode);
+        }
       }
     }
   }, [exportKeyRef, format, resolve, speed]);
 
-  const refresh = useCallback(() => run('resolve', { quiet: true }), [run]);
+  const refresh = useCallback(() => run('resolve', { quiet: true, includeProgress: false, urgent: true }), [run]);
+  const refreshDetails = useCallback(() => run('resolve', { quiet: true, includeProgress: true }), [run]);
+  useEffect(() => {
+    refreshRef.current = (mode) => { void (mode === 'lookup' ? refresh() : refreshDetails()); };
+  }, [refresh, refreshDetails]);
 
   // EventSource retries a dropped connection by itself, but gives up for good
   // (readyState CLOSED) when a reconnect is refused, for example after the
@@ -180,9 +207,9 @@ export function useAudiobookExport(input: {
     const waitMs = Math.max(0, lastRefreshAtRef.current + PROGRESS_REFRESH_INTERVAL_MS - Date.now());
     refreshTimerRef.current = setTimeout(() => {
       refreshTimerRef.current = null;
-      void refresh();
+      void refreshDetails();
     }, waitMs);
-  }, [isOpenRef, refresh]);
+  }, [isOpenRef, refreshDetails]);
 
   // A different voice/format/speed is a different export: drop everything
   // tied to the previous one and hydrate the new one when visible.
@@ -190,7 +217,10 @@ export function useAudiobookExport(input: {
     setSnapshot(null);
     setLiveCounts(null);
     setArtifactProgress(null);
+    setArtifactPhase(null);
+    setCheckingCache(false);
     setRequestError(null);
+    setRefreshError(null);
     setChapterDownloads({});
     autoBuildAttemptRef.current = null;
     const chapterSubscriptions = chapterSubscriptionsRef.current;
@@ -199,6 +229,8 @@ export function useAudiobookExport(input: {
       lifecycleRef.current += 1;
       requestControllerRef.current?.abort();
       requestControllerRef.current = null;
+      trailingRefreshRef.current = null;
+      requestModeRef.current = null;
       setPendingAction(null);
       if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
@@ -210,8 +242,8 @@ export function useAudiobookExport(input: {
   }, [exportKey]);
 
   useEffect(() => {
-    if (isOpen && exportKey) void refresh();
-  }, [exportKey, isOpen, refresh]);
+    if (isOpen && exportKey) void run('resolve', { quiet: true, includeProgress: false });
+  }, [exportKey, isOpen, run]);
 
   const generationState = snapshot?.generation.state ?? null;
   const generationOperationId = snapshot?.generation.operationId ?? null;
@@ -219,6 +251,7 @@ export function useAudiobookExport(input: {
     if ((generationState !== 'generating' && generationState !== 'queued') || !generationOperationId) return;
     return subscribeTtsExportGenerationEvents({ opId: generationOperationId, documentId }, {
       onSnapshot: (event) => {
+        setCheckingCache(event.phase === 'checking_cache');
         if (event.completedCount !== null && event.plannedCount !== null) {
           setLiveCounts({
             completed: event.completedCount,
@@ -238,11 +271,14 @@ export function useAudiobookExport(input: {
   useEffect(() => {
     if (artifactState !== 'building' || !artifactOperationId) {
       setArtifactProgress(null);
+      setArtifactPhase(null);
       return;
     }
     return subscribeTtsExportArtifactEvents({ opId: artifactOperationId, documentId }, {
       onSnapshot: (event) => {
-        setArtifactProgress(progressPercent(event.completedSegments, event.plannedSegments));
+        setArtifactPhase(event.phase);
+        setArtifactProgress(event.phase === 'assembling'
+          ? progressPercent(event.completedSegments, event.plannedSegments) : null);
         if (event.status === 'succeeded' || event.status === 'failed') void refresh();
       },
       onError: reconnectIfClosed,
@@ -280,10 +316,9 @@ export function useAudiobookExport(input: {
       try {
         const next = await resolve({ format, speed, action, chapterIndex });
         if (!isCurrent()) return;
-        // The chapter response carries fresh book-wide progress too.
-        setSnapshot((previous) => previous
-          ? { ...previous, generation: next.generation, progress: next.progress }
-          : previous);
+        // A chapter request may outlive Stop/Resume. It owns only its download;
+        // the main request/SSE owner refreshes book state without this older
+        // response rolling a newer generation snapshot back.
         if (next.download) {
           setChapter(null);
           triggerDownload(next.download);
@@ -302,7 +337,8 @@ export function useAudiobookExport(input: {
                 void settle('resolve');
                 return;
               }
-              setChapter({ status: 'preparing', progress: progressPercent(event.completedSegments, event.plannedSegments) });
+              setChapter({ status: 'preparing', progress: event.phase === 'assembling'
+                ? progressPercent(event.completedSegments, event.plannedSegments) : null });
             },
             // A closed stream re-resolves the chapter, which downloads a
             // finished file or subscribes to the build again.
@@ -336,6 +372,12 @@ export function useAudiobookExport(input: {
     snapshot,
     liveCounts,
     artifactProgress,
+    artifactPhase,
+    checkingCache,
+    isChecking: snapshot === null && refreshError === null,
+    isLoadingChapters: snapshot !== null && snapshot.progress === null && refreshError === null,
+    refreshError,
+    refresh,
     pendingAction,
     requestError,
     clearRequestError: useCallback(() => setRequestError(null), []),

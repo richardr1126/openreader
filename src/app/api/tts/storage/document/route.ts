@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { getComputeWorkerClient, isComputeWorkerAvailable, isComputeWorkerEndpointMissingError,
+  isComputeWorkerUnavailableError } from '@/lib/server/compute-worker/client';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { resolveDocumentStorageScope } from '@/lib/server/tts/storage-scope';
@@ -31,6 +32,16 @@ export async function POST(request: NextRequest) {
       settingsHash: resolved.settingsHash,
     }));
   } catch (error) {
+    if (isComputeWorkerEndpointMissingError(error)) {
+      logger.warn({ event: 'tts.storage.worker_version_mismatch' }, 'Storage measurement endpoint is unavailable');
+      return NextResponse.json({ error: 'The compute worker does not support storage measurement. Redeploy the worker to match the web version.' }, { status: 503 });
+    }
+    if (isComputeWorkerUnavailableError(error)
+      || (error instanceof Error && error.name === 'TimeoutError')) {
+      logger.warn({ event: 'tts.storage.worker_unavailable' }, 'Worker unavailable for storage measurement');
+      return NextResponse.json({ error: 'Storage measurement is taking too long or the worker is unavailable. Try again in a moment.' },
+        { status: 503, headers: { 'Retry-After': '5' } });
+    }
     return errorResponse(error, {
       logger,
       event: 'tts.storage.document_usage_failed',

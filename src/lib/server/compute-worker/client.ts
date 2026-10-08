@@ -56,6 +56,10 @@ export function isComputeWorkerUnavailableError(error: unknown): boolean {
   return error instanceof TypeError && error.message === 'fetch failed';
 }
 
+export function isComputeWorkerEndpointMissingError(error: unknown): boolean {
+  return error instanceof WorkerHttpError && error.status === 404;
+}
+
 function readRequiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required for compute worker client`);
@@ -309,12 +313,6 @@ export class ComputeWorkerClient {
     maxAgeMs: number;
   }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
     return this.requestJson('POST', '/v1/account-exports/expire', input, init);
-  }
-
-  expireTtsPlaybackExportArtifacts(input: {
-    maxAgeMs: number;
-  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
-    return this.requestJson('POST', '/v1/tts-playback/exports/expire', input, init);
   }
 
   clearPdfLayoutArtifacts(input: {

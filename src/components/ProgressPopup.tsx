@@ -4,7 +4,8 @@ import { ProgressCard } from './ProgressCard';
 
 interface ProgressPopupProps {
   isOpen: boolean;
-  progress: number;
+  progress: number | null;
+  operationLabel?: string;
   estimatedTimeRemaining?: string;
   /** Omit for work that cannot be canceled from the popup. */
   onCancel?: () => void;
@@ -24,6 +25,7 @@ export function ProgressPopup({
   onCancel,
   statusMessage,
   operationType,
+  operationLabel,
   cancelText = 'Cancel',
   onClick,
   currentChapter,
@@ -56,6 +58,7 @@ export function ProgressPopup({
                 onCancel();
               } : undefined}
               operationType={operationType}
+              operationLabel={operationLabel}
               cancelText={cancelText}
               currentChapter={currentChapter}
               completedChapters={completedChapters}

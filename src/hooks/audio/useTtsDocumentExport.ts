@@ -13,6 +13,7 @@ export type TtsDocumentAudioExportRequest = {
   speed: number;
   action: TtsExportAction;
   chapterIndex?: number;
+  includeProgress?: boolean;
 };
 
 type UseTtsDocumentExportInput = {
@@ -60,6 +61,7 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
       format: options.format,
       speed: options.speed,
       action: options.action,
+      includeProgress: options.includeProgress,
       ...(options.chapterIndex === undefined ? {} : { chapterIndex: options.chapterIndex }),
     }, request.headers, signal);
   }, [applyWorkerPlan, buildPlaybackPlanRequest, playbackPlanRef]);

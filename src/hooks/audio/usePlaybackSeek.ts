@@ -25,7 +25,6 @@ type UsePlaybackSeekInput = {
   playbackSessionRef: MutableRefObject<PlaybackSessionState | null>;
   projectPlaybackTime: (seconds: number) => void;
   publishPlaybackTimeSec: (seconds: number, options?: { force?: boolean }) => void;
-  refreshPlaybackTimeline: (timelineUrl: string, signal?: AbortSignal) => Promise<unknown>;
   setAudioDocumentTime: (
     audio: HTMLAudioElement,
     documentTimeSec: number,
@@ -51,7 +50,6 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     playbackSessionRef,
     projectPlaybackTime,
     publishPlaybackTimeSec,
-    refreshPlaybackTimeline,
     setAudioDocumentTime,
     setPlaybackPhase,
     setSelectedOrdinal,
@@ -83,8 +81,8 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     }
     if (isPlayingRef.current) {
       audio.playbackRate = audioSpeed;
+      setPlaybackPhase('buffering');
       void audio.play().catch(() => undefined);
-      setPlaybackPhase('playing');
     } else {
       setPlaybackPhase('ready');
     }
@@ -135,23 +133,15 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
 
     const session = playbackSessionRef.current;
     if (!session) return undefined;
-    let current = true;
-    void refreshPlaybackTimeline(session.timelineUrl)
-      .catch(() => undefined)
-      .then(() => {
-        if (!current || pendingSeekRef.current !== pendingSeek
-          || pendingSeek.runId !== playbackRunIdRef.current
-          || playbackSessionRef.current !== session) return;
-        const targetSec = Math.max(0, slot.startMs / 1000);
-        setSelectedOrdinal(pendingSeek.ordinal);
-        // A generated range after a gap cannot be read through the old stream
-        // prefix. Reopen only after SSE proves the target buffer is ready.
-        applyReadyMediaPosition(targetSec, pendingSeek.ordinal, targetSec, true);
-        publishPlaybackTimeSec(targetSec, { force: true });
-        projectPlaybackTime(targetSec);
-        setPendingSeek(null);
-      });
-    return () => { current = false; };
+    const targetSec = Math.max(0, slot.startMs / 1000);
+    setSelectedOrdinal(pendingSeek.ordinal);
+    // The accepted SSE-owned grid already contains target timing. Reopen the
+    // same canonical stream without another whole-document metadata round trip.
+    applyReadyMediaPosition(targetSec, pendingSeek.ordinal, targetSec, true);
+    publishPlaybackTimeSec(targetSec, { force: true });
+    projectPlaybackTime(targetSec);
+    setPendingSeek(null);
+    return undefined;
   }, [
     applyReadyMediaPosition,
     audioSpeed,
@@ -161,7 +151,6 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     playbackSessionRef,
     projectPlaybackTime,
     publishPlaybackTimeSec,
-    refreshPlaybackTimeline,
     setPendingSeek,
     setSelectedOrdinal,
   ]);

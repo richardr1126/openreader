@@ -1,9 +1,8 @@
-import type { FastifyReply, FastifyRequest } from 'fastify';
+import { isNotFound } from '../../../infrastructure/storage';
 import { hashOpKey } from '../../../infrastructure/nats-adapters';
 import type { TtsPlaybackExportArtifactMetadata, WorkerOperationRequest } from '../../../operations/contracts';
 import { buildTtsPlaybackExportOperationKey } from '../../../operations/keys';
 import { ttsPlaybackExportMetadataArtifactKey } from '../../../storage/artifact-addressing';
-import { expireExportArtifactsUnderRoot } from '../../../storage/export-retention';
 import { groupExportChapters, type ExportChapterGroup } from '../../../jobs/playback/export-chapters';
 import { readPersistedTtsPlaybackPlanSegments } from '../../../jobs/playback/plan';
 import { toComputeOperation } from '../../compute-operation';
@@ -12,7 +11,6 @@ import type { ComputeWorkerRouteContext } from '../../route-context';
 import {
   apiErrorResponseSchema,
   computeOperationSchema,
-  exportRetentionSchema,
   jsonSchema,
   ttsPlaybackExportArtifactCreateSchema,
   ttsPlaybackExportArtifactMetadataSchema,
@@ -40,9 +38,10 @@ async function readExportMetadata(context: ComputeWorkerRouteContext, input: {
   try {
     const parsed = JSON.parse(Buffer.from(await context.storage.readObject(key)).toString('utf8')) as TtsPlaybackExportArtifactMetadata;
     if (parsed.schemaVersion !== 1 || parsed.artifactId !== input.artifactId || parsed.status !== 'ready') return null;
-    return await context.storage.objectExists(parsed.objectKey).catch(() => false) ? parsed : null;
-  } catch {
-    return null;
+    return await context.storage.objectExists(parsed.objectKey) ? parsed : null;
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
   }
 }
 
@@ -133,34 +132,6 @@ export function registerPlaybackExportJobRoutes(context: ComputeWorkerRouteConte
     const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
     return { artifact, operation: operation ? toComputeOperation(operation) : null };
   });
-}
-
-export function registerPlaybackExportRetentionRoute(context: ComputeWorkerRouteContext): void {
-  const { app, storage, s3Prefix } = context;
-  const retentionRouteSchema = {
-    body: jsonSchema(exportRetentionSchema),
-    response: {
-      200: {
-        type: 'object',
-        properties: { expiredArtifacts: { type: 'number' }, deletedObjects: { type: 'number' } },
-        required: ['expiredArtifacts', 'deletedObjects'],
-      },
-      400: errorResponseSchema,
-    },
-  };
-  const retentionHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-    const parsed = exportRetentionSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
-    }
-    return expireExportArtifactsUnderRoot({
-      storage,
-      exportRoot: `${s3Prefix}/tts_playback_exports_v1/`,
-      maxAgeMs: parsed.data.maxAgeMs,
-    });
-  };
-  app.post('/v1/tts-playback/exports/expire', { schema: retentionRouteSchema }, retentionHandler);
 }
 
 /**
