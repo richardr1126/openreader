@@ -125,12 +125,10 @@ export function registerPlaybackAudioRoutes(
 
     const startedAt = Date.now();
 
-    // Resolve a snapshot of the stream layout before sending headers: we need a
-    // stable total byte size for Content-Length / seeking. The total is a
-    // deterministic char-based estimate over the whole window (independent of how
-    // much is generated, so it never changes between range requests), while the
-    // byte→ordinal map uses exact durations where generated so seeks land on the
-    // correct segment. CBR makes both linear (see STREAM_AUDIO_PROFILE).
+    // Content-Length is a deterministic plan estimate, independent of cache size.
+    // A direct start needs no duration catalogue. For a nonzero byte range, read
+    // only the prefix needed to locate that byte; the body checks each source as
+    // it streams. Far-away cached chapters never gate a direct/suffix start.
     type Layout = { totalBytes: number; slots: ReturnType<typeof buildByteLayout>['slots'] };
     type Resolved =
       | { kind: 'ok'; total: number; mapLayout: Layout }
@@ -159,7 +157,6 @@ export function registerPlaybackAudioRoutes(
             if (startOrdinal === null) {
               return { kind: 'error', code: 400, message: 'Playback stream start ordinal is not present in the canonical plan' };
             }
-            const completed = await readModel.listCompletedDurations(session, planSegments.length);
             const estimateRate = estimateRateForSession(session);
             // Size every not-yet-generated (silence) slot in WHOLE MP3 frames, with
             // its exact frame byte length, so the silence we emit decodes to exactly
@@ -173,21 +170,37 @@ export function registerPlaybackAudioRoutes(
                 ? (frames: number) => cumulativeCbrFrameBytes(silenceFrameLengths, frames)
                 : undefined,
             };
-            // Real durations where generated (so the byte map matches the gapless
-            // real audio and seeking lands accurately within the generated region),
-            // frame-quantized silence for the not-yet-generated tail.
-            const mapSlots: PlanSlotInput[] = planSegments.map((segment) => ({
-              ordinal: segment.ordinal,
-              text: segment.text,
-              durationMs: completed.get(segment.ordinal) ?? null,
-            }));
             const totalSlots: PlanSlotInput[] = planSegments.map((segment) => ({
               ordinal: segment.ordinal,
               text: segment.text,
               durationMs: null, // pure estimate → stable Content-Length across requests
             }));
-            const mapLayout = buildByteLayout(mapSlots, startOrdinal, estimateRate, layoutOptions);
             const total = buildByteLayout(totalSlots, startOrdinal, estimateRate, layoutOptions).totalBytes;
+            const rawRange = request.headers.range;
+            const range = parseRangeHeader(Array.isArray(rawRange) ? rawRange[0] : rawRange, total);
+            const rangeStart = range && typeof range === 'object' ? range.start : 0;
+            const completed = new Map<number, number>();
+            if (rangeStart > 0) {
+              const suffix = planSegments.filter((segment) => segment.ordinal >= startOrdinal);
+              let prefixBytes = 0;
+              for (let index = 0; index < suffix.length && prefixBytes <= rangeStart; index += 32) {
+                if (closed) return { kind: 'error', code: 409, message: 'Client disconnected' };
+                const batch = suffix.slice(index, index + 32);
+                const rows = await readModel.readSegmentIndexRows(session, {
+                  minOrdinal: batch[0].ordinal, limit: batch.length,
+                });
+                for (const row of rows) completed.set(row.ordinal, row.durationMs);
+                prefixBytes += buildByteLayout(batch.map((segment) => ({
+                  ...segment, durationMs: completed.get(segment.ordinal) ?? null,
+                })), startOrdinal, estimateRate, layoutOptions).totalBytes;
+              }
+            }
+            const mapLayout = buildByteLayout(planSegments.map((segment) => ({
+              ...segment, durationMs: completed.get(segment.ordinal) ?? null,
+            })), startOrdinal, estimateRate, layoutOptions);
+            app.log.info({ sessionId, fromOrdinal: startOrdinal, rangeStart,
+              durationMs: Date.now() - startedAt, durationReads: completed.size,
+            }, 'tts.playback.audio.layout_ready');
             return { kind: 'ok', total, mapLayout };
           }
         }

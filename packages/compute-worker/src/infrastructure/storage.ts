@@ -7,6 +7,8 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 import { resolveStorageTransport } from '@openreader/runtime-config/storage-transport';
 
 export interface StoredObjectSummary {
@@ -25,6 +27,8 @@ export interface ArtifactStorage {
    */
   listPrefixPages(prefix: string): AsyncIterable<StoredObjectSummary[]>;
   putObject(key: string, body: Buffer | Uint8Array, contentType?: string): Promise<void>;
+  /** Upload a derived file without materializing the entire artifact in memory. */
+  putFile(key: string, path: string, contentType: string): Promise<void>;
   putParsedPdf(documentId: string, namespace: string | null, parsed: unknown): Promise<string>;
 }
 
@@ -65,7 +69,7 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return copy.buffer;
 }
 
-function isNotFound(error: unknown): boolean {
+export function isNotFound(error: unknown): boolean {
   const maybe = error as { name?: string; Code?: string; $metadata?: { httpStatusCode?: number } };
   return maybe.$metadata?.httpStatusCode === 404
     || maybe.name === 'NotFound'
@@ -169,6 +173,18 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
         ContentType: contentType,
         ServerSideEncryption: 'AES256',
       }));
+    },
+    async putFile(key, path, contentType) {
+      const { size } = await stat(path);
+      const body = createReadStream(path);
+      try {
+        await config.client.send(new PutObjectCommand({
+          Bucket: config.bucket, Key: safeKey(key), Body: body,
+          ContentLength: size, ContentType: contentType, ServerSideEncryption: 'AES256',
+        }));
+      } finally {
+        body.destroy();
+      }
     },
     async putParsedPdf(documentId, namespace, parsed) {
       const key = parsedPdfArtifactKey({ documentId, namespace, prefix: config.prefix });

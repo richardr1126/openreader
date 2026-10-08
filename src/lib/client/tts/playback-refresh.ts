@@ -10,6 +10,7 @@ export function createCoalescedPlaybackRefresh(
   const controller = new AbortController();
   const minIntervalMs = Math.max(0, Math.floor(options?.minIntervalMs ?? 0));
   let running = false;
+  let activeRead: AbortController | null = null;
   let pending = false;
   let lastStartedAt: number | null = null;
   let waitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -29,9 +30,10 @@ export function createCoalescedPlaybackRefresh(
       controller.signal.addEventListener('abort', finish, { once: true });
     });
   };
-  const request = () => {
+  const request = (options?: { supersede?: boolean }) => {
     if (controller.signal.aborted) return;
     pending = true;
+    if (options?.supersede) activeRead?.abort();
     if (running) return;
     running = true;
     void (async () => {
@@ -42,7 +44,9 @@ export function createCoalescedPlaybackRefresh(
           if (cadenceWait) await cadenceWait;
           if (controller.signal.aborted) break;
           lastStartedAt = Date.now();
-          await refresh(controller.signal).catch(() => undefined);
+          activeRead = new AbortController();
+          await refresh(AbortSignal.any([controller.signal, activeRead.signal])).catch(() => undefined);
+          activeRead = null;
         }
       } finally {
         running = false;
@@ -76,7 +80,9 @@ export function createPlaybackTimelineLoader<T>(input: {
     scopeSignal?: AbortSignal;
     promise?: Promise<T>;
   };
-  let active: Read | null = null;
+  // Cursor-window and overview reads have different priorities and may overlap.
+  // Sharing/teardown remains scoped to one run/session for both profiles.
+  const active = new Map<string, Read>();
   const waitForRead = (promise: Promise<T>, signal: AbortSignal): Promise<void> => {
     if (signal.aborted) return Promise.reject(signal.reason);
     return new Promise<void>((resolve, reject) => {
@@ -88,40 +94,47 @@ export function createPlaybackTimelineLoader<T>(input: {
     });
   };
   const reset = () => {
-    active?.controller.abort();
-    active = null;
+    for (const read of active.values()) read.controller.abort();
+    active.clear();
   };
   const refresh = (url: string, signal?: AbortSignal): Promise<T> => {
     const runId = input.getRunId();
     const session = input.getSession();
-    if (active?.url === url && active.runId === runId && active.session === session
-      && !active.signal.aborted && active.promise) {
-      if (active.scopeSignal === signal || (active.scopeSignal !== undefined && signal === undefined)) {
-        return active.promise;
+    for (const [key, read] of active) {
+      if (read.runId !== runId || read.session !== session
+        || (url !== session?.timelineUrl && key !== session?.timelineUrl && key !== url)) {
+        read.controller.abort();
+        active.delete(key);
       }
-      if (active.scopeSignal === undefined && signal !== undefined) {
+    }
+    const current = active.get(url);
+    if (current && !current.signal.aborted && current.promise) {
+      if (current.scopeSignal === signal || (current.scopeSignal !== undefined && signal === undefined)) {
+        return current.promise;
+      }
+      if (current.scopeSignal === undefined && signal !== undefined) {
         // Do not abort a startup/timing-heal read that another caller awaits.
         // The foreground subscriber still gets one exact trailing read, and
         // its own stop signal can cancel the wait before that read starts.
-        return waitForRead(active.promise, signal).then(() => refresh(url, signal));
+        return waitForRead(current.promise, signal).then(() => refresh(url, signal));
       }
     }
-    reset();
+    current?.controller.abort();
     const controller = new AbortController();
     const combinedSignal = AbortSignal.any([
       controller.signal, AbortSignal.timeout(30_000), ...(signal ? [signal] : []),
     ]);
     const read: Read = { url, runId, session, controller, signal: combinedSignal, scopeSignal: signal };
-    active = read;
+    active.set(url, read);
     read.promise = (async () => {
       try {
         const timeline = await input.load(url, combinedSignal);
-        if (active === read && !combinedSignal.aborted
+        if (active.get(url) === read && !combinedSignal.aborted
           && input.getRunId() === runId && input.getSession() === session
-          && session?.timelineUrl === url) input.apply(timeline);
+          && session?.timelineUrl === url.split('?')[0]) input.apply(timeline);
         return timeline;
       } finally {
-        if (active === read) active = null;
+        if (active.get(url) === read) active.delete(url);
       }
     })();
     return read.promise;

@@ -408,7 +408,8 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }
       let durationMs = existing?.status === 'completed' ? existing.durationMs : null;
       const alignment = existing?.alignment ?? null;
-      const needsRebuild = existing?.status !== 'completed' || durationMs == null || !alignment;
+      const needsRebuild = existing?.status !== 'completed' || durationMs == null
+        || (input.request.generationExtent !== 'document' && !alignment);
       let storedAudio: Buffer | null = null;
       if (needsRebuild && input.readAudioObject) {
         try {
@@ -647,7 +648,9 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     // Register alignment in plan order immediately. The lane waits for each
     // segment's result, so a faster later request cannot steal word-timing
     // priority from the segment the listener reaches first.
-    enqueueAlignment(generation.catch(() => null));
+    // Audiobook construction consumes audio, not word timing. Live playback
+    // owns alignment and backfills it when these cached segments are played.
+    if (input.request.generationExtent !== 'document') enqueueAlignment(generation.catch(() => null));
     let tracked: Promise<void>;
     tracked = generation
       .then(() => undefined)

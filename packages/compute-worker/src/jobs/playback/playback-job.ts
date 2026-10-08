@@ -139,17 +139,31 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const completedOrdinals = new Set<number>();
       const erroredOrdinals = new Set<number>();
       const plannedOrdinals = new Set(plannedSegments.map((segment) => segment.ordinal));
-      // Discover existing cache entries instead of issuing an S3 GET for every
-      // segment in the book before the requested segment can start synthesis.
-      const cachedOrdinals = (await playbackStorage.artifacts.listSegmentOrdinals(parsed).catch((error) => {
+      const verificationStartedAt = Date.now();
+      if (forceDocumentExtent) await hooks?.onProgress?.({
+        completedThroughOrdinal: -1, completedCount: 0, skippedCount: 0,
+        plannedCount: plannedSegments.length, phase: 'checking_cache',
+      });
+      // Export needs whole-document settlement. Interactive playback checks
+      // each segment as the ordered generator reaches it; a catalogue scan of
+      // unrelated cached chapters must not delay its first synthesis/alignment.
+      const cachedOrdinals = forceDocumentExtent ? (await playbackStorage.artifacts.listSegmentOrdinals(parsed).catch((error) => {
         input.logger?.warn({
           sessionId: parsed.sessionId,
           error: toErrorMessage(error),
         }, 'tts.playback.cache_catalogue_read_failed');
         return [];
       }))
-        .filter((ordinal) => plannedOrdinals.has(ordinal));
+        .filter((ordinal) => plannedOrdinals.has(ordinal)) : [];
       for (let index = 0; index < cachedOrdinals.length; index += 32) {
+        if (forceDocumentExtent) {
+          const observed = await playbackStorage.sessions.getSession(parsed.sessionId);
+          if (!observed || (observed.generationRunId ?? null) !== generationRunId
+            || (observed.status !== 'queued' && observed.status !== 'running')) {
+            return { sessionId: parsed.sessionId, planObjectKey,
+              timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
+          }
+        }
         const sidecars = await Promise.all(cachedOrdinals.slice(index, index + 32).map((ordinal) =>
           playbackStorage.artifacts.readSegmentMetadata({
             storageUserId: parsed.storageUserId,
@@ -158,16 +172,22 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
             settingsHash: parsed.settingsHash,
             ordinal,
           }).catch(() => null)));
-        sidecars.forEach((sidecar) => {
+        await Promise.all(sidecars.map(async (sidecar) => {
           if (!sidecar) return;
           if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return;
           if (sidecar.status === 'completed' && sidecar.audioKey) {
+            if (forceDocumentExtent && (sidecar.durationMs == null
+              || !await input.storage.objectExists(sidecar.audioKey))) return;
             completedOrdinals.add(sidecar.ordinal);
           } else if (sidecar.status === 'error' && !retryErroredSegments) {
             erroredOrdinals.add(sidecar.ordinal);
           }
-        });
+        }));
       }
+      if (forceDocumentExtent) input.logger?.info?.({
+        sessionId: parsed.sessionId, durationMs: Date.now() - verificationStartedAt,
+        cachedSegments: completedOrdinals.size, plannedSegments: plannedSegments.length,
+      }, 'tts.export.cache_verified');
 
       const sectionByOrdinal = new Map<number, string | null>();
       for (const segment of plannedSegments) {
@@ -272,7 +292,8 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const generationFloor = generationFloorForCursor(isContinuationRun ? sessionCursorOrdinal : startOrdinal);
       const requiredPlaybackOrdinal = isContinuationRun ? sessionCursorOrdinal : startOrdinal;
       const generationSegments = forceDocumentExtent
-        ? plannedSegments
+        ? plannedSegments.filter((segment) => !completedOrdinals.has(segment.ordinal)
+          && !erroredOrdinals.has(segment.ordinal))
         : plannedSegments.filter((segment) => segment.ordinal >= generationFloor);
       const generationController = new AbortController();
       const stopWatchingGeneration = forceDocumentExtent

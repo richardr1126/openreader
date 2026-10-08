@@ -78,6 +78,22 @@ async function readEpubWordHighlight(page: Page) {
 }
 
 async function verifyEpubPlayback(page: Page) {
+  let releaseOverview!: () => void;
+  const overviewGate = new Promise<void>((resolve) => { releaseOverview = resolve; });
+  let overviewRequested = false;
+  let overviewReleased = false;
+  await page.route('**/api/tts/stream/*/timeline*', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.has('minOrdinal')) {
+      expect(Number(url.searchParams.get('limit'))).toBeLessThanOrEqual(64);
+      // Exercise remote metadata latency instead of only loopback delivery.
+      if (!overviewReleased) await new Promise((resolve) => setTimeout(resolve, 150));
+    } else {
+      overviewRequested = true;
+      await overviewGate;
+    }
+    await route.continue();
+  });
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
   const position = page.getByRole('slider', { name: 'Playback position', exact: true });
   const initialViewportHeading = page.frameLocator('iframe').getByRole('heading').first();
@@ -108,6 +124,7 @@ async function verifyEpubPlayback(page: Page) {
 
   const pauseButton = page.getByRole('button', { name: 'Pause', exact: true });
   await expect(pauseButton).toBeVisible({ timeout: 60_000 });
+  await expect.poll(() => overviewRequested).toBe(true);
   const startedAt = await readPlaybackPosition(page);
   await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 })
     .toBeGreaterThan(startedAt + 1);
@@ -117,6 +134,13 @@ async function verifyEpubPlayback(page: Page) {
   const firstHighlightedWord = await readEpubWordHighlight(page);
   await expect.poll(() => readEpubWordHighlight(page), { timeout: 15_000 })
     .not.toBe(firstHighlightedWord);
+  // Audible playback and exact-word delivery must precede the unrelated
+  // overview, while cached ranges remain visible once that read is released.
+  overviewReleased = true;
+  releaseOverview();
+  // Keep the handler installed for this page's lifetime, forwarding subsequent
+  // reads immediately. Removing interception while gated routes drain can make
+  // Playwright continue the same request twice.
 
   await pauseButton.click();
   await expect(playButton).toBeVisible();

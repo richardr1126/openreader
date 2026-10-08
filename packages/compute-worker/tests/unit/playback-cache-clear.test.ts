@@ -4,6 +4,7 @@ import { clearTtsPlaybackArtifacts } from '../../src/playback/cache-clear';
 import type { ArtifactStorage } from '../../src/infrastructure/storage';
 
 class MemoryStorage implements ArtifactStorage {
+  async putFile(): Promise<void> { throw new Error('not implemented'); }
   readonly objects = new Map<string, Buffer>();
 
   async readObject(key: string): Promise<ArrayBuffer> {

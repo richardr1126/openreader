@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   documentTimeToMediaTime,
   mediaTimeToDocumentTime,
+  mergePlaybackGrid,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
   shouldRefreshPlaybackSegmentTiming,
@@ -55,6 +56,23 @@ const grid: TtsPlaybackGrid = {
 };
 
 describe('playback grid mapping', () => {
+  test('merges a delayed cache overview without losing cursor audio or exact highlighting', () => {
+    const priority = { ...grid, sessionUpdatedAt: 20, segments: [
+      { ...grid.segments[0], generated: false, estimated: true, durationMs: 5000, endMs: 5000 },
+      { ...grid.segments[1], startMs: 5000, endMs: 7000 },
+    ] };
+    const overview = { ...grid, status: 'queued', sessionUpdatedAt: 10, segments: [
+      grid.segments[0], { ...grid.segments[1], generated: false, alignment: null, durationMs: 7000 },
+    ] };
+    const merged = mergePlaybackGrid(priority, overview);
+    expect(merged.status).toBe('running');
+    expect(merged.segments.map((segment) => segment.generated)).toEqual([true, true]);
+    expect(merged.segments[1].startMs).toBe(1000);
+    expect(merged.durationMs).toBe(3000);
+    const anchorSec = merged.segments[1].startMs / 1000;
+    expect(projectPlaybackGridAtTime(merged, mediaTimeToDocumentTime(0.75, anchorSec)).wordIndex).toBe(1);
+    expect(mergePlaybackGrid(merged, { ...overview, sessionId: 'replacement' }).segments[1].generated).toBe(false);
+  });
   test('translates between a session-relative stream and whole-document time', () => {
     expect(mediaTimeToDocumentTime(2.5, 120)).toBe(122.5);
     expect(documentTimeToMediaTime(122.5, 120)).toBe(2.5);

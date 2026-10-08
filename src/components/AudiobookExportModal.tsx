@@ -176,6 +176,12 @@ export function AudiobookExportModal({
     snapshot,
     liveCounts,
     artifactProgress,
+    artifactPhase,
+    checkingCache,
+    isChecking,
+    isLoadingChapters,
+    refreshError,
+    refresh,
     pendingAction,
     requestError,
     clearRequestError,
@@ -214,7 +220,8 @@ export function AudiobookExportModal({
   const skipped = liveCounts?.skipped ?? progress?.skippedSegments ?? 0;
   const settledCount = Math.min(planned, (liveCounts?.completed ?? progress?.completedSegments ?? 0) + skipped);
   const generationPercent = planned > 0 ? Math.round((settledCount / planned) * 100) : 0;
-  const displayPercent = isBuilding ? artifactProgress ?? 0 : generationPercent;
+  const displayPercent = isBuilding ? artifactProgress : checkingCache ? null : generationPercent;
+  const operationLabel = isBuilding ? 'Building Audiobook' : checkingCache ? 'Checking cached audio' : 'Generating Audiobook';
   const narratedMs = useMemo(
     () => (progress?.chapters ?? []).reduce((sum, chapter) => sum + chapter.durationMs, 0),
     [progress],
@@ -235,7 +242,9 @@ export function AudiobookExportModal({
   );
 
   const statusMessage = isBuilding
-    ? `Building ${exportFormat.toUpperCase()} file`
+    ? artifactPhase === 'transcoding' ? `Encoding ${exportFormat.toUpperCase()}`
+      : artifactPhase === 'uploading' ? 'Uploading file' : `Assembling ${exportFormat.toUpperCase()}`
+    : checkingCache ? 'Verifying saved audio before generation'
     : isQueued
       ? 'Queued behind another export'
       : planned > 0
@@ -258,6 +267,10 @@ export function AudiobookExportModal({
   }, [snapshot]);
 
   const primaryAction = (() => {
+    if (isChecking) return { label: 'Checking…', onClick: start, variant: 'secondary' as const };
+    if (pendingAction === 'start' || pendingAction === 'retry-skipped') return {
+      label: generationState === 'complete' ? 'Building…' : 'Starting…', onClick: start, variant: 'secondary' as const,
+    };
     if (isGenerating) return { label: pendingAction === 'stop' ? 'Stopping…' : 'Stop', onClick: stop, variant: 'secondary' as const };
     if (RESUMABLE_STATES.has(generationState)) return { label: 'Resume', onClick: start, variant: 'primary' as const };
     if (generationState === 'complete') {
@@ -267,7 +280,9 @@ export function AudiobookExportModal({
     }
     return { label: 'Generate', onClick: start, variant: 'primary' as const };
   })();
-  const badge = canDownload
+  const badge = isChecking
+    ? { label: 'Checking', tone: 'muted' as const }
+    : canDownload
     ? { label: 'Ready', tone: 'accent' as const }
     : isGenerating
       ? { label: isQueued ? 'Queued' : 'Generating', tone: 'foreground' as const }
@@ -290,6 +305,7 @@ export function AudiobookExportModal({
         onCancel={isGenerating ? stop : undefined}
         cancelText="Stop"
         operationType="audiobook"
+        operationLabel={operationLabel}
         onClick={() => setIsOpen(true)}
         currentChapter={activeChapter ? titleFor(activeChapter) : `Preparing ${exportFormat.toUpperCase()}`}
         statusMessage={statusMessage}
@@ -360,6 +376,7 @@ export function AudiobookExportModal({
             variant="group"
             action={<Badge tone={badge.tone}>{badge.label}</Badge>}
           >
+            {isChecking && <p role="status" className="text-sm text-soft animate-pulse">Checking for a saved audiobook…</p>}
             <div className="flex items-center justify-between text-sm">
               <span className="font-medium text-foreground">Segments</span>
               <span className="text-soft tabular-nums">
@@ -374,12 +391,17 @@ export function AudiobookExportModal({
                   progress={displayPercent}
                   estimatedTimeRemaining={isGenerating ? estimatedTimeRemaining || undefined : undefined}
                   operationType="audiobook"
+                  operationLabel={operationLabel}
                   currentChapter={activeChapter ? titleFor(activeChapter) : undefined}
                   statusMessage={statusMessage}
                 />
               )}
 
               {generationNotice && <p role="status" className="text-xs text-warning">{generationNotice}</p>}
+              {refreshError && <div role="status" className="space-y-2 text-xs text-warning">
+                <p>{refreshError}</p>
+                <Button size="sm" variant="ghost" onClick={() => void refresh()}>Retry lookup</Button>
+              </div>}
               {skippedNotice && <p className="text-xs text-warning">{skippedNotice}</p>}
               {artifactNotice && <p role="status" className="text-xs text-warning">{artifactNotice}</p>}
 
@@ -387,7 +409,7 @@ export function AudiobookExportModal({
                 {primaryAction && (
                   <Button
                     onClick={primaryAction.onClick}
-                    disabled={!voice || pendingAction !== null || isBuilding}
+                    disabled={!voice || !snapshot || pendingAction !== null || isBuilding}
                     variant={primaryAction.variant}
                     size="md"
                     className="flex-1"
@@ -421,6 +443,7 @@ export function AudiobookExportModal({
             </div>
           </Section>
 
+          {isLoadingChapters && <p role="status" className="text-xs text-soft animate-pulse">Loading chapter progress…</p>}
           {chapters.length > 0 && (
             <Section
               title={documentType === 'pdf' ? 'Pages' : 'Chapters'}

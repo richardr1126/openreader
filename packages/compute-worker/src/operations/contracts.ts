@@ -338,7 +338,7 @@ export interface TtsPlaybackProgress {
   /** Terminal error sidecars intentionally omitted from playback/export audio. */
   skippedCount?: number;
   plannedCount: number;
-  phase?: 'downloading_model' | 'generating';
+  phase?: 'downloading_model' | 'generating' | 'checking_cache';
   stopReason?: 'usage_limit';
   downloadedBytes?: number;
   totalBytes?: number;

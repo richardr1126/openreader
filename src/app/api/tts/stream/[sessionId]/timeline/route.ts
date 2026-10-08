@@ -31,6 +31,7 @@ export async function GET(
     route: '/api/tts/stream/[sessionId]/timeline',
     request,
   });
+  const startedAt = Date.now();
   try {
     const { sessionId } = await context.params;
     const session = await resolveTtsPlaybackSession(request, sessionId);
@@ -39,30 +40,50 @@ export async function GET(
       throw new Error('TTS playback timeline requires a canonical plan artifact');
     }
 
-    // The worker lists existing sidecars across the document, keeping earlier
-    // cached chapters visible without probing every ungenerated ordinal.
-    const segments = await listCompletedTtsPlaybackSegments(session);
+    const minOrdinalRaw = request.nextUrl.searchParams.get('minOrdinal');
+    const limitRaw = request.nextUrl.searchParams.get('limit');
+    let readWindow: { minOrdinal: number; limit: number } | undefined;
+    if (minOrdinalRaw !== null || limitRaw !== null) {
+      const minOrdinal = Number(minOrdinalRaw);
+      const limit = Number(limitRaw);
+      if (minOrdinalRaw === null || limitRaw === null || !Number.isSafeInteger(minOrdinal)
+        || minOrdinal < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 256) {
+        return NextResponse.json({ error: 'Invalid playback timeline window' }, { status: 400 });
+      }
+      readWindow = { minOrdinal, limit };
+    }
+    // The foreground owner prioritizes this bounded cursor window. Unwindowed
+    // reads still discover all cached chapters for the document-wide overview.
+    const [segments, { artifact }] = await Promise.all([
+      listCompletedTtsPlaybackSegments(session, readWindow),
+      readTtsPlaybackPlanArtifact(session.planObjectKey),
+    ]);
     const completedSegments = new Map(segments.map((segment) => [segment.ordinal, {
       alignment: parseAlignment(segment.alignmentJson),
       alignmentSource: segment.alignmentSource,
       updatedAt: segment.updatedAt,
     }]));
     const layout = buildPlaybackGrid({
-      artifact: (await readTtsPlaybackPlanArtifact(session.planObjectKey)).artifact,
+      artifact,
       settingsJson: session.settingsJson,
       completedDurations: new Map(segments.map((segment) => [segment.ordinal, segment.durationMs])),
       startOrdinal: 0,
       completedSegments,
     });
+    logger.info({ event: 'tts.playback.timeline_resolved', durationMs: Date.now() - startedAt, completedSegments: segments.length,
+      windowed: Boolean(readWindow), sessionId: session.sessionId,
+    }, 'tts.playback.timeline_resolved');
 
     return NextResponse.json({
       sessionId: session.sessionId,
       documentId: session.documentId,
       status: session.status,
+      sessionUpdatedAt: session.updatedAt,
       startOrdinal: 0,
       generationStartOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal)),
       durationMs: layout.durationMs,
       segments: layout.segments,
+      ...(readWindow ? { readWindow } : {}),
     }, {
       headers: {
         'Cache-Control': 'private, no-store',

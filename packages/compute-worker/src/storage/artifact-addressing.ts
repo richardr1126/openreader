@@ -161,9 +161,12 @@ export function ttsPlaybackExportArtifactKey(input: {
   storageUserId: string;
   documentId: string;
   format: 'mp3' | 'm4b';
+  /** One build owns its output; metadata continues to use the stable artifact id. */
+  buildId?: string;
   prefix: string;
 }): string {
-  return `${ttsPlaybackExportArtifactDirPrefix(input)}artifact.${input.format}`;
+  const filename = input.buildId ? `artifact-${encodeURIComponent(input.buildId)}` : 'artifact';
+  return `${ttsPlaybackExportArtifactDirPrefix(input)}${filename}.${input.format}`;
 }
 
 export function ttsPlaybackExportMetadataArtifactKey(input: {

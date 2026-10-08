@@ -10,8 +10,9 @@ object storage, NATS JetStream, and a standalone compute worker such as Railway.
 - Documents (PDF/EPUB/DOCX/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
 - Background TTS generation, playback, previews, DOCX conversion, Whisper alignment, PDF layout
   parsing, and audiobook export run through an external compute worker service.
-- Audiobook export downloads the worker-owned playback stream; there are no audiobook-specific
-  serverless routes.
+- The worker assembles audiobook files in object storage. Same-origin
+  `/api/tts/export/*` routes authorize lookup, generation commands, SSE, and
+  downloads; assembly and conversion continue outside Vercel requests.
 - For worker setup details and worker-specific env vars, see [Compute Worker (NATS JetStream)](./compute-worker).
 
 :::info DOCX conversion
@@ -164,6 +165,11 @@ Each due task is claimed with a database-backed lease, due tasks start independe
 - Playback and audiobook export require the external compute worker and S3-compatible object
   storage because generation continues outside the serverless request lifecycle.
 - For production Vercel deploys, use `POSTGRES_URL` instead of SQLite.
+- Deploy matching web and worker versions. The document storage measurement
+  endpoint is worker-backed; an older Railway image can lack that endpoint.
+- Worker and object-storage network latency affects discovery and preparation.
+  Audiobook controls show checking/pending feedback while calls are outstanding,
+  and file discovery does not wait for the full chapter-progress scan.
 
 ## 7. Smoke test after deploy
 

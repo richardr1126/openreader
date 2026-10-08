@@ -69,6 +69,7 @@ export type TtsExportResolvePayload = TtsPlaybackSessionPayload & {
   action: TtsExportAction;
   /** Resolve or build one chapter's download instead of the whole book. */
   chapterIndex?: number;
+  includeProgress?: boolean;
 };
 
 /** A failed export request, keeping the server's code and retry hint. */
@@ -233,7 +234,7 @@ export type TtsPlaybackEventSnapshot = {
   completedCount: number | null;
   skippedCount: number | null;
   plannedCount: number | null;
-  phase: 'downloading_model' | 'generating' | null;
+  phase: 'downloading_model' | 'generating' | 'checking_cache' | null;
   stopReason: 'usage_limit' | null;
   downloadedBytes: number | null;
   totalBytes: number | null;
@@ -265,7 +266,7 @@ export const subscribeTtsPlaybackEvents = (
             completedCount?: number;
             skippedCount?: number;
             plannedCount?: number;
-            phase?: 'downloading_model' | 'generating';
+            phase?: 'downloading_model' | 'generating' | 'checking_cache';
             stopReason?: 'usage_limit';
             downloadedBytes?: number;
             totalBytes?: number;
@@ -289,7 +290,7 @@ export const subscribeTtsPlaybackEvents = (
         plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
           ? Number(progress.plannedCount)
           : null,
-        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating'
+        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating' || progress?.phase === 'checking_cache'
           ? progress.phase
           : null,
         stopReason: progress?.stopReason === 'usage_limit' ? 'usage_limit' : null,
@@ -333,7 +334,7 @@ export const subscribeTtsExportGenerationEvents = (
             completedCount?: number;
             skippedCount?: number;
             plannedCount?: number;
-            phase?: 'downloading_model' | 'generating';
+            phase?: 'downloading_model' | 'generating' | 'checking_cache';
             stopReason?: 'usage_limit';
             downloadedBytes?: number;
             totalBytes?: number;
@@ -357,7 +358,7 @@ export const subscribeTtsExportGenerationEvents = (
         plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
           ? Number(progress.plannedCount)
           : null,
-        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating'
+        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating' || progress?.phase === 'checking_cache'
           ? progress.phase
           : null,
         stopReason: progress?.stopReason === 'usage_limit' ? 'usage_limit' : null,

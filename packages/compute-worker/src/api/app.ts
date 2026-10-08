@@ -216,6 +216,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         yield await storageDisabled();
       },
       putObject: storageDisabled,
+      putFile: storageDisabled,
       putParsedPdf: storageDisabled,
     }
     : createArtifactStorage({

@@ -5,6 +5,7 @@ import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 import {
   documentTimeToMediaTime,
   mediaTimeToDocumentTime,
+  mergePlaybackGrid,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
   shouldRefreshPlaybackSegmentTiming,
@@ -67,6 +68,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
   } = input;
   const playbackProjectionRafRef = useRef<number | null>(null);
   const playbackStreamBaseSecRef = useRef(0);
+  const playbackStreamStartOrdinalRef = useRef<number | null>(null);
   const playbackTimelineRef = useRef<TtsPlaybackGrid | null>(null);
   const playbackCursorOrdinalRef = useRef<number | null>(null);
   const [playbackTimeSec, setPlaybackTimeSec] = useState(0);
@@ -84,7 +86,16 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     timelineLoaderRef.current = createPlaybackTimelineLoader({
       getRunId: () => playbackRunIdRef.current,
       getSession: () => playbackSessionRef.current,
-      apply: (timeline) => { playbackTimelineRef.current = timeline; },
+      apply: (timeline) => {
+        playbackTimelineRef.current = mergePlaybackGrid(playbackTimelineRef.current, timeline);
+        const anchor = playbackTimelineRef.current.segments.find((segment) => (
+          segment.ordinal === playbackStreamStartOrdinalRef.current
+        ));
+        // Loading earlier cached chapters changes document coordinates, never
+        // the media clock or its source ordinal. Rebase to keep highlighting
+        // attached to the same audible segment as the overview arrives.
+        if (anchor) playbackStreamBaseSecRef.current = anchor.startMs / 1000;
+      },
       load: async (url, signal) => {
         const response = await fetch(url, { cache: 'no-store', signal });
         if (!response.ok) throw new Error(`Failed to load TTS playback timeline: ${response.status}`);
@@ -115,13 +126,15 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
   ) => {
     const target = Math.max(0, documentTimeSec);
     let base = playbackStreamBaseSecRef.current;
-    if (options?.reopenStream || target + 0.001 < base) {
+    if (options?.reopenStream || targetOrdinal !== playbackStreamStartOrdinalRef.current
+      || target + 0.001 < base) {
       const session = playbackSessionRef.current;
       if (session) {
         const url = new URL(session.audioUrl, window.location.href);
         url.searchParams.set('fromOrdinal', String(Math.max(0, Math.floor(targetOrdinal))));
         base = Math.max(0, targetStartSec);
         playbackStreamBaseSecRef.current = base;
+        playbackStreamStartOrdinalRef.current = targetOrdinal;
         audio.src = url.toString();
         audio.load();
       }
@@ -129,8 +142,19 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     audio.currentTime = documentTimeToMediaTime(target, base);
   }, [playbackSessionRef]);
 
-  const refreshPlaybackTimeline = useCallback(async (timelineUrl: string, signal?: AbortSignal): Promise<TtsPlaybackGrid> => {
-    return timelineLoaderRef.current!.refresh(timelineUrl, signal);
+  const refreshPlaybackTimeline = useCallback(async (
+    timelineUrl: string, signal?: AbortSignal,
+    readWindow?: { minOrdinal: number; limit: number },
+  ): Promise<TtsPlaybackGrid> => {
+    const query = readWindow ? `?minOrdinal=${readWindow.minOrdinal}&limit=${readWindow.limit}` : '';
+    await timelineLoaderRef.current!.refresh(timelineUrl + query, signal);
+    if (signal?.aborted || !playbackTimelineRef.current) throw new DOMException('Playback timeline replaced', 'AbortError');
+    return playbackTimelineRef.current;
+  }, []);
+
+  const setPlaybackStreamAnchor = useCallback((ordinal: number, seconds: number) => {
+    playbackStreamStartOrdinalRef.current = ordinal;
+    playbackStreamBaseSecRef.current = Math.max(0, seconds);
   }, []);
 
   const projectPlaybackTime = useCallback((currentTimeSec: number) => {
@@ -146,7 +170,9 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
       const now = Date.now();
       if (session?.timelineUrl && now - lastTimelineHealAtRef.current > 1_000) {
         lastTimelineHealAtRef.current = now;
-        void refreshPlaybackTimeline(session.timelineUrl).catch(() => undefined);
+        void refreshPlaybackTimeline(session.timelineUrl, undefined, {
+          minOrdinal: projection.segment.ordinal, limit: 64,
+        }).catch(() => undefined);
       }
     }
 
@@ -229,6 +255,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     timelineLoaderRef.current?.reset();
     playbackTimelineRef.current = null;
     playbackStreamBaseSecRef.current = 0;
+    playbackStreamStartOrdinalRef.current = null;
     lastProjectionRef.current = null;
     playbackCursorOrdinalRef.current = null;
     publishPlaybackTimeSec(0, { force: true });
@@ -236,7 +263,6 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
 
   return {
     playbackCursorOrdinalRef,
-    playbackStreamBaseSecRef,
     playbackTimeSec,
     documentTimeForAudio,
     projectPlaybackTime,
@@ -244,6 +270,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     refreshPlaybackTimeline,
     resetPlaybackProjection,
     setAudioDocumentTime,
+    setPlaybackStreamAnchor,
     startPlaybackProjectionLoop,
     stopPlaybackProjectionLoop,
   };

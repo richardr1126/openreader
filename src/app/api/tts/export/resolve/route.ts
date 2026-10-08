@@ -58,6 +58,7 @@ function normalizeChapterIndex(value: unknown): number | null {
 }
 
 export async function POST(request: NextRequest) {
+  const startedAt = Date.now();
   const { logger } = createRequestLogger({
     route: '/api/tts/export/resolve',
     request,
@@ -78,6 +79,7 @@ export async function POST(request: NextRequest) {
     const format = normalizeFormat(bodyRecord.format);
     const speed = normalizeSpeed(bodyRecord.speed);
     const chapterIndex = normalizeChapterIndex(bodyRecord.chapterIndex);
+    const includeProgress = bodyRecord.includeProgress !== false || chapterIndex !== null;
     if (Number.isNaN(chapterIndex)) {
       return NextResponse.json({ error: 'chapterIndex must be a non-negative integer' }, { status: 400 });
     }
@@ -130,14 +132,14 @@ export async function POST(request: NextRequest) {
     };
 
     const client = new ComputeWorkerClient();
-    const readGeneration = async () => {
+    const readGeneration = async (withProgress = false) => {
       const generation = await client.resolveTtsPlaybackSession(sessionScope);
-      const progress: TtsPlaybackExportProgressSummary | null = generation.session
+      const progress: TtsPlaybackExportProgressSummary | null = generation.session && withProgress
         ? await client.getTtsPlaybackExportProgress(sessionId)
         : null;
       return { generation, progress, ...classifyExportGeneration(generation) };
     };
-    let current = await readGeneration();
+    let current = await readGeneration(action === 'retry-skipped' || chapterIndex !== null);
 
     const runActive = current.state === 'generating' || current.state === 'queued';
     if (action === 'stop' && runActive) {
@@ -190,13 +192,20 @@ export async function POST(request: NextRequest) {
       current = await readGeneration();
     }
 
+    // Commands have already been applied. Chapter discovery must never gate Stop.
+    if (includeProgress && !current.progress && current.generation.session) {
+      current.progress = await client.getTtsPlaybackExportProgress(sessionId);
+    }
     const chapter = chapterIndex === null ? null : current.progress?.chapters[chapterIndex] ?? null;
     if (chapterIndex !== null && !chapter) {
       return NextResponse.json({ error: 'Chapter not found in this export' }, { status: 404 });
     }
     const counts = chapter ?? (current.progress
       ? { completedSegments: current.progress.completedSegments, skippedSegments: current.progress.skippedSegments }
-      : null);
+      : current.generation.progress
+        ? { completedSegments: current.generation.progress.completedCount,
+          skippedSegments: current.generation.progress.skippedCount ?? 0 }
+        : null);
     // A whole book needs a finished run; one chapter only needs its own
     // segments settled, so it can be downloaded while generation continues.
     const settled = chapter
@@ -261,6 +270,9 @@ export async function POST(request: NextRequest) {
         : null,
     };
     const response = NextResponse.json(snapshot);
+    logger.info?.({ event: 'tts.export.resolved', durationMs: Date.now() - startedAt,
+      action, includeProgress, generationState: current.state, artifactState,
+    }, 'Audiobook export resolved');
     if (device?.didCreate) setDeviceIdCookie(response, device.deviceId);
     return response;
   } catch (error) {

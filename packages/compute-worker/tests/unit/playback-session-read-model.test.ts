@@ -84,6 +84,7 @@ function createFixture(planLength = 100) {
     async listPrefix() { return []; },
     async *listPrefixPages() {},
     async putObject() {},
+    async putFile() {},
     async putParsedPdf() { throw new Error('unused'); },
   } satisfies ArtifactStorage;
   const playbackStorage = {
@@ -148,6 +149,9 @@ describe('playback session read model', () => {
     const audioFirstRows = await fixture.model.readSegmentIndexRows(session, { minOrdinal: 0, limit: 1 });
     expect(audioFirstRows[0]?.alignmentSource).toBeNull();
     expect(audioFirstRows[0]?.alignmentJson).toBeNull();
+    await fixture.model.readSegmentState(session, 0);
+    await fixture.model.readSegmentState(session, 0);
+    expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(1);
 
     fixture.sidecars.set(0, completedSidecar(0));
     const exactRows = await fixture.model.readSegmentIndexRows(session, { minOrdinal: 0, limit: 1 });
@@ -201,17 +205,34 @@ describe('playback session read model', () => {
     const listed = new Promise<number[]>((resolve) => { release = resolve; });
     fixture.listSegmentOrdinals.mockReturnValueOnce(listed);
     const timeline = fixture.model.readSegmentIndexRows(deepSession);
-    const durations = fixture.model.listCompletedDurations(deepSession, 10_000);
+    const overview = fixture.model.readSegmentIndexRows(deepSession);
     await vi.waitFor(() => expect(fixture.listSegmentOrdinals).toHaveBeenCalledTimes(1));
     release([2, 9_000]);
     expect((await timeline).map((row) => row.alignmentSource)).toEqual(['exact', null]);
-    expect([...(await durations).keys()]).toEqual([2, 9_000]);
+    expect((await overview).map((row) => row.ordinal)).toEqual([2, 9_000]);
     expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(2);
 
     fixture.sidecars.set(9_000, completedSidecar(9_000));
-    const exact = await fixture.model.readSegmentIndexRows(deepSession);
+    // Whole-book overviews retain audio-only metadata instead of refetching
+    // thousands of entries outside the playhead. The priority window heals
+    // alignment as soon as playback visits that ordinal.
+    const overviewAgain = await fixture.model.readSegmentIndexRows(deepSession);
+    expect(overviewAgain.at(-1)?.alignmentSource).toBe(null);
+    expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(2);
+    const exact = await fixture.model.readSegmentIndexRows(deepSession, { minOrdinal: 9000, limit: 1 });
     expect(exact.at(-1)?.alignmentSource).toBe('exact');
     expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(3);
+  });
+
+  test('reads a deep cursor window while the whole-book catalogue remains blocked', async () => {
+    const fixture = createFixture(10_000);
+    fixture.sidecars.set(8000, completedSidecar(8000));
+    fixture.listSegmentOrdinals.mockImplementation(() => new Promise<number[]>(() => undefined));
+    const rows = await fixture.model.readSegmentIndexRows(session, { minOrdinal: 8000, limit: 64 });
+    expect(rows.map((row) => row.ordinal)).toEqual([8000]);
+    expect(fixture.listSegmentOrdinals).not.toHaveBeenCalled();
+    expect(fixture.readSegmentMetadata).toHaveBeenCalledTimes(64);
+    expect(fixture.readSegmentMetadata.mock.calls.every(([scope]) => scope.ordinal >= 8000 && scope.ordinal < 8064)).toBe(true);
   });
 
   test('serves the in-process sidecar cache when catalogue discovery fails', async () => {

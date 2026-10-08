@@ -8,7 +8,7 @@ export interface JobHandlerContext {
   pdfHardCapMs: number;
   ttsPlaybackSegmentTimeoutMs: number;
   s3Prefix: string;
-  logger?: { warn(data: unknown, message?: string): void };
+  logger?: { warn(data: unknown, message?: string): void; info?(data: unknown, message?: string): void };
   acquireProviderCapacity?: (input: {
     providerRef: string;
     characters: number;

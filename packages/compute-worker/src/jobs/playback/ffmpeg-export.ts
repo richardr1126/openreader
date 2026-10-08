@@ -1,5 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import ffmpegPath from 'ffmpeg-static';
@@ -104,19 +103,18 @@ function buildFfmetadata(input: { title: string; chapters: ExportChapter[] }): s
 }
 
 export async function runFfmpegExport(input: {
-  source: Buffer;
+  inputPath: string;
+  outputPath: string;
+  workDir: string;
   format: 'mp3' | 'm4b';
   speed: number;
   title: string;
   chapters: ExportChapter[];
-}): Promise<Buffer> {
+}): Promise<void> {
   const executable = ffmpegPath;
   if (!executable) throw new Error('ffmpeg-static did not provide an executable path');
-  const workDir = await mkdtemp(join(tmpdir(), 'openreader-audiobook-export-'));
-  const inputPath = join(workDir, 'input.mp3');
-  const outputPath = join(workDir, input.format === 'm4b' ? 'audiobook.m4b' : 'audiobook.mp3');
+  const { inputPath, outputPath, workDir } = input;
   const metadataPath = join(workDir, 'chapters.ffmetadata');
-  await writeFile(inputPath, input.source);
   const args = ['-hide_banner', '-loglevel', 'error', '-i', inputPath];
   if (input.format === 'm4b') {
     await writeFile(metadataPath, buildFfmetadata({ title: input.title, chapters: input.chapters }), 'utf8');
@@ -128,25 +126,20 @@ export async function runFfmpegExport(input: {
   } else {
     args.push('-vn', '-codec:a', 'libmp3lame', '-b:a', '128k', '-f', 'mp3', outputPath);
   }
-  try {
-    const stderr: Buffer[] = [];
-    await new Promise<void>((resolve, reject) => {
-      const child = spawn(executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
-      child.stderr.on('data', (chunk: Buffer) => {
-        stderr.push(Buffer.from(chunk));
-        if (stderr.length > 16) stderr.shift();
-      });
-      child.on('error', reject);
-      child.on('close', (code: number | null) => {
-        if (code) {
-          reject(new Error(`ffmpeg audiobook export failed with code ${code}: ${Buffer.concat(stderr).toString('utf8').slice(-500)}`));
-          return;
-        }
-        resolve();
-      });
+  const stderr: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(executable, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderr.push(Buffer.from(chunk));
+      if (stderr.length > 16) stderr.shift();
     });
-    return await readFile(outputPath);
-  } finally {
-    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
-  }
+    child.on('error', reject);
+    child.on('close', (code: number | null) => {
+      if (code !== 0) {
+        reject(new Error(`ffmpeg audiobook export failed with code ${code}: ${Buffer.concat(stderr).toString('utf8').slice(-500)}`));
+        return;
+      }
+      resolve();
+    });
+  });
 }

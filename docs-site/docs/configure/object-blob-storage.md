@@ -61,7 +61,12 @@ Synthetic key layouts:
 - `/openreader-cache/previews/{documentId}/{previewVersion}`
 - `/openreader-cache/audio/{audioKey}/{version}`
 
-Explicit audiobook MP3 exports are not persistently cached.
+Audiobook MP3/M4B downloads are not persisted in browser Cache Storage. Completed
+files and their metadata are durable in server object storage and are kept until
+you clear the relevant audio, delete the document/account, or remove the stored
+objects. Downloads get fresh links; a signed link expires after five minutes,
+which does not delete the file. Temporary account export ZIPs expire after seven
+days. Document storage sizes include finished audiobook variants.
 
 ## Document previews
 

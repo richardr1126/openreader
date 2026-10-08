@@ -21,7 +21,7 @@ function UsageRow({ label, bytes }: { label: string; bytes: number | undefined }
   return (
     <div className="flex items-center justify-between gap-3 text-sm">
       <span className="text-foreground">{label}</span>
-      <span className="tabular-nums text-soft">{bytes === undefined ? '…' : formatBytes(bytes)}</span>
+      <span className="tabular-nums text-soft">{bytes === undefined ? '—' : formatBytes(bytes)}</span>
     </div>
   );
 }
@@ -97,8 +97,14 @@ export function DocumentStorageSection({ documentId }: { documentId: string }) {
         <UsageRow label="Unused audio" bytes={usage?.unusedAudioBytes} />
         <UsageRow label="Document data" bytes={usage?.documentDataBytes} />
       </div>
+      {usageQuery.isFetching && <p role="status" className="text-xs text-soft animate-pulse">Measuring document storage…</p>}
       {usageQuery.isError ? (
-        <p className="text-xs text-danger">{errorMessage(usageQuery.error, 'Failed to load storage usage')}</p>
+        <div role="status" className="space-y-2">
+          <p className="text-xs text-danger">{errorMessage(usageQuery.error, 'Failed to load storage usage')}</p>
+          <Button size="sm" variant="ghost" onClick={() => void usageQuery.refetch()} disabled={usageQuery.isFetching}>
+            {usageQuery.isFetching ? 'Retrying…' : 'Retry measurement'}
+          </Button>
+        </div>
       ) : null}
       {usage?.truncated ? (
         <p className="text-xs text-soft">Sizes are partial; this document has more stored objects than one scan covers.</p>
@@ -107,7 +113,7 @@ export function DocumentStorageSection({ documentId }: { documentId: string }) {
         <Button
           size="sm"
           onClick={() => setPendingAction('reclaim')}
-          disabled={!payload || busy || usage?.unusedAudioBytes === 0}
+          disabled={!payload || !usage || busy || usage.unusedAudioBytes === 0}
         >
           {reclaimMutation.isPending ? 'Reclaiming…' : 'Reclaim unused audio'}
         </Button>

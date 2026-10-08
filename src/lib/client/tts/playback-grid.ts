@@ -25,6 +25,8 @@ export type TtsPlaybackGrid = {
   generationStartOrdinal: number;
   durationMs: number;
   segments: TtsPlaybackGridSegment[];
+  readWindow?: { minOrdinal: number; limit: number };
+  sessionUpdatedAt?: number;
 };
 
 export type TtsPlaybackTimeProjection = {
@@ -112,7 +114,41 @@ export function normalizePlaybackGrid(value: unknown): TtsPlaybackGrid {
       : Number.isFinite(Number(rec.startOrdinal)) ? Math.max(0, Math.floor(Number(rec.startOrdinal))) : 0,
     durationMs: Number.isFinite(Number(rec.durationMs)) ? Math.max(0, Math.floor(Number(rec.durationMs))) : 0,
     segments,
+    sessionUpdatedAt: Number(rec.sessionUpdatedAt) || 0,
+    ...(rec.readWindow && typeof rec.readWindow === 'object'
+      && Number.isSafeInteger((rec.readWindow as { minOrdinal?: unknown }).minOrdinal)
+      && Number.isSafeInteger((rec.readWindow as { limit?: unknown }).limit)
+      ? { readWindow: rec.readWindow as { minOrdinal: number; limit: number } } : {}),
   };
+}
+
+/** One canonical grid combines priority cursor reads with the complete overview.
+ * Completed audio and exact alignment are monotonic within a playback run/cache
+ * epoch. A late overview must not erase newer ready audio or exact timing.
+ */
+export function mergePlaybackGrid(
+  previous: TtsPlaybackGrid | null,
+  incoming: TtsPlaybackGrid,
+): TtsPlaybackGrid {
+  if (!previous || previous.sessionId !== incoming.sessionId) return incoming;
+  const old = new Map(previous.segments.map((segment) => [segment.ordinal, segment]));
+  let cursorMs = 0;
+  const segments = incoming.segments.map((segment) => {
+    const cached = old.get(segment.ordinal);
+    const ready = cached?.generated && (!segment.generated || (cached.alignment && !segment.alignment))
+      ? cached : segment;
+    const merged = { ...ready, startMs: cursorMs, endMs: cursorMs + ready.durationMs };
+    cursorMs = merged.endMs;
+    return merged;
+  });
+  // A queued snapshot that started before a running/terminal response cannot
+  // return the current run to its preparation state.
+  const older = (incoming.sessionUpdatedAt ?? 0) < (previous.sessionUpdatedAt ?? 0);
+  const status = older || (incoming.status === 'queued' && previous.status !== 'queued')
+    ? previous.status : incoming.status;
+  return { ...incoming, status,
+    sessionUpdatedAt: Math.max(incoming.sessionUpdatedAt ?? 0, previous.sessionUpdatedAt ?? 0),
+    durationMs: cursorMs, segments };
 }
 
 export function shouldRefreshPlaybackSegmentTiming(segment: TtsPlaybackGridSegment): boolean {

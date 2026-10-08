@@ -26,7 +26,7 @@ export const TASK_REGISTRY: TaskRegistry = {
   },
   'expire-export-artifacts': {
     name: 'Clean up expired exports',
-    description: 'Remove completed account and audiobook exports after their retention window.',
+    description: 'Remove temporary account export ZIPs after seven days. Audiobooks are kept until audio is cleared.',
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     maxRunMs: 45_000,
     run: expireExportArtifacts,

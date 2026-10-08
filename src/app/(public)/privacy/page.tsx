@@ -243,8 +243,9 @@ export default async function PrivacyPage() {
               <p>
                 Account records, reading state, source documents, and reusable derived artifacts are generally retained
                 while the account or document remains active. Incomplete temporary uploads are eligible for cleanup
-                after 24 hours. Durable compute operation state expires after 24 hours, and completed account-export and
-                audiobook-export artifacts are cleaned up after seven days by the shipped scheduled task. An operator
+                after 24 hours. Durable compute operation state expires after 24 hours, and completed account-export
+                ZIPs are cleaned up after seven days by the shipped scheduled task. Finished audiobook files remain
+                until the relevant audio, document, or account is deleted. An operator
                 can change task scheduling and may retain infrastructure logs or backups on a different schedule.
               </p>
               <p>
