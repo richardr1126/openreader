@@ -1919,8 +1919,11 @@ causes, now fixed:
 stop` and an optional `chapterIndex`, and returns a server-classified snapshot:
 generation state (`idle`, `queued`, `generating`, `complete`, `stopped`,
 `usage_limited`, `interrupted`, `failed`) with its cause, per-chapter progress
-from `GET /v1/tts-playback/sessions/:sessionId/export-progress`, and artifact
-state (`none`, `building`, `ready`, `stale`, `failed`). Stop cancels the export
+from `POST /v1/tts-playback/exports/progress`, and artifact state (`none`,
+`building`, `ready`, `stale`, `failed`). Progress is keyed by the cache scope
+and plan rather than a session: export sessions expire, and without one a book
+whose planned segments are all settled is reported `complete` instead of
+offering to generate it again. Stop cancels the export
 session through `POST /v1/tts-playback/sessions/:sessionId/cancel`, conditional
 on the generation run the request observed so a stop racing a resume never
 cancels the replacement run; cached audio is kept. A chapter artifact needs only that chapter's segments settled, so it

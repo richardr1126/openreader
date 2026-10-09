@@ -65,7 +65,7 @@ describe('compute worker domain route registrars', () => {
     expect(patches).toEqual([{ expectedRunId: 'run-1' }, { expectedRunId: 'run-2' }]);
   });
 
-  test('summarizes export progress per plan chapter', async () => {
+  test('summarizes export progress per plan chapter from the cache scope alone', async () => {
     const app = Fastify();
     apps.push(app);
     const plan = {
@@ -76,21 +76,44 @@ describe('compute worker domain route registrars', () => {
         { ordinal: 2, text: 'Three.', locator: { readerType: 'pdf', page: 2 } },
       ],
     };
+    const planObjectKey = `openreader/tts_playback_plan_v1/${'a'.repeat(64)}/3/pdf/sig.json`;
+    const scopes: unknown[] = [];
     registerPlaybackExportSessionRoutes({
       app,
+      s3Prefix: 'openreader',
       storage: { readObject: async () => Buffer.from(JSON.stringify(plan)) },
     } as unknown as ComputeWorkerRouteContext, {
-      readSession: async () => ({
-        sessionId: 'session-1', status: 'running', stopReason: null, lastError: null, planObjectKey: 'plan.json',
-      }),
-      listSegmentStates: async () => new Map([
-        [0, { status: 'completed', durationMs: 1_500 }],
-        [1, { status: 'error', message: 'fetch failed', code: null }],
-        [2, { status: 'generating' }],
-      ]),
+      listSegmentStates: async (scope: unknown) => {
+        scopes.push(scope);
+        return new Map([
+          [0, { status: 'completed', durationMs: 1_500 }],
+          [1, { status: 'error', message: 'fetch failed', code: null }],
+          [2, { status: 'generating' }],
+        ]);
+      },
     } as unknown as PlaybackSessionReadModel);
+    const scope = { storageUserId: 'user-1', documentId: 'a'.repeat(64), documentVersion: 3, settingsHash: 'settings-1' };
 
-    const response = await app.inject({ method: 'GET', url: '/v1/tts-playback/sessions/session-1/export-progress' });
+    const foreignPlan = await app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/exports/progress',
+      payload: { ...scope, planObjectKey: `openreader/tts_playback_plan_v1/${'b'.repeat(64)}/3/pdf/sig.json` },
+    });
+    expect(foreignPlan.statusCode).toBe(400);
+    const escapedPlan = await app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/exports/progress',
+      payload: { ...scope, planObjectKey: `openreader/tts_playback_plan_v1/${'a'.repeat(64)}/../${'b'.repeat(64)}/3/pdf/sig.json` },
+    });
+    expect(escapedPlan.statusCode).toBe(400);
+
+    // No session lookup: an expired export session still reports progress.
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/exports/progress',
+      payload: { ...scope, planObjectKey },
+    });
+    expect(scopes).toEqual([scope]);
 
     expect(response.json()).toMatchObject({
       plannedSegments: 3,

@@ -535,11 +535,16 @@ const ttsPlaybackSegmentErrorSchema = z.object({
   code: z.string().nullable(),
 });
 
+/** Export progress is read from the cache scope, which outlives any session. */
+export const ttsPlaybackExportProgressRequestSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  documentVersion: z.number().int().nonnegative(),
+  settingsHash: z.string().trim().min(1).max(256),
+  planObjectKey: z.string().trim().min(1).max(2048),
+}).strict();
+
 export const ttsPlaybackExportProgressSummarySchema = z.object({
-  sessionId: z.string(),
-  status: z.enum(['queued', 'running', 'succeeded', 'failed', 'canceled']),
-  stopReason: z.literal('usage_limit').nullable(),
-  lastError: z.string().nullable(),
   plannedSegments: z.number(),
   completedSegments: z.number(),
   skippedSegments: z.number(),

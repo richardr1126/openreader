@@ -676,23 +676,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tts-playback/sessions/{sessionId}/export-progress": {
+    "/v1/tts-playback/exports/progress": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: {
+        get?: never;
+        put?: never;
+        post: {
             parameters: {
                 query?: never;
                 header?: never;
-                path: {
-                    sessionId: string;
-                };
+                path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": {
+                        storageUserId: string;
+                        documentId: string;
+                        documentVersion: number;
+                        settingsHash: string;
+                        planObjectKey: string;
+                    };
+                };
+            };
             responses: {
                 /** @description Default Response */
                 200: {
@@ -701,11 +711,6 @@ export interface paths {
                     };
                     content: {
                         "application/json": {
-                            sessionId: string;
-                            /** @enum {string} */
-                            status: "queued" | "running" | "succeeded" | "failed" | "canceled";
-                            stopReason: "usage_limit" | null;
-                            lastError: string | null;
                             plannedSegments: number;
                             completedSegments: number;
                             skippedSegments: number;
@@ -755,8 +760,6 @@ export interface paths {
                 };
             };
         };
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;

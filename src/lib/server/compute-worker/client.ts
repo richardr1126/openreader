@@ -16,6 +16,7 @@ import type {
   TtsPlaybackCursorUpdateRequest,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResolution,
+  TtsPlaybackExportProgressRequest,
   TtsPlaybackExportProgressSummary,
   TtsPlaybackPlanRequest,
   TtsPlaybackSessionCancelResponse,
@@ -218,9 +219,11 @@ export class ComputeWorkerClient {
     }
   }
 
-  async getTtsPlaybackExportProgress(sessionId: string): Promise<TtsPlaybackExportProgressSummary | null> {
+  async getTtsPlaybackExportProgress(
+    input: TtsPlaybackExportProgressRequest,
+  ): Promise<TtsPlaybackExportProgressSummary | null> {
     try {
-      return await this.requestJson('GET', `/v1/tts-playback/sessions/${encodeURIComponent(sessionId)}/export-progress`);
+      return await this.requestJson('POST', '/v1/tts-playback/exports/progress', input);
     } catch (error) {
       if (error instanceof WorkerHttpError && error.status === 404) return null;
       throw error;

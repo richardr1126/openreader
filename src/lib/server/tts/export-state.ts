@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type {
   ComputeOperation,
   TtsPlaybackExportArtifactResolution,
+  TtsPlaybackExportProgressSummary,
   TtsPlaybackSessionResolution,
 } from '@/lib/server/compute-worker/protocol';
 import type {
@@ -59,15 +60,25 @@ export function exportOperationIssue(operation: ComputeOperation | null | undefi
 /**
  * The durable export session is the generation authority; its current worker
  * operation tells whether a queued/running session still has a live run.
+ * Sessions expire, so without one the cache scope decides: a book whose every
+ * planned segment is settled is complete and never needs another run.
  */
-export function classifyExportGeneration(generation: TtsPlaybackSessionResolution): {
+export function classifyExportGeneration(
+  generation: TtsPlaybackSessionResolution,
+  progress: TtsPlaybackExportProgressSummary | null,
+): {
   state: TtsExportGenerationState;
   issue: TtsExportIssue | null;
 } {
   const session = generation.session && typeof generation.session === 'object'
     ? generation.session as { status?: unknown; stopReason?: unknown; lastError?: unknown }
     : null;
-  if (!session) return { state: 'idle', issue: null };
+  if (!session) {
+    const settled = progress !== null
+      && progress.completedSegments > 0
+      && progress.completedSegments + progress.skippedSegments === progress.plannedSegments;
+    return { state: settled ? 'complete' : 'idle', issue: null };
+  }
   const lastError = typeof session.lastError === 'string' && session.lastError ? session.lastError : null;
   switch (session.status) {
     case 'succeeded':
