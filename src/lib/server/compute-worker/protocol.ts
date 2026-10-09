@@ -50,8 +50,10 @@ export type TtsPlaybackExportArtifactMetadata =
   NonNullable<TtsPlaybackExportArtifactResolution['artifact']>;
 export type TtsPlaybackSessionCancelResponse =
   paths['/v1/tts-playback/sessions/{sessionId}/cancel']['post']['responses'][200]['content']['application/json'];
+export type TtsPlaybackExportProgressRequest =
+  paths['/v1/tts-playback/exports/progress']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackExportProgressSummary =
-  paths['/v1/tts-playback/sessions/{sessionId}/export-progress']['get']['responses'][200]['content']['application/json'];
+  paths['/v1/tts-playback/exports/progress']['post']['responses'][200]['content']['application/json'];
 export type DocumentPreviewRequest =
   paths['/v1/document-previews/jobs']['post']['requestBody']['content']['application/json'];
 export type DocumentPreviewResolution =

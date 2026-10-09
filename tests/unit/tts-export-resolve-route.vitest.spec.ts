@@ -108,10 +108,6 @@ function chapter(index: number, completed: number, skipped = 0, planned = 10) {
 
 function summary(chapters: ReturnType<typeof chapter>[]) {
   return {
-    sessionId: 'session-1',
-    status: 'running',
-    stopReason: null,
-    lastError: null,
     plannedSegments: chapters.reduce((sum, row) => sum + row.plannedSegments, 0),
     completedSegments: chapters.reduce((sum, row) => sum + row.completedSegments, 0),
     skippedSegments: chapters.reduce((sum, row) => sum + row.skippedSegments, 0),
@@ -174,6 +170,36 @@ describe('POST /api/tts/export/resolve', () => {
     }));
   });
 
+  test('reports a book whose session expired as complete from its cache scope', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0 }, operation: null,
+    });
+
+    const lookup = await post({ action: 'resolve', includeProgress: false });
+    expect(lookup.json.generation.state).toBe('complete');
+    expect(lookup.json.progress.chapters).toHaveLength(2);
+    expect(lookup.json.download.filename).toBe('book.mp3');
+    expect(hoisted.exportProgress).toHaveBeenCalledWith({
+      storageUserId: 'user-1',
+      documentId: 'doc-1',
+      documentVersion: 1,
+      settingsHash: 'settings-1',
+      planObjectKey: 'plans/doc-1.json',
+    });
+
+    await post({ action: 'start' });
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+  });
+
+  test('offers generation for an idle scope with segments still missing', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 4)]));
+    const { json } = await post({ action: 'resolve', includeProgress: false });
+    expect(json.generation.state).toBe('idle');
+    expect(json.progress.completedSegments).toBe(14);
+  });
+
   test('finds a ready file without entering a slow chapter scan', async () => {
     hoisted.resolveSession.mockResolvedValue(completeSession);
     hoisted.exportProgress.mockImplementation(() => new Promise(() => undefined));
@@ -215,6 +241,7 @@ describe('POST /api/tts/export/resolve', () => {
     hoisted.resolveSession
       .mockResolvedValueOnce({ session: null, operation: null, progress: null })
       .mockResolvedValueOnce(completeSession);
+    hoisted.exportProgress.mockResolvedValueOnce(summary([chapter(0, 0), chapter(1, 0)]));
 
     const { status } = await post();
 

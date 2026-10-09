@@ -131,13 +131,24 @@ export async function POST(request: NextRequest) {
       speed,
     };
 
+    const progressScope = {
+      storageUserId: scope.storageUserId,
+      documentId: parsed.documentId,
+      documentVersion: scope.documentVersion,
+      settingsHash,
+      planObjectKey,
+    };
+
     const client = new ComputeWorkerClient();
     const readGeneration = async (withProgress = false) => {
       const generation = await client.resolveTtsPlaybackSession(sessionScope);
-      const progress: TtsPlaybackExportProgressSummary | null = generation.session && withProgress
-        ? await client.getTtsPlaybackExportProgress(sessionId)
+      // Without a session (it expired, or none ever ran) the cache scope is
+      // the only record of what was generated, so it is read even on a fast
+      // lookup; otherwise a finished book would offer to generate again.
+      const progress: TtsPlaybackExportProgressSummary | null = withProgress || !generation.session
+        ? await client.getTtsPlaybackExportProgress(progressScope)
         : null;
-      return { generation, progress, ...classifyExportGeneration(generation) };
+      return { generation, progress, ...classifyExportGeneration(generation, progress) };
     };
     let current = await readGeneration(action === 'retry-skipped' || chapterIndex !== null);
 
@@ -193,8 +204,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Commands have already been applied. Chapter discovery must never gate Stop.
-    if (includeProgress && !current.progress && current.generation.session) {
-      current.progress = await client.getTtsPlaybackExportProgress(sessionId);
+    if (includeProgress && !current.progress) {
+      current.progress = await client.getTtsPlaybackExportProgress(progressScope);
     }
     const chapter = chapterIndex === null ? null : current.progress?.chapters[chapterIndex] ?? null;
     if (chapterIndex !== null && !chapter) {

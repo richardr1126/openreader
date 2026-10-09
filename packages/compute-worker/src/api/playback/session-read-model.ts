@@ -2,6 +2,7 @@ import type { ArtifactStorage } from '../../infrastructure/storage';
 import { toErrorMessage } from '../../infrastructure/errors';
 import type {
   TtsPlaybackSegmentMetadata,
+  TtsPlaybackSegmentScope,
   TtsPlaybackSessionState,
   TtsPlaybackStorage,
 } from '../../playback/storage';
@@ -37,7 +38,8 @@ export interface PlaybackSessionReadModel {
   ): Promise<PlaybackSegmentManifestRow[]>;
   readSegmentState(session: PlaybackSessionRow, ordinal: number): Promise<PlaybackSegmentState>;
   /** Every stored segment state for export progress, keyed by plan ordinal. */
-  listSegmentStates(session: PlaybackSessionRow, planLength: number): Promise<Map<number, PlaybackSegmentSettledState>>;
+  /** Settled states for one cache scope; export progress needs no live session. */
+  listSegmentStates(scope: TtsPlaybackSegmentScope, planLength: number): Promise<Map<number, PlaybackSegmentSettledState>>;
   forgetCachedSidecar(session: PlaybackSessionRow, ordinal: number): Promise<void>;
   invalidateSidecarsForScope(scope: PlaybackScope): number;
   invalidatePlansUnderPrefix(prefix: string): number;
@@ -78,7 +80,7 @@ function serializeTimelineAlignment(input: {
   return { alignmentJson: null, alignmentSource: null };
 }
 
-function scopeCacheKey(session: PlaybackSessionRow, cacheEpoch: number): string {
+function scopeCacheKey(session: TtsPlaybackSegmentScope, cacheEpoch: number): string {
   return `${session.storageUserId}\0${session.documentId}\0${Math.max(0, Math.floor(session.documentVersion))}\0${session.settingsHash}\0${Math.max(0, Math.floor(cacheEpoch))}`;
 }
 
@@ -106,7 +108,7 @@ export function createPlaybackSessionReadModel(input: {
   // progress refreshes re-read only error/generating sidecars.
   const completedDurationScopes = new Map<string, Map<number, number>>();
 
-  const getScopeEpoch = async (session: PlaybackSessionRow): Promise<number> => {
+  const getScopeEpoch = async (session: TtsPlaybackSegmentScope): Promise<number> => {
     return await playbackStorage?.artifacts.getScopeEpoch({
       storageUserId: session.storageUserId,
       documentId: session.documentId,
@@ -116,7 +118,7 @@ export function createPlaybackSessionReadModel(input: {
   };
 
   const getSidecarScope = (
-    session: PlaybackSessionRow,
+    session: TtsPlaybackSegmentScope,
     cacheEpoch: number,
   ): Map<number, TtsPlaybackSegmentMetadata> => {
     const key = scopeCacheKey(session, cacheEpoch);
@@ -133,7 +135,7 @@ export function createPlaybackSessionReadModel(input: {
   };
 
   const fetchSidecar = async (
-    session: PlaybackSessionRow,
+    session: TtsPlaybackSegmentScope,
     ordinal: number,
     cacheEpoch: number,
   ): Promise<TtsPlaybackSegmentMetadata | null> => {
@@ -323,9 +325,9 @@ export function createPlaybackSessionReadModel(input: {
       }
       return { status: 'pending', ordinal };
     },
-    async listSegmentStates(session, planLength) {
-      const cacheEpoch = await getScopeEpoch(session);
-      const key = scopeCacheKey(session, cacheEpoch);
+    async listSegmentStates(scope, planLength) {
+      const cacheEpoch = await getScopeEpoch(scope);
+      const key = scopeCacheKey(scope, cacheEpoch);
       let completed = completedDurationScopes.get(key);
       if (!completed) {
         if (completedDurationScopes.size >= SIDECAR_SCOPE_CACHE_MAX) {
@@ -337,16 +339,16 @@ export function createPlaybackSessionReadModel(input: {
       }
       const states = new Map<number, PlaybackSegmentSettledState>();
       for (const [ordinal, durationMs] of completed) states.set(ordinal, { status: 'completed', durationMs });
-      const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(session).catch((error) => {
+      const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(scope).catch((error) => {
         logger?.warn({
-          sessionId: session.sessionId,
+          documentId: scope.documentId,
           error: toErrorMessage(error),
         }, 'tts.playback.segment_state_catalogue_read_failed');
         return [];
       }) ?? []).filter((ordinal) => ordinal < planLength && !completed.has(ordinal));
       for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
         const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
-        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
+        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(scope, ordinal, cacheEpoch)));
         batch.forEach((ordinal, batchIndex) => {
           const sidecar = fetched[batchIndex];
           if (!sidecar) return;

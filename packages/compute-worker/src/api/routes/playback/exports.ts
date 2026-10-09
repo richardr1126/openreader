@@ -2,7 +2,10 @@ import { isNotFound } from '../../../infrastructure/storage';
 import { hashOpKey } from '../../../infrastructure/nats-adapters';
 import type { TtsPlaybackExportArtifactMetadata, WorkerOperationRequest } from '../../../operations/contracts';
 import { buildTtsPlaybackExportOperationKey } from '../../../operations/keys';
-import { ttsPlaybackExportMetadataArtifactKey } from '../../../storage/artifact-addressing';
+import {
+  ttsPlaybackExportMetadataArtifactKey,
+  ttsPlaybackPlanArtifactPrefix,
+} from '../../../storage/artifact-addressing';
 import { groupExportChapters, type ExportChapterGroup } from '../../../jobs/playback/export-chapters';
 import { readPersistedTtsPlaybackPlanSegments } from '../../../jobs/playback/plan';
 import { toComputeOperation } from '../../compute-operation';
@@ -16,6 +19,7 @@ import {
   ttsPlaybackExportArtifactMetadataSchema,
   ttsPlaybackExportArtifactResolutionSchema,
   ttsPlaybackExportArtifactResolveSchema,
+  ttsPlaybackExportProgressRequestSchema,
   ttsPlaybackExportProgressSummarySchema,
   ttsPlaybackSessionCancelResponseSchema,
   ttsPlaybackSessionCancelSchema,
@@ -135,9 +139,11 @@ export function registerPlaybackExportJobRoutes(context: ComputeWorkerRouteConte
 }
 
 /**
- * Export-session progress and control. Chapter grouping is derived from the
- * immutable plan artifact, so it is cached per plan key; segment states come
- * from the shared sidecar read model.
+ * Export progress and session control. Progress is keyed by the cache scope,
+ * not a session, so a finished book still reports its chapters after its
+ * session expires. Chapter grouping is derived from the immutable plan
+ * artifact, so it is cached per plan key; segment states come from the shared
+ * sidecar read model.
  */
 export function registerPlaybackExportSessionRoutes(
   context: ComputeWorkerRouteContext,
@@ -160,9 +166,9 @@ export function registerPlaybackExportSessionRoutes(
     return groups;
   };
 
-  app.get('/v1/tts-playback/sessions/:sessionId/export-progress', {
+  app.post('/v1/tts-playback/exports/progress', {
     schema: {
-      params: sessionIdParamsSchema,
+      body: jsonSchema(ttsPlaybackExportProgressRequestSchema),
       response: {
         200: jsonSchema(ttsPlaybackExportProgressSummarySchema),
         400: errorResponseSchema,
@@ -170,19 +176,23 @@ export function registerPlaybackExportSessionRoutes(
       },
     },
   }, async (request, reply) => {
-    const sessionId = (request.params as { sessionId?: string }).sessionId?.trim() ?? '';
-    if (!sessionId) {
+    const parsed = ttsPlaybackExportProgressRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
       reply.code(400);
-      return { error: 'Missing playback session id' };
+      return { error: 'Invalid request body', issues: parsed.error.issues };
     }
-    const session = await readModel.readSession(sessionId);
-    const groups = session?.planObjectKey ? await readChapterGroups(session.planObjectKey) : null;
-    if (!session || !groups) {
+    const { planObjectKey, ...scope } = parsed.data;
+    if (!planObjectKey.startsWith(ttsPlaybackPlanArtifactPrefix({ documentId: scope.documentId, prefix: context.s3Prefix }))) {
+      reply.code(400);
+      return { error: 'Plan does not belong to this document' };
+    }
+    const groups = await readChapterGroups(planObjectKey);
+    if (!groups) {
       reply.code(404);
-      return { error: 'Export session not found' };
+      return { error: 'Export plan not found' };
     }
     const plannedSegments = groups.reduce((sum, group) => sum + group.ordinals.length, 0);
-    const states = await readModel.listSegmentStates(session, plannedSegments);
+    const states = await readModel.listSegmentStates(scope, plannedSegments);
     let completedSegments = 0;
     let skippedSegments = 0;
     let lastSkipError: { message: string | null; code: string | null } | null = null;
@@ -218,10 +228,6 @@ export function registerPlaybackExportSessionRoutes(
       };
     });
     return {
-      sessionId,
-      status: session.status,
-      stopReason: session.stopReason ?? null,
-      lastError: session.lastError,
       plannedSegments,
       completedSegments,
       skippedSegments,

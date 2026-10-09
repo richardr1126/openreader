@@ -5853,18 +5853,52 @@
         }
       }
     },
-    "/v1/tts-playback/sessions/{sessionId}/export-progress": {
-      "get": {
-        "parameters": [
-          {
-            "schema": {
-              "type": "string"
-            },
-            "in": "path",
-            "name": "sessionId",
-            "required": true
+    "/v1/tts-playback/exports/progress": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "settingsHash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "planObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  }
+                },
+                "required": [
+                  "storageUserId",
+                  "documentId",
+                  "documentVersion",
+                  "settingsHash",
+                  "planObjectKey"
+                ],
+                "additionalProperties": false
+              }
+            }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "Default Response",
@@ -5873,42 +5907,6 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "sessionId": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "queued",
-                        "running",
-                        "succeeded",
-                        "failed",
-                        "canceled"
-                      ]
-                    },
-                    "stopReason": {
-                      "anyOf": [
-                        {
-                          "type": "string",
-                          "enum": [
-                            "usage_limit"
-                          ]
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
-                    "lastError": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    },
                     "plannedSegments": {
                       "type": "number"
                     },
@@ -6018,10 +6016,6 @@
                     }
                   },
                   "required": [
-                    "sessionId",
-                    "status",
-                    "stopReason",
-                    "lastError",
                     "plannedSegments",
                     "completedSegments",
                     "skippedSegments",
