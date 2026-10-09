@@ -14,10 +14,12 @@ import {
   getTempDocumentFinalizeReceipt,
   headDocumentBlob,
   headTempDocumentBlob,
+  isDocumentBlobIntegrityError,
   isMissingBlobError,
   isPreconditionFailed,
   isValidTempUploadToken,
   putTempDocumentFinalizeReceipt,
+  verifyDocumentBlobIntegrity,
 } from '@/lib/server/documents/blobstore';
 import {
   buildDocxConversionRequest,
@@ -184,6 +186,40 @@ async function loadTempUpload(input: {
   throw lastError instanceof Error ? lastError : new Error('Temporary upload is unavailable');
 }
 
+/**
+ * The canonical key is a SHA-256 address. HEAD alone does not prove its
+ * contents are complete. Verify within the document lease before registering.
+ * If the existing/copy-once object is corrupt, make one bounded replacement
+ * from the known-good source and verify again; never record an unverified copy.
+ */
+async function ensureVerifiedDocumentBlob(input: {
+  documentId: string;
+  namespace: string | null;
+  expectedSize: number;
+  copy: (ifNoneMatch: boolean) => Promise<void>;
+}): Promise<number> {
+  try {
+    await headDocumentBlob(input.documentId, input.namespace);
+  } catch (error) {
+    if (!isMissingBlobError(error)) throw error;
+    try {
+      await input.copy(true);
+    } catch (copyError) {
+      if (!isPreconditionFailed(copyError)) throw copyError;
+    }
+  }
+
+  try {
+    return await verifyDocumentBlobIntegrity(input.documentId, input.namespace, input.expectedSize);
+  } catch (error) {
+    if (!isDocumentBlobIntegrityError(error)) throw error;
+  }
+
+  // Only recover an integrity mismatch, not an S3 transport/auth failure.
+  await input.copy(false);
+  return verifyDocumentBlobIntegrity(input.documentId, input.namespace, input.expectedSize);
+}
+
 async function registerConvertedDocx(input: {
   upload: FinalizeUpload;
   userId: string;
@@ -195,31 +231,25 @@ async function registerConvertedDocx(input: {
   const documentId = input.artifact.documentId;
 
   const stored = await withDocumentBlobLease(documentId, async () => {
-    try {
-      await headDocumentBlob(documentId, input.namespace);
-    } catch (error) {
-      if (!isMissingBlobError(error)) throw error;
-      try {
-        await copyObjectKeyToDocument(
-          input.artifact.objectKey,
-          documentId,
-          input.namespace,
-          'application/pdf',
-          { ifNoneMatch: true },
-        );
-      } catch (copyError) {
-        if (!isPreconditionFailed(copyError)) throw copyError;
-      }
-    }
-
-    const canonicalHead = await headDocumentBlob(documentId, input.namespace);
+    const canonicalSize = await ensureVerifiedDocumentBlob({
+      documentId,
+      namespace: input.namespace,
+      expectedSize: input.artifact.byteLength,
+      copy: (ifNoneMatch) => copyObjectKeyToDocument(
+        input.artifact.objectKey,
+        documentId,
+        input.namespace,
+        'application/pdf',
+        ifNoneMatch ? { ifNoneMatch: true } : undefined,
+      ),
+    });
     return registerUploadedDocument({
       documentId,
       userId: input.userId,
       namespace: input.namespace,
       name: finalizedName,
       type: 'pdf',
-      size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : input.artifact.byteLength,
+      size: canonicalSize,
       lastModified: input.upload.lastModified,
       folderId: input.upload.folderId,
       ...extractImportMetadata({ type: 'pdf', name: finalizedName, body: null, hints: input.upload.hints }),
@@ -338,7 +368,12 @@ async function finalizeOne(input: {
     input.namespace,
   );
   if (existingReceipt?.stored) {
-    return { kind: 'stored', stored: existingReceipt.stored };
+    // A stale success receipt must not bypass validation of the canonical bytes.
+    const verifiedSize = await verifyDocumentBlobIntegrity(
+      existingReceipt.stored.id,
+      input.namespace,
+    );
+    return { kind: 'stored', stored: { ...existingReceipt.stored, size: verifiedSize } };
   }
 
   const isDocxUpload = input.upload.type === 'docx';
@@ -372,35 +407,28 @@ async function finalizeOne(input: {
   });
 
   const stored = await withDocumentBlobLease(documentId, async () => {
-    // Keep the canonical blob and ownership-row write under the same durable
-    // lease so the orphan reaper cannot delete between its ownership check and
-    // this registration.
-    try {
-      await headDocumentBlob(documentId, input.namespace);
-    } catch (error) {
-      if (!isMissingBlobError(error)) throw error;
-      try {
-        await copyTempDocumentBlobToDocument(
-          input.upload.token,
-          input.userId,
-          documentId,
-          input.namespace,
-          finalizedContentType,
-          { ifNoneMatch: true },
-        );
-      } catch (copyError) {
-        if (!isPreconditionFailed(copyError)) throw copyError;
-      }
-    }
-
-    const canonicalHead = await headDocumentBlob(documentId, input.namespace);
+    // Keep verification and registration under the lease; other users may
+    // reference the same content-addressed object.
+    const canonicalSize = await ensureVerifiedDocumentBlob({
+      documentId,
+      namespace: input.namespace,
+      expectedSize: finalizedBody.byteLength,
+      copy: (ifNoneMatch) => copyTempDocumentBlobToDocument(
+        input.upload.token,
+        input.userId,
+        documentId,
+        input.namespace,
+        finalizedContentType,
+        ifNoneMatch ? { ifNoneMatch: true } : undefined,
+      ),
+    });
     return registerUploadedDocument({
       documentId,
       userId: input.userId,
       namespace: input.namespace,
       name: finalizedName,
       type: finalizedType,
-      size: canonicalHead.contentLength > 0 ? canonicalHead.contentLength : finalizedBody.byteLength,
+      size: canonicalSize,
       lastModified: input.upload.lastModified,
       folderId: input.upload.folderId,
       ...metadata,

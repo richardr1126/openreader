@@ -16,6 +16,7 @@ const hoisted = vi.hoisted(() => ({
   copyTempDocumentBlobToDocument: vi.fn(),
   copyObjectKeyToDocument: vi.fn(),
   tempDocumentUploadKey: vi.fn(),
+  verifyDocumentBlobIntegrity: vi.fn(),
   createAdmittedComputeOperation: vi.fn(),
 }));
 
@@ -54,8 +55,11 @@ vi.mock('@/lib/server/documents/blobstore', () => ({
   }),
   isPreconditionFailed: vi.fn(() => false),
   isValidTempUploadToken: vi.fn(() => true),
+  isDocumentBlobIntegrityError: vi.fn((error: unknown) =>
+    (error as { code?: string } | null)?.code === 'DOCUMENT_BLOB_INTEGRITY_MISMATCH'),
   putTempDocumentFinalizeReceipt: hoisted.putTempDocumentFinalizeReceipt,
   tempDocumentUploadKey: hoisted.tempDocumentUploadKey,
+  verifyDocumentBlobIntegrity: hoisted.verifyDocumentBlobIntegrity,
 }));
 
 vi.mock('@/lib/server/storage/s3', () => ({
@@ -114,6 +118,8 @@ describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
     hoisted.copyTempDocumentBlobToDocument.mockReset();
     hoisted.copyObjectKeyToDocument.mockReset();
     hoisted.tempDocumentUploadKey.mockReset();
+    hoisted.verifyDocumentBlobIntegrity.mockReset();
+    hoisted.verifyDocumentBlobIntegrity.mockResolvedValue(9);
     hoisted.createAdmittedComputeOperation.mockReset();
     hoisted.createAdmittedComputeOperation.mockImplementation(
       async (input: { create: () => Promise<unknown> }) => input.create(),
@@ -225,6 +231,7 @@ describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
       'application/pdf',
       { ifNoneMatch: true },
     );
+    expect(hoisted.verifyDocumentBlobIntegrity).toHaveBeenCalledWith('a'.repeat(64), null, 9);
     expect(hoisted.registerUploadedDocument).toHaveBeenCalledWith(expect.objectContaining({
       documentId: 'a'.repeat(64),
       name: 'Report.pdf',
@@ -232,4 +239,41 @@ describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
       folderId: undefined,
     }));
   });
+
+  test('does not register a DOCX-generated PDF whose permanent blob fails integrity verification', async () => {
+    hoisted.resolveDocumentConversion.mockResolvedValue({
+      artifact: {
+        schemaVersion: 1,
+        conversionId: 'conversion-1',
+        namespace: null,
+        sourceObjectKey: 'openreader/docx/source.bin',
+        sourceLastModifiedMs: lastModified,
+        sourceContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        sourceEtag: 'source-etag',
+        converterVersion: 'docx-to-pdf@libreoffice-v1',
+        objectKey: 'openreader/document_conversions_v1/docx/ns/_default/conversion-1/artifact.pdf',
+        metadataObjectKey: 'openreader/document_conversions_v1/docx/ns/_default/conversion-1/metadata.json',
+        contentType: 'application/pdf',
+        byteLength: 9,
+        documentId: 'a'.repeat(64),
+        status: 'ready',
+        createdAt: 2,
+      },
+      operation: null,
+    });
+    const integrityError = Object.assign(new Error('Stored document failed integrity check'), {
+      code: 'DOCUMENT_BLOB_INTEGRITY_MISMATCH',
+    });
+    hoisted.verifyDocumentBlobIntegrity.mockRejectedValue(integrityError);
+
+    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
+    const response = await POST(finalizeRequest());
+
+    expect(response.status).toBe(503);
+    expect(hoisted.verifyDocumentBlobIntegrity).toHaveBeenCalledTimes(2);
+    expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
+    expect(hoisted.putTempDocumentFinalizeReceipt).not.toHaveBeenCalled();
+    expect(hoisted.deleteTempDocumentUpload).not.toHaveBeenCalled();
+  });
+
 });
