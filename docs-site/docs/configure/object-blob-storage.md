@@ -45,6 +45,27 @@ OpenReader chooses one browser transport before every transfer with `S3_BROWSER_
 
 For a public SeaweedFS/S3 origin, use a dedicated HTTPS hostname such as `s3.reader.example`, not a `/s3` path mount. Preserve the signed path, query string, `Host`, and signed headers in the reverse proxy. Configure CORS for the OpenReader origin with `GET`, `HEAD`, `PUT`, and `OPTIONS`, allowing `Content-Type` and `x-amz-server-side-encryption`.
 
+## Document upload integrity
+
+Canonical documents use their SHA-256 digest as the storage object key. Finalization reads
+back the persisted canonical object and verifies the full SHA-256 and expected byte count
+**before** registering it in the library or issuing a successful finalize receipt. This
+also applies to PDFs produced by DOCX conversion. Existing finalize receipts are
+revalidated against the content hash before being returned; their recorded size is
+not trusted because old receipts may have been created before verification existed.
+
+If the canonical object is already present but corrupt, or the first copy does not
+verify, finalization makes **one** replacement attempt using the original temporary
+upload or converted artifact and re-verifies it. If the bytes still do not match,
+the upload fails with DOCUMENT_BLOB_INTEGRITY_MISMATCH. The temporary upload remains
+available until its normal expiry so the operation can be retried. Network/read errors
+are not treated as corruption and do not trigger a replacement. A failed verification
+does not register a document or schedule its preview.
+
+Object size, an S3 HEAD response, or an ETag alone cannot prove content integrity
+(particularly for multipart or encrypted objects). Verification reads and hashes the
+stored bytes. It does not retroactively scan previously registered library documents.
+
 ## Browser Cache Storage
 
 The browser may retain reusable document, preview, and TTS audio responses in the versioned `openreader-blobs-v1` Cache Storage cache. This is strictly an evictable performance optimization:
