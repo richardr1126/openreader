@@ -100,6 +100,12 @@ describe('compute worker domain route registrars', () => {
       payload: { ...scope, planObjectKey: `openreader/tts_playback_plan_v1/${'b'.repeat(64)}/3/pdf/sig.json` },
     });
     expect(foreignPlan.statusCode).toBe(400);
+    const escapedPlan = await app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/exports/progress',
+      payload: { ...scope, planObjectKey: `openreader/tts_playback_plan_v1/${'a'.repeat(64)}/../${'b'.repeat(64)}/3/pdf/sig.json` },
+    });
+    expect(escapedPlan.statusCode).toBe(400);
 
     // No session lookup: an expired export session still reports progress.
     const response = await app.inject({

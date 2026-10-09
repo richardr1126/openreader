@@ -182,7 +182,8 @@ export function registerPlaybackExportSessionRoutes(
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
     const { planObjectKey, ...scope } = parsed.data;
-    if (!planObjectKey.startsWith(ttsPlaybackPlanArtifactPrefix({ documentId: scope.documentId, prefix: context.s3Prefix }))) {
+    const planPrefix = ttsPlaybackPlanArtifactPrefix({ documentId: scope.documentId, prefix: context.s3Prefix });
+    if (!planObjectKey.startsWith(planPrefix) || planObjectKey.split('/').includes('..')) {
       reply.code(400);
       return { error: 'Plan does not belong to this document' };
     }
