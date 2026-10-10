@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { createServerAppError, isServerAppError } from '@/lib/server/errors/contract';
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
@@ -169,6 +171,52 @@ export async function headDocumentBlob(
     contentType: res.ContentType ?? null,
     eTag: res.ETag ?? null,
   };
+}
+
+/**
+ * Verify the *persisted* canonical bytes against the content-addressed key.
+ * S3 ETags (including multipart/encrypted objects) are not content hashes.
+ * Streams the response instead of buffering a second full document in memory.
+ */
+export async function verifyDocumentBlobIntegrity(
+  id: string,
+  namespace: string | null,
+  expectedSize?: number,
+): Promise<number> {
+  const cfg = getS3Config();
+  const response = await getS3InternalClient().send(new GetObjectCommand({
+    Bucket: cfg.bucket,
+    Key: documentKey(id, namespace),
+  }));
+  if (!response.Body) {
+    throw createServerAppError({
+      code: 'DOCUMENT_BLOB_INTEGRITY_MISMATCH',
+      message: 'The stored document is incomplete. Please retry the upload.',
+      errorClass: 'storage',
+    });
+  }
+
+  const hash = createHash('sha256');
+  let size = 0;
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) {
+    const bytes = Buffer.from(chunk);
+    size += bytes.byteLength;
+    hash.update(bytes);
+  }
+
+  if (hash.digest('hex') !== id.toLowerCase()
+      || (expectedSize !== undefined && size !== expectedSize)) {
+    throw createServerAppError({
+      code: 'DOCUMENT_BLOB_INTEGRITY_MISMATCH',
+      message: 'The stored document failed its integrity check. Please retry the upload.',
+      errorClass: 'storage',
+    });
+  }
+  return size;
+}
+
+export function isDocumentBlobIntegrityError(error: unknown): boolean {
+  return isServerAppError(error) && error.code === 'DOCUMENT_BLOB_INTEGRITY_MISMATCH';
 }
 
 export async function headTempDocumentBlob(
