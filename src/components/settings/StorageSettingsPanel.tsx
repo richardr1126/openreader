@@ -14,33 +14,46 @@ import {
 import { queryKeys } from '@/lib/client/query-keys';
 import { formatBytes } from '@/lib/shared/format-bytes';
 
-function SkeletonBar({ className }: { className: string }) {
-  return <span aria-hidden="true" className={`block animate-pulse rounded bg-surface-sunken ${className}`} />;
-}
+const CARD_CLASS = 'divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid';
 
 function UsageRow({
   label,
   bytes,
   detail,
-  loading,
   action,
 }: {
   label: string;
   bytes: number | undefined;
   detail?: string;
-  loading: boolean;
   action?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-14 items-center gap-3 px-4 py-3">
+    <div className="flex min-h-14 items-center gap-3 px-3 py-2.5">
       <div className="min-w-0 flex-1">
         <div className="text-sm text-foreground">{label}</div>
-        {loading ? <SkeletonBar className="mt-1.5 h-2.5 w-20" /> : detail ? <div className="mt-0.5 text-xs text-faint">{detail}</div> : null}
+        {detail ? <div className="mt-0.5 text-xs text-faint">{detail}</div> : null}
       </div>
-      {loading
-        ? <SkeletonBar className="h-4 w-16" />
-        : <span className="text-sm font-medium tabular-nums text-foreground">{bytes === undefined ? '—' : formatBytes(bytes)}</span>}
+      <span className="text-sm font-medium tabular-nums text-foreground">{bytes === undefined ? '—' : formatBytes(bytes)}</span>
       <div className="w-24 shrink-0 text-right">{action}</div>
+    </div>
+  );
+}
+
+function StorageSkeleton() {
+  return (
+    <div className={`animate-pulse ${CARD_CLASS}`} aria-label="Loading storage usage" aria-busy="true">
+      {[true, true, false].map((hasAction, index) => (
+        <div key={index} className="flex min-h-14 items-center gap-3 px-3 py-2.5">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="h-4 w-28 rounded bg-offbase" />
+            <div className="h-3 w-20 rounded bg-offbase" />
+          </div>
+          <div className="h-4 w-14 rounded bg-offbase" />
+          <div className="flex w-24 shrink-0 justify-end">
+            {hasAction ? <div className="h-6 w-16 rounded-md bg-offbase" /> : null}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -90,53 +103,51 @@ export function StorageSettingsPanel() {
   });
 
   const usage = usageQuery.data;
-  const loading = usageQuery.isPending;
   const busyTarget = reclaimMutation.isPending ? reclaimMutation.variables : null;
   const pendingCopy = pendingTarget ? CONFIRM_COPY[pendingTarget] : null;
 
   return (
-    <section className="space-y-3" aria-label="Library storage" aria-busy={loading}>
-      <div className="divide-y divide-line-soft rounded-lg border border-line bg-surface">
-        <UsageRow
-          label="Audio"
-          bytes={usage?.audioBytes}
-          loading={loading}
-          action={(
-            <Button
-              size="xs"
-              variant="outline"
-              aria-label="Delete all audio"
-              onClick={() => setPendingTarget('all')}
-              disabled={loading || reclaimMutation.isPending}
-            >
-              {busyTarget === 'all' ? 'Deleting…' : 'Delete all'}
-            </Button>
-          )}
-        />
-        <UsageRow
-          label="Orphaned audio"
-          bytes={usage?.orphanedAudioBytes}
-          detail={usage && usage.orphanedDocumentCount > 0 ? plural(usage.orphanedDocumentCount, 'removed document') : undefined}
-          loading={loading}
-          action={(
-            <Button
-              size="xs"
-              variant="outline"
-              aria-label="Reclaim orphaned audio"
-              onClick={() => setPendingTarget('orphaned')}
-              disabled={loading || reclaimMutation.isPending || usage?.orphanedAudioBytes === 0}
-            >
-              {busyTarget === 'orphaned' ? 'Reclaiming…' : 'Reclaim'}
-            </Button>
-          )}
-        />
-        <UsageRow
-          label="Document data"
-          bytes={usage?.documentDataBytes}
-          detail={usage ? plural(usage.documentCount, 'document') : undefined}
-          loading={loading}
-        />
-      </div>
+    <section className="space-y-3" aria-label="Library storage">
+      {usageQuery.isPending ? <StorageSkeleton /> : (
+        <div className={CARD_CLASS}>
+          <UsageRow
+            label="Audio"
+            bytes={usage?.audioBytes}
+            action={(
+              <Button
+                size="xs"
+                variant="outline"
+                aria-label="Delete all audio"
+                onClick={() => setPendingTarget('all')}
+                disabled={reclaimMutation.isPending}
+              >
+                {busyTarget === 'all' ? 'Deleting…' : 'Delete all'}
+              </Button>
+            )}
+          />
+          <UsageRow
+            label="Orphaned audio"
+            bytes={usage?.orphanedAudioBytes}
+            detail={usage && usage.orphanedDocumentCount > 0 ? plural(usage.orphanedDocumentCount, 'removed document') : undefined}
+            action={(
+              <Button
+                size="xs"
+                variant="outline"
+                aria-label="Reclaim orphaned audio"
+                onClick={() => setPendingTarget('orphaned')}
+                disabled={reclaimMutation.isPending || usage?.orphanedAudioBytes === 0}
+              >
+                {busyTarget === 'orphaned' ? 'Reclaiming…' : 'Reclaim'}
+              </Button>
+            )}
+          />
+          <UsageRow
+            label="Document data"
+            bytes={usage?.documentDataBytes}
+            detail={usage ? plural(usage.documentCount, 'document') : undefined}
+          />
+        </div>
+      )}
       {usageQuery.isError ? (
         <p role="status" className="px-1 text-xs text-danger">
           {usageQuery.error instanceof Error ? usageQuery.error.message : 'Failed to load storage usage'}
