@@ -116,7 +116,6 @@ const state = (() => {
 const alignmentCache = state.alignmentCache;
 const alignmentInFlight = state.alignmentInFlight;
 const ALIGNMENT_CACHE_MAX_ENTRIES = 256;
-const MAX_DECODE_STEPS_CAP = 128;
 const ALIGNMENT_TIMEOUT_BUFFER_MS = 2_000;
 const MIN_ALIGNMENT_TIMEOUT_MS = 5_000;
 const MIN_FFMPEG_DECODE_TIMEOUT_MS = 10_000;
@@ -396,15 +395,56 @@ function disposeTensorMap(tensors: Record<string, ort.Tensor>): void {
   }
 }
 
-function computeAdaptiveDecodeStepLimit(maxDecodeSteps: number, textHint?: string): number {
+/**
+ * Bound decoding by the text this window is expected to transcribe. A window
+ * covers `share` of the segment audio, so it gets that share of the estimate
+ * (with headroom for uneven pacing) rather than a fixed cap that silently
+ * drops the tail words of a long segment.
+ */
+export function computeAdaptiveDecodeStepLimit(maxDecodeSteps: number, textHint?: string, share = 1): number {
   const normalized = (textHint ?? '').trim();
   if (!normalized) return Math.min(maxDecodeSteps, 96);
 
   const chars = normalized.length;
   const words = normalized.split(/\s+/).filter(Boolean).length;
   const estTokens = Math.max(words * 3, Math.ceil(chars / 2));
-  const adaptive = Math.max(64, Math.min(maxDecodeSteps, estTokens + 24));
-  return adaptive;
+  const windowTokens = Math.ceil(estTokens * Math.min(1, Math.max(0, share) * 1.5));
+  // Speech is rarely spread evenly across windows, so a dense window keeps at
+  // least the former fixed cap; decoding still stops early at end-of-text.
+  return Math.min(maxDecodeSteps, Math.max(128, windowTokens + 24));
+}
+
+const WINDOW_SPLIT_SEARCH_SAMPLES = 4 * SAMPLE_RATE;
+const WINDOW_SPLIT_FRAME_SAMPLES = SAMPLE_RATE / 50;
+
+/**
+ * Whisper sees one 30 s window at a time. Longer segment audio is aligned in
+ * consecutive windows, each ending at the quietest 20 ms frame of its last
+ * few seconds so a cut falls between words rather than through one.
+ */
+export function planAlignmentWindows(sampleCount: number, samples?: Float32Array): Array<{ start: number; end: number }> {
+  const windows: Array<{ start: number; end: number }> = [];
+  let start = 0;
+  while (sampleCount - start > N_SAMPLES) {
+    const limit = start + N_SAMPLES;
+    let end = limit;
+    if (samples) {
+      let quietest = Number.POSITIVE_INFINITY;
+      for (let frameEnd = limit; frameEnd - WINDOW_SPLIT_FRAME_SAMPLES >= limit - WINDOW_SPLIT_SEARCH_SAMPLES;
+        frameEnd -= WINDOW_SPLIT_FRAME_SAMPLES) {
+        let energy = 0;
+        for (let i = frameEnd - WINDOW_SPLIT_FRAME_SAMPLES; i < frameEnd; i += 1) energy += samples[i]! * samples[i]!;
+        if (energy < quietest) {
+          quietest = energy;
+          end = frameEnd - Math.floor(WINDOW_SPLIT_FRAME_SAMPLES / 2);
+        }
+      }
+    }
+    windows.push({ start, end });
+    start = end;
+  }
+  windows.push({ start, end: sampleCount });
+  return windows;
 }
 
 function assertWithinDeadline(deadlineMs: number, timeoutMs: number): void {
@@ -523,7 +563,8 @@ async function getRuntime(
     const timestampBeginTokenId = noTimestampsTokenId + 1;
     const maxInitialTimestampIndex = Number(generationConfig.max_initial_timestamp_index ?? 50);
     const configuredMaxDecodeSteps = Number(generationConfig.max_length ?? 448);
-    const maxDecodeSteps = Math.min(configuredMaxDecodeSteps, MAX_DECODE_STEPS_CAP);
+    // max_length counts every decoder position, including the prompt.
+    const maxDecodeSteps = configuredMaxDecodeSteps - 4;
     const alignmentHeads = Array.isArray(generationConfig.alignment_heads)
       ? generationConfig.alignment_heads
         .filter((head): head is [number, number] => Array.isArray(head) && head.length === 2)
@@ -624,12 +665,13 @@ async function runWhisperOnnx(
   audioSamples: Float32Array,
   opts: WhisperAlignmentOptions,
   numFrames: number,
+  textShare: number,
   deadlineMs: number,
   timeoutMs: number,
 ): Promise<WhisperWord[]> {
   assertWithinDeadline(deadlineMs, timeoutMs);
   const runtime = await getRuntime(opts.lang, opts.onModelDownloadProgress);
-  const decodeStepLimit = computeAdaptiveDecodeStepLimit(runtime.maxDecodeSteps, opts.textHint);
+  const decodeStepLimit = computeAdaptiveDecodeStepLimit(runtime.maxDecodeSteps, opts.textHint, textShare);
   const mel = computeLogMelSpectrogram(audioSamples);
   const encoderPast: Record<string, ort.Tensor> = {};
   const decoderPast: Record<string, ort.Tensor> = {};
@@ -896,7 +938,6 @@ export async function alignAudioWithText(
 
   const execute = async (): Promise<TTSSentenceAlignment[]> => {
     const alignmentTimeoutMs = getAlignmentTimeoutMs();
-    const deadlineMs = Date.now() + alignmentTimeoutMs;
     let tmpBase = '';
     let inputPath = '';
     let pcmPath = '';
@@ -912,17 +953,30 @@ export async function alignAudioWithText(
 
       const pcmBytes = await readFile(pcmPath);
       const decodedSamples = pcm16ToFloat32(pcmBytes);
-      const effectiveSampleLength = Math.min(decodedSamples.length, N_SAMPLES);
-      const effectiveFrameCount = Math.max(1, Math.floor((effectiveSampleLength / HOP_LENGTH) / 2));
-      const normalizedAudio = padOrTrimAudio(decodedSamples);
-
-      const words = await runWhisperOnnx(
-        normalizedAudio,
-        { ...opts, textHint: text },
-        effectiveFrameCount,
-        deadlineMs,
-        alignmentTimeoutMs,
-      );
+      const words: WhisperWord[] = [];
+      const windows = planAlignmentWindows(decodedSamples.length, decodedSamples);
+      // One shared deadline bounds the whole job, scaled by window count so a
+      // long segment gets the same per-model-invocation budget as a short one.
+      const timeoutMs = alignmentTimeoutMs * windows.length;
+      const deadlineMs = Date.now() + timeoutMs;
+      for (const window of windows) {
+        // A superseded run releases the alignment lane between windows.
+        if (opts.shouldStart && !await opts.shouldStart()) return [];
+        const windowSamples = decodedSamples.subarray(window.start, window.end);
+        const frameCount = Math.max(1, Math.floor((windowSamples.length / HOP_LENGTH) / 2));
+        const offsetSec = window.start / SAMPLE_RATE;
+        const windowWords = await runWhisperOnnx(
+          padOrTrimAudio(windowSamples),
+          { ...opts, textHint: text },
+          frameCount,
+          windowSamples.length / Math.max(1, decodedSamples.length),
+          deadlineMs,
+          timeoutMs,
+        );
+        for (const word of windowWords) {
+          words.push({ word: word.word, start: word.start + offsetSec, end: word.end + offsetSec });
+        }
+      }
       const alignment = mapWordsToSentenceOffsets(text, words);
       const result: TTSSentenceAlignment[] = [alignment];
 

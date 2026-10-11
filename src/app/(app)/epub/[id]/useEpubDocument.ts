@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -141,6 +142,16 @@ export function useEpubDocument(
   const pendingInitialOrdinalRef = useRef<number | null>(null);
   const playbackSegmentsRef = useRef<CanonicalTtsSegment[]>(playbackSegments);
   playbackSegmentsRef.current = playbackSegments;
+  // Navigation callbacks change identity whenever playback state does (each
+  // SSE seek-layout update during generation). Placement reads the latest ones
+  // through refs: as dependencies they re-ran a full placement every few
+  // seconds, which rebuilt the text maps and blanked the highlights.
+  const reconcileEpubRenderedAnchorRef = useRef(reconcileEpubRenderedAnchor);
+  const skipToOrdinalRef = useRef(skipToOrdinal);
+  useLayoutEffect(() => {
+    reconcileEpubRenderedAnchorRef.current = reconcileEpubRenderedAnchor;
+    skipToOrdinalRef.current = skipToOrdinal;
+  }, [reconcileEpubRenderedAnchor, skipToOrdinal]);
   const startupDisplayStartedRef = useRef(false);
   const startupDisplayOwnerRef = useRef(0);
 
@@ -191,7 +202,7 @@ export function useEpubDocument(
       // ordinal to map. Complete it before DOM range extraction so an empty book
       // or non-text cover page cannot deadlock the reader gate.
       if (playbackPlanReady && playbackPlanSegmentCount === 0) {
-        const emptyResult = reconcileEpubRenderedAnchor({
+        const emptyResult = reconcileEpubRenderedAnchorRef.current({
           locator: null,
           hasReadableText: false,
           shouldPause: false,
@@ -238,7 +249,7 @@ export function useEpubDocument(
       // selected ordinal repaint against the newly committed rendition.
       setRenderedTextRevision((revision) => revision + 1);
 
-      const result = reconcileEpubRenderedAnchor({
+      const result = reconcileEpubRenderedAnchorRef.current({
         locator,
         hasReadableText: Boolean(textContent),
         shouldPause: false,
@@ -270,7 +281,7 @@ export function useEpubDocument(
         error: null,
       });
       if (result.status === 'selected' && savedOrdinal !== null && savedOrdinal !== result.ordinal) {
-        skipToOrdinal(savedOrdinal);
+        skipToOrdinalRef.current(savedOrdinal);
       }
     } catch (error) {
       const resolved = error instanceof Error ? error : new Error('Failed to place the EPUB reader');
@@ -282,8 +293,6 @@ export function useEpubDocument(
   }, [
     playbackPlanReady,
     playbackPlanSegmentCount,
-    reconcileEpubRenderedAnchor,
-    skipToOrdinal,
     setPlacementLifecycle,
     setRenderedTextMaps,
   ]);

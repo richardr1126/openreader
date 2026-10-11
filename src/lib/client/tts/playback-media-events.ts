@@ -1,6 +1,6 @@
 /** Centralize media-element event policy so connection churn cannot change intent. */
 export function installPlaybackMediaEvents(input: {
-  audio: HTMLAudioElement; audioSpeed: number;
+  audio: HTMLAudioElement;
   isCurrent: () => boolean; isPlaying: () => boolean; shouldRecoverEnd: () => boolean;
   onPause: () => void; onBuffering: () => void; onRecover: () => void;
   onEnded: () => void; onTime: () => void; onPlaying: () => void;
@@ -8,7 +8,7 @@ export function installPlaybackMediaEvents(input: {
   const { audio } = input;
   audio.onplay = () => {
     if (!input.isCurrent() || !input.isPlaying() || audio.paused) return;
-    audio.playbackRate = input.audioSpeed; input.onBuffering();
+    input.onBuffering();
   };
   audio.onpause = () => {
     if (!input.isCurrent()) return;

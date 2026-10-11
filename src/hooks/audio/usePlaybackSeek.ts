@@ -80,7 +80,6 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
       // Projection still updates even when a browser rejects the media seek.
     }
     if (isPlayingRef.current) {
-      audio.playbackRate = audioSpeed;
       setPlaybackPhase('buffering');
       void audio.play().catch(() => undefined);
     } else {
@@ -88,7 +87,6 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     }
   }, [
     audioRef,
-    audioSpeed,
     isPlayingRef,
     playbackActiveRef,
     setAudioDocumentTime,

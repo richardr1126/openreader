@@ -5,7 +5,6 @@ import { resumePlaybackMedia } from '@/lib/client/tts/playback-control';
 import type { TtsPlaybackPhase } from '@/types/tts';
 
 export function usePlaybackMediaResume(input: {
-  audioSpeed: number;
   isPlayingRef: MutableRefObject<boolean>;
   playbackInFlightRef: MutableRefObject<boolean>;
   playbackRunIdRef: MutableRefObject<number>;
@@ -16,7 +15,7 @@ export function usePlaybackMediaResume(input: {
   checkRecovery: () => void;
 }) {
   const {
-    audioSpeed, isPlayingRef, playbackInFlightRef,
+    isPlayingRef, playbackInFlightRef,
     playbackRunIdRef, setIsPlaying, setPlaybackPhase,
     setWorkerPlaybackActive, startPlaybackForegroundSync, checkRecovery,
   } = input;
@@ -24,7 +23,6 @@ export function usePlaybackMediaResume(input: {
     const runId = playbackRunIdRef.current;
     setWorkerPlaybackActive(true);
     startPlaybackForegroundSync(runId);
-    audio.playbackRate = audioSpeed;
     playbackInFlightRef.current = true;
     setPlaybackPhase('buffering');
     isPlayingRef.current = true;
@@ -35,7 +33,7 @@ export function usePlaybackMediaResume(input: {
       runId === playbackRunIdRef.current && isPlayingRef.current
     )).then((result) => { if (result.status === 'stale') checkRecovery(); });
   }, [
-    audioSpeed, isPlayingRef, playbackInFlightRef,
+    isPlayingRef, playbackInFlightRef,
     playbackRunIdRef, setIsPlaying, setPlaybackPhase,
     setWorkerPlaybackActive, startPlaybackForegroundSync, checkRecovery,
   ]);

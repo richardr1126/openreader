@@ -7,7 +7,6 @@ describe('playback media event policy', () => {
     const onEnded = vi.fn();
     installPlaybackMediaEvents({
       audio,
-      audioSpeed: 1,
       isCurrent: () => true,
       isPlaying: () => false,
       shouldRecoverEnd: () => false,

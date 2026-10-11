@@ -1,14 +1,16 @@
 'use client';
 
 type RangeHighlight = {
+  priority: number;
+  readonly size: number;
   clear: () => void;
   add: (range: Range) => unknown;
+  values: () => IterableIterator<AbstractRange>;
 };
 
 type HighlightRegistry = {
   get: (name: string) => RangeHighlight | undefined;
   set: (name: string, highlight: RangeHighlight) => void;
-  delete: (name: string) => boolean;
 };
 
 type HighlightWindow = Window & {
@@ -16,15 +18,26 @@ type HighlightWindow = Window & {
   CSS: typeof CSS & { highlights?: HighlightRegistry };
 };
 
+function paintsExactly(highlight: RangeHighlight, range: Range): boolean {
+  if (highlight.size !== 1) return false;
+  const [painted] = highlight.values();
+  return painted.startContainer === range.startContainer
+    && painted.startOffset === range.startOffset
+    && painted.endContainer === range.endContainer
+    && painted.endOffset === range.endOffset;
+}
+
 /**
  * Paint a DOM Range without wrapping or otherwise mutating its text nodes.
  * This is intentionally reader-agnostic and works in both the main document
- * and same-origin EPUB iframe documents.
+ * and same-origin EPUB iframe documents. A higher `priority` paints above
+ * overlapping highlights (the word layer over its segment).
  */
 export function paintRangeHighlight(
   range: Range,
   name: string,
   declarations: string,
+  priority = 0,
 ): boolean {
   const document = range.startContainer.nodeType === 9
     ? range.startContainer as Document
@@ -47,23 +60,27 @@ export function paintRangeHighlight(
     document.head.appendChild(style);
   }
 
-  // Keep the registered object and update its ranges. Replacing it with
-  // CSS.highlights.set(name, new Highlight(...)) can leave the previous range
-  // painted in WebKit during rapid hover updates (WebKit bug 321567).
+  // Register each highlight once and only ever update its ranges. Replacing
+  // or unregistering a highlight leaves stale paint in WebKit (bugs 321567,
+  // 266250), and every range mutation repaints, so an unchanged range is left
+  // alone rather than cleared and re-added.
   const existingHighlight = registry.get(name);
   if (existingHighlight) {
+    if (existingHighlight.priority !== priority) existingHighlight.priority = priority;
+    if (paintsExactly(existingHighlight, range)) return true;
     existingHighlight.clear();
     existingHighlight.add(range);
   } else {
-    registry.set(name, new Highlight(range));
+    const highlight = new Highlight(range);
+    highlight.priority = priority;
+    registry.set(name, highlight);
   }
   return true;
 }
 
 export function clearRangeHighlight(document: Document, name: string): void {
   const view = document.defaultView as HighlightWindow | null;
-  const registry = view?.CSS?.highlights;
-  // Invalidate the painted ranges before unregistering their highlight.
-  registry?.get(name)?.clear();
-  registry?.delete(name);
+  const highlight = view?.CSS?.highlights?.get(name);
+  // Keep the registration (see paintRangeHighlight); only drop its ranges.
+  if (highlight && highlight.size > 0) highlight.clear();
 }

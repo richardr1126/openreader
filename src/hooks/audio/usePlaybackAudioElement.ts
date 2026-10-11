@@ -6,6 +6,11 @@ import { useCallback, useEffect, useRef } from 'react';
 const SILENT_WAV_DATA_URI =
   'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YSADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
 
+function applyPlaybackRate(audio: HTMLAudioElement, speed: number) {
+  audio.defaultPlaybackRate = speed;
+  audio.playbackRate = speed;
+}
+
 type UsePlaybackAudioElementInput = {
   audioContext: AudioContext | null;
   audioSpeed: number;
@@ -14,6 +19,7 @@ type UsePlaybackAudioElementInput = {
 export function usePlaybackAudioElement(input: UsePlaybackAudioElementInput) {
   const { audioContext, audioSpeed } = input;
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioSpeedRef = useRef(audioSpeed);
   const unlockAttemptRef = useRef(0);
 
   const ensureAudio = useCallback(() => {
@@ -22,6 +28,7 @@ export function usePlaybackAudioElement(input: UsePlaybackAudioElementInput) {
 
     audio = new Audio();
     audio.preload = 'auto';
+    applyPlaybackRate(audio, audioSpeedRef.current);
     try {
       audio.setAttribute('playsinline', 'true');
     } catch {
@@ -80,8 +87,12 @@ export function usePlaybackAudioElement(input: UsePlaybackAudioElementInput) {
     }
   }, [audioContext, ensureAudio]);
 
+  // The single owner of the element's rate. Every src change or load() resets
+  // playbackRate to defaultPlaybackRate, so both are kept in sync; seeks and
+  // stream reopens then preserve the chosen speed without reapplying it.
   useEffect(() => {
-    if (audioRef.current) audioRef.current.playbackRate = audioSpeed;
+    audioSpeedRef.current = audioSpeed;
+    if (audioRef.current) applyPlaybackRate(audioRef.current, audioSpeed);
   }, [audioSpeed]);
 
   useEffect(() => clearAudioSource, [clearAudioSource]);

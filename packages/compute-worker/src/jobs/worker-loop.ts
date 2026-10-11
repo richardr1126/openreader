@@ -240,6 +240,13 @@ export function createWorkerLoopController(input: {
         deliveryCount: work.msg.info.deliveryCount,
       }, 'job.started');
       heartbeat = setInterval(() => {
+        // Long jobs (multi-window alignment) can outlast ack_wait without ever
+        // reporting progress, so the execution heartbeat also extends the ack.
+        try {
+          work.msg.working();
+        } catch {
+          // A detached or redelivered message is handled by the normal loop path.
+        }
         void writeState(() => markRunning(context!, Date.now())).catch((error) => {
           input.logger.error({
             worker: work.workerLabel,

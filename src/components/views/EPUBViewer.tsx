@@ -191,8 +191,9 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     if (placementLifecycle.error) onError?.(placementLifecycle.error);
   }, [onError, placementLifecycle.error]);
 
-  // Word-level highlight layered on top of the block highlight
-  useEffect(() => {
+  // Word-level highlight layered on top of the block highlight. A layout effect
+  // so a sentence change commits both layers before the browser paints.
+  useLayoutEffect(() => {
     if (!epubHighlightEnabled || !epubWordHighlightEnabled) {
       clearWordHighlights();
       return;
