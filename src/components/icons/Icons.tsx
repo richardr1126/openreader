@@ -1,24 +1,19 @@
+const DISC = 'M12 1a11 11 0 1 0 0 22 11 11 0 0 0 0-22z';
+
 export const PlayIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     width={props.width || 24}
     height={props.height || 24}
-    viewBox="0 0 32 32"
+    viewBox="0 0 24 24"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={props.className}
     {...props}
   >
-    <circle
-      cx="16"
-      cy="16"
-      r="15"
-      stroke="currentColor"
-      strokeWidth="2"
-      className="transition-colors"
-    />
     <path
-      d="M21.5 15.134c.667.385.667 1.347 0 1.732l-7.5 4.33c-.667.386-1.5-.096-1.5-.866V11.67c0-.77.833-1.252 1.5-.866l7.5 4.33z"
+      d={`${DISC}M11.57 8.38l4.17 2.51a1.3 1.3 0 0 1 0 2.22l-4.17 2.51A1.3 1.3 0 0 1 9.6 14.5v-5a1.3 1.3 0 0 1 1.97-1.12z`}
       fill="currentColor"
+      fillRule="evenodd"
       className="transition-colors"
     />
   </svg>
@@ -28,36 +23,16 @@ export const PauseIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     width={props.width || 24}
     height={props.height || 24}
-    viewBox="0 0 32 32"
+    viewBox="0 0 24 24"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     className={props.className}
     {...props}
   >
-    <circle
-      cx="16"
-      cy="16"
-      r="15"
-      stroke="currentColor"
-      strokeWidth="2"
-      className="transition-colors"
-    />
-    <rect
-      x="12"
-      y="11"
-      width="2.5"
-      height="10"
-      rx="1"
+    <path
+      d={`${DISC}M9.6 8h.4a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-.4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM14 8h.4a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H14a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z`}
       fill="currentColor"
-      className="transition-colors"
-    />
-    <rect
-      x="17.5"
-      y="11"
-      width="2.5"
-      height="10"
-      rx="1"
-      fill="currentColor"
+      fillRule="evenodd"
       className="transition-colors"
     />
   </svg>
@@ -74,16 +49,7 @@ export const SkipForwardIcon = (props: React.SVGProps<SVGSVGElement>) => (
     {...props}
   >
     <path
-      d="M6 4l10 8-10 8V4z"
-      fill="currentColor"
-      className="transition-colors"
-    />
-    <rect
-      x="16"
-      y="4"
-      width="2"
-      height="16"
-      rx="1"
+      d="M6 7.7v8.6a1.2 1.2 0 0 0 1.84 1.02l7-4.3a1.2 1.2 0 0 0 0-2.04l-7-4.3A1.2 1.2 0 0 0 6 7.7zM17.25 6.5a1.25 1.25 0 0 1 1.25 1.25v8.5a1.25 1.25 0 0 1-2.5 0v-8.5a1.25 1.25 0 0 1 1.25-1.25z"
       fill="currentColor"
       className="transition-colors"
     />
@@ -101,16 +67,7 @@ export const SkipBackwardIcon = (props: React.SVGProps<SVGSVGElement>) => (
     {...props}
   >
     <path
-      d="M18 4L8 12l10 8V4z"
-      fill="currentColor"
-      className="transition-colors"
-    />
-    <rect
-      x="6"
-      y="4"
-      width="2"
-      height="16"
-      rx="1"
+      d="M18 7.7v8.6a1.2 1.2 0 0 1-1.84 1.02l-7-4.3a1.2 1.2 0 0 1 0-2.04l7-4.3A1.2 1.2 0 0 1 18 7.7zM6.75 6.5a1.25 1.25 0 0 0-1.25 1.25v8.5a1.25 1.25 0 0 0 2.5 0v-8.5A1.25 1.25 0 0 0 6.75 6.5z"
       fill="currentColor"
       className="transition-colors"
     />
