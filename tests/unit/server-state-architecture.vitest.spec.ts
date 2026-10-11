@@ -269,6 +269,7 @@ describe('server-state architecture', () => {
       '/api/admin/gutendex',
       '/api/admin/providers',
       '/api/admin/providers/[id]',
+      '/api/admin/providers/check',
       '/api/admin/settings',
       '/api/admin/system-check',
       '/api/admin/tasks',

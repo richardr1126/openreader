@@ -6,10 +6,13 @@ import toast from 'react-hot-toast';
 import { DotsHorizontalIcon, PlusIcon } from '@/components/icons/Icons';
 import { providerSupportsCustomModel, resolveProviderModels, type TtsModelDefinition, type TtsProviderId, type TtsProviderType } from '@openreader/tts/provider-catalog';
 import { defaultBaseUrlForProviderType, defaultModelForProviderType, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import {
   Badge,
+  type BadgeTone,
   Field,
-  Section,
+  ModalFrame,
+  ModalTitle,
   ToggleRow,
   Select,
   SelectOptionDetail,
@@ -24,6 +27,7 @@ import {
   MenuTransition,
 } from '@/components/ui';
 import { queryKeys } from '@/lib/client/query-keys';
+import type { ProviderCheckItem, ProviderCheckStatus } from '@/lib/shared/provider-check';
 import { useAuthSession } from '@/hooks/useAuthSession';
 
 type ProviderType = TtsProviderId;
@@ -117,6 +121,14 @@ function createEmptyForm(): FormState {
   };
 }
 
+function baseUrlHost(value: string): string {
+  try {
+    return new URL(value).host;
+  } catch {
+    return value;
+  }
+}
+
 function truncateModelLabel(value: string, maxLength = 56): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, maxLength - 3)}...`;
@@ -156,6 +168,36 @@ async function upsertAdminProvider(input: {
   }
 }
 
+const CHECK_BADGE: Record<ProviderCheckStatus, { tone: BadgeTone; label: string }> = {
+  ok: { tone: 'accent', label: 'OK' },
+  warn: { tone: 'foreground', label: 'Check' },
+  error: { tone: 'danger', label: 'Fix' },
+  skipped: { tone: 'muted', label: 'Skipped' },
+};
+
+async function checkAdminProvider(input: {
+  editingId: string | null;
+  form: FormState;
+}): Promise<ProviderCheckItem[]> {
+  const res = await fetch('/api/admin/providers/check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ...(input.editingId && input.editingId !== '__new' ? { providerId: input.editingId } : {}),
+      providerType: input.form.providerType,
+      baseUrl: input.form.baseUrl.trim(),
+      apiKey: input.form.apiKey,
+      defaultModel: input.form.defaultModel.trim(),
+      defaultInstructions: input.form.defaultInstructions.trim(),
+    }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return ((await res.json()) as { checks: ProviderCheckItem[] }).checks;
+}
+
 async function deleteAdminProvider(id: string): Promise<void> {
   const res = await fetch(`/api/admin/providers/${id}`, { method: 'DELETE' });
   if (!res.ok) {
@@ -175,6 +217,10 @@ export function AdminProvidersPanel() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => createEmptyForm());
   const [customModelInput, setCustomModelInput] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<AdminProviderMasked | null>(null);
+  // Results belong to the exact form they checked; any edit hides them.
+  const [checkResult, setCheckResult] = useState<{ key: string; items: ProviderCheckItem[] } | null>(null);
+  const checkKey = JSON.stringify({ editingId, form });
 
   const { data: providers = [], isPending: isLoading, error } = useQuery({
     queryKey: adminProvidersQueryKey,
@@ -214,6 +260,17 @@ export function AdminProvidersPanel() {
     onError: (mutationError) => {
       console.error('[AdminProvidersPanel] save failed:', mutationError);
       toast.error((mutationError as Error).message || 'Save failed');
+    },
+  });
+
+  const checkMutation = useMutation({
+    mutationFn: checkAdminProvider,
+    onSuccess: (items, variables) => {
+      setCheckResult({ key: JSON.stringify(variables), items });
+    },
+    onError: (mutationError) => {
+      console.error('[AdminProvidersPanel] check failed:', mutationError);
+      toast.error((mutationError as Error).message || 'Check failed');
     },
   });
 
@@ -286,20 +343,27 @@ export function AdminProvidersPanel() {
   };
 
   function cancelEdit() {
+    setCheckResult(null);
     setEditingId(null);
     setForm(createEmptyForm());
     setCustomModelInput('');
   }
+
+  const runCheck = () => {
+    if (checkMutation.isPending) return;
+    checkMutation.mutate({ editingId, form });
+  };
+  const visibleChecks = checkResult?.key === checkKey ? checkResult.items : null;
 
   const submit = () => {
     if (saveMutation.isPending) return;
     saveMutation.mutate({ editingId, form });
   };
 
-  const remove = (id: string) => {
-    if (!confirm('Delete this shared provider? Users selecting it will lose access until they switch.')) return;
-    if (deleteMutation.isPending) return;
-    deleteMutation.mutate(id);
+  const confirmDelete = () => {
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    if (target && !deleteMutation.isPending) deleteMutation.mutate(target.id);
   };
   const toggleEnabled = (provider: AdminProviderMasked) => {
     if (toggleEnabledMutation.isPending) return;
@@ -366,35 +430,80 @@ export function AdminProvidersPanel() {
     setForm((prev) => ({ ...prev, defaultInstructions: '' }));
   }, [form.defaultModel, form.defaultInstructions, form.providerType, form.slug, modelSupportsInstructions]);
 
+  const rowActionsDisabled = deleteMutation.isPending || toggleEnabledMutation.isPending || setDefaultMutation.isPending;
+
   return (
-    <Section
-      title="Shared TTS providers"
-      variant="group"
-      action={!editingId ? (
-        <Button
+    <div className="space-y-3">
+      <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid">
+        {isLoading ? (
+          <ProvidersListSkeleton />
+        ) : providers.length === 0 ? (
+          <p className="px-3 py-3 text-sm text-soft">No shared providers yet</p>
+        ) : (
+          providers.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <span className={`truncate text-sm font-medium ${p.enabled ? 'text-foreground' : 'text-soft'}`}>{p.displayName}</span>
+                  {defaultProviderSlug === p.slug && <Badge tone="accent">Default</Badge>}
+                  {!p.enabled && <Badge tone="muted">Disabled</Badge>}
+                </div>
+                <div className="mt-0.5 truncate font-mono text-[11px] text-soft" title={p.defaultModel ?? undefined}>
+                  {p.slug} · {p.defaultModel ? truncateModelLabel(p.defaultModel) : 'no default model'}
+                  {p.baseUrl ? ` · ${baseUrlHost(p.baseUrl)}` : ''}
+                </div>
+              </div>
+              <MenuRoot as="div" className="relative shrink-0">
+                <MenuTrigger
+                  as={IconButton}
+                  tone="surface"
+                  size="sm"
+                  title="Provider actions"
+                  aria-label={`Actions for ${p.displayName}`}
+                  disabled={rowActionsDisabled}
+                >
+                  <DotsHorizontalIcon className="h-3 w-4" />
+                </MenuTrigger>
+                <MenuTransition>
+                  <MenuItemsSurface
+                    anchor="bottom end"
+                    className="z-50 mt-2 min-w-[170px] bg-base focus:outline-none"
+                  >
+                    <MenuActionItem onClick={() => startEdit(p)}>
+                      Edit
+                    </MenuActionItem>
+                    <MenuActionItem
+                      onClick={() => setDefault(p.slug)}
+                      disabled={!p.enabled || defaultProviderSlug === p.slug}
+                    >
+                      Set as default
+                    </MenuActionItem>
+                    <MenuActionItem onClick={() => toggleEnabled(p)}>
+                      {p.enabled ? 'Disable' : 'Enable'}
+                    </MenuActionItem>
+                    <MenuActionItem tone="danger" onClick={() => setDeleteTarget(p)}>
+                      Delete
+                    </MenuActionItem>
+                  </MenuItemsSurface>
+                </MenuTransition>
+              </MenuRoot>
+            </div>
+          ))
+        )}
+        <button
+          type="button"
           onClick={startCreate}
-          variant="primary"
-          size="xs"
-          className="gap-1"
-          aria-label="Add provider"
-          title="Add provider"
+          className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2.5 text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
         >
-          <PlusIcon className="h-3 w-3" aria-hidden="true" />
-          Add
-        </Button>
-      ) : null}
-    >
-      {editingId && (
-        <div className="space-y-2.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <h4 className="text-sm font-semibold text-foreground">
-              {isEditingExisting ? `Edit "${editingProvider?.slug}"` : 'New provider'}
-            </h4>
-            {isEditingExisting && (
-              <span className="text-xs text-muted">slug cannot be changed after create</span>
-            )}
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          Add provider
+        </button>
+      </div>
+
+      <ModalFrame open={editingId !== null} onClose={cancelEdit} size="lg">
+        <ModalTitle>{isEditingExisting ? 'Edit provider' : 'New provider'}</ModalTitle>
+        <div className="mt-4 space-y-3">
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <Field label="Slug">
               <Input
                 type="text"
@@ -437,7 +546,7 @@ export function AdminProvidersPanel() {
                 }}
               />
             </Field>
-            <Field label="Default model" hint="Pre-selected for users picking this provider.">
+            <Field label="Default model">
               <div className="space-y-2">
                 <Select
                   value={selectedModelDefinition}
@@ -493,21 +602,17 @@ export function AdminProvidersPanel() {
               </div>
             </Field>
             {shouldShowInstructions && (
-              <Field
-                label="TTS instructions"
-                className="sm:col-span-2"
-                hint="Optional. Applied by default when this shared provider is selected."
-              >
+              <Field label="TTS instructions" className="sm:col-span-2">
                 <Textarea
                   value={form.defaultInstructions}
                   onChange={(e) => setForm({ ...form, defaultInstructions: e.target.value })}
-                  placeholder="Enter instructions for this model"
+                  placeholder="Optional"
                   className="min-h-24 resize-y"
                 />
               </Field>
             )}
             {shouldShowBaseUrl && (
-              <Field label="Base URL" className="sm:col-span-2" hint="Optional. Falls back to the provider type's default when blank.">
+              <Field label="Base URL" className="sm:col-span-2">
                 <Input
                   type="text"
                   value={form.baseUrl}
@@ -516,29 +621,53 @@ export function AdminProvidersPanel() {
                 />
               </Field>
             )}
-            <Field
-              label={isEditingExisting ? 'API key (leave blank to keep existing)' : 'API key (optional)'}
-              className="sm:col-span-2"
-              hint="Stored encrypted with AES-256-GCM. Never returned to clients."
-            >
+            <Field label="API key" className="sm:col-span-2">
               <Input
                 type="password"
                 value={form.apiKey}
                 onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                placeholder={isEditingExisting ? `keep existing (${editingProvider?.apiKeyMask ?? ''})` : 'Optional'}
+                placeholder={editingProvider?.apiKeyMask.startsWith('••••') ? `Keep existing (${editingProvider.apiKeyMask})` : 'Optional'}
               />
             </Field>
           </div>
 
           <ToggleRow
             label="Enabled"
-            description="When off, this provider is hidden from users without being deleted."
             checked={form.enabled}
             onChange={(checked) => setForm({ ...form, enabled: checked })}
             variant="flat"
           />
 
-          <div className="pt-1 flex justify-end gap-2">
+          {visibleChecks && (
+            <ul
+              className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid"
+              aria-label="Provider check results"
+            >
+              {visibleChecks.map((item) => {
+                const badge = CHECK_BADGE[item.status];
+                return (
+                  <li key={item.id} className="px-3 py-2" data-status={item.status}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-foreground">{item.label}</span>
+                      <Badge tone={badge.tone}>{badge.label}</Badge>
+                    </div>
+                    <p className="mt-0.5 text-xs text-soft">{item.detail}</p>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <div className="flex items-center gap-2 pt-1">
+            <Button
+              onClick={runCheck}
+              disabled={checkMutation.isPending}
+              variant="outline"
+              size="sm"
+            >
+              {checkMutation.isPending ? 'Checking…' : 'Check'}
+            </Button>
+            <span className="flex-1" />
             <Button onClick={cancelEdit} variant="secondary" size="sm">
               Cancel
             </Button>
@@ -552,102 +681,31 @@ export function AdminProvidersPanel() {
             </Button>
           </div>
         </div>
-      )}
+      </ModalFrame>
 
-      <div className="divide-y divide-line-soft !p-0">
-        {isLoading ? (
-          <ProvidersListSkeleton />
-        ) : providers.length === 0 ? (
-          <p className="px-3 py-2.5 text-xs text-soft">No shared providers configured yet.</p>
-        ) : (
-          providers.map((p) => (
-            <div key={p.id} className="px-3 py-2.5">
-              <div className="flex items-start gap-2.5">
-                <div className="flex-1 min-w-0 space-y-0.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-medium text-foreground truncate">{p.displayName}</span>
-                    <Badge tone="muted">{p.slug}</Badge>
-                    {defaultProviderSlug === p.slug && <Badge tone="foreground">Default</Badge>}
-                    {!p.enabled && <Badge tone="muted">Disabled</Badge>}
-                  </div>
-                  <div className="text-xs text-muted">
-                    {p.providerType}
-                    {p.defaultModel ? (
-                      <>
-                        {' · '}
-                        <span title={p.defaultModel}>{truncateModelLabel(p.defaultModel)}</span>
-                      </>
-                    ) : (
-                      ' · no default model'
-                    )}
-                    {p.defaultInstructions ? ' · instructions' : ''}
-                  </div>
-                  <div className="text-[11px] text-muted truncate">
-                    {p.baseUrl ? p.baseUrl : 'provider base URL default'} · key {p.apiKeyMask}
-                  </div>
-                </div>
-                <MenuRoot as="div" className="relative shrink-0">
-                  <MenuTrigger
-                    as={IconButton}
-                    tone="surface"
-                    size="sm"
-                    title="Provider actions"
-                    aria-label="Provider actions"
-                    disabled={!!editingId || deleteMutation.isPending || toggleEnabledMutation.isPending || setDefaultMutation.isPending}
-                  >
-                    <DotsHorizontalIcon className="h-3 w-4" />
-                  </MenuTrigger>
-                  <MenuTransition>
-                    <MenuItemsSurface
-                      anchor="bottom end"
-                      className="z-50 mt-2 min-w-[170px] bg-base focus:outline-none"
-                    >
-                      <MenuActionItem onClick={() => startEdit(p)}>
-                        Edit
-                      </MenuActionItem>
-                      <MenuActionItem
-                        onClick={() => setDefault(p.slug)}
-                        disabled={!p.enabled || defaultProviderSlug === p.slug}
-                      >
-                        Set as default
-                      </MenuActionItem>
-                      <MenuActionItem onClick={() => toggleEnabled(p)}>
-                        {p.enabled ? 'Disable' : 'Enable'}
-                      </MenuActionItem>
-                      <MenuActionItem tone="danger" onClick={() => remove(p.id)}>
-                        Delete
-                      </MenuActionItem>
-                    </MenuItemsSurface>
-                  </MenuTransition>
-                </MenuRoot>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </Section>
+      <ConfirmDialog
+        isOpen={deleteTarget !== null}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title="Delete provider?"
+        message={`Users who selected ${deleteTarget?.displayName ?? 'this provider'} lose access until they switch.`}
+        confirmText="Delete"
+        isDangerous
+      />
+    </div>
   );
 }
 
 function ProvidersListSkeleton() {
-  const rows = Array.from({ length: 4 });
   return (
     <div className="animate-pulse divide-y divide-line-soft" aria-label="Loading shared providers" aria-busy="true">
-      {rows.map((_, index) => (
-        <div key={index} className="px-3 py-2.5">
-          <div className="flex items-start gap-3">
-            <div className="flex-1 min-w-0 space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="h-4 w-36 rounded bg-offbase" />
-                <div className="h-4 w-20 rounded bg-offbase" />
-              </div>
-              <div className="h-3 w-4/5 rounded bg-offbase" />
-            </div>
-            <div className="shrink-0 flex gap-1.5 pt-0.5">
-              <div className="h-7 w-14 rounded-md bg-offbase" />
-              <div className="h-7 w-16 rounded-md bg-offbase" />
-            </div>
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="flex items-center gap-3 px-3 py-2.5">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="h-4 w-36 rounded bg-offbase" />
+            <div className="h-3 w-56 rounded bg-offbase" />
           </div>
+          <div className="h-7 w-7 shrink-0 rounded-md bg-offbase" />
         </div>
       ))}
     </div>

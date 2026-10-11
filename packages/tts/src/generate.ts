@@ -25,7 +25,7 @@ import {
   REPLICATE_KOKORO_82M_VERSIONED_MODEL,
   speechSdkProviderPrefix,
 } from './provider-catalog';
-import { resolveTtsProviderModelPolicy } from './provider-policy';
+import { defaultBaseUrlForProviderType, resolveTtsProviderModelPolicy } from './provider-policy';
 import {
   resolveReplicateLanguageInput,
   resolveReplicateVoiceInputKey,
@@ -727,6 +727,17 @@ async function runProviderRequest(
   });
 }
 
+/**
+ * Shared providers only store a base URL for custom endpoints. Without the
+ * provider's own default, the OpenAI SDK would send a Deepinfra key to OpenAI.
+ */
+function openAiCompatibleBaseUrl(request: ResolvedServerTTSRequest): string | undefined {
+  if (request.baseUrl) return request.baseUrl;
+  return isBuiltInTtsProviderId(request.provider)
+    ? defaultBaseUrlForProviderType(request.provider) || undefined
+    : undefined;
+}
+
 async function runOpenAiCompatibleRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
@@ -739,7 +750,7 @@ async function runOpenAiCompatibleRequest(
     // (merged after the bearer auth, and allowed by validateHeaders), so the
     // placeholder is never sent.
     apiKey: request.apiKey || 'no-key',
-    baseURL: request.baseUrl,
+    baseURL: openAiCompatibleBaseUrl(request),
     defaultHeaders: request.apiKey ? undefined : { Authorization: null },
     maxRetries: 0,
     timeout: upstreamSettings.ttsUpstreamTimeoutMs,
