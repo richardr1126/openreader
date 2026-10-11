@@ -196,6 +196,16 @@ export function AuthLoader({ children }: { children: ReactNode }) {
       try {
         const client = getAuthClient(baseUrl);
 
+        // The session hook can still report `null` just after a sign-in in this
+        // tab navigates here. Minting an anonymous session then would replace
+        // the cookie that sign-in just set, so ask the server first and adopt
+        // an existing session instead.
+        const existing = await client.getSession();
+        if (existing.data?.session) {
+          await refetchSession();
+          return;
+        }
+
         // Under concurrent production-server requests we can hit 429s on anonymous sign-in.
         // Keep using better-auth client so its session hook updates correctly,
         // but add retry/backoff around the call.
