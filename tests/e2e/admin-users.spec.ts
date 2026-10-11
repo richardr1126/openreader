@@ -39,6 +39,16 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await expect(page.getByText('Anonymous', { exact: true }).first()).toBeVisible();
   await page.getByRole('radio', { name: 'All', exact: true }).click();
 
+  await page.getByRole('button', { name: 'Providers', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Add provider' }).click();
+  const providerDialog = page.getByRole('dialog', { name: 'New provider' });
+  await providerDialog.getByPlaceholder('https://your-tts-host/v1').fill('http://127.0.0.1:9/v1');
+  await providerDialog.getByRole('button', { name: 'Check', exact: true }).click();
+  const providerChecks = providerDialog.getByRole('list', { name: 'Provider check results' });
+  await expect(providerChecks.getByRole('listitem').filter({ hasText: 'Connection' })).toContainText('Could not reach 127.0.0.1:9');
+  await providerDialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(providerDialog).toBeHidden();
+
   await page.getByRole('button', { name: 'Maintenance', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Maintenance', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Scheduled tasks', exact: true })).toBeVisible();
