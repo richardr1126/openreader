@@ -1,7 +1,7 @@
 'use client';
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LoadingSpinner } from '@/components/Spinner';
@@ -107,6 +107,26 @@ function statusTone(status: UserAccessStatus): 'accent' | 'muted' | 'danger' {
   return 'muted';
 }
 
+function UsersSkeleton() {
+  return (
+    <div className="animate-pulse divide-y divide-line-soft" aria-label="Loading users" aria-busy="true">
+      {[0, 1, 2, 3, 4].map((row) => (
+        <div key={row} className="flex items-center gap-3 p-3">
+          <div className="h-4 w-4 shrink-0 rounded bg-offbase" />
+          <div className="h-8 w-8 shrink-0 rounded-full bg-offbase" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <div className="h-4 w-40 rounded bg-offbase" />
+            <div className="h-3 w-56 rounded bg-offbase" />
+          </div>
+          <div className="hidden h-3 w-20 rounded bg-offbase lg:block" />
+          <div className="hidden h-3 w-24 rounded bg-offbase lg:block" />
+          <div className="hidden h-6 w-40 rounded-md bg-offbase lg:block" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function AdminUsersPanel() {
   const { data: session } = useAuthSession();
   const queryClient = useQueryClient();
@@ -129,6 +149,7 @@ export function AdminUsersPanel() {
     queryKey,
     queryFn: () => fetchUsers({ page, search: deferredSearch, kind, status }),
     enabled: Boolean(session?.user?.id),
+    placeholderData: keepPreviousData,
   });
   const refreshUsers = async () => {
     await queryClient.invalidateQueries({ queryKey: queryKeys.adminRoot(session?.user?.id ?? 'no-session') });
@@ -224,53 +245,46 @@ export function AdminUsersPanel() {
           ].map(([label, value]) => (
             <div key={String(label)} className="min-w-0 bg-surface-solid px-3 py-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-faint">{label}</p>
-              <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">{formatCount(Number(value))}</p>
+              {data
+                ? <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">{formatCount(Number(value))}</p>
+                : <div className="mt-1.5 h-6 w-10 animate-pulse rounded bg-offbase" />}
             </div>
           ))}
         </div>
       </section>
 
       <section className="overflow-hidden rounded-lg border border-line bg-surface">
-        <div className="flex flex-col gap-3 border-b border-line-soft bg-surface-solid p-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Directory</h3>
-            <p className="mt-0.5 text-xs text-soft">Accounts, anonymous sessions, storage, and metered compute usage when limits are enabled.</p>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <SearchField
-              value={search}
-              onChange={(event) => { setSearch(event.target.value); setPage(1); }}
-              placeholder="Search name or email"
-              aria-label="Search users"
-              className="w-full sm:w-56"
-            />
-            <SegmentedControl<UserKind>
-              value={kind}
-              onChange={(value) => changeFilter(setKind, value)}
-              options={[
-                { value: 'all', label: 'All' },
-                { value: 'account', label: 'Accounts' },
-                { value: 'anonymous', label: 'Anon' },
-              ]}
-              ariaLabel="User kind"
-              className="grid-cols-3"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1 border-b border-line-soft px-3 py-2">
-          {(['all', 'pending', 'active', 'suspended'] as const).map((value) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => changeFilter(setStatus, value)}
-              aria-pressed={status === value}
-              className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${status === value ? 'bg-accent-wash text-accent' : 'text-soft hover:bg-surface-sunken hover:text-foreground'}`}
-            >
-              {value === 'all' ? 'Any status' : value[0].toUpperCase() + value.slice(1)}
-            </button>
-          ))}
-          {usersQuery.isFetching ? <LoadingSpinner className="ml-auto h-3.5 w-3.5 text-accent" /> : null}
+        <div className="flex flex-wrap items-center gap-2 border-b border-line-soft bg-surface-solid p-3">
+          <SearchField
+            value={search}
+            onChange={(event) => { setSearch(event.target.value); setPage(1); }}
+            placeholder="Search name or email"
+            aria-label="Search users"
+            className="w-full sm:w-auto sm:min-w-56 sm:flex-1"
+          />
+          <SegmentedControl<UserKind>
+            value={kind}
+            onChange={(value) => changeFilter(setKind, value)}
+            options={[
+              { value: 'all', label: 'All' },
+              { value: 'account', label: 'Accounts' },
+              { value: 'anonymous', label: 'Anon' },
+            ]}
+            ariaLabel="User kind"
+            className="grid-cols-3"
+          />
+          <SegmentedControl<UserStatus>
+            value={status}
+            onChange={(value) => changeFilter(setStatus, value)}
+            options={[
+              { value: 'all', label: 'Any' },
+              { value: 'pending', label: 'Pending' },
+              { value: 'active', label: 'Active' },
+              { value: 'suspended', label: 'Suspended' },
+            ]}
+            ariaLabel="Access status"
+            className="grid-cols-4"
+          />
         </div>
 
         {selectedUsers.length > 0 ? (
@@ -288,19 +302,16 @@ export function AdminUsersPanel() {
         ) : null}
 
         {usersQuery.isPending ? (
-          <div className="grid min-h-56 place-items-center"><LoadingSpinner className="h-6 w-6 text-accent" /></div>
+          <UsersSkeleton />
         ) : usersQuery.error ? (
           <div className="p-8 text-center">
             <p className="text-sm text-danger">{usersQuery.error instanceof Error ? usersQuery.error.message : 'Unable to load users'}</p>
             <Button className="mt-3" size="sm" onClick={() => void usersQuery.refetch()}>Retry</Button>
           </div>
         ) : data?.users.length === 0 ? (
-          <div className="p-10 text-center">
-            <p className="text-sm font-medium text-foreground">No users match these filters</p>
-            <p className="mt-1 text-xs text-soft">Try a broader search or status.</p>
-          </div>
+          <p className="p-10 text-center text-sm text-soft">No users match these filters</p>
         ) : (
-          <div>
+          <div className={`transition-opacity duration-base ${usersQuery.isPlaceholderData ? 'opacity-60' : ''}`}>
             <div className={`hidden border-b border-line-soft bg-surface-solid px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-faint ${columns}`}>
               <span className="flex items-center gap-2">
                 <Checkbox
