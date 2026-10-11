@@ -234,7 +234,7 @@ export function AdminUsersPanel() {
   return (
     <div className="space-y-4">
       <section className="overflow-hidden rounded-lg border border-line bg-surface">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line-soft sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
+        <div className="grid grid-cols-3 gap-px bg-line-soft lg:grid-cols-6">
           {[
             ['All users', data?.counts.all ?? 0],
             ['Accounts', data?.counts.accounts ?? 0],
@@ -243,10 +243,10 @@ export function AdminUsersPanel() {
             ['Suspended', data?.counts.suspended ?? 0],
             ['Admins', data?.counts.admins ?? 0],
           ].map(([label, value]) => (
-            <div key={String(label)} className="min-w-0 bg-surface-solid px-3 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-faint">{label}</p>
+            <div key={String(label)} className="min-w-0 bg-surface-solid px-3 py-2 sm:py-3">
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.12em] text-faint">{label}</p>
               {data
-                ? <p className="mt-1 font-mono text-xl font-semibold tabular-nums text-foreground">{formatCount(Number(value))}</p>
+                ? <p className="mt-1 font-mono text-lg font-semibold tabular-nums text-foreground sm:text-xl">{formatCount(Number(value))}</p>
                 : <div className="mt-1.5 h-6 w-10 animate-pulse rounded bg-offbase" />}
             </div>
           ))}
@@ -271,7 +271,7 @@ export function AdminUsersPanel() {
               { value: 'anonymous', label: 'Anon' },
             ]}
             ariaLabel="User kind"
-            className="grid-cols-3"
+            className="w-full grid-cols-3 sm:w-auto"
           />
           <SegmentedControl<UserStatus>
             value={status}
@@ -283,7 +283,7 @@ export function AdminUsersPanel() {
               { value: 'suspended', label: 'Suspended' },
             ]}
             ariaLabel="Access status"
-            className="grid-cols-4"
+            className="w-full grid-flow-col auto-cols-auto sm:w-auto"
           />
         </div>
 
@@ -356,21 +356,18 @@ export function AdminUsersPanel() {
                               <Badge tone={statusTone(user.accessStatus)}>{user.accessStatus}</Badge>
                             </span>
                             <span className="mt-0.5 block truncate font-mono text-[11px] text-soft">{user.isAnonymous ? user.id : user.email}</span>
+                            <span className="mt-0.5 block truncate font-mono text-[11px] tabular-nums text-faint lg:hidden">
+                              {formatCount(user.documentCount)} docs · {formatBytes(user.documentBytes)} · {formatCount(user.usage.ttsCharacters)} chars
+                            </span>
                           </span>
                         </div>
                       </button>
                     </div>
 
-                    <div className="mt-2 flex items-baseline justify-between gap-2 text-xs lg:mt-0 lg:block lg:text-right">
-                      <span className="text-soft lg:hidden">Documents</span>
-                      <span className="font-mono font-medium tabular-nums text-foreground">{formatCount(user.documentCount)} · {formatBytes(user.documentBytes)}</span>
-                    </div>
-                    <div className="mt-1 flex items-baseline justify-between gap-2 text-xs lg:mt-0 lg:block lg:text-right">
-                      <span className="text-soft lg:hidden">TTS usage</span>
-                      <span className="font-mono font-medium tabular-nums text-foreground">{formatCount(user.usage.ttsCharacters)} chars</span>
-                    </div>
+                    <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatCount(user.documentCount)} · {formatBytes(user.documentBytes)}</span>
+                    <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatCount(user.usage.ttsCharacters)} chars</span>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-2 lg:mt-0 lg:justify-end">
+                    <div className="mt-2 flex flex-wrap items-center gap-2 pl-16 empty:hidden lg:mt-0 lg:justify-end lg:pl-0">
                       {!user.isAnonymous ? (
                         <label className="flex items-center gap-1.5 text-xs text-soft">
                           Admin
