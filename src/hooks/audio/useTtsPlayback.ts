@@ -387,11 +387,9 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
       })();
 
       const audio = ensureAudio();
-      audio.defaultPlaybackRate = audioSpeed;
-      audio.playbackRate = audioSpeed;
       audio.volume = 1;
       const recover = () => { setPlaybackPhase('buffering'); checkRecovery(); };
-      installPlaybackMediaEvents({ audio, audioSpeed,
+      installPlaybackMediaEvents({ audio,
         isCurrent: () => runId === playbackRunIdRef.current,
         isPlaying: () => isPlayingRef.current,
         shouldRecoverEnd: () => {
@@ -525,7 +523,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
   ]);
 
   const resumeActivePlayback = usePlaybackMediaResume({
-    audioSpeed,
     isPlayingRef,
     playbackInFlightRef,
     playbackRunIdRef,

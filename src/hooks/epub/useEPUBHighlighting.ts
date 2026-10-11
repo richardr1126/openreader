@@ -62,11 +62,25 @@ export function useEPUBHighlighting({
   const activeWordHighlightRef = useRef<{ key: string; wordIndex: number } | null>(null);
   const highlightedDocumentsRef = useRef<Set<Document>>(new Set());
 
-  const clearPaintedHighlight = useCallback((name: string) => {
+  const clearPaintedHighlight = useCallback((name: string, except?: Document | null) => {
     for (const document of highlightedDocumentsRef.current) {
-      clearRangeHighlight(document, name);
+      if (document !== except) clearRangeHighlight(document, name);
     }
   }, []);
+
+  const paintHighlight = useCallback((
+    range: Range,
+    name: string,
+    declarations: string,
+    priority: number,
+  ): boolean => {
+    if (!paintRangeHighlight(range, name, declarations, priority)) return false;
+    // A section change can move the layer into another iframe document.
+    const document = range.startContainer.ownerDocument;
+    clearPaintedHighlight(name, document);
+    if (document) highlightedDocumentsRef.current.add(document);
+    return true;
+  }, [clearPaintedHighlight]);
 
   const clearWordHighlights = useCallback(() => {
     clearPaintedHighlight(EPUB_WORD_HIGHLIGHT);
@@ -78,25 +92,28 @@ export function useEPUBHighlighting({
     clearWordHighlights();
   }, [clearPaintedHighlight, clearWordHighlights]);
 
+  // Repaints the segment layer in place and leaves the word layer to the word
+  // effect, which commits in the same frame. Clearing both first made Safari
+  // paint an intermediate frame on every sentence change.
   const highlightSegment = useCallback((segment: CanonicalTtsSegment | null | undefined) => {
-    clearHighlights();
-
-    if (!epubHighlightEnabled) return true;
-    if (!segment) return false;
-
-    const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
-    if (!resolved) return false;
-
-    const painted = paintRangeHighlight(
+    if (!epubHighlightEnabled) {
+      clearHighlights();
+      return true;
+    }
+    const resolved = segment
+      ? resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)
+      : null;
+    if (!resolved || !paintHighlight(
       resolved.range,
       EPUB_SEGMENT_HIGHLIGHT,
       'background-color: rgba(128, 128, 128, 0.32);',
-    );
-    if (!painted) return false;
-    const document = resolved.range.startContainer.ownerDocument;
-    if (document) highlightedDocumentsRef.current.add(document);
+      0,
+    )) {
+      clearHighlights();
+      return false;
+    }
     return true;
-  }, [clearHighlights, epubHighlightEnabled, renderedTextMapsRef]);
+  }, [clearHighlights, epubHighlightEnabled, paintHighlight, renderedTextMapsRef]);
 
   const highlightWordIndex = useCallback((
     alignment: TTSSentenceAlignment | undefined,
@@ -183,13 +200,12 @@ export function useEPUBHighlighting({
     const active = activeWordHighlightRef.current;
     if (active && active.key === cacheKey && active.wordIndex === wordIndex) return;
 
-    if (paintRangeHighlight(
+    if (paintHighlight(
       wordRange,
       EPUB_WORD_HIGHLIGHT,
       `background-color: color-mix(in srgb, ${resolvePrimaryHighlightColor()} 40%, transparent);`,
+      1,
     )) {
-      const document = wordRange.startContainer.ownerDocument;
-      if (document) highlightedDocumentsRef.current.add(document);
       activeWordHighlightRef.current = { key: cacheKey, wordIndex };
       return;
     }
@@ -197,6 +213,7 @@ export function useEPUBHighlighting({
   }, [
     clearWordHighlights,
     epubHighlightEnabled,
+    paintHighlight,
     renderedTextMapsRef,
   ]);
 

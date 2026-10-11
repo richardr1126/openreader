@@ -27,8 +27,11 @@ describe('range highlight painter', () => {
     expect(registry.set).toHaveBeenCalledWith('openreader-word', expect.any(FakeHighlight));
     expect(styles[0]?.textContent).toContain('::highlight(openreader-word)');
 
+    const registered = registry.set.mock.calls[0][1] as FakeHighlight;
+    registry.get.mockReturnValue(registered);
     clearRangeHighlight(document, 'openreader-word');
-    expect(registry.delete).toHaveBeenCalledWith('openreader-word');
+    expect(registered.size).toBe(0);
+    expect(registry.delete).not.toHaveBeenCalled();
   });
 
   test('updates the injected rule when the active theme color changes', () => {
@@ -97,7 +100,38 @@ describe('range highlight painter', () => {
     paintRangeHighlight(otherRange, 'playing', 'background: blue;');
     clearRangeHighlight(document, 'hover');
     expect(highlight.size).toBe(0);
-    expect(registry.has('hover')).toBe(false);
+    expect(registry.get('hover')).toBe(highlight);
     expect([...registry.get('playing')!]).toEqual([otherRange]);
+  });
+
+  test('repainting an unchanged range leaves the highlight untouched', () => {
+    const registry = new Map<string, Set<Range> & { priority?: number }>();
+    class FakeHighlight extends Set<Range> {
+      priority = 0;
+      constructor(...ranges: Range[]) { super(ranges); }
+    }
+    const document = {
+      defaultView: { CSS: { highlights: registry }, Highlight: FakeHighlight },
+      head: { querySelector: () => ({ textContent: '' }) },
+    } as unknown as Document;
+    const text = { nodeType: 3, ownerDocument: document };
+    const range = (start: number, end: number) => ({
+      startContainer: text, startOffset: start, endContainer: text, endOffset: end,
+    }) as unknown as Range;
+
+    paintRangeHighlight(range(0, 5), 'word', 'background: blue;', 1);
+    const highlight = registry.get('word')!;
+    expect(highlight.priority).toBe(1);
+    const invalidate = vi.spyOn(highlight, 'clear');
+
+    paintRangeHighlight(range(0, 5), 'word', 'background: blue;', 1);
+    expect(invalidate).not.toHaveBeenCalled();
+
+    paintRangeHighlight(range(6, 9), 'word', 'background: blue;', 1);
+    expect(invalidate).toHaveBeenCalledOnce();
+
+    clearRangeHighlight(document, 'word');
+    clearRangeHighlight(document, 'word');
+    expect(invalidate).toHaveBeenCalledTimes(2);
   });
 });

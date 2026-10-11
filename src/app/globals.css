@@ -393,16 +393,15 @@ h1, h2, h3, h4, h5, h6 {
 /* HTML/TXT/MD reader sentence + word highlights. These are applied by
    `src/lib/client/html/highlight.ts` wrapping the matched text in spans, so
    they survive any browser quirks around the (still-spotty) CSS Custom
-   Highlight API. */
+   Highlight API. They must not change box metrics: inline padding shifted the
+   following text (and could rewrap the line) on every word advance. */
 .openreader-html-highlight-sentence {
   background-color: color-mix(in srgb, var(--accent) 22%, transparent);
   border-radius: 2px;
-  padding: 0 1px;
 }
 .openreader-html-highlight-word {
   background-color: color-mix(in srgb, var(--accent) 55%, transparent);
   border-radius: 2px;
-  padding: 0 1px;
 }
 
 /* Static prism gradient divider (no animation) */

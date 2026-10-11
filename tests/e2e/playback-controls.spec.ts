@@ -77,6 +77,23 @@ async function readEpubWordHighlight(page: Page) {
   });
 }
 
+async function countBlankEpubSegmentFrames(page: Page, durationMs: number) {
+  return await page.frameLocator('iframe').locator('body').evaluate(async (body, duration) => {
+    type HighlightRegistry = { get: (name: string) => { size: number } | undefined };
+    const view = body.ownerDocument.defaultView as (Window & {
+      CSS: typeof CSS & { highlights?: HighlightRegistry };
+    }) | null;
+    if (!view) return -1;
+    let blank = 0;
+    const end = performance.now() + duration;
+    while (performance.now() < end) {
+      await new Promise((resolve) => view.requestAnimationFrame(resolve));
+      if (!view.CSS.highlights?.get('openreader-epub-segment')?.size) blank += 1;
+    }
+    return blank;
+  }, durationMs);
+}
+
 async function verifyEpubPlayback(page: Page) {
   let releaseOverview!: () => void;
   const overviewGate = new Promise<void>((resolve) => { releaseOverview = resolve; });
@@ -141,6 +158,11 @@ async function verifyEpubPlayback(page: Page) {
   // Keep the handler installed for this page's lifetime, forwarding subsequent
   // reads immediately. Removing interception while gated routes drain can make
   // Playwright continue the same request twice.
+
+  // Generation keeps publishing seek-layout updates while audio plays. Those
+  // must not re-run rendered placement, which blanked the segment highlight
+  // for several frames every few seconds.
+  expect(await countBlankEpubSegmentFrames(page, 4_000)).toBe(0);
 
   await pauseButton.click();
   await expect(playButton).toBeVisible();
