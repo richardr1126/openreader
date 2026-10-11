@@ -409,7 +409,9 @@ export function computeAdaptiveDecodeStepLimit(maxDecodeSteps: number, textHint?
   const words = normalized.split(/\s+/).filter(Boolean).length;
   const estTokens = Math.max(words * 3, Math.ceil(chars / 2));
   const windowTokens = Math.ceil(estTokens * Math.min(1, Math.max(0, share) * 1.5));
-  return Math.max(64, Math.min(maxDecodeSteps, windowTokens + 24));
+  // Speech is rarely spread evenly across windows, so a dense window keeps at
+  // least the former fixed cap; decoding still stops early at end-of-text.
+  return Math.min(maxDecodeSteps, Math.max(128, windowTokens + 24));
 }
 
 const WINDOW_SPLIT_SEARCH_SAMPLES = 4 * SAMPLE_RATE;

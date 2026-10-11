@@ -34,6 +34,8 @@ describe('whisper alignment windows', () => {
   test('a long segment decodes past the old fixed cap', () => {
     const text = 'word '.repeat(120).trim();
     expect(computeAdaptiveDecodeStepLimit(444, text)).toBeGreaterThan(128);
+    // A dense window in a long segment keeps at least the former fixed cap.
+    expect(computeAdaptiveDecodeStepLimit(444, text, 0.1)).toBeGreaterThanOrEqual(128);
     expect(computeAdaptiveDecodeStepLimit(444, text, 0.5)).toBeLessThan(computeAdaptiveDecodeStepLimit(444, text));
   });
 });
