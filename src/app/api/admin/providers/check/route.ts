@@ -11,6 +11,7 @@ import {
 } from '@/lib/server/admin/providers';
 import { runProviderCheck, type ProviderCheckDraft, type ProviderCheckSaved } from '@/lib/server/admin/provider-check';
 import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import type { ProviderCheckItem } from '@/lib/shared/provider-check';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,13 +49,26 @@ export async function POST(req: NextRequest) {
       const record = await getAdminProviderById(providerId);
       if (!record) return NextResponse.json({ error: 'Provider not found' }, { status: 404 });
       const keyChanged = draft.apiKey.length > 0;
-      if (!keyChanged) draft.apiKey = await decryptedKeyFor(record);
+      const sameEndpoint = record.providerType === draft.providerType
+        && (record.baseUrl ?? '') === draft.baseUrl;
+      if (!keyChanged) {
+        // The stored key is write-only; never send it to an endpoint the admin changed.
+        if (!sameEndpoint && record.apiKeyLast4) {
+          const checks: ProviderCheckItem[] = [{
+            id: 'settings',
+            label: 'Settings',
+            status: 'error',
+            detail: 'Enter the API key again to check a changed provider type or base URL.',
+          }];
+          return NextResponse.json({ checks }, { headers: { 'Cache-Control': 'no-store' } });
+        }
+        if (sameEndpoint) draft.apiKey = await decryptedKeyFor(record);
+      }
       saved = {
         slug: record.slug,
         enabled: record.enabled,
         matchesDraft: !keyChanged
-          && record.providerType === draft.providerType
-          && (record.baseUrl ?? '') === draft.baseUrl
+          && sameEndpoint
           && (record.defaultModel ?? '') === draft.defaultModel
           && (record.defaultInstructions ?? '') === draft.defaultInstructions,
       };

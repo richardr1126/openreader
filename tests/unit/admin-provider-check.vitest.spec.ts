@@ -114,3 +114,49 @@ describe('admin provider check', () => {
     expect(items.at(-1)).toMatchObject({ id: 'connection', status: 'error' });
   });
 });
+
+const routeMocks = vi.hoisted(() => ({
+  requireAdminContext: vi.fn(async () => ({ userId: 'admin' })),
+  getAdminProviderById: vi.fn(),
+  decryptedKeyFor: vi.fn(async () => 'stored-secret'),
+}));
+
+vi.mock('@/lib/server/auth/admin', () => ({ requireAdminContext: routeMocks.requireAdminContext }));
+vi.mock('@/lib/server/admin/providers', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/server/admin/providers')>()),
+  getAdminProviderById: routeMocks.getAdminProviderById,
+  decryptedKeyFor: routeMocks.decryptedKeyFor,
+}));
+
+describe('admin provider check route', () => {
+  test('never uses the stored key for a changed endpoint', async () => {
+    const { NextRequest } = await import('next/server');
+    const { POST } = await import('../../src/app/api/admin/providers/check/route');
+    routeMocks.getAdminProviderById.mockResolvedValue({
+      id: 'p1',
+      slug: 'openai-prod',
+      providerType: 'openai',
+      baseUrl: null,
+      apiKeyLast4: 'abcd',
+      defaultModel: 'tts-1',
+      defaultInstructions: null,
+      enabled: true,
+    });
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const response = await POST(new NextRequest('http://localhost/api/admin/providers/check', {
+      method: 'POST',
+      body: JSON.stringify({
+        providerId: 'p1',
+        providerType: 'custom-openai',
+        baseUrl: 'https://attacker.example/v1',
+        apiKey: '',
+        defaultModel: 'tts-1',
+      }),
+    }));
+    const body = await response.json() as { checks: Array<{ id: string; status: string }> };
+    expect(body.checks).toEqual([expect.objectContaining({ id: 'settings', status: 'error' })]);
+    expect(routeMocks.decryptedKeyFor).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});
