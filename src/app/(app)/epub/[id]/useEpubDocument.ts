@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -146,9 +147,11 @@ export function useEpubDocument(
   // through refs: as dependencies they re-ran a full placement every few
   // seconds, which rebuilt the text maps and blanked the highlights.
   const reconcileEpubRenderedAnchorRef = useRef(reconcileEpubRenderedAnchor);
-  reconcileEpubRenderedAnchorRef.current = reconcileEpubRenderedAnchor;
   const skipToOrdinalRef = useRef(skipToOrdinal);
-  skipToOrdinalRef.current = skipToOrdinal;
+  useLayoutEffect(() => {
+    reconcileEpubRenderedAnchorRef.current = reconcileEpubRenderedAnchor;
+    skipToOrdinalRef.current = skipToOrdinal;
+  }, [reconcileEpubRenderedAnchor, skipToOrdinal]);
   const startupDisplayStartedRef = useRef(false);
   const startupDisplayOwnerRef = useRef(0);
 

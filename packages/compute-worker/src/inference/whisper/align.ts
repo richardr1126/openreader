@@ -952,8 +952,14 @@ export async function alignAudioWithText(
       const pcmBytes = await readFile(pcmPath);
       const decodedSamples = pcm16ToFloat32(pcmBytes);
       const words: WhisperWord[] = [];
-      // Each window is one bounded model invocation with its own time budget.
-      for (const window of planAlignmentWindows(decodedSamples.length, decodedSamples)) {
+      const windows = planAlignmentWindows(decodedSamples.length, decodedSamples);
+      // One shared deadline bounds the whole job, scaled by window count so a
+      // long segment gets the same per-model-invocation budget as a short one.
+      const timeoutMs = alignmentTimeoutMs * windows.length;
+      const deadlineMs = Date.now() + timeoutMs;
+      for (const window of windows) {
+        // A superseded run releases the alignment lane between windows.
+        if (opts.shouldStart && !await opts.shouldStart()) return [];
         const windowSamples = decodedSamples.subarray(window.start, window.end);
         const frameCount = Math.max(1, Math.floor((windowSamples.length / HOP_LENGTH) / 2));
         const offsetSec = window.start / SAMPLE_RATE;
@@ -962,8 +968,8 @@ export async function alignAudioWithText(
           { ...opts, textHint: text },
           frameCount,
           windowSamples.length / Math.max(1, decodedSamples.length),
-          Date.now() + alignmentTimeoutMs,
-          alignmentTimeoutMs,
+          deadlineMs,
+          timeoutMs,
         );
         for (const word of windowWords) {
           words.push({ word: word.word, start: word.start + offsetSec, end: word.end + offsetSec });
