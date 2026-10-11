@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
+import { ZoomControl } from '@/components/documents/ZoomControl';
 import { Header } from '@/components/Header';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
@@ -91,6 +92,9 @@ function PdfReader({
     setPdfSkipBlockKinds,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
+  // Plain-text mode reflows like EPUB, so its control sets side padding instead of page scale.
+  const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
+  const [maxPadPx, setMaxPadPx] = useState<number>(0);
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
   const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
@@ -114,6 +118,10 @@ function PdfReader({
       if (h > 0) {
         setContainerHeight(`${h}px`);
       }
+
+      const vw = window.innerWidth;
+      const minContent = Math.min(640, Math.max(320, vw - 32));
+      setMaxPadPx(Math.max(0, Math.floor((vw - minContent) / 2)));
     };
     compute();
     const settleT1 = window.setTimeout(compute, 0);
@@ -126,8 +134,7 @@ function PdfReader({
     };
   }, [rendererReady, activeSidebar]);
 
-  const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 10, 300));
-  const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 10, 50));
+  const sidePaddingPx = Math.round(maxPadPx * ((100 - padPct) / 100));
 
   const handleBackToDocuments = useCallback((event?: MouseEvent) => {
     event?.preventDefault();
@@ -176,16 +183,11 @@ function PdfReader({
         right={
           <div className="flex items-center gap-2">
             <DocumentHeaderMenu
-              zoomLevel={zoomLevel}
-              onZoomIncrease={handleZoomIn}
-              onZoomDecrease={handleZoomOut}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
               isSettingsOpen={activeSidebar === 'settings'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
-              minZoom={50}
-              maxZoom={300}
             />
           </div>
         }
@@ -212,6 +214,23 @@ function PdfReader({
               )}
             />
           ) : null}
+          zoom={readerShowsLayout ? (
+            <ZoomControl
+              value={zoomLevel}
+              onIncrease={() => setZoomLevel(prev => Math.min(prev + 10, 300))}
+              onDecrease={() => setZoomLevel(prev => Math.max(prev - 10, 50))}
+              min={50}
+              max={300}
+            />
+          ) : (
+            <ZoomControl
+              value={padPct}
+              onIncrease={() => setPadPct(p => Math.min(p + 10, 100))}
+              onDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
+              min={0}
+              max={100}
+            />
+          )}
         />
         <div className={rendererReady ? 'min-h-0 flex-1' : 'min-h-0 flex-1 opacity-0 pointer-events-none'}>
           {readerShowsLayout ? (
@@ -222,7 +241,9 @@ function PdfReader({
               pdfState={pdfState}
             />
           ) : (
-            <PlanTextReader className="h-full" readerType="pdf" onReady={onReady} onError={onError} />
+            <div className="h-full w-full" style={{ paddingLeft: `${sidePaddingPx}px`, paddingRight: `${sidePaddingPx}px` }}>
+              <PlanTextReader className="h-full" readerType="pdf" onReady={onReady} onError={onError} />
+            </div>
           )}
         </div>
       </div>

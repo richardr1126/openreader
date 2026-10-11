@@ -112,6 +112,14 @@ test('a PDF can be read as flowing text and tapped to seek', async ({ page }) =>
   const reader = page.getByTestId('text-reader');
   const target = reader.getByText('This is chapter one text used for integration tests.');
   await expect(target).toBeVisible();
+
+  // Flowing text has no page scale, so the toolbar control narrows the column instead.
+  const zoomControls = page.getByRole('toolbar', { name: 'Reader' }).getByLabel('Zoom controls', { exact: true });
+  await expect(zoomControls).toContainText('100%');
+  const fullWidth = (await reader.boundingBox())!.width;
+  await zoomControls.getByRole('button', { name: 'Zoom out', exact: true }).click();
+  await expect(zoomControls).toContainText('90%');
+  await expect.poll(async () => (await reader.boundingBox())!.width).toBeLessThan(fullWidth);
   await target.click({ position: { x: 4, y: 6 } });
   await expect(reader.locator('.openreader-html-highlight-sentence').first())
     .toContainText('This is chapter one text');

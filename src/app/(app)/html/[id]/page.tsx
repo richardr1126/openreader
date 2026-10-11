@@ -12,6 +12,7 @@ import { Header } from '@/components/Header';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
+import { ZoomControl } from '@/components/documents/ZoomControl';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -132,16 +133,11 @@ function HtmlReader({
         right={rendererReady ? (
           <div className="flex items-center gap-3">
             <DocumentHeaderMenu
-              zoomLevel={padPct}
-              onZoomIncrease={() => setPadPct(p => Math.min(p + 10, 100))}
-              onZoomDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
               onOpenAudiobook={() => setActiveSidebar((prev) => prev === 'audiobook' ? null : 'audiobook')}
               isSettingsOpen={activeSidebar === 'settings'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
-              minZoom={0}
-              maxZoom={100}
             />
           </div>
         ) : null}
@@ -153,6 +149,15 @@ function HtmlReader({
           onTogglePanel={(panel) => setActiveSidebar((prev) => prev === panel ? null : panel)}
           sentenceBookmark={sentenceBookmark}
           navigation={<ReadingProgress />}
+          zoom={(
+            <ZoomControl
+              value={padPct}
+              onIncrease={() => setPadPct(p => Math.min(p + 10, 100))}
+              onDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
+              min={0}
+              max={100}
+            />
+          )}
         />
         {currDocData !== undefined ? (
           <div

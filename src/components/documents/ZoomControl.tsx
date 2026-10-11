@@ -24,7 +24,7 @@ export function ZoomControl({
       >
         −
       </IconButton>
-      <span className="text-xs tabular-nums w-12 text-center text-soft">{value}%</span>
+      <span className="text-xs tabular-nums w-10 sm:w-12 text-center text-soft">{value}%</span>
       <IconButton
         onClick={onIncrease}
         disabled={value >= max}

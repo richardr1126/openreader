@@ -1,46 +1,28 @@
 'use client';
 
 import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon } from '@/components/icons/Icons';
-import { ZoomControl } from '@/components/documents/ZoomControl';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton } from '@/components/ui';
 
 interface DocumentHeaderMenuProps {
-  zoomLevel: number;
-  onZoomIncrease: () => void;
-  onZoomDecrease: () => void;
   onOpenSettings: () => void;
   onOpenAudiobook?: () => void;
   isSettingsOpen?: boolean;
   isAudiobookOpen?: boolean;
   showAudiobookExport?: boolean;
-  minZoom?: number;
-  maxZoom?: number;
 }
 
 export function DocumentHeaderMenu({
-  zoomLevel,
-  onZoomIncrease,
-  onZoomDecrease,
   onOpenSettings,
   onOpenAudiobook,
   isSettingsOpen = false,
   isAudiobookOpen = false,
   showAudiobookExport,
-  minZoom = 0,
-  maxZoom = 100
 }: DocumentHeaderMenuProps) {
 
   // --- Desktop View ---
   const DesktopView = (
     <div className="hidden sm:flex items-center gap-2">
-      <ZoomControl
-        value={zoomLevel}
-        onIncrease={onZoomIncrease}
-        onDecrease={onZoomDecrease}
-        min={minZoom}
-        max={maxZoom}
-      />
       {showAudiobookExport && onOpenAudiobook && (
         <ToolbarButton
           onClick={onOpenAudiobook}
@@ -80,20 +62,6 @@ export function DocumentHeaderMenu({
         </MenuTrigger>
         <MenuTransition>
           <MenuItemsSurface className="absolute right-0 z-50 mt-2 min-w-max origin-top-right divide-y divide-line-soft focus:outline-none">
-            {/* Zoom Controls Section */}
-            <div className="px-4 py-3">
-              <p className="text-xs font-medium text-soft mb-2">Zoom / Padding</p>
-              <div className="flex justify-center">
-                <ZoomControl
-                  value={zoomLevel}
-                  onIncrease={onZoomIncrease}
-                  onDecrease={onZoomDecrease}
-                  min={minZoom}
-                  max={maxZoom}
-                />
-              </div>
-            </div>
-
             {/* Actions Section */}
             <div className="p-1">
               {showAudiobookExport && onOpenAudiobook && (

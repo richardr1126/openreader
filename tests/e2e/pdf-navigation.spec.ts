@@ -39,7 +39,7 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   await expect(page.getByRole('button', { name: '1 / 2', exact: true })).toBeFocused();
   await expect(page.getByText('Chapter One', { exact: true })).toBeVisible();
 
-  const zoomControls = page.getByLabel('Zoom controls', { exact: true });
+  const zoomControls = page.getByRole('toolbar', { name: 'Reader', exact: true }).getByLabel('Zoom controls', { exact: true });
   await zoomControls.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(zoomControls).toContainText('110%');
   await zoomControls.getByRole('button', { name: 'Zoom out', exact: true }).click();
