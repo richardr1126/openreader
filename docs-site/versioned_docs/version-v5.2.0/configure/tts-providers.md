@@ -1,0 +1,74 @@
+---
+title: TTS Providers
+---
+
+OpenReader keeps provider configuration in the app, while background speech synthesis runs in the
+compute worker. Provider credentials are always admin-managed and never accepted from the browser.
+The worker resolves the selected provider just in time through the authenticated app-owned
+credential broker; credentials are not embedded in NATS jobs or playback artifacts.
+
+**Admin-managed shared providers** (Settings > Admin > Shared providers): DB-backed instances configured by an admin and visible to all users. Keys are encrypted at rest and never exposed to the client. Available only when [auth is enabled](./auth) and your account has an administrator grant. See [Admin Panel](./admin-panel).
+
+**Per-user Settings modal** (Settings > TTS Provider): users may select an enabled shared provider, model, instructions, and voice. Credentials remain server-side.
+
+**Environment variables**: `API_KEY`, `API_BASE`, and `API_MODEL_NAME` form a one-shot first-boot seed that auto-creates a `default-openai` admin shared provider. `API_MODEL_NAME` defaults to `kokoro` and does not trigger provider creation by itself. After the first boot these variables are no longer read by the running app.
+
+## Providers
+
+- **OpenAI**: Cloud. Base URL pre-filled (`https://api.openai.com/v1`). API key required.
+- **Replicate**: Cloud. Base URL managed internally by OpenReader. API key required.
+- **DeepInfra**: Cloud. Base URL pre-filled (`https://api.deepinfra.com/v1/openai`). API key required.
+- **Speech SDK**: Cloud. Reaches additional providers (ElevenLabs, Cartesia, Hume, Deepgram, Google, Inworld, and more) directly with your own provider API keys via [speech-sdk](./tts-provider-guides/speech-sdk). No base URL. API key required (the key for the model's provider).
+- **Custom OpenAI-Like**: Self-hosted or any custom endpoint. `API_BASE` must be set manually (typically ending in `/v1`). API key optional.
+
+Admins configure the required fields for each provider type on its shared-provider row (e.g. API key and, where applicable, base URL).
+
+## Built-in model catalogs
+
+- **Replicate** models: `alphanumericuser/kokoro-82m`, `google/gemini-3.1-flash-tts`, `minimax/speech-2.8-turbo`, `qwen/qwen3-tts`, `inworld/tts-1.5-mini` (or choose `Other` and enter any Replicate model ID, such as `owner/model` or `owner/model:version`)
+- **OpenAI** models: `tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`
+- **DeepInfra** models: includes `hexgrad/Kokoro-82M` and additional hosted models (depending on API key / feature flags)
+- **Speech SDK** models: `openai/gpt-4o-mini-tts`, `elevenlabs/eleven_multilingual_v2`, `cartesia/sonic-3.5`, `deepgram/aura-2`, `google/gemini-2.5-flash-preview-tts`, `inworld/inworld-tts-1.5-max` (or choose `Other` and enter any `provider/model` the SDK supports)
+
+## Custom provider requirements
+
+Self-hosted or custom providers only need an OpenAI-compatible speech endpoint:
+
+- `POST /v1/audio/speech` — **required**.
+- Voice listing is **optional** and auto-discovered: OpenReader probes `/v1/audio/voices`, `/v1/voices`, then `/v1/styles`. If none respond, it falls back to default voices — the Kokoro set for Kokoro models, otherwise the standard OpenAI voices (`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`).
+
+The speech endpoint may return any common audio format — `mp3`, `wav`, `ogg`, or `flac`. OpenReader detects the format and transcodes non-mp3 audio to mp3 automatically, so your server does not need to honor `response_format: mp3`. An API key is optional; keyless servers work.
+
+:::warning Provider URLs are server-side
+Speech synthesis originates from the **compute worker**, not the browser. Optional custom voice
+discovery is performed by the Next.js app server, so a self-hosted base URL should be reachable from
+both server runtimes.
+
+| Deployment | Provider base URL |
+| --- | --- |
+| Native app + embedded worker on the same host | `http://127.0.0.1:<port>/v1` |
+| Single Docker container, provider on the Docker host | `http://host.docker.internal:<port>/v1` (add Docker's host-gateway mapping on Linux) |
+| Docker Compose | The provider service name on the shared network, such as `http://kokoro-tts:8880/v1` |
+| Remote worker (Railway or another host) | A public, private-network, or VPN URL reachable from both app and worker |
+
+`localhost` always means the current process/container. It cannot refer to a provider on your laptop
+from a remote worker.
+:::
+
+## Provider guides
+
+- [Kokoro-FastAPI](./tts-provider-guides/kokoro-fastapi)
+- [KittenTTS-FastAPI](./tts-provider-guides/kitten-tts-fastapi)
+- [Orpheus-FastAPI](./tts-provider-guides/orpheus-fastapi)
+- [Supertonic](./tts-provider-guides/supertonic)
+- [Replicate](./tts-provider-guides/replicate)
+- [DeepInfra](./tts-provider-guides/deepinfra)
+- [OpenAI](./tts-provider-guides/openai)
+- [Speech SDK](./tts-provider-guides/speech-sdk)
+- [Other](./tts-provider-guides/other)
+
+## Related
+
+- [Admin Panel](./admin-panel) — DB-backed shared providers with encrypted keys
+- [TTS Environment Variables](../reference/environment-variables#tts-provider-and-request-behavior)
+- [Compute Rate Limiting](./compute-rate-limiting)
