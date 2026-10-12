@@ -21,6 +21,7 @@ export function useIsNarrow(): boolean {
 
 export function LibraryFrame({
   toolbar,
+  banner,
   sidebar,
   children,
   sidebarOpen,
@@ -28,6 +29,8 @@ export function LibraryFrame({
   className,
 }: {
   toolbar: ReactNode;
+  /** Full-width strip between the toolbar and the sidebar/content panes. */
+  banner?: ReactNode;
   sidebar: ReactNode;
   children: ReactNode;
   sidebarOpen: boolean;
@@ -39,6 +42,7 @@ export function LibraryFrame({
   return (
     <div className={cn('flex h-full w-full flex-col overflow-hidden bg-surface-sunken', className)}>
       {toolbar}
+      {banner}
       <div className="flex flex-1 min-h-0">
         {!isNarrow && sidebarOpen && <div className="h-full">{sidebar}</div>}
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">{children}</div>

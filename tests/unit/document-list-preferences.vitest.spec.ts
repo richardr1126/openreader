@@ -14,7 +14,7 @@ describe('document-list preferences', () => {
     })).toEqual({
       sortBy: 'date',
       sortDirection: 'desc',
-      iosBetaBannerDismissed: false,
+      iosBannerDismissed: false,
       viewMode: 'icons',
       iconSize: 'md',
       sidebarWidth: 220,
@@ -27,7 +27,7 @@ describe('document-list preferences', () => {
     const stored = {
       sortBy: 'name',
       sortDirection: 'asc',
-      iosBetaBannerDismissed: true,
+      iosBannerDismissed: true,
       viewMode: 'list',
       iconSize: 'lg',
       sidebarWidth: 280,
@@ -40,7 +40,7 @@ describe('document-list preferences', () => {
     expect(serializeDocumentListState(normalizeDocumentListState(stored))).toEqual({
       sortBy: 'name',
       sortDirection: 'asc',
-      iosBetaBannerDismissed: true,
+      iosBannerDismissed: true,
       viewMode: 'list',
       iconSize: 'lg',
       sidebarWidth: 280,

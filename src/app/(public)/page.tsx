@@ -69,8 +69,9 @@ export default async function LandingPage() {
               <p className="public-ios-kicker">iPhone &amp; iPad · Beta signups open</p>
               <p className="public-ios-headline">OpenReader for iOS is coming soon.</p>
               <p className="public-ios-description">
-                Read and listen entirely on your device, with Kokoro speech
-                powered by Apple&rsquo;s Core AI. Join the beta group now.
+                Read and listen entirely on your device, with many speech
+                models and voice cloning powered by Apple&rsquo;s Core AI.
+                Join the beta group now.
               </p>
             </div>
             <ButtonAnchor

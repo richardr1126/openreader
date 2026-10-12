@@ -113,6 +113,7 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
         sortDirection: 'asc',
         showHint: true,
         iosBetaBannerDismissed: true,
+        iosBannerDismissed: true,
         folders: [{ id: 'legacy-folder' }],
         collapsedFolders: ['legacy-folder'],
       },
@@ -121,7 +122,7 @@ describe('sanitizePreferencesPatch — inherit-by-default provider model', () =>
     expect(patch.documentListState).toEqual({
       sortBy: 'name',
       sortDirection: 'asc',
-      iosBetaBannerDismissed: true,
+      iosBannerDismissed: true,
     });
   });
 });

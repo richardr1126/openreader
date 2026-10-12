@@ -2,6 +2,15 @@ import { SYNCED_PREFERENCE_KEYS, type SyncedPreferencesPatch } from '@/types/use
 import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@openreader/tts/provider-catalog';
 import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 
+// Dropped on write. `iosBetaBannerDismissed` belonged to the first iOS banner;
+// retiring it shows the current banner again to users who dismissed the old one.
+const OBSOLETE_DOCUMENT_LIST_FIELDS = new Set([
+  'folders',
+  'collapsedFolders',
+  'showHint',
+  'iosBetaBannerDismissed',
+]);
+
 export interface PreferenceNormalizationContext {
   showAllProviderModels: boolean;
   sharedProviders: Array<{
@@ -125,8 +134,7 @@ export function sanitizePreferencesPatch(
       case 'documentListState':
         if (isRecord(value)) {
           out[key] = Object.fromEntries(
-            Object.entries(value).filter(([field]) =>
-              field !== 'folders' && field !== 'collapsedFolders' && field !== 'showHint'),
+            Object.entries(value).filter(([field]) => !OBSOLETE_DOCUMENT_LIST_FIELDS.has(field)),
           ) as unknown as SyncedPreferencesPatch[typeof key];
         }
         break;

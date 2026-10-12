@@ -6,10 +6,10 @@ import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
 import { UploadMenuDialog } from '@/components/documents/UploadMenuDialog';
-import { IconButton } from '@/components/ui';
 import { QueryError, RefreshIndicator } from '@/components/ui/query-states';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import { DocumentSelectionProvider } from './dnd/DocumentSelectionContext';
+import { IosBetaBanner } from './IosBetaBanner';
 import { SelectionActionBar } from './SelectionActionBar';
 import type { DocumentActions } from './document-actions';
 import { SidebarUploadStatus } from './SidebarUploadStatus';
@@ -36,7 +36,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
   const {
     sortBy,
     sortDirection,
-    iosBetaBannerDismissed,
+    iosBannerDismissed,
     viewMode,
     iconSize,
     sidebarWidth,
@@ -90,6 +90,12 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
           leftSlot={brand}
         />
       }
+      banner={(
+        <IosBetaBanner
+          show={!initialLoading && !queryError && controller.preferencesLoaded && !iosBannerDismissed}
+          onDismiss={() => controller.updateListState({ iosBannerDismissed: true }, true)}
+        />
+      )}
       sidebar={
         <FinderSidebar
           filter={sidebarFilter}
@@ -128,52 +134,6 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       sidebarOpen={controller.effectiveSidebarOpen}
       onRequestSidebarClose={controller.closeMobileSidebar}
     >
-      {!initialLoading && !queryError && controller.preferencesLoaded && !iosBetaBannerDismissed && (
-        <div className="px-3 pt-3 shrink-0 bg-surface-sunken">
-          <aside
-            aria-label="OpenReader for iOS beta"
-            className="relative flex items-center gap-2 rounded-lg border border-accent-line bg-surface py-2 pl-3 pr-10 shadow-elev-1 sm:gap-4 sm:py-2.5 sm:pr-11"
-          >
-            <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-accent-line bg-accent-wash text-accent sm:flex" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" className="h-5 w-5">
-                <rect x="7" y="2.5" width="10" height="19" rx="2.5" />
-                <path d="M10.5 18.5h3" strokeLinecap="round" />
-              </svg>
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[13px] font-semibold leading-tight text-foreground sm:text-sm">
-                <span className="sm:hidden">OpenReader for iOS</span>
-                <span className="hidden sm:inline">OpenReader for iOS is coming soon</span>
-              </p>
-              <p className="mt-0.5 text-[11px] leading-snug text-soft sm:text-xs">
-                <span className="sm:hidden">On-device Kokoro + Core AI · Soon</span>
-                <span className="hidden sm:inline">On-device reading and Kokoro speech with Apple&rsquo;s Core AI.</span>
-              </p>
-            </div>
-            <a
-              href="https://testflight.apple.com/join/eJTYjDwV"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-accent-line bg-accent-wash px-2 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:gap-1.5 sm:px-3"
-            >
-              <span className="sm:hidden">Join beta</span>
-              <span className="hidden sm:inline">Join iOS beta</span>
-              <span aria-hidden="true">↗</span>
-            </a>
-            <IconButton
-              onClick={() => controller.updateListState({ iosBetaBannerDismissed: true }, true)}
-              size="sm"
-              className="absolute right-2 top-2"
-              aria-label="Dismiss iOS beta banner"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
-                <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
-              </svg>
-            </IconButton>
-          </aside>
-        </div>
-      )}
-
       {queryError ? (
         <QueryError
           error={queryError}

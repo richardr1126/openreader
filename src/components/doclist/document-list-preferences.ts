@@ -10,7 +10,7 @@ import type {
 export type NormalizedDocumentListState = {
   sortBy: SortBy;
   sortDirection: SortDirection;
-  iosBetaBannerDismissed: boolean;
+  iosBannerDismissed: boolean;
   viewMode: ViewMode;
   iconSize: IconSize;
   sidebarWidth: number;
@@ -21,7 +21,7 @@ export type NormalizedDocumentListState = {
 export const DEFAULT_DOCUMENT_LIST_STATE: NormalizedDocumentListState = {
   sortBy: 'name',
   sortDirection: 'asc',
-  iosBetaBannerDismissed: false,
+  iosBannerDismissed: false,
   viewMode: 'icons',
   iconSize: 'md',
   sidebarWidth: 220,
@@ -46,8 +46,8 @@ export function normalizeDocumentListState(
   return {
     sortBy: normalizeSortBy(stored?.sortBy),
     sortDirection: stored?.sortDirection ?? DEFAULT_DOCUMENT_LIST_STATE.sortDirection,
-    iosBetaBannerDismissed:
-      stored?.iosBetaBannerDismissed ?? DEFAULT_DOCUMENT_LIST_STATE.iosBetaBannerDismissed,
+    iosBannerDismissed:
+      stored?.iosBannerDismissed ?? DEFAULT_DOCUMENT_LIST_STATE.iosBannerDismissed,
     viewMode: normalizeViewMode(stored?.viewMode),
     iconSize: stored?.iconSize ?? DEFAULT_DOCUMENT_LIST_STATE.iconSize,
     sidebarWidth: stored?.sidebarWidth ?? DEFAULT_DOCUMENT_LIST_STATE.sidebarWidth,
@@ -62,7 +62,7 @@ export function serializeDocumentListState(
   return {
     sortBy: state.sortBy,
     sortDirection: state.sortDirection,
-    iosBetaBannerDismissed: state.iosBetaBannerDismissed,
+    iosBannerDismissed: state.iosBannerDismissed,
     viewMode: state.viewMode,
     iconSize: state.iconSize,
     sidebarWidth: state.sidebarWidth,

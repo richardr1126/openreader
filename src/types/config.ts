@@ -80,7 +80,7 @@ export function getAppConfigDefaults(): AppConfigValues {
     documentListState: {
       sortBy: 'name',
       sortDirection: 'asc',
-      iosBetaBannerDismissed: false,
+      iosBannerDismissed: false,
       viewMode: 'grid',
     },
   };

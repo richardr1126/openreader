@@ -74,7 +74,7 @@ export type SidebarFilter = string;
 export interface DocumentListState {
   sortBy: SortBy;
   sortDirection: SortDirection;
-  iosBetaBannerDismissed?: boolean;
+  iosBannerDismissed?: boolean;
   viewMode?: ViewMode | 'grid';
   iconSize?: IconSize;
   sidebarWidth?: number;
