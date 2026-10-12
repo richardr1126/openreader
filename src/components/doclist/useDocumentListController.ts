@@ -275,6 +275,9 @@ export function useDocumentListController() {
     : undefined;
   return {
     listState,
+    // Saved list state is unknown until preferences load; dismissible UI such
+    // as the iOS beta banner waits for it instead of flashing the defaults.
+    preferencesLoaded: preferencesQuery.data !== undefined,
     model,
     query,
     setQuery,

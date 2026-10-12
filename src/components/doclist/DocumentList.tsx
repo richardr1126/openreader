@@ -128,7 +128,7 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
       sidebarOpen={controller.effectiveSidebarOpen}
       onRequestSidebarClose={controller.closeMobileSidebar}
     >
-      {!initialLoading && !queryError && !iosBetaBannerDismissed && (
+      {!initialLoading && !queryError && controller.preferencesLoaded && !iosBetaBannerDismissed && (
         <div className="px-3 pt-3 shrink-0 bg-surface-sunken">
           <aside
             aria-label="OpenReader for iOS beta"
