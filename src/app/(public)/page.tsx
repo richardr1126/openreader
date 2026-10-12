@@ -46,6 +46,8 @@ export const metadata: Metadata = {
 // is the product's actual word-level highlighting, used as the page's signature.
 const SWEEP = ['highlighted', 'word', 'by', 'word.'];
 
+const IOS_MODELS = ['Supertonic 3', 'Kokoro', 'Pocket TTS', 'Chatterbox Nano', 'System voices'];
+
 const PROVIDERS = ['Kokoro', 'KittenTTS', 'Orpheus', 'OpenAI', 'Replicate', 'DeepInfra'];
 
 const FORMATS = ['EPUB', 'PDF', 'TXT', 'MD', 'DOCX'];
@@ -63,30 +65,6 @@ export default async function LandingPage() {
     <main className="public-main">
       {/* ───────────────────────────── Hero ───────────────────────────── */}
       <section className="public-hero">
-        <div className="public-wrap">
-          <div className="public-ios-announcement public-reveal-1">
-            <div className="public-ios-announcement-copy">
-              <p className="public-ios-kicker">iPhone &amp; iPad · Beta signups open</p>
-              <p className="public-ios-headline">OpenReader for iOS is coming soon.</p>
-              <p className="public-ios-description">
-                Read and listen entirely on your device, with many speech
-                models and voice cloning powered by Apple&rsquo;s Core AI.
-                Join the beta group now.
-              </p>
-            </div>
-            <ButtonAnchor
-              href="https://testflight.apple.com/join/eJTYjDwV"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="primary"
-              size="md"
-              className="public-ios-cta"
-            >
-              Join the iOS beta <span aria-hidden="true">↗</span>
-            </ButtonAnchor>
-          </div>
-        </div>
-
         <div className="public-wrap public-hero-grid">
           <div className="public-hero-lede public-reveal-1">
             <p className="public-eyebrow">
@@ -198,6 +176,83 @@ export default async function LandingPage() {
                   {p}
                 </span>
               ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ────────────────────────────── iOS ───────────────────────────── */}
+      <section className="public-section" aria-labelledby="ios-heading">
+        <div className="public-wrap public-ios">
+          <div className="public-ios-copy">
+            <p className="public-kicker">OpenReader for iPhone &amp; iPad · Beta</p>
+            <h2 id="ios-heading">The whole reader, running on your phone.</h2>
+            <p className="public-ios-text">
+              A native iOS app that parses, speaks, and highlights your
+              documents entirely on-device with Apple&rsquo;s Core AI. No
+              server, no speech service, nothing leaves your phone.
+            </p>
+
+            <ul className="public-ios-points">
+              <li>
+                <h3>Several voice models</h3>
+                <p>{IOS_MODELS.join(', ')}.</p>
+              </li>
+              <li>
+                <h3>Voice cloning</h3>
+                <p>Record a short sample and hear books in a personal voice.</p>
+              </li>
+            </ul>
+
+            <div className="public-actions">
+              <ButtonAnchor
+                href="https://testflight.apple.com/join/eJTYjDwV"
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="primary"
+                size="lg"
+                className="gap-2"
+              >
+                Join the TestFlight beta <span aria-hidden="true">↗</span>
+              </ButtonAnchor>
+            </div>
+          </div>
+
+          <div className="public-phone" aria-hidden="true">
+            <div className="public-phone-screen">
+              <div className="public-phone-island" />
+              <p className="public-reader-chapter">Chapter 2 · The council</p>
+              <p className="public-phone-text">
+                The cyclone had set the house down very gently.{' '}
+                <span className="public-reader-sentence">
+                  She was <span className="public-reader-word">startled</span> by
+                  the lovely sight before her.
+                </span>{' '}
+                Banks of gorgeous flowers lined the road.
+              </p>
+              <p className="public-phone-text">
+                Birds with bright plumage sang and fluttered in the trees, and a
+                little way off was a small brook, rushing and sparkling along.
+              </p>
+              <div className="public-phone-player">
+                <span className="public-phone-voice">Personal voice · Chatterbox Nano</span>
+                <div className="public-phone-controls">
+                  <span className="public-player-play">
+                    <svg viewBox="0 0 24 24" width="16" height="16">
+                      <path d="M8 5v14l11-7z" fill="currentColor" />
+                    </svg>
+                  </span>
+                  <div className="public-wave">
+                    {Array.from({ length: 18 }).map((_, i) => (
+                      <span
+                        key={i}
+                        className="public-wave-bar"
+                        style={{ '--b': i } as CSSProperties}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
