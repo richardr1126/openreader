@@ -559,6 +559,17 @@ async function addReplicateLanguageInput(
   return input;
 }
 
+// Models with region-only codes (Gemini's `en-US`, `ja-JP`) need a bare
+// language expanded to its most likely region rather than omitted.
+function likelyRegionalLanguageTag(language: string): string | null {
+  try {
+    const locale = new Intl.Locale(language).maximize();
+    return locale.region ? `${locale.language}-${locale.region}` : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveReplicateLanguageValue(language: string, allowedValues: string[]): string | null {
   if (allowedValues.length === 0) return language;
 
@@ -566,9 +577,10 @@ export function resolveReplicateLanguageValue(language: string, allowedValues: s
   const candidates = [
     language,
     baseLanguage,
+    likelyRegionalLanguageTag(language),
     getLanguageDisplayName(language),
     getLanguageDisplayName(baseLanguage),
-  ];
+  ].filter((candidate): candidate is string => Boolean(candidate));
   const allowedByLowercase = new Map(
     allowedValues.map((value) => [value.toLocaleLowerCase(), value]),
   );
