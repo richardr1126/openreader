@@ -313,6 +313,8 @@ The audio route builds the suffix CBR layout from the canonical plan plus
 completed sidecars. Generated segments use exact probed duration. Missing
 segments are represented by frame-aligned silence estimates, so byte-range
 seeking can target ungenerated regions without cutting a segment in half.
+The advertised length is a deterministic upper bound with headroom over that
+estimate; the remainder after the document's real audio is silence padding.
 
 Readiness is derived from sidecars:
 
@@ -1958,7 +1960,10 @@ overviews discover newly cached ordinals but do not repeatedly fetch all
 audio-only sidecars. Explicit cursor windows refresh missing word timing, and
 cache epochs and explicit invalidation still bound reuse.
 
-Audio response Content-Length remains the deterministic plan estimate. Direct
+Audio response Content-Length remains deterministic: the plan estimate at a
+slower worst-case speaking rate, so real audio that outruns the text estimate is
+never cut off. The client ends playback at the last generated segment's exact
+end instead of playing the trailing length padding. Direct
 starts and `fromOrdinal` suffix starts perform no duration catalogue scan.
 Nonzero byte ranges read the required prefix in batches of 32 to preserve exact
 byte mapping; streaming still checks each source, emits frame-valid scaffolding

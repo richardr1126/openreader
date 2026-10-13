@@ -33,7 +33,20 @@ function parseReplicateModelIdentifier(model: string): {
     : parsed;
 }
 
-function extractSchemaStringEnums(schemaNode: unknown, seen = new Set<object>()): string[] {
+// Cog-built Replicate models declare enum inputs as
+// `allOf: [{ $ref: '#/components/schemas/<name>' }]`, so local refs must be
+// followed to find the allowed values.
+function resolveLocalSchemaRef(root: unknown, ref: string): unknown {
+  if (!ref.startsWith('#/')) return undefined;
+  let node: unknown = root;
+  for (const segment of ref.slice(2).split('/')) {
+    if (!isRecord(node)) return undefined;
+    node = node[segment.replace(/~1/g, '/').replace(/~0/g, '~')];
+  }
+  return node;
+}
+
+function extractSchemaStringEnums(schemaNode: unknown, root: unknown, seen = new Set<object>()): string[] {
   if (!isRecord(schemaNode)) {
     return [];
   }
@@ -43,6 +56,9 @@ function extractSchemaStringEnums(schemaNode: unknown, seen = new Set<object>())
   seen.add(schemaNode);
 
   const values: string[] = [];
+  if (typeof schemaNode.$ref === 'string') {
+    values.push(...extractSchemaStringEnums(resolveLocalSchemaRef(root, schemaNode.$ref), root, seen));
+  }
   if (Array.isArray(schemaNode.enum)) {
     values.push(...schemaNode.enum.filter((value): value is string => typeof value === 'string'));
   }
@@ -54,12 +70,12 @@ function extractSchemaStringEnums(schemaNode: unknown, seen = new Set<object>())
     const branch = schemaNode[key];
     if (!Array.isArray(branch)) continue;
     for (const item of branch) {
-      values.push(...extractSchemaStringEnums(item, seen));
+      values.push(...extractSchemaStringEnums(item, root, seen));
     }
   }
 
   if (schemaNode.items) {
-    values.push(...extractSchemaStringEnums(schemaNode.items, seen));
+    values.push(...extractSchemaStringEnums(schemaNode.items, root, seen));
   }
 
   return values;
@@ -131,7 +147,7 @@ function extractReplicateVoicesFromOpenApiSchema(openApiSchema: unknown): string
     }
     for (const key of REPLICATE_VOICE_KEYS) {
       if (!(key in properties)) continue;
-      voices.push(...extractSchemaStringEnums(properties[key]));
+      voices.push(...extractSchemaStringEnums(properties[key], openApiSchema));
     }
   });
 
@@ -173,7 +189,7 @@ function extractReplicateLanguageInputFromOpenApiSchema(openApiSchema: unknown):
       if (key in properties) {
         found = {
           key,
-          allowedValues: extractSchemaStringEnums(properties[key]),
+          allowedValues: extractSchemaStringEnums(properties[key], openApiSchema),
         };
         return true;
       }

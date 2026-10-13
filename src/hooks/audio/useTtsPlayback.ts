@@ -396,6 +396,11 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
           const last = latestSeekLayoutRef.current?.segments.at(-1)?.ordinal;
           return last !== undefined && (playbackCursorOrdinalRef.current ?? 0) < last;
         },
+        reachedEnd: () => {
+          const last = latestSeekLayoutRef.current?.segments.at(-1);
+          if (!last || (!last.generated && last.audioState !== 'error')) return false;
+          return documentTimeForAudio(audio) * 1000 >= last.endMs;
+        },
         onPause: () => {
           stopPlaybackProjectionLoop();
           playbackInFlightRef.current = isPlayingRef.current;

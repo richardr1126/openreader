@@ -84,3 +84,17 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/app$/);
 });
+
+test('anonymous visitor plays the landing read-along sample', async ({ page }) => {
+  await page.goto('/');
+  const sample = page.getByRole('complementary', { name: 'Read-along sample', exact: true });
+  await sample.getByRole('button', { name: 'Play sample', exact: true }).click();
+
+  const pause = sample.getByRole('button', { name: 'Pause sample', exact: true });
+  await expect(pause).toBeVisible();
+  await expect.poll(() => sample.locator('audio').evaluate((audio: HTMLAudioElement) => audio.currentTime))
+    .toBeGreaterThan(0.5);
+
+  await pause.click();
+  await expect(sample.getByRole('button', { name: 'Play sample', exact: true })).toBeVisible();
+});

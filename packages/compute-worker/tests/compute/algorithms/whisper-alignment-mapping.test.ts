@@ -29,7 +29,28 @@ describe('whisper alignment mapping', () => {
     ]);
 
     expect(aligned.words[0].charStart).toBe(0);
-    expect(aligned.words[0].charEnd).toBe('Übermensch'.length);
+    expect(aligned.words[0].charEnd).toBe('Über-\n mensch'.length);
     expect(aligned.words[1].charStart).toBeGreaterThanOrEqual(aligned.words[0].charEnd);
+  });
+
+  const spoken = (sentence: string, alignment: ReturnType<typeof mapWordsToSentenceOffsets>) =>
+    alignment.words.map((word) => sentence.slice(word.charStart, word.charEnd));
+
+  test('a misheard word does not pull later words onto a distant match', () => {
+    const sentence = 'and Aunt Em, who was the wife. It was carried by wagon many miles.';
+    const heard = ['and', 'an', 'M,', 'who', 'was', 'the', 'wife.', 'It', 'was', 'carried', 'by', 'wagon', 'many', 'miles.'];
+    const aligned = mapWordsToSentenceOffsets(sentence, heard.map((word, i) => ({ word, start: i, end: i + 1 })));
+    expect(spoken(sentence, aligned)).toEqual([
+      'and', 'Aunt', 'Em,', 'who', 'was', 'the', 'wife.', 'It', 'was', 'carried', 'by', 'wagon', 'many', 'miles.',
+    ]);
+  });
+
+  test('merged and extra recognized words share the text between their anchors', () => {
+    const sentence = 'Uncle Henry farmed wheat.';
+    const timed = (heard: string[]) => heard.map((word, i) => ({ word, start: i, end: i + 1 }));
+    expect(spoken(sentence, mapWordsToSentenceOffsets(sentence, timed(['Uncle', 'Henryfarmed', 'wheat.']))))
+      .toEqual(['Uncle', 'Henry farmed', 'wheat.']);
+    expect(spoken(sentence, mapWordsToSentenceOffsets(sentence, timed(['Uncle', 'uh', 'Henry', 'farmed', 'wheat.']))))
+      .toEqual(['Uncle', '', 'Henry', 'farmed', 'wheat.']);
   });
 });

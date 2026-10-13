@@ -11,6 +11,7 @@ import {
 } from '@openreader/tts/provider-catalog';
 import { normalizeLegacyProviderRef, resolveProviderDefaults, resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import {
+  resolveReplicateLanguageInput,
   resolveReplicateLanguageInputKey,
   resolveReplicateVoiceInputKey,
   resolveVoices,
@@ -450,6 +451,44 @@ describe('tts provider catalog', () => {
         apiKey: 'r8_token',
       })).resolves.toBe('language_code');
       expect(calls).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('follows Cog $ref enums when discovering allowed Replicate language values', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        latest_version: {
+          openapi_schema: {
+            components: {
+              schemas: {
+                Input: {
+                  type: 'object',
+                  properties: {
+                    text: { type: 'string' },
+                    language_code: {
+                      allOf: [{ $ref: '#/components/schemas/language_code' }],
+                      default: 'en-US',
+                    },
+                  },
+                },
+                language_code: { type: 'string', enum: ['en-GB', 'en-US', 'ja-JP'] },
+              },
+            },
+          },
+        },
+      }),
+    } as Response);
+
+    try {
+      await expect(resolveReplicateLanguageInput({
+        provider: 'replicate',
+        model: 'acme/cog-enum-language-model',
+        apiKey: 'r8_token',
+      })).resolves.toEqual({ key: 'language_code', allowedValues: ['en-GB', 'en-US', 'ja-JP'] });
     } finally {
       globalThis.fetch = originalFetch;
     }

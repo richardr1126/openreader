@@ -88,6 +88,15 @@ describe('Replicate language schema values', () => {
     expect(resolveReplicateLanguageValue('ja-JP', ['English', 'French'])).toBeNull();
   });
 
+  test('expands a bare language to its likely region for region-only enums', () => {
+    const gemini = ['en-AU', 'en-GB', 'en-US', 'ja-JP', 'pt-BR', 'pt-PT'];
+    expect(resolveReplicateLanguageValue('en', gemini)).toBe('en-US');
+    expect(resolveReplicateLanguageValue('en-GB', gemini)).toBe('en-GB');
+    expect(resolveReplicateLanguageValue('ja', gemini)).toBe('ja-JP');
+    expect(resolveReplicateLanguageValue('pt', gemini)).toBe('pt-BR');
+    expect(resolveReplicateLanguageValue('fr', gemini)).toBeNull();
+  });
+
   test('includes language_code for the built-in Replicate Kokoro model', async () => {
     await expect(buildReplicateInput({
       text: 'Hello world',

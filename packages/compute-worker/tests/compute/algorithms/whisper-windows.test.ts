@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { computeAdaptiveDecodeStepLimit, planAlignmentWindows } from '../../../src/inference/whisper/align';
+import {
+  computeAdaptiveDecodeStepLimit,
+  findAlignmentResumeSample,
+  findSpeechEndSample,
+  planAlignmentWindows,
+} from '../../../src/inference/whisper/align';
 
 const SAMPLE_RATE = 16000;
 const WINDOW = 30 * SAMPLE_RATE;
@@ -37,5 +42,37 @@ describe('whisper alignment windows', () => {
     // A dense window in a long segment keeps at least the former fixed cap.
     expect(computeAdaptiveDecodeStepLimit(444, text, 0.1)).toBeGreaterThanOrEqual(128);
     expect(computeAdaptiveDecodeStepLimit(444, text, 0.5)).toBeLessThan(computeAdaptiveDecodeStepLimit(444, text));
+  });
+});
+
+describe('whisper alignment continuation', () => {
+  const speech = (seconds: number, speechUntilSec: number) => {
+    const samples = new Float32Array(seconds * SAMPLE_RATE);
+    samples.fill(0.3, 0, speechUntilSec * SAMPLE_RATE);
+    return samples;
+  };
+
+  test('resumes after an early end-of-text when speech remains in the window', () => {
+    const samples = speech(27, 26.8);
+    const window = { start: 0, end: samples.length };
+    expect(findAlignmentResumeSample(window, 20.96, samples)).toBe(Math.round(20.96 * SAMPLE_RATE));
+  });
+
+  test('does not resume over trailing silence, a short tail, or no progress', () => {
+    const samples = speech(27, 21);
+    const window = { start: 0, end: samples.length };
+    expect(findAlignmentResumeSample(window, 21.2, samples)).toBeNull();
+    expect(findAlignmentResumeSample(window, 26.5, speech(27, 27))).toBeNull();
+    expect(findAlignmentResumeSample(window, null, samples)).toBeNull();
+    expect(findAlignmentResumeSample(window, 0, samples)).toBeNull();
+  });
+
+  test('word timing stops shortly after the voice instead of spanning trailing silence', () => {
+    const samples = speech(30, 26.8);
+    const end = findSpeechEndSample({ start: 0, end: samples.length }, samples);
+    expect(end).toBeGreaterThanOrEqual(26.8 * SAMPLE_RATE);
+    expect(end).toBeLessThanOrEqual(27 * SAMPLE_RATE);
+    expect(findSpeechEndSample({ start: 0, end: samples.length }, new Float32Array(samples.length)))
+      .toBe(samples.length);
   });
 });
