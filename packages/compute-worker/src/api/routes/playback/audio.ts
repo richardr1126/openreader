@@ -27,6 +27,11 @@ import { apiErrorResponseSchema, jsonSchema } from '../../schemas';
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
 const ESTIMATE_MS_PER_CHAR_BASE = 78;
+// Expressive or slow voices can speak far past the text estimate, and real audio
+// that overruns the advertised length would be cut off. The advertised length is
+// therefore a deterministic upper bound; the client ends playback at the last
+// generated segment's exact end rather than playing the trailing pad.
+const ADVERTISED_LENGTH_HEADROOM = 2;
 
 function estimateRateForSession(session: PlaybackSessionRow): number {
   const speedRaw = (session.settingsJson as { nativeSpeed?: unknown } | null)?.nativeSpeed;
@@ -125,7 +130,7 @@ export function registerPlaybackAudioRoutes(
 
     const startedAt = Date.now();
 
-    // Content-Length is a deterministic plan estimate, independent of cache size.
+    // Content-Length is a deterministic plan upper bound, independent of cache size.
     // A direct start needs no duration catalogue. For a nonzero byte range, read
     // only the prefix needed to locate that byte; the body checks each source as
     // it streams. Far-away cached chapters never gate a direct/suffix start.
@@ -175,7 +180,9 @@ export function registerPlaybackAudioRoutes(
               text: segment.text,
               durationMs: null, // pure estimate → stable Content-Length across requests
             }));
-            const total = buildByteLayout(totalSlots, startOrdinal, estimateRate, layoutOptions).totalBytes;
+            const total = buildByteLayout(
+              totalSlots, startOrdinal, estimateRate * ADVERTISED_LENGTH_HEADROOM, layoutOptions,
+            ).totalBytes;
             const rawRange = request.headers.range;
             const range = parseRangeHeader(Array.isArray(rawRange) ? rawRange[0] : rawRange, total);
             const rangeStart = range && typeof range === 'object' ? range.start : 0;

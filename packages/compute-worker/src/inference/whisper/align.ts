@@ -447,6 +447,56 @@ export function planAlignmentWindows(sampleCount: number, samples?: Float32Array
   return windows;
 }
 
+const RESUME_MIN_REMAINING_SAMPLES = SAMPLE_RATE;
+// -40 dBFS: TTS pauses sit near digital silence, speech sits well above it.
+const RESUME_SPEECH_MEAN_SQUARE = 1e-4;
+const MAX_WINDOW_CONTINUATIONS = 8;
+
+/**
+ * Whisper may emit end-of-text after a segment while speech remains later in
+ * the same window. Like long-form Whisper, decoding then resumes from the last
+ * decoded word; otherwise the trailing sentences of a segment get no timings.
+ * Returns the sample to resume at, or null when the rest of the window is
+ * short, silent, or decoding made no progress.
+ */
+export function findAlignmentResumeSample(
+  window: { start: number; end: number },
+  lastWordEndSec: number | null,
+  samples: Float32Array,
+): number | null {
+  if (lastWordEndSec === null || lastWordEndSec <= 0) return null;
+  const resume = window.start + Math.round(lastWordEndSec * SAMPLE_RATE);
+  if (window.end - resume < RESUME_MIN_REMAINING_SAMPLES) return null;
+  for (let frameStart = resume; frameStart + WINDOW_SPLIT_FRAME_SAMPLES <= window.end;
+    frameStart += WINDOW_SPLIT_FRAME_SAMPLES) {
+    if (frameHasSpeech(samples, frameStart)) return resume;
+  }
+  return null;
+}
+
+const SPEECH_END_PADDING_SAMPLES = SAMPLE_RATE / 10;
+
+function frameHasSpeech(samples: Float32Array, frameStart: number): boolean {
+  let energy = 0;
+  for (let i = frameStart; i < frameStart + WINDOW_SPLIT_FRAME_SAMPLES; i += 1) energy += samples[i]! * samples[i]!;
+  return energy / WINDOW_SPLIT_FRAME_SAMPLES > RESUME_SPEECH_MEAN_SQUARE;
+}
+
+/**
+ * Where speech ends in a window, plus a short pad. Word timing is aligned only
+ * up to here: aligning across trailing silence drags the last word to the end
+ * of the window, so it would highlight after the voice has stopped.
+ */
+export function findSpeechEndSample(window: { start: number; end: number }, samples: Float32Array): number {
+  for (let frameStart = window.end - WINDOW_SPLIT_FRAME_SAMPLES; frameStart >= window.start;
+    frameStart -= WINDOW_SPLIT_FRAME_SAMPLES) {
+    if (frameHasSpeech(samples, frameStart)) {
+      return Math.min(window.end, frameStart + WINDOW_SPLIT_FRAME_SAMPLES + SPEECH_END_PADDING_SAMPLES);
+    }
+  }
+  return window.end;
+}
+
 function assertWithinDeadline(deadlineMs: number, timeoutMs: number): void {
   if (Date.now() > deadlineMs) {
     throw new Error(`Whisper alignment timed out after ${timeoutMs}ms`);
@@ -955,15 +1005,18 @@ export async function alignAudioWithText(
       const decodedSamples = pcm16ToFloat32(pcmBytes);
       const words: WhisperWord[] = [];
       const windows = planAlignmentWindows(decodedSamples.length, decodedSamples);
-      // One shared deadline bounds the whole job, scaled by window count so a
-      // long segment gets the same per-model-invocation budget as a short one.
-      const timeoutMs = alignmentTimeoutMs * windows.length;
-      const deadlineMs = Date.now() + timeoutMs;
-      for (const window of windows) {
+      // One shared deadline bounds the whole job, scaled by model invocations so
+      // a long segment gets the same per-invocation budget as a short one.
+      let timeoutMs = alignmentTimeoutMs * windows.length;
+      let deadlineMs = Date.now() + timeoutMs;
+      let continuations = 0;
+      while (windows.length > 0) {
+        const window = windows.shift()!;
         // A superseded run releases the alignment lane between windows.
         if (opts.shouldStart && !await opts.shouldStart()) return [];
         const windowSamples = decodedSamples.subarray(window.start, window.end);
-        const frameCount = Math.max(1, Math.floor((windowSamples.length / HOP_LENGTH) / 2));
+        const alignedSamples = findSpeechEndSample(window, decodedSamples) - window.start;
+        const frameCount = Math.max(1, Math.floor((alignedSamples / HOP_LENGTH) / 2));
         const offsetSec = window.start / SAMPLE_RATE;
         const windowWords = await runWhisperOnnx(
           padOrTrimAudio(windowSamples),
@@ -975,6 +1028,15 @@ export async function alignAudioWithText(
         );
         for (const word of windowWords) {
           words.push({ word: word.word, start: word.start + offsetSec, end: word.end + offsetSec });
+        }
+        const resume = continuations < MAX_WINDOW_CONTINUATIONS
+          ? findAlignmentResumeSample(window, windowWords.at(-1)?.end ?? null, decodedSamples)
+          : null;
+        if (resume !== null) {
+          continuations += 1;
+          timeoutMs += alignmentTimeoutMs;
+          deadlineMs += alignmentTimeoutMs;
+          windows.unshift({ start: resume, end: window.end });
         }
       }
       const alignment = mapWordsToSentenceOffsets(text, words);

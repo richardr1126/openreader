@@ -104,3 +104,32 @@ test('locates a nonzero byte range using exact prefix durations in bounded reads
     expect(readSegmentState).toHaveBeenCalledExactlyOnceWith(session, 1);
   } finally { await app.close(); }
 });
+
+test('serves real audio that runs longer than the text estimate without cutting it off', async () => {
+  const app = Fastify();
+  const session = {
+    sessionId: 'slow-voice-session', userId: 'user', storageUserId: 'user', documentId: 'doc',
+    status: 'succeeded', expiresAt: Date.now() + 60_000, generationStartOrdinal: 0,
+    cursorOrdinal: 0, planObjectKey: 'plan.json', settingsJson: {},
+  };
+  // 'Hi.' estimates to ~9 frames (~3.8 KB); an expressive voice took 6 KB.
+  const realAudio = Buffer.alloc(6000, 0xab);
+  registerPlaybackAudioRoutes({
+    app, storage: { readObject: async () => Uint8Array.from(realAudio).buffer }, markActivity: vi.fn(),
+  } as unknown as ComputeWorkerRouteContext, {
+    readSession: async () => session,
+    readPlanSegments: async () => [{ ordinal: 0, text: 'Hi.' }],
+    readSegmentState: async () => ({ status: 'completed', audioKey: 'audio.mp3' }),
+  } as unknown as PlaybackSessionReadModel, {} as PlaybackSessionController);
+  try {
+    const token = createTtsPlaybackToken({ ...session, exp: session.expiresAt }, process.env.TTS_PLAYBACK_TOKEN_SECRET!);
+    const response = await app.inject({
+      method: 'GET', url: `/v1/tts-playback/sessions/${session.sessionId}/audio?token=${token}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(Number(response.headers['content-length'])).toBe(response.rawPayload.length);
+    expect(response.rawPayload.subarray(0, realAudio.length)).toEqual(realAudio);
+  } finally {
+    await app.close();
+  }
+});

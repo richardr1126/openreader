@@ -19,20 +19,89 @@ export interface WhisperWord {
   word: string;
 }
 
+function wordKey(text: string): string {
+  return text.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+/**
+ * Map recognized words onto the sentence's own words. Whisper mishears some
+ * words ("Aunt Em" -> "an M"), so a forward substring search can latch onto a
+ * later, unrelated match and shift every following highlight. Instead, words
+ * that agree anchor an in-order alignment (longest common subsequence), and
+ * each run of disagreeing words between two anchors shares that run's text.
+ */
 export function mapWordsToSentenceOffsets(sentence: string, words: WhisperWord[]): TTSSentenceAlignment {
-  const lowerSentence = sentence.toLowerCase();
-  let cursor = 0;
-  const alignedWords: TTSSentenceWord[] = words.map((word) => {
-    const token = word.word.trim();
-    if (!token) {
-      return { text: '', startSec: word.start, endSec: word.end, charStart: cursor, charEnd: cursor };
+  const recognized = words
+    .map((word) => ({ ...word, text: word.word.trim() }))
+    .filter((word) => word.text.length > 0);
+  const textWords = Array.from(sentence.matchAll(/\S+/g), (match) => ({
+    start: match.index,
+    end: match.index + match[0].length,
+    key: wordKey(match[0]),
+  }));
+  const keys = recognized.map((word) => wordKey(word.text));
+
+  // lcs[i][j]: matches available in recognized[i..] and textWords[j..].
+  const lcs = Array.from({ length: recognized.length + 1 }, () => new Uint16Array(textWords.length + 1));
+  for (let i = recognized.length - 1; i >= 0; i -= 1) {
+    for (let j = textWords.length - 1; j >= 0; j -= 1) {
+      lcs[i][j] = keys[i] && keys[i] === textWords[j].key
+        ? lcs[i + 1][j + 1] + 1
+        : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
     }
-    const index = lowerSentence.indexOf(token.toLowerCase(), cursor);
-    const start = index >= 0 ? index : cursor;
-    const end = Math.min(sentence.length, start + token.length);
-    cursor = Math.max(cursor, end);
-    return { text: token, startSec: word.start, endSec: word.end, charStart: start, charEnd: end };
-  }).filter((word) => word.text.length > 0);
+  }
+  const anchors: Array<[number, number]> = [];
+  for (let i = 0, j = 0; i < recognized.length && j < textWords.length;) {
+    if (keys[i] && keys[i] === textWords[j].key && lcs[i][j] === lcs[i + 1][j + 1] + 1) {
+      anchors.push([i, j]);
+      i += 1;
+      j += 1;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      i += 1;
+    } else {
+      j += 1;
+    }
+  }
+  anchors.push([recognized.length, textWords.length]);
+
+  const spans: Array<{ start: number; end: number }> = [];
+  let fromWord = 0;
+  let fromText = 0;
+  for (const [anchorWord, anchorText] of anchors) {
+    const wordCount = anchorWord - fromWord;
+    const textCount = anchorText - fromText;
+    for (let k = 0; k < wordCount; k += 1) {
+      if (textCount === 0) {
+        // Nothing left to read here: an empty span keeps timing without a highlight.
+        const at = fromText < textWords.length ? textWords[fromText].start : sentence.length;
+        spans.push({ start: at, end: at });
+        continue;
+      }
+      const first = fromText + Math.floor((k * textCount) / wordCount);
+      const last = fromText + Math.max(
+        Math.floor((k * textCount) / wordCount),
+        Math.ceil(((k + 1) * textCount) / wordCount) - 1,
+      );
+      spans.push({ start: textWords[first].start, end: textWords[last].end });
+    }
+    if (anchorWord < recognized.length) {
+      // Keep the recognized form's extent, e.g. "Hello" without the text's comma.
+      const { start, end } = textWords[anchorText];
+      const token = recognized[anchorWord].text.toLowerCase();
+      const within = sentence.slice(start, end).toLowerCase().indexOf(token);
+      spans.push(within >= 0 ? { start: start + within, end: start + within + token.length } : { start, end });
+    }
+    fromWord = anchorWord + 1;
+    fromText = anchorText + 1;
+  }
+
+  const alignedWords: TTSSentenceWord[] = recognized.map((word, index) => ({
+    text: word.text,
+    startSec: word.start,
+    endSec: word.end,
+    charStart: spans[index].start,
+    charEnd: spans[index].end,
+  }));
   return { sentence, sentenceIndex: 0, words: alignedWords };
 }
 
