@@ -428,12 +428,6 @@
   border-radius: 3px;
   padding: 0.04em 2px;
   color: var(--pub-fg);
-  animation: public-word-pulse 2.8s ease-in-out infinite;
-}
-
-@keyframes public-word-pulse {
-  0%, 100% { background-color: color-mix(in srgb, var(--pub-accent) 42%, transparent); }
-  50% { background-color: color-mix(in srgb, var(--pub-accent) 62%, transparent); }
 }
 
 /* Playback bar */
@@ -458,8 +452,17 @@
   border-radius: 999px;
   background: var(--pub-accent);
   color: var(--background);
-  cursor: default;
+  cursor: pointer;
   box-shadow: 0 8px 20px color-mix(in srgb, var(--pub-accent) 45%, transparent);
+}
+
+.public-player-play:focus-visible {
+  outline: 2px solid var(--pub-accent);
+  outline-offset: 3px;
+}
+
+.public-player[data-status='loading'] .public-player-play {
+  animation: public-pulse 2.4s ease-out infinite;
 }
 
 .public-wave {
@@ -477,10 +480,16 @@
   height: 100%;
   border-radius: 999px;
   background: color-mix(in srgb, var(--pub-accent) 60%, var(--pub-muted));
-  transform: scaleY(0.35);
+  transform: scaleY(0.28);
   transform-origin: center;
-  animation: public-wave 1.3s ease-in-out infinite;
+  opacity: 0.75;
+  animation: public-wave 1.3s ease-in-out infinite paused;
   animation-delay: calc(var(--b) * -0.07s);
+}
+
+/* The waveform moves only while audio is audible, never during a load. */
+.public-player[data-status='playing'] .public-wave-bar {
+  animation-play-state: running;
 }
 
 .public-wave-bar:nth-child(3n) { background: color-mix(in srgb, var(--pub-accent-soft) 55%, var(--pub-muted)); }
@@ -497,16 +506,6 @@
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   color: var(--pub-soft);
-}
-
-.public-player-speed {
-  flex: none;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--pub-accent);
-  padding: 0.18rem 0.45rem;
-  border-radius: 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--pub-accent) 35%, transparent);
 }
 
 /* ── Provider strip ───────────────────────────────────────────────── */
@@ -1189,7 +1188,7 @@
   .public-aurora,
   .public-eyebrow-dot,
   .public-sweep-word,
-  .public-reader-word,
+  .public-player-play,
   .public-wave-bar,
   .public-term-caret,
   .public-reveal-1,

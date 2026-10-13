@@ -2,6 +2,9 @@ import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import { getResolvedRuntimeConfigForRsc } from '@/lib/server/runtime-config-rsc';
 import { ButtonAnchor } from '@/components/ui';
+import { ReaderDemo } from './ReaderDemo';
+import type { ReaderDemo as ReaderDemoData } from './reader-demo-timeline';
+import wizardOfOzTimeline from './wizard-of-oz.timeline.json';
 
 export const metadata: Metadata = {
   title: 'Open Source Read-Along Workspace',
@@ -45,6 +48,14 @@ export const metadata: Metadata = {
 // Words that receive the looping read-along highlight sweep in the hero. This
 // is the product's actual word-level highlighting, used as the page's signature.
 const SWEEP = ['highlighted', 'word', 'by', 'word.'];
+
+const WIZARD_OF_OZ_DEMO: ReaderDemoData = {
+  audioSrc: '/demo/wizard-of-oz.mp3',
+  fileName: 'wizard-of-oz.epub',
+  chapter: 'Chapter 1 · The Cyclone',
+  voiceLabel: 'English · Gemini · Kore',
+  ...wizardOfOzTimeline,
+};
 
 const PROVIDERS = ['Kokoro', 'KittenTTS', 'Orpheus', 'OpenAI', 'Replicate', 'DeepInfra'];
 
@@ -118,51 +129,8 @@ export default async function LandingPage() {
             </div>
           </div>
 
-          {/* Reader mockup: demonstrates the synchronized highlight + playback */}
-          <aside className="public-reader public-reveal-2" aria-hidden="true">
-            <div className="public-reader-glow" aria-hidden="true" />
-            <div className="public-reader-bar">
-              <span className="public-reader-dot" data-tone="a" />
-              <span className="public-reader-dot" data-tone="b" />
-              <span className="public-reader-dot" data-tone="c" />
-              <span className="public-reader-file">wizard-of-oz.epub</span>
-              <span className="public-reader-voice">English · Kokoro · af_sky</span>
-            </div>
-
-            <div className="public-reader-body">
-              <p className="public-reader-chapter">Chapter 1 · The Cyclone</p>
-              <p className="public-reader-text">
-                Dorothy lived in the midst of the great Kansas prairies, with
-                Uncle Henry, who was a farmer, and Aunt Em, who was the
-                farmer&rsquo;s wife.{' '}
-                <span className="public-reader-sentence">
-                  Their house was small, for the lumber to build it had to be
-                  carried by <span className="public-reader-word">wagon</span>{' '}
-                  many miles.
-                </span>{' '}
-                There were four walls, a floor and a roof, which made one room.
-              </p>
-            </div>
-
-            <div className="public-player">
-              <button type="button" className="public-player-play" aria-label="Playing" tabIndex={-1}>
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                  <path d="M8 5v14l11-7z" fill="currentColor" />
-                </svg>
-              </button>
-              <div className="public-wave" aria-hidden="true">
-                {Array.from({ length: 28 }).map((_, i) => (
-                  <span
-                    key={i}
-                    className="public-wave-bar"
-                    style={{ '--b': i } as CSSProperties}
-                  />
-                ))}
-              </div>
-              <span className="public-player-time">04:12 / 18:30</span>
-              <span className="public-player-speed">1.1×</span>
-            </div>
-          </aside>
+          {/* Pre-rendered read-along sample: real cached audio and word timings */}
+          <ReaderDemo demo={WIZARD_OF_OZ_DEMO} />
         </div>
 
         <div className="public-wrap">
