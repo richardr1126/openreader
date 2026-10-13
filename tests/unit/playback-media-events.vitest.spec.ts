@@ -51,4 +51,27 @@ describe('playback media event policy', () => {
     expect(onEnded).toHaveBeenCalledOnce();
     expect(onPause).not.toHaveBeenCalled();
   });
+
+  test('a late ended event cannot reopen playback that already finished', () => {
+    const audio = { paused: false, pause: vi.fn() } as unknown as HTMLAudioElement;
+    const onEnded = vi.fn();
+    const onRecover = vi.fn();
+    installPlaybackMediaEvents({
+      audio,
+      isCurrent: () => true,
+      isPlaying: () => true,
+      shouldRecoverEnd: () => true,
+      reachedEnd: () => true,
+      onPause: vi.fn(),
+      onBuffering: vi.fn(),
+      onRecover,
+      onEnded,
+      onTime: vi.fn(),
+      onPlaying: vi.fn(),
+    });
+    audio.ontimeupdate?.(new Event('timeupdate'));
+    audio.onended?.(new Event('ended'));
+    expect(onEnded).toHaveBeenCalledOnce();
+    expect(onRecover).not.toHaveBeenCalled();
+  });
 });

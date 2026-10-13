@@ -28,6 +28,7 @@ export function ReaderDemo({ demo }: { demo: ReaderDemoData }) {
   const running = status !== 'paused';
   const [active, setActive] = useState<ActiveDemoWord | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [failed, setFailed] = useState(false);
 
   const sentences = useMemo(
     () => demo.sentences.map((sentence) => splitDemoSentence(sentence)),
@@ -54,7 +55,12 @@ export function ReaderDemo({ demo }: { demo: ReaderDemoData }) {
     const audio = audioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      void audio.play().catch(() => setStatus('paused'));
+      setFailed(false);
+      void audio.play().catch((error: unknown) => {
+        setStatus('paused');
+        // A pause during startup aborts play(); only a real failure is reported.
+        if (!(error instanceof DOMException && error.name === 'AbortError')) setFailed(true);
+      });
     } else {
       audio.pause();
     }
@@ -128,9 +134,13 @@ export function ReaderDemo({ demo }: { demo: ReaderDemoData }) {
             <span key={i} className="public-wave-bar" style={{ '--b': i } as CSSProperties} />
           ))}
         </div>
-        <span className="public-player-time">
-          {formatDemoTime(elapsedSec)} / {formatDemoTime(demo.durationSec)}
-        </span>
+        {failed ? (
+          <span className="public-player-time" role="alert">Sample unavailable</span>
+        ) : (
+          <span className="public-player-time">
+            {formatDemoTime(elapsedSec)} / {formatDemoTime(demo.durationSec)}
+          </span>
+        )}
         <audio
           ref={audioRef}
           src={demo.audioSrc}
@@ -140,7 +150,10 @@ export function ReaderDemo({ demo }: { demo: ReaderDemoData }) {
           onWaiting={() => setStatus('loading')}
           onPause={() => setStatus('paused')}
           onEnded={reset}
-          onError={() => setStatus('paused')}
+          onError={() => {
+            setStatus('paused');
+            setFailed(true);
+          }}
         />
       </div>
     </aside>
