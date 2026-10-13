@@ -674,143 +674,54 @@
   font-size: 0.94rem;
 }
 
-/* ── iOS app — copy beside a phone mockup ─────────────────────────── */
+/* ── iOS app — compact strip below the hero ──────────────────────── */
+.public-ios-section {
+  margin-top: clamp(2rem, 4vw, 3rem);
+}
+
 .public-ios {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: clamp(2.4rem, 5vw, 4rem);
-  align-items: center;
-}
-
-.public-ios-copy h2 {
-  margin: 0;
-  font-size: clamp(1.7rem, 3.6vw, 2.7rem);
-  line-height: 1.08;
-  letter-spacing: -0.025em;
-  max-width: 18ch;
-}
-
-.public-ios-text {
-  margin: 0.9rem 0 0;
-  color: var(--pub-soft);
-  line-height: 1.66;
-  max-width: 52ch;
-}
-
-.public-ios-points {
-  list-style: none;
-  margin: 1.6rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 1.1rem;
-  border-top: 1px solid var(--pub-line);
-  padding-top: 1.4rem;
-}
-
-.public-ios-points h3 {
-  margin: 0;
-  font-size: 1rem;
-  letter-spacing: -0.01em;
-}
-
-.public-ios-points p {
-  margin: 0.3rem 0 0;
-  color: var(--pub-soft);
-  font-size: 0.92rem;
-  line-height: 1.55;
-}
-
-.public-ios .public-actions {
-  margin-top: 1.8rem;
-}
-
-.public-phone {
-  position: relative;
-  justify-self: center;
-  width: min(100%, 17.5rem);
-  aspect-ratio: 9 / 18.5;
-  padding: 0.6rem;
-  border: 1px solid var(--pub-line);
-  border-radius: 2.6rem;
-  background: color-mix(in srgb, var(--pub-bg) 70%, var(--pub-surface));
-  box-shadow:
-    0 1px 0 color-mix(in srgb, var(--pub-fg) 8%, transparent) inset,
-    0 30px 70px color-mix(in srgb, var(--pub-bg) 60%, transparent);
-}
-
-.public-phone::before {
-  content: '';
-  position: absolute;
-  inset: -20% -30% auto;
-  height: 70%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--pub-accent) 22%, transparent), transparent 65%);
-  pointer-events: none;
-  z-index: -1;
-}
-
-.public-phone-screen {
-  position: relative;
   display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 2.8rem 1.1rem 1rem;
-  border-radius: 2.05rem;
-  background: var(--pub-card-solid);
-  overflow: hidden;
-}
-
-.public-phone-island {
-  position: absolute;
-  top: 0.65rem;
-  left: 50%;
-  width: 5.2rem;
-  height: 1.35rem;
-  border-radius: 999px;
-  background: var(--pub-bg);
-  transform: translateX(-50%);
-}
-
-.public-phone-text {
-  margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.7;
-  color: var(--pub-soft);
-}
-
-.public-phone-text + .public-phone-text {
-  margin-top: 0.8rem;
-}
-
-.public-phone-player {
-  margin-top: auto;
-  padding: 0.75rem;
-  border: 1px solid var(--pub-line-soft);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--pub-line);
   border-radius: var(--pub-radius-sm);
-  background: color-mix(in srgb, var(--pub-bg) 35%, transparent);
+  background: var(--pub-card);
 }
 
-.public-phone-voice {
-  display: block;
-  font-size: 0.66rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+.public-ios-copy {
+  min-width: 0;
+  flex: 1 1 22rem;
+}
+
+.public-ios-kicker {
+  margin: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--pub-accent);
 }
 
-.public-phone-controls {
-  display: flex;
-  align-items: center;
-  gap: 0.7rem;
-  margin-top: 0.6rem;
+.public-ios-copy h2 {
+  margin: 0.25rem 0 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
 }
 
-.public-phone-controls .public-player-play {
-  width: 2rem;
-  height: 2rem;
+.public-ios-text {
+  margin: 0.2rem 0 0;
+  color: var(--pub-soft);
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
-.public-phone-controls .public-wave {
-  height: 1.6rem;
+.public-ios-cta {
+  flex-shrink: 0;
+  gap: 0.5rem;
+  white-space: nowrap;
 }
 
 /* ── Self-host callout + terminal ─────────────────────────────────── */
@@ -1235,15 +1146,6 @@
 
   .public-callout {
     grid-template-columns: 1fr 0.85fr;
-  }
-
-  .public-ios {
-    grid-template-columns: 1.2fr 0.8fr;
-  }
-
-  .public-ios-points {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.6rem;
   }
 
   .policy-grid {
