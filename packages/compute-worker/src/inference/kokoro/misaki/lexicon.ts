@@ -203,12 +203,15 @@ export class Lexicon {
   private readonly golds: Map<string, GoldValue>;
   private readonly silvers: Map<string, string>;
   private readonly letterToSound: LetterToSound | null;
+  /** Dotted entries ("Mr.", "Dr."): the tokenizer keeps their full stop. */
+  readonly abbreviations: ReadonlySet<string>;
 
   constructor(input: { british: boolean; data: LexiconData; letterToSound: LetterToSound | null }) {
     this.british = input.british;
     this.golds = growDictionary(input.data.gold);
     this.silvers = growDictionary(input.data.silver);
     this.letterToSound = input.letterToSound;
+    this.abbreviations = new Set([...this.golds.keys()].filter((key) => key.length > 1 && key.endsWith('.')));
     Lexicon.validate(this.golds, this.british);
   }
 
