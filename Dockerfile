@@ -85,6 +85,8 @@ RUN chmod +x /usr/local/bin/nats-server
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
 COPY --from=app-builder /app/packages/compute-worker/src/inference/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
+# Kokoro-82M, Misaki and letter-to-sound notices for the local Kokoro provider's runtime downloads.
+COPY --from=app-builder /app/packages/compute-worker/src/inference/kokoro/assets/LICENSE.txt /licenses/kokoro-82m-misaki-LICENSE.txt
 
 # Match the app's historical container port now that standalone server.js
 # is started directly instead of `next start -p 3003`.
