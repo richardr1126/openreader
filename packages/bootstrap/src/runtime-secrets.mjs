@@ -26,13 +26,16 @@ export function applyEmbeddedPlaybackSecret(env) {
   return true;
 }
 
-// Secrets that belong to the Next.js app alone. The desktop launch token is the
-// shell-to-app boundary; no embedded service (worker, NATS) ever receives it.
-const APP_ONLY_SECRETS = ['DESKTOP_LAUNCH_TOKEN'];
+// Settings that belong to the Next.js app alone; no embedded service (worker,
+// NATS, SeaweedFS) receives them. AUTH_SECRET signs sessions and encrypts
+// provider credentials, and the playback secret is derived from it above before
+// any child starts. Workers never reach the application database. The desktop
+// launch token is the shell-to-app boundary.
+const APP_ONLY_ENV = ['AUTH_SECRET', 'POSTGRES_URL', 'SQLITE_DB_PATH', 'DESKTOP_LAUNCH_TOKEN'];
 
-/** Environment for an embedded child service, without app-only secrets. */
+/** Environment for an embedded child service, without app-only settings. */
 export function embeddedServiceEnv(env, overrides = {}) {
   const serviceEnv = { ...env, ...overrides };
-  for (const name of APP_ONLY_SECRETS) delete serviceEnv[name];
+  for (const name of APP_ONLY_ENV) delete serviceEnv[name];
   return serviceEnv;
 }

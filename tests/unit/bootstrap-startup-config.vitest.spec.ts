@@ -55,13 +55,23 @@ describe('embedded playback secret', () => {
 });
 
 describe('embedded service environment', () => {
-  test('never forwards the desktop launch token to embedded services', () => {
-    const env = { AUTH_SECRET: 'a', DESKTOP_LAUNCH_TOKEN: 'shell-secret', COMPUTE_WORKER_TOKEN: 'w' };
+  test('never forwards app-only settings to embedded services', () => {
+    const env = {
+      AUTH_SECRET: 'a',
+      DESKTOP_LAUNCH_TOKEN: 'shell-secret',
+      POSTGRES_URL: 'postgres://app',
+      SQLITE_DB_PATH: '/data/app.db',
+      COMPUTE_WORKER_TOKEN: 'w',
+    };
     const serviceEnv = embeddedServiceEnv(env, { PORT: '8081' });
     expect(serviceEnv).not.toHaveProperty('DESKTOP_LAUNCH_TOKEN');
+    for (const name of ['AUTH_SECRET', 'POSTGRES_URL', 'SQLITE_DB_PATH']) {
+      expect(serviceEnv).not.toHaveProperty(name);
+    }
     expect(serviceEnv).toMatchObject({ COMPUTE_WORKER_TOKEN: 'w', PORT: '8081' });
     expect(embeddedServiceEnv(env, { DESKTOP_LAUNCH_TOKEN: 'override' })).not.toHaveProperty('DESKTOP_LAUNCH_TOKEN');
     expect(env.DESKTOP_LAUNCH_TOKEN).toBe('shell-secret');
+    expect(env.AUTH_SECRET).toBe('a');
   });
 
   test('builds every embedded child environment through the filter', () => {
