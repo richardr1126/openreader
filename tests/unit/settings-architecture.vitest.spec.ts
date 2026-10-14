@@ -15,6 +15,7 @@ describe('settings ownership', () => {
   test('keeps the routed settings composition separate from section behavior', () => {
     const route = source('src/app/(app)/app/settings/page.tsx');
     const page = source('src/components/settings/SettingsPage.tsx');
+    const sections = source('src/components/settings/settings-sections.ts');
     const library = source('src/components/HomeContent.tsx');
 
     expect(route).toContain("from '@/components/settings/SettingsPage'");
@@ -27,11 +28,14 @@ describe('settings ownership', () => {
     expect(page).not.toContain('new EventSource');
     expect(page).toContain('Close settings');
     expect(page).toContain('SidebarNavItem');
-    expect(page).toContain('>General</SidebarNavGroup>');
-    expect(page).toContain('>Admin</SidebarNavGroup>');
+    expect(page).toContain('<SidebarNavGroup isFirst={index === 0}>{group.label}</SidebarNavGroup>');
+    expect(page).toContain("from './settings-sections'");
+    expect(page).not.toContain('SETTINGS_SECTIONS');
+    expect(sections).toContain("label: 'General'");
+    expect(sections).toContain("label: 'Admin'");
     expect(page).toContain('<AdminEmailPanel');
-    expect(page).not.toContain("id: 'email'");
-    expect(page).not.toContain('icon: DocumentIcon');
+    expect(sections).not.toContain("id: 'email'");
+    expect(sections).not.toContain('icon: DocumentIcon');
     expect(page).not.toContain('AdminSettingsPanel');
     expect(page).toContain('useSearchParams');
     expect(page).toContain('router.replace(`/app/settings?section=${section}`');
@@ -65,6 +69,24 @@ describe('settings ownership', () => {
     expect(userMenu).toContain('aria-label="Sign out"');
     expect(userMenu).not.toContain('Disconnect account');
     expect(route).toContain('initialSection={section}');
+  });
+
+  test('hides multi-user surfaces on the desktop profile without touching auth checks', () => {
+    const userMenu = source('src/components/auth/UserMenu.tsx');
+    const account = source('src/components/settings/AccountSettingsPanel.tsx');
+    const security = source('src/components/settings/AccountSecurityPanel.tsx');
+    const features = source('src/components/admin/AdminFeaturesPanel.tsx');
+    const page = source('src/components/settings/SettingsPage.tsx');
+
+    expect(userMenu).toContain("const canSignOut = installProfile === 'server';");
+    expect(userMenu.match(/\{canSignOut \? <IconButton/g)).toHaveLength(2);
+    expect(account).toContain("if (runtimeConfig.installProfile === 'desktop') return <AccountSecurityPanel nameOnly />;");
+    expect(security).toContain('{nameOnly ? null : <>');
+    expect(features).toContain("const multiUser = useRuntimeConfig().installProfile === 'server';");
+    expect(features).toContain('{multiUser && computePolicy ? (');
+    expect(page).toContain("{installProfile === 'server' ? <AdminEmailPanel /> : null}");
+    // Panels still render behind the same admin guard on every profile.
+    expect(page).toContain("{isAdmin && activeSection === 'instance' ? (");
   });
 
   test('prevents settings sections from importing one another', () => {

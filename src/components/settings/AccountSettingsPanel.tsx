@@ -133,6 +133,10 @@ export function AccountSettingsPanel() {
     setShowDeleteConfirm(false);
   };
 
+  // The desktop owner has one account, no password and no inbox; signing out
+  // would only be undone by the shell. Its Profile is the display name alone.
+  if (runtimeConfig.installProfile === 'desktop') return <AccountSecurityPanel nameOnly />;
+
   return (
     <>
       <div className="space-y-2">
