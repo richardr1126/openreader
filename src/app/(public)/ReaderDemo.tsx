@@ -1,128 +1,100 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { WORD_HIGHLIGHT_LEAD_SEC } from '@/lib/client/tts/playback-grid';
-import {
-  findActiveDemoWord,
-  formatDemoTime,
-  splitDemoSentence,
-  type ActiveDemoWord,
-  type ReaderDemo as ReaderDemoData,
-} from './reader-demo-timeline';
+import { useRef, type PointerEvent } from 'react';
+import { formatDemoTime, type ReaderDemo as ReaderDemoData } from './reader-demo-timeline';
+import { useReaderDemo } from './useReaderDemo';
 
-const WAVE_BARS = 28;
+/** Leans the window toward a fine pointer; touch and reduced motion stay flat. */
+function tilt(event: PointerEvent<HTMLDivElement>) {
+  if (event.pointerType !== 'mouse') return;
+  const el = event.currentTarget;
+  const rect = el.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width - 0.5;
+  const y = (event.clientY - rect.top) / rect.height - 0.5;
+  el.style.setProperty('--ry', `${(x * 5).toFixed(2)}deg`);
+  el.style.setProperty('--rx', `${(-y * 4).toFixed(2)}deg`);
+  el.style.setProperty('--gx', `${((x + 0.5) * 100).toFixed(1)}%`);
+  el.style.setProperty('--gy', `${((y + 0.5) * 100).toFixed(1)}%`);
+}
 
-/** `loading` covers the fetch before the first frame and any later stall. */
-type DemoStatus = 'paused' | 'loading' | 'playing';
-
-function sameWord(a: ActiveDemoWord | null, b: ActiveDemoWord | null): boolean {
-  return a?.sentence === b?.sentence && a?.word === b?.word;
+function untilt(event: PointerEvent<HTMLDivElement>) {
+  for (const prop of ['--rx', '--ry', '--gx', '--gy']) event.currentTarget.style.removeProperty(prop);
 }
 
 /**
- * The landing page's read-along sample: a static clip whose highlight follows
- * the audio clock exactly like the app's reader, with no session involved.
+ * The read-along sample: a floating glass window with a detached control
+ * ornament. The frame loop in `useReaderDemo` writes `--progress` onto the
+ * stage, which fills the ornament's ring without a React render per frame.
  */
 export function ReaderDemo({ demo }: { demo: ReaderDemoData }) {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const [status, setStatus] = useState<DemoStatus>('paused');
-  const running = status !== 'paused';
-  const [active, setActive] = useState<ActiveDemoWord | null>(null);
-  const [elapsedSec, setElapsedSec] = useState(0);
-  const [failed, setFailed] = useState(false);
-
-  const sentences = useMemo(
-    () => demo.sentences.map((sentence) => splitDemoSentence(sentence)),
-    [demo.sentences],
-  );
-
-  // The audio element is the only clock; one frame loop projects it onto the
-  // highlight, with the reader's lead, while running and stops with playback.
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!running || !audio) return;
-    let frame = 0;
-    const tick = () => {
-      const next = findActiveDemoWord(demo.sentences, audio.currentTime + WORD_HIGHLIGHT_LEAD_SEC);
-      setActive((prev) => (sameWord(prev, next) ? prev : next));
-      setElapsedSec(Math.floor(audio.currentTime));
-      frame = requestAnimationFrame(tick);
-    };
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [running, demo.sentences]);
-
-  const toggle = () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (audio.paused) {
-      setFailed(false);
-      void audio.play().catch((error: unknown) => {
-        setStatus('paused');
-        // A pause during startup aborts play(); only a real failure is reported.
-        if (!(error instanceof DOMException && error.name === 'AbortError')) setFailed(true);
-      });
-    } else {
-      audio.pause();
-    }
-  };
-
-  const reset = () => {
-    const audio = audioRef.current;
-    if (audio) audio.currentTime = 0;
-    setStatus('paused');
-    setActive(null);
-    setElapsedSec(0);
-  };
+  const stageRef = useRef<HTMLElement>(null);
+  const { audioRef, audioProps, status, running, active, elapsedSec, failed, sentences, toggle } =
+    useReaderDemo(demo, stageRef);
+  const spoken = active ? demo.sentences[active.sentence].words[active.word] : null;
 
   return (
-    <aside className="public-reader public-reveal-2" aria-label="Read-along sample">
-      <div className="public-reader-glow" aria-hidden="true" />
-      <div className="public-reader-bar">
-        <span className="public-reader-dot" data-tone="a" aria-hidden="true" />
-        <span className="public-reader-dot" data-tone="b" aria-hidden="true" />
-        <span className="public-reader-dot" data-tone="c" aria-hidden="true" />
-        <span className="public-reader-file">{demo.fileName}</span>
-        <span className="public-reader-voice">{demo.voiceLabel}</span>
-      </div>
-
-      <div className="public-reader-body">
-        <p className="public-reader-chapter">{demo.chapter}</p>
-        <p className="public-reader-text">
-          {sentences.map((parts, s) => {
-            const sentenceActive = active?.sentence === s;
-            return (
-              <span key={s}>
-                {s > 0 ? ' ' : null}
-                <span className={sentenceActive ? 'public-reader-sentence' : undefined}>
-                  {parts.map((part, p) => (
-                    <span
-                      key={p}
-                      className={
-                        sentenceActive && part.word !== null && part.word === active.word
-                          ? 'public-reader-word'
-                          : undefined
-                      }
-                    >
-                      {part.text}
-                    </span>
-                  ))}
-                </span>
+    <aside ref={stageRef} className="lu-stage" data-status={status} aria-label="Read-along sample">
+      <div className="lu-window lu-glass" onPointerMove={tilt} onPointerLeave={untilt}>
+        <div className="lu-window-bar">
+          <span className="lu-window-file">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+              <path
+                d="M6 3h8l4 4v14H6zM14 3v4h4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {demo.fileName}
+          </span>
+          <span className="lu-window-chapter">{demo.chapter}</span>
+        </div>
+        <p className="lu-window-text">
+          {sentences.map((parts, s) => (
+            <span key={s}>
+              {s > 0 ? ' ' : null}
+              <span className={active?.sentence === s ? 'openreader-html-highlight-sentence' : undefined}>
+                {parts.map((part, p) => (
+                  <span
+                    key={p}
+                    className={
+                      active?.sentence === s && part.word !== null && part.word === active.word
+                        ? 'openreader-html-highlight-word'
+                        : undefined
+                    }
+                  >
+                    {part.text}
+                  </span>
+                ))}
               </span>
-            );
-          })}
+            </span>
+          ))}
         </p>
       </div>
+      {/* Annotations pinned to the live highlight with CSS anchor positioning. */}
+      <span className="lu-wordtag" aria-hidden="true">
+        {spoken ? `${spoken.startSec.toFixed(2)}s` : null}
+      </span>
+      <span className="lu-aside lu-aside-sentence lu-glass" aria-hidden="true">
+        <b>Sentence</b>
+        Tinted while it’s spoken
+      </span>
+      <span className="lu-aside lu-aside-word lu-glass" aria-hidden="true">
+        <b>Word</b>
+        Timed by forced alignment
+      </span>
+      <span className="lu-grabber" aria-hidden="true" />
 
-      <div className="public-player" data-status={status}>
+      <div className="lu-ornament lu-glass">
         <button
           type="button"
-          className="public-player-play"
+          className="lu-play"
           aria-label={running ? 'Pause sample' : 'Play sample'}
           aria-busy={status === 'loading'}
           onClick={toggle}
         >
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
             {running ? (
               <path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" />
             ) : (
@@ -130,33 +102,27 @@ export function ReaderDemo({ demo }: { demo: ReaderDemoData }) {
             )}
           </svg>
         </button>
-        <div className="public-wave" aria-hidden="true">
-          {Array.from({ length: WAVE_BARS }).map((_, i) => (
-            <span key={i} className="public-wave-bar" style={{ '--b': i } as CSSProperties} />
-          ))}
-        </div>
-        {failed ? (
-          <span className="public-player-time" role="alert">Sample unavailable</span>
-        ) : (
-          <span className="public-player-time">
-            {formatDemoTime(elapsedSec)} / {formatDemoTime(demo.durationSec)}
+        <div className="lu-ornament-meta">
+          <span className="lu-ornament-state">
+            {failed ? (
+              <span role="alert">Sample unavailable</span>
+            ) : status === 'loading' ? (
+              'Preparing voice…'
+            ) : running ? (
+              'Reading aloud'
+            ) : (
+              'Listen to a real sample'
+            )}
           </span>
-        )}
-        <audio
-          ref={audioRef}
-          src={demo.audioSrc}
-          preload="none"
-          onPlay={() => setStatus('loading')}
-          onPlaying={() => setStatus('playing')}
-          onWaiting={() => setStatus('loading')}
-          onPause={() => setStatus('paused')}
-          onEnded={reset}
-          onError={() => {
-            setStatus('paused');
-            setFailed(true);
-          }}
-        />
+          <span className="lu-ornament-voice">{demo.voiceLabel}</span>
+        </div>
+        <span className="lu-eq" aria-hidden="true"><i /><i /><i /><i /></span>
+        <span className="lu-ornament-time">
+          {formatDemoTime(elapsedSec)}
+          <small> / {formatDemoTime(demo.durationSec)}</small>
+        </span>
       </div>
+      <audio ref={audioRef} {...audioProps} />
     </aside>
   );
 }

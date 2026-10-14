@@ -1,0 +1,1469 @@
+/* =================================================================== *
+ *  Public pages: light through glass.
+ *  Frosted, layered panes float over an aurora mixed from the active
+ *  theme's accents, so every theme gets its own light. All color comes
+ *  from the theme tokens in globals.css; type is the app's Figtree.
+ *
+ *  Motion follows the product: things get "read". The headline, key
+ *  phrases, the phone, the terminal, and the footer wordmark light up
+ *  with the reader's own highlight as they are reached. Scroll-linked
+ *  effects sit behind @supports and everything stops for reduced motion.
+ * =================================================================== */
+
+@property --lu-spin {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.lumen {
+  --lu-fg: var(--foreground);
+  --lu-bg: var(--background);
+  --lu-accent: var(--accent);
+  --lu-accent-2: var(--secondary-accent);
+  --lu-muted: var(--muted);
+  --lu-soft: color-mix(in oklab, var(--foreground) 74%, var(--background));
+  --lu-line: color-mix(in oklab, var(--offbase) 80%, transparent);
+  --lu-glass-hi: color-mix(in oklab, var(--base) 64%, transparent);
+  --lu-glass-lo: color-mix(in oklab, var(--base) 34%, transparent);
+  --lu-rim: color-mix(in oklab, var(--foreground) 22%, transparent);
+  --lu-glint: color-mix(in oklab, var(--background) 75%, transparent);
+  --lu-word: color-mix(in srgb, var(--accent) 55%, transparent);
+  --lu-sentence: color-mix(in srgb, var(--accent) 22%, transparent);
+  --lu-shadow: 0 30px 60px -30px rgb(var(--shadow-rgb) / 0.35), 0 10px 24px -14px rgb(var(--shadow-rgb) / 0.25);
+  --lu-aurora-alpha: 0.42;
+
+  --lu-font: var(--font-display), system-ui, sans-serif;
+  --lu-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --lu-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --lu-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --lu-r: 1.75rem;
+  /* Scroll effects play in the band where the eye actually is: the timeline's
+     viewport is cut short at the bottom, so nothing finishes before it's seen. */
+  --lu-band: 0% 22%;
+
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  overflow-x: clip;
+  background: var(--lu-bg);
+  color: var(--lu-fg);
+  font-family: var(--lu-font);
+}
+
+:root:is(.dark, .ocean, .forest, .sunset, .sea, .mint) .lumen {
+  --lu-rim: color-mix(in oklab, var(--foreground) 28%, transparent);
+  --lu-glint: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --lu-aurora-alpha: 0.5;
+}
+
+.lumen ::selection { background: var(--lu-word); color: var(--lu-fg); }
+:where(.lumen) a { color: inherit; text-decoration: none; }
+.lumen :focus-visible { outline: 2px solid var(--lu-accent); outline-offset: 3px; border-radius: 10px; }
+
+.lu-wrap { width: min(1200px, calc(100% - 2.5rem)); margin-inline: auto; }
+.lu-sr { position: absolute; width: 1px; height: 1px; overflow: clip; clip-path: inset(50%); white-space: nowrap; }
+.lu-skip {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  border-radius: 999px;
+  background: var(--lu-fg);
+  color: var(--lu-bg);
+  font-weight: 600;
+  translate: 0 -200%;
+  transition: translate 0.25s var(--lu-ease);
+}
+.lu-skip:focus-visible { translate: 0 0; }
+
+.lu-eyebrow {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lu-accent);
+}
+
+@view-transition { navigation: auto; }
+.lu-nav-inner { view-transition-name: lu-nav; }
+
+/* ── Aurora ───────────────────────────────────────────────────────── */
+.lu-aurora {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: clip;
+}
+.lu-aurora i {
+  position: absolute;
+  width: 62vmax;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: var(--lu-aurora-alpha);
+  filter: blur(60px);
+  background: radial-gradient(circle, var(--c) 0%, transparent 62%);
+  animation: lu-drift 28s ease-in-out infinite alternate;
+  transition: opacity 1.6s var(--lu-ease);
+}
+.lu-aurora i:nth-child(1) { --c: var(--accent); top: -28vmax; left: -14vmax; }
+.lu-aurora i:nth-child(2) { --c: var(--secondary-accent); top: -18vmax; right: -24vmax; animation-duration: 34s; animation-direction: alternate-reverse; }
+.lu-aurora i:nth-child(3) { --c: color-mix(in oklab, var(--accent) 60%, var(--foreground)); bottom: -40vmax; left: 20vmax; opacity: calc(var(--lu-aurora-alpha) * 0.55); animation-duration: 40s; }
+.lu-aurora::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 0%, color-mix(in oklab, var(--background) 55%, transparent) 70%);
+}
+/* The room brightens while the sample reads aloud. */
+.lumen:has(.lu-stage[data-status='playing']) .lu-aurora i:nth-child(-n + 2) { opacity: calc(var(--lu-aurora-alpha) * 1.45); }
+@keyframes lu-drift {
+  0% { translate: 0 0; scale: 1; }
+  50% { translate: 8vmax 5vmax; scale: 1.12; }
+  100% { translate: -6vmax 9vmax; scale: 0.94; }
+}
+
+/* ── Glass ────────────────────────────────────────────────────────── */
+.lu-glass {
+  position: relative;
+  background: linear-gradient(150deg, var(--lu-glass-hi), var(--lu-glass-lo));
+  -webkit-backdrop-filter: blur(22px) saturate(1.7);
+  backdrop-filter: blur(22px) saturate(1.7);
+  box-shadow: inset 0 1px 0 var(--lu-glint), var(--lu-shadow);
+}
+/* Specular rim: bright where light hits the top-left edge, tinted at the opposite corner. */
+.lu-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    150deg,
+    var(--lu-rim),
+    transparent 38%,
+    transparent 62%,
+    color-mix(in oklab, var(--accent) 45%, transparent)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+/* ── Buttons ──────────────────────────────────────────────────────── */
+.lu-btn {
+  position: relative;
+  overflow: clip;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3.1rem;
+  padding: 0 1.5rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.98rem;
+  white-space: nowrap;
+  transition: transform 0.35s var(--lu-spring), box-shadow 0.3s, background 0.3s;
+}
+.lu-btn:hover { transform: translateY(-2px) scale(1.02); }
+.lu-btn:active { transform: scale(0.97); }
+.lu-btn-sm { height: 2.4rem; padding: 0 1.1rem; font-size: 0.88rem; }
+.lu-btn-solid {
+  background: var(--lu-fg);
+  color: var(--lu-bg);
+  box-shadow: 0 10px 30px -12px color-mix(in oklab, var(--accent) 70%, transparent);
+}
+/* A glint crosses the solid button on hover, like light along a glass edge. */
+.lu-btn-solid::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, color-mix(in oklab, var(--background) 40%, transparent) 50%, transparent 65%);
+  translate: -120% 0;
+  transition: translate 0.7s var(--lu-ease);
+}
+.lu-btn-solid:hover::after { translate: 120% 0; }
+.lu-btn-glass {
+  background: var(--lu-glass-hi);
+  -webkit-backdrop-filter: blur(16px) saturate(1.6);
+  backdrop-filter: blur(16px) saturate(1.6);
+  box-shadow: inset 0 0 0 1px var(--lu-line), inset 0 1px 0 var(--lu-glint);
+}
+.lu-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+
+/* ── Nav ──────────────────────────────────────────────────────────── */
+.lu-nav { position: sticky; top: 0.75rem; z-index: 50; padding-inline: 1rem; }
+.lu-nav-inner {
+  width: min(1120px, 100%);
+  margin: 0.75rem auto 0;
+  height: 3.6rem;
+  padding: 0 0.6rem 0 1.1rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+/* Once the page scrolls, a denser pane and shadow fade in under the bar.
+   Only opacity is animated, so it stays on the compositor: changing the bar's
+   size would re-run layout and re-blur its backdrop on every frame. */
+.lu-nav-inner { isolation: isolate; }
+.lu-nav-inner::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(150deg, color-mix(in oklab, var(--base) 86%, transparent), color-mix(in oklab, var(--base) 68%, transparent));
+  box-shadow: 0 16px 36px -18px rgb(var(--shadow-rgb) / 0.5);
+  opacity: 0;
+}
+@supports (animation-timeline: scroll()) {
+  .lu-nav-inner::after {
+    animation: lu-show linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 200px;
+  }
+}
+@keyframes lu-show { to { opacity: 1; } }
+.lu-logo { display: inline-flex; align-items: center; gap: 0.6rem; font-weight: 700; letter-spacing: -0.01em; }
+.lu-logo img { width: 1.6rem; height: 1.6rem; border-radius: 0.45rem; transition: rotate 0.6s var(--lu-spring); }
+.lu-logo:hover img { rotate: -8deg; }
+.lu-nav-links { display: flex; align-items: center; gap: 0.25rem; font-size: 0.92rem; }
+.lu-nav-links > a:not(.lu-btn) { padding: 0.5rem 0.85rem; border-radius: 999px; color: var(--lu-soft); transition: background 0.2s, color 0.2s; }
+.lu-nav-links > a:not(.lu-btn):hover { color: var(--lu-fg); background: var(--lu-glass-hi); }
+
+/* ── Motion primitives ────────────────────────────────────────────── */
+.lu-in { animation: lu-in 1s var(--lu-ease) both; animation-delay: calc(var(--d, 0) * 110ms + 80ms); }
+@keyframes lu-in {
+  from { opacity: 0; translate: 0 22px; }
+}
+@supports (animation-timeline: view()) {
+  .lu-reveal {
+    transform-origin: 50% 100%;
+    animation: lu-rise linear both;
+    animation-timeline: view(block var(--lu-band));
+    animation-range: entry 0% cover 30%;
+    /* Siblings in a row arrive one after another. */
+    animation-range: entry calc(mod(var(--i, 0), 3) * 7%) cover calc(30% + mod(var(--i, 0), 3) * 7%);
+  }
+}
+@keyframes lu-rise {
+  from { opacity: 0; translate: 0 64px; rotate: x 18deg; scale: 0.95; filter: blur(12px); }
+  60% { filter: blur(0); }
+}
+
+/* A key phrase in a heading takes the reader's word highlight as it scrolls in. */
+.lu-mark {
+  color: inherit;
+  padding: 0 0.06em;
+  margin: 0 -0.06em;
+  border-radius: 0.12em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  background: linear-gradient(var(--lu-word), var(--lu-word)) no-repeat 0 0 / 100% 100%;
+}
+@supports (animation-timeline: view()) {
+  .lu-mark {
+    animation: lu-mark linear both;
+    animation-timeline: view(block var(--lu-band));
+    animation-range: cover 12% cover 34%;
+  }
+}
+@keyframes lu-mark { from { background-size: 0% 100%; } }
+
+/* ── Hero ─────────────────────────────────────────────────────────── */
+.lu-hero { padding: clamp(3.5rem, 9vw, 7.5rem) 0 2rem; }
+.lu-hero-copy { display: grid; justify-items: center; text-align: center; }
+.lu-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--lu-soft);
+}
+.lu-pill-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--lu-accent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 22%, transparent);
+  animation: lu-ping 2.6s ease-out infinite;
+}
+@keyframes lu-ping {
+  0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--accent) 45%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 9px transparent; }
+}
+.lu-title {
+  margin-top: 1.75rem;
+  max-width: 13ch;
+  font-size: clamp(2.75rem, 1.2rem + 6.8vw, 7.25rem);
+  line-height: 0.98;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+  isolation: isolate;
+}
+/* The headline reads itself once, word by word, with the reader's own highlight.
+   The highlight is a layer behind each word that only fades, so it runs on the
+   compositor even while the page is still hydrating. */
+.lu-k { position: relative; }
+.lu-k::before {
+  content: '';
+  position: absolute;
+  inset: 0.04em -0.06em;
+  z-index: -1;
+  border-radius: 0.14em;
+  background: var(--lu-word);
+  opacity: 0;
+  animation: lu-word 0.62s ease-out both;
+  animation-delay: calc(0.9s + var(--i) * 0.34s);
+}
+@keyframes lu-word { 20%, 70% { opacity: 1; } }
+.lu-k-lit {
+  background-image: linear-gradient(120deg, var(--accent), var(--secondary-accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.lu-lede {
+  margin-top: 1.5rem;
+  max-width: 40rem;
+  font-size: clamp(1.02rem, 0.98rem + 0.3vw, 1.22rem);
+  line-height: 1.6;
+  color: var(--lu-soft);
+  text-wrap: pretty;
+}
+.lu-hero-copy .lu-actions { margin-top: 2rem; justify-content: center; }
+
+/* ── Stage ────────────────────────────────────────────────────────── */
+.lu-stage-wrap { position: relative; margin-top: clamp(2.75rem, 6vw, 5rem); perspective: 1600px; }
+.lu-stage {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 880px;
+  margin-inline: auto;
+  transform-origin: 50% 100%;
+}
+@supports (animation-timeline: view()) {
+  .lu-stage {
+    animation: lu-tilt linear both;
+    animation-timeline: view();
+    animation-range: entry 10% cover 45%;
+  }
+}
+@keyframes lu-tilt {
+  from { transform: rotateX(20deg) scale(0.93); }
+  to { transform: none; }
+}
+.lu-window {
+  width: 100%;
+  border-radius: 2.25rem;
+  padding: clamp(1.4rem, 1rem + 2.5vw, 3rem) clamp(1.2rem, 0.6rem + 3vw, 3.5rem) clamp(3.4rem, 3rem + 2vw, 4.5rem);
+  transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg));
+  transition: transform 0.6s var(--lu-ease);
+}
+/* Glare that follows the pointer across the pane. */
+.lu-window::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s;
+  background: radial-gradient(36rem circle at var(--gx, 50%) var(--gy, 0%), color-mix(in oklab, var(--foreground) 7%, transparent), transparent 55%);
+}
+.lu-window:hover::after { opacity: 1; }
+/* While reading aloud, light travels around the window's rim. */
+.lu-stage[data-status='playing'] .lu-window::before {
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--lu-spin),
+    var(--lu-rim) 0deg,
+    transparent 60deg,
+    transparent 200deg,
+    var(--accent) 280deg,
+    var(--secondary-accent) 320deg,
+    var(--lu-rim) 360deg
+  );
+  animation: lu-rim 4.5s linear infinite;
+}
+@keyframes lu-rim { to { --lu-spin: 360deg; } }
+.lu-window-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--lu-line);
+  font-size: 0.85rem;
+  color: var(--lu-muted);
+}
+.lu-window-file { display: inline-flex; align-items: center; gap: 0.45rem; font-family: var(--lu-mono); font-size: 0.8rem; }
+.lu-window-chapter { font-weight: 600; color: var(--lu-accent); }
+.lu-window-text {
+  font-size: clamp(1.08rem, 0.95rem + 0.85vw, 1.6rem);
+  line-height: 1.62;
+  letter-spacing: -0.01em;
+  color: var(--lu-fg);
+  text-wrap: pretty;
+}
+.lu-grabber {
+  order: 3;
+  width: 5.5rem;
+  height: 0.38rem;
+  margin-top: 0.9rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 22%, transparent);
+}
+.lu-ornament {
+  order: 2;
+  margin-top: -2.4rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.55rem 1.4rem 0.55rem 0.55rem;
+  border-radius: 999px;
+  max-width: calc(100% - 1.5rem);
+  transition: transform 0.5s var(--lu-spring);
+}
+.lu-stage[data-status='playing'] .lu-ornament { transform: translateY(-3px); }
+.lu-play {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  background: var(--lu-fg);
+  color: var(--lu-bg);
+  transition: transform 0.35s var(--lu-spring);
+}
+.lu-play:hover { transform: scale(1.06); }
+.lu-play:active { transform: scale(0.94); }
+/* Progress ring around the button, driven by --progress from the frame loop. */
+.lu-play::before {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--accent) calc(var(--progress, 0) * 1turn),
+    color-mix(in oklab, var(--foreground) 14%, transparent) 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+}
+/* Preparing is never shown as playing: the ring spins a short arc instead of filling. */
+.lu-stage[data-status='loading'] .lu-play::before {
+  background: conic-gradient(var(--accent) 0 0.22turn, color-mix(in oklab, var(--foreground) 14%, transparent) 0.22turn);
+  animation: lu-spin 0.9s linear infinite;
+}
+.lu-ornament-meta { display: grid; gap: 0.15rem; min-width: 0; }
+.lu-ornament-state { font-weight: 600; font-size: 0.98rem; }
+.lu-ornament-voice { font-size: 0.8rem; color: var(--lu-muted); white-space: nowrap; overflow: clip; text-overflow: ellipsis; }
+.lu-ornament-time { margin-left: auto; padding-left: 0.25rem; white-space: nowrap; font-family: var(--lu-mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.lu-ornament-time small { color: var(--lu-muted); font-size: inherit; }
+/* Level bars: flat at rest, bouncing only while audio actually plays. */
+.lu-eq { display: inline-flex; align-items: center; gap: 3px; height: 1.1rem; margin-left: auto; }
+.lu-eq i {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--lu-accent);
+  transform-origin: 50% 50%;
+  scale: 1 0.22;
+  transition: scale 0.4s var(--lu-ease);
+}
+.lu-stage[data-status='playing'] .lu-eq i { animation: lu-eq 0.9s ease-in-out infinite alternate; }
+.lu-eq i:nth-child(2) { animation-delay: -0.3s !important; }
+.lu-eq i:nth-child(3) { animation-delay: -0.6s !important; }
+.lu-eq i:nth-child(4) { animation-delay: -0.15s !important; }
+@keyframes lu-eq { 0% { scale: 1 0.25; } 50% { scale: 1 1; } 100% { scale: 1 0.5; } }
+.lu-eq + .lu-ornament-time { margin-left: 0; }
+@keyframes lu-spin { to { rotate: 1turn; } }
+
+.lu-floaters { position: absolute; inset: -2rem 0 0; list-style: none; margin: 0; padding: 0; pointer-events: none; }
+.lu-floaters li {
+  position: absolute;
+  padding: 0.55rem 0.95rem;
+  border-radius: 1rem;
+  font-family: var(--lu-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--lu-soft);
+  animation: lu-float 7s ease-in-out infinite alternate;
+  animation-delay: calc(var(--i) * -1.4s);
+}
+.lu-floaters li:nth-child(1) { top: 8%; left: 2%; rotate: -8deg; }
+.lu-floaters li:nth-child(2) { top: 44%; left: -1%; rotate: 6deg; }
+.lu-floaters li:nth-child(3) { top: 4%; right: 3%; rotate: 7deg; }
+.lu-floaters li:nth-child(4) { top: 40%; right: -1%; rotate: -5deg; }
+.lu-floaters li:nth-child(5) { top: 72%; right: 6%; rotate: 4deg; }
+@keyframes lu-float { to { translate: 0 -16px; } }
+/* Chips drift apart at different depths as the hero scrolls away. */
+@supports (animation-timeline: scroll()) {
+  .lu-floaters {
+    animation: lu-scatter linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 900px;
+  }
+}
+@keyframes lu-scatter { to { opacity: 0; scale: 1.18; } }
+
+/* ── Sample in focus ──────────────────────────────────────────────── */
+/* Focus pull: as the page scrolls, the hero copy recedes and the sample takes the stage. */
+@supports (animation-timeline: scroll()) {
+  .lu-hero-copy {
+    animation: lu-recede linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 70vh;
+  }
+}
+@keyframes lu-recede { to { opacity: 0.25; translate: 0 -2.5rem; scale: 0.97; } }
+/* Lights down: while the sample reads, everything around it dims and it glows. */
+.lu-hero-copy { transition: filter 0.9s var(--lu-ease); }
+.lumen:has(.lu-stage[data-status='playing']) .lu-hero-copy { filter: opacity(0.4) saturate(0.7); }
+.lu-window { transition: transform 0.6s var(--lu-ease), box-shadow 1s var(--lu-ease); }
+.lu-stage[data-status='playing'] .lu-window {
+  box-shadow:
+    inset 0 1px 0 var(--lu-glint),
+    0 0 0 1px color-mix(in oklab, var(--accent) 22%, transparent),
+    0 40px 140px -40px color-mix(in oklab, var(--accent) 65%, transparent),
+    var(--lu-shadow);
+}
+.lu-floaters li { transition: opacity 0.6s var(--lu-ease), filter 0.6s var(--lu-ease); }
+.lu-stage-wrap:has(.openreader-html-highlight-word) .lu-floaters li { opacity: 0; filter: blur(6px); }
+
+/* Controls pop forward as the sample reaches the middle of the screen. */
+@supports (animation-timeline: view()) {
+  .lu-ornament {
+    animation: lu-pop linear both;
+    animation-timeline: view(block var(--lu-band));
+    animation-range: entry 0% cover 12%;
+  }
+}
+@keyframes lu-pop {
+  from { scale: 0.84; opacity: 0.7; }
+  70% { scale: 1.06; opacity: 1; }
+}
+/* Until it has been played, the button sends out an invitation. */
+.lu-play::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  pointer-events: none;
+}
+.lu-stage[data-status='paused']:not(:has(.openreader-html-highlight-word)) .lu-play::after {
+  animation: lu-invite 2.4s var(--lu-ease) infinite;
+}
+@keyframes lu-invite {
+  0% { opacity: 0.8; scale: 1; }
+  70%, 100% { opacity: 0; scale: 1.7; }
+}
+
+/* Annotations tethered to the live highlight with CSS anchor positioning:
+   the timestamp rides above the spoken word, side notes follow the line. */
+.lu-window-text .openreader-html-highlight-word { anchor-name: --lu-word; }
+.lu-window-text .openreader-html-highlight-sentence { anchor-name: --lu-sentence; }
+.lu-wordtag, .lu-aside { display: none; }
+@supports (anchor-name: --lu-a) {
+  .lu-wordtag {
+    display: block;
+    position: absolute;
+    z-index: 3;
+    position-anchor: --lu-word;
+    left: anchor(center);
+    bottom: anchor(top);
+    translate: -50% -0.5rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.5rem;
+    font: 600 0.7rem/1.2 var(--lu-mono);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    color: var(--lu-bg);
+    background: var(--lu-fg);
+    box-shadow: 0 6px 16px -6px rgb(var(--shadow-rgb) / 0.5);
+    pointer-events: none;
+    opacity: 0;
+    scale: 0.7;
+    transition: opacity 0.25s, scale 0.35s var(--lu-spring);
+  }
+  .lu-wordtag::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    translate: -50% -1px;
+    border: 5px solid transparent;
+    border-top-color: var(--lu-fg);
+  }
+  .lu-stage:has(.openreader-html-highlight-word) .lu-wordtag { opacity: 1; scale: 1; }
+}
+@media (min-width: 1280px) {
+  @supports (anchor-name: --lu-a) {
+    .lu-aside {
+      display: grid;
+      gap: 0.15rem;
+      position: absolute;
+      z-index: 2;
+      top: anchor(top);
+      width: 9.25rem;
+      padding: 0.65rem 0.85rem;
+      border-radius: 1rem;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      color: var(--lu-soft);
+      pointer-events: none;
+      opacity: 0;
+      translate: var(--lu-from) 0;
+      transition: opacity 0.5s var(--lu-ease), translate 0.6s var(--lu-ease);
+    }
+    .lu-aside b { font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lu-accent); }
+    .lu-aside::after {
+      content: '';
+      position: absolute;
+      top: 1.05rem;
+      width: 1.75rem;
+      height: 1px;
+    }
+    .lu-aside-sentence { position-anchor: --lu-sentence; right: calc(100% + 1.75rem); --lu-from: 1rem; }
+    .lu-aside-sentence::after { left: 100%; background: linear-gradient(90deg, var(--accent), transparent); }
+    .lu-aside-word { position-anchor: --lu-word; left: calc(100% + 1.75rem); --lu-from: -1rem; }
+    .lu-aside-word::after { right: 100%; background: linear-gradient(270deg, var(--accent), transparent); }
+    .lu-stage:has(.openreader-html-highlight-word) .lu-aside { opacity: 1; translate: 0 0; }
+  }
+}
+
+/* ── Sections ─────────────────────────────────────────────────────── */
+.lu-section { padding: clamp(4.5rem, 10vw, 8.5rem) 0 0; }
+.lu-head { max-width: 46rem; margin: 0 auto clamp(2.25rem, 5vw, 3.75rem); text-align: center; }
+.lu-section h2 {
+  margin-top: 0.75rem;
+  font-size: clamp(2rem, 1.2rem + 3.4vw, 4rem);
+  line-height: 1.06;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+/* Steps, joined by a beam of light that fills as the row scrolls in. */
+.lu-steps {
+  position: relative;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+.lu-steps::before {
+  content: '';
+  position: absolute;
+  top: 3.6rem;
+  left: 8%;
+  right: 8%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent), var(--secondary-accent), transparent);
+  box-shadow: 0 0 18px 2px color-mix(in oklab, var(--accent) 45%, transparent);
+  transform-origin: left;
+}
+.lu-steps li { border-radius: var(--lu-r); padding: 2rem 1.75rem 2.25rem; }
+.lu-step-num {
+  display: grid;
+  place-items: center;
+  width: 3.2rem;
+  height: 3.2rem;
+  margin-bottom: 1.75rem;
+  border-radius: 50%;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--lu-bg);
+  background: linear-gradient(140deg, var(--accent), var(--secondary-accent));
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--base) 70%, transparent), 0 10px 28px -8px color-mix(in oklab, var(--accent) 70%, transparent);
+}
+@supports (animation-timeline: view()) {
+  .lu-steps { view-timeline: --lu-steps block; view-timeline-inset: var(--lu-band); }
+  .lu-steps::before {
+    animation: lu-beam linear both;
+    animation-timeline: --lu-steps;
+    animation-range: cover 12% cover 46%;
+  }
+  /* Each number lights as the beam reaches it. */
+  .lu-step-num {
+    animation: lu-node linear both;
+    animation-timeline: --lu-steps;
+  }
+  .lu-steps li:nth-child(1) .lu-step-num { animation-range: cover 10% cover 18%; }
+  .lu-steps li:nth-child(2) .lu-step-num { animation-range: cover 26% cover 32%; }
+  .lu-steps li:nth-child(3) .lu-step-num { animation-range: cover 40% cover 46%; }
+}
+@keyframes lu-beam { from { transform: scaleX(0); } }
+@keyframes lu-node {
+  from {
+    color: var(--lu-muted);
+    background: var(--lu-glass-hi);
+    scale: 0.82;
+  }
+}
+.lu-steps h3, .lu-tile h3 { font-size: 1.28rem; font-weight: 700; letter-spacing: -0.02em; }
+.lu-steps p, .lu-tile > p:last-child { margin-top: 0.6rem; line-height: 1.6; color: var(--lu-soft); }
+
+/* Feature tiles with a soft light that follows the pointer. */
+.lu-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+.lu-tile {
+  border-radius: var(--lu-r);
+  padding: 1.9rem 1.75rem 2rem;
+  overflow: clip;
+  transition: transform 0.45s var(--lu-spring);
+}
+.lu-tile:hover { transform: translateY(-4px); }
+.lu-tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s;
+  background: radial-gradient(22rem circle at var(--mx, 50%) var(--my, 50%), color-mix(in oklab, var(--accent) 16%, transparent), transparent 60%);
+}
+.lu-tile:hover::after { opacity: 1; }
+.lu-tile .lu-eyebrow { margin-bottom: 0.4rem; }
+
+/* Feature visuals: each tile scrubs its own small story through the middle of the screen. */
+.lu-viz {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 8.5rem;
+  margin-bottom: 1.4rem;
+  padding: 0.9rem;
+  border-radius: 1.1rem;
+  overflow: clip;
+  background: color-mix(in oklab, var(--offbase) 40%, transparent);
+  box-shadow: inset 0 0 0 1px var(--lu-line);
+}
+@keyframes lu-badge {
+  from { scale: 0; }
+  70% { scale: 1.25; }
+}
+
+/* Formats: layout analysis boxes each block and numbers the reading order. */
+.lu-vf-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  padding: 0.6rem;
+  border-radius: 0.6rem;
+  background: color-mix(in oklab, var(--background) 70%, transparent);
+}
+.lu-vf-col { display: grid; align-content: start; gap: 0.5rem; }
+.lu-vf-block { position: relative; display: grid; gap: 0.26rem; padding: 0.32rem; border-radius: 0.3rem; }
+.lu-vf-block i { height: 0.28rem; border-radius: 2px; background: color-mix(in oklab, var(--foreground) 22%, transparent); }
+.lu-vf-block i:nth-last-of-type(1) { width: 65%; }
+.lu-vf-head i { height: 0.45rem; width: 85%; background: color-mix(in oklab, var(--foreground) 45%, transparent); }
+.lu-vf-figure { height: 2.6rem; background: linear-gradient(135deg, color-mix(in oklab, var(--accent) 30%, transparent), color-mix(in oklab, var(--secondary-accent) 14%, transparent)); }
+.lu-vf-block::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1.5px dashed var(--accent);
+}
+.lu-vf-block b {
+  position: absolute;
+  top: -0.45rem;
+  right: -0.45rem;
+  display: grid;
+  place-items: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 50%;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--lu-bg);
+  background: var(--accent);
+}
+.lu-vf-page::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 2px;
+  opacity: 0;
+  background: var(--accent);
+  box-shadow: 0 0 14px 2px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+
+/* Alignment: a playhead crosses the waveform, lighting each word on its timestamp. */
+.lu-va { width: 100%; display: grid; gap: 0.85rem; }
+.lu-va-words { display: flex; justify-content: center; font-size: 1.1rem; font-weight: 600; }
+.lu-va-words span { padding: 0 0.22rem; background: var(--lu-sentence); }
+.lu-va-words span:first-child { border-radius: 0.25rem 0 0 0.25rem; }
+.lu-va-words span:last-child { border-radius: 0 0.25rem 0.25rem 0; background: var(--lu-word); }
+.lu-va-wave { position: relative; display: flex; align-items: center; gap: 2px; height: 2.6rem; }
+.lu-va-wave i { flex: 1; height: calc(var(--h) * 10%); border-radius: 2px; background: var(--accent); }
+.lu-va-head {
+  position: absolute;
+  top: -0.35rem;
+  bottom: -0.35rem;
+  left: 100%;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--lu-fg);
+  box-shadow: 0 0 10px var(--accent);
+}
+
+/* Languages: the same phrase rolls through each language. */
+.lu-vl {
+  --row: 2.3rem;
+  position: relative;
+  width: 100%;
+  height: calc(var(--row) * 3);
+  overflow: clip;
+  -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+  mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+}
+.lu-vl::before {
+  content: '';
+  position: absolute;
+  inset: var(--row) 8% auto;
+  height: var(--row);
+  border-radius: 0.6rem;
+  background: var(--lu-sentence);
+}
+.lu-vl-reel { position: relative; translate: 0 calc(var(--row) * -3); }
+.lu-vl-reel p {
+  height: var(--row);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.lu-vl-reel b { padding: 0.12rem 0.35rem; border-radius: 0.3rem; font: 700 0.62rem/1.2 var(--lu-mono); color: var(--lu-bg); background: var(--accent); }
+
+/* Export: chapters render one by one into a single audiobook file. */
+.lu-ve { width: 100%; display: grid; justify-items: center; gap: 0.6rem; }
+.lu-ve-tracks { width: 100%; display: grid; gap: 0.38rem; }
+.lu-ve-tracks p { display: grid; grid-template-columns: 2.3rem 1fr; align-items: center; gap: 0.5rem; font: 600 0.66rem/1 var(--lu-mono); color: var(--lu-muted); }
+.lu-ve-tracks i {
+  height: 0.4rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, var(--accent), var(--secondary-accent)) no-repeat 0 0 / 100% 100%,
+    color-mix(in oklab, var(--foreground) 14%, transparent);
+}
+.lu-ve-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  font: 600 0.72rem/1.2 var(--lu-mono);
+  color: var(--lu-bg);
+  background: var(--lu-fg);
+}
+
+/* Sync: where you stop on one device is where the next one picks up. */
+.lu-vs { position: relative; width: 100%; height: 100%; display: flex; align-items: flex-end; justify-content: space-between; padding: 0 0.5rem 0.15rem; }
+.lu-vs-laptop, .lu-vs-phone {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 0.3rem;
+  padding: 0.5rem 0.45rem;
+  border: 1.5px solid color-mix(in oklab, var(--foreground) 30%, transparent);
+  background: color-mix(in oklab, var(--background) 60%, transparent);
+}
+.lu-vs-laptop { width: 54%; aspect-ratio: 16 / 10; border-radius: 0.5rem; }
+.lu-vs-phone { width: 21%; aspect-ratio: 9 / 16; border-radius: 0.6rem; }
+.lu-vs i { height: 0.28rem; border-radius: 2px; background: color-mix(in oklab, var(--foreground) 20%, transparent); }
+.lu-vs em {
+  position: absolute;
+  top: calc(0.5rem - 0.14rem);
+  left: 0.3rem;
+  right: 0.3rem;
+  height: 0.56rem;
+  border-radius: 0.2rem;
+  background: var(--lu-word);
+  translate: 0 calc(2 * 0.58rem);
+}
+.lu-vs-arc { position: absolute; left: 38%; right: 13%; top: 4%; height: 42%; overflow: visible; }
+.lu-vs-arc path { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; stroke-dasharray: 1; vector-effect: non-scaling-stroke; }
+
+/* Backend: the stack assembles from the storage layer up. */
+.lu-viz-stack { padding-block: 0.6rem; }
+.lu-vk { width: 100%; display: grid; gap: 0.26rem; perspective: 500px; }
+.lu-vk span {
+  padding: 0.3rem 0.75rem;
+  border-radius: 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: color-mix(in oklab, var(--accent) calc(30% - var(--i) * 6%), var(--lu-glass-hi));
+  box-shadow: inset 0 0 0 1px var(--lu-line);
+  transform-origin: 50% 0;
+}
+
+@supports (animation-timeline: view()) {
+  /*
+   * Each visual's ranges are written for its tile's own timeline (cover
+   * 10%–48%). On a pinned desktop grid the same ranges are remapped into the
+   * tile's slice of the section's timeline, so the tiles play one at a time.
+   */
+  .lu-tile {
+    --viz-tl: --lu-tile;
+    --viz-range: cover;
+    --viz-at: 10%;
+    --viz-k: 1;
+    view-timeline: --lu-tile block;
+    view-timeline-inset: var(--lu-band);
+  }
+
+  .lu-vf-block::after {
+    animation: lu-boxdraw linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + (4% + var(--i) * 7%) * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + (10% + var(--i) * 7%) * var(--viz-k));
+  }
+  .lu-vf-block b {
+    animation: lu-badge linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + (9% + var(--i) * 7%) * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + (13% + var(--i) * 7%) * var(--viz-k));
+  }
+  .lu-vf-page::after {
+    animation: lu-scan linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) var(--viz-at) var(--viz-range) calc(var(--viz-at) + 36% * var(--viz-k));
+  }
+
+  .lu-va-words span {
+    animation: lu-va-word linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + (2% + var(--i) * 9%) * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + (8% + var(--i) * 9%) * var(--viz-k));
+  }
+  .lu-va-wave i {
+    animation: lu-va-bar linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + (2% + var(--i) / var(--n) * 36%) * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + (3% + var(--i) / var(--n) * 36%) * var(--viz-k));
+  }
+  .lu-va-head {
+    animation: lu-va-sweep linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + 2% * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + 38% * var(--viz-k));
+  }
+
+  .lu-vl-reel {
+    animation: lu-vl-roll linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) var(--viz-at) var(--viz-range) calc(var(--viz-at) + 38% * var(--viz-k));
+  }
+
+  .lu-ve-tracks i {
+    animation: lu-ve-fill linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + (2% + var(--i) * 7%) * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + (9% + var(--i) * 7%) * var(--viz-k));
+  }
+  .lu-ve-file {
+    animation: lu-badge linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + 31% * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + 38% * var(--viz-k));
+  }
+
+  .lu-vs-laptop em {
+    animation: lu-vs-read linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + 2% * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + 18% * var(--viz-k));
+  }
+  .lu-vs-arc path {
+    animation: lu-arc linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + 18% * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + 30% * var(--viz-k));
+  }
+  .lu-vs-phone em {
+    animation: lu-badge linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + 30% * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + 36% * var(--viz-k));
+  }
+
+  .lu-vk span {
+    animation: lu-vk-drop linear both;
+    animation-timeline: var(--viz-tl);
+    animation-range: var(--viz-range) calc(var(--viz-at) + (2% + (3 - var(--i)) * 8%) * var(--viz-k)) var(--viz-range) calc(var(--viz-at) + (10% + (3 - var(--i)) * 8%) * var(--viz-k));
+  }
+}
+/*
+ * Desktop: the grid pins below the nav while its section scrolls past, and the
+ * tiles take turns. Each owns a sixth of the section's timeline: it lifts and
+ * brightens, its visual plays, then it settles; tiles still to come wait dimmed.
+ */
+@media (min-width: 1001px) and (min-height: 700px) {
+  @supports (animation-timeline: view()) {
+    .lu-seq { height: 360vh; view-timeline: --lu-seq block; }
+    .lu-seq > .lu-tiles { position: sticky; top: 5.75rem; }
+    /* Compact enough that both rows fit under the nav while pinned. */
+    .lu-seq .lu-tile { padding: 1.4rem 1.5rem 1.5rem; }
+    .lu-seq .lu-viz { height: 7.5rem; margin-bottom: 1.1rem; }
+    .lu-seq .lu-tile > p:last-child { font-size: 0.95rem; line-height: 1.5; }
+    @media (max-height: 839px) {
+      .lu-seq > .lu-tiles { top: 5.25rem; }
+      .lu-seq .lu-tile { padding: 1.15rem 1.35rem 1.25rem; }
+      .lu-seq .lu-tile > p:last-child { font-size: 0.9rem; line-height: 1.45; margin-top: 0.4rem; }
+    }
+    .lu-seq .lu-tile {
+      --viz-tl: --lu-seq;
+      --viz-range: contain;
+      --viz-at: calc(3% + var(--i) * 15.4%);
+      --viz-k: 0.3;
+      animation: lu-turn linear both;
+      animation-timeline: --lu-seq;
+      animation-range: contain calc(var(--i) * 15.4%) contain calc(var(--i) * 15.4% + 18%);
+    }
+  }
+}
+@keyframes lu-turn {
+  from { opacity: 0.5; scale: 0.96; }
+  25%, 75% { opacity: 1; scale: 1.03; translate: 0 -0.4rem; }
+  to { opacity: 1; scale: 1; translate: 0 0; }
+}
+@keyframes lu-boxdraw { from { clip-path: inset(0 100% 100% 0); opacity: 0; } }
+@keyframes lu-scan {
+  from { top: 0; opacity: 1; }
+  90% { opacity: 1; }
+  to { top: 100%; opacity: 0; }
+}
+@keyframes lu-va-word {
+  from { background-color: transparent; color: color-mix(in oklab, var(--foreground) 35%, transparent); }
+  45% { background-color: var(--lu-word); color: var(--foreground); }
+}
+@keyframes lu-va-bar { from { background-color: color-mix(in oklab, var(--foreground) 18%, transparent); } }
+@keyframes lu-va-sweep { from { left: 0%; } }
+@keyframes lu-vl-roll {
+  0%, 12% { translate: 0 var(--row); }
+  22%, 34% { translate: 0 0; }
+  44%, 56% { translate: 0 calc(var(--row) * -1); }
+  66%, 78% { translate: 0 calc(var(--row) * -2); }
+  88%, 100% { translate: 0 calc(var(--row) * -3); }
+}
+@keyframes lu-ve-fill { from { background-size: 0% 100%, auto; } }
+@keyframes lu-vs-read { from { translate: 0 0; } }
+@keyframes lu-arc { from { stroke-dashoffset: 1; } }
+@keyframes lu-vk-drop { from { opacity: 0; translate: 0 -1.4rem; rotate: x 70deg; } }
+
+/* Orbit: formats on the inner ring, providers on the outer. */
+.lu-orbit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; }
+.lu-orbit-grid .lu-lede { margin-top: 1.25rem; }
+.lu-orbit-stage { justify-self: center; perspective: 1100px; }
+.lu-orbit {
+  --w: min(32rem, 78vw);
+  position: relative;
+  width: var(--w);
+  aspect-ratio: 1;
+  transform-style: preserve-3d;
+}
+/* The system lies back like a disc, then rises to face you as it scrolls in. */
+@supports (animation-timeline: view()) {
+  .lu-orbit {
+    animation: lu-orbit-rise linear both;
+    animation-timeline: view(block var(--lu-band));
+    animation-range: entry 0% cover 45%;
+  }
+}
+@keyframes lu-orbit-rise { from { transform: rotateX(62deg) scale(0.82); opacity: 0.4; } }
+.lu-orb {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  width: 26%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%, var(--lu-glint), transparent 45%),
+    radial-gradient(circle at 50% 60%, color-mix(in oklab, var(--accent) 30%, transparent), transparent 70%),
+    var(--lu-glass-hi);
+  box-shadow: 0 0 80px 10px color-mix(in oklab, var(--accent) 30%, transparent), inset 0 1px 0 var(--lu-glint);
+  animation: lu-breathe 5s ease-in-out infinite;
+}
+@keyframes lu-breathe { 50% { box-shadow: 0 0 110px 22px color-mix(in oklab, var(--accent) 38%, transparent), inset 0 1px 0 var(--lu-glint); } }
+.lu-orb img { width: 42%; border-radius: 22%; }
+.lu-ring {
+  --r: calc(var(--w) * var(--k));
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: calc(var(--r) * 2);
+  aspect-ratio: 1;
+  margin: calc(var(--r) * -1) 0 0 calc(var(--r) * -1);
+  list-style: none;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in oklab, var(--foreground) 18%, transparent);
+  animation: lu-spin var(--t) linear infinite;
+}
+.lu-ring-in { --k: 0.28; --t: 50s; }
+.lu-ring-out { --k: 0.46; --t: 80s; animation-direction: reverse; }
+.lu-ring li {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: rotate(calc(var(--i) / var(--n) * 1turn)) translateY(calc(var(--r) * -1)) rotate(calc(var(--i) / var(--n) * -1turn));
+}
+.lu-ring span {
+  display: block;
+  translate: -50% -50%;
+  padding: 0.45rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  animation: lu-spin var(--t) linear infinite reverse;
+}
+.lu-ring-out span { animation-direction: normal; color: var(--lu-soft); font-weight: 500; }
+.lu-ring-in span { font-family: var(--lu-mono); color: var(--lu-accent); }
+
+/* iOS */
+.lu-ios {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  align-items: center;
+  gap: 2rem;
+  border-radius: 2.5rem;
+  padding: clamp(1.75rem, 1rem + 4vw, 4rem);
+  overflow: clip;
+}
+.lu-ios h2 { font-size: clamp(1.9rem, 1.2rem + 2.8vw, 3.4rem); }
+.lu-ios-copy > p:not(.lu-eyebrow) { margin-top: 1rem; max-width: 30rem; line-height: 1.6; color: var(--lu-soft); }
+.lu-ios-copy .lu-actions { margin-top: 1.75rem; }
+.lu-phone {
+  position: relative;
+  justify-self: center;
+  width: min(15rem, 100%);
+  aspect-ratio: 9 / 18.5;
+  margin-bottom: -6rem;
+  padding: 4.25rem 1.4rem 0;
+  border-radius: 2.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  background:
+    radial-gradient(120% 60% at 20% 0%, color-mix(in oklab, var(--accent) 30%, transparent), transparent 70%),
+    radial-gradient(100% 60% at 100% 60%, color-mix(in oklab, var(--secondary-accent) 26%, transparent), transparent 70%),
+    var(--lu-glass-hi);
+  box-shadow:
+    inset 0 0 0 1px var(--lu-rim),
+    inset 0 0 0 7px color-mix(in oklab, var(--foreground) 10%, transparent),
+    0 40px 80px -30px rgb(var(--shadow-rgb) / 0.5);
+  rotate: 6deg;
+}
+/* The phone slides up through the card as you scroll past. */
+@supports (animation-timeline: view()) {
+  .lu-phone {
+    animation: lu-phone-rise linear both;
+    animation-timeline: view();
+    animation-range: entry 0% exit 20%;
+  }
+}
+@keyframes lu-phone-rise {
+  from { translate: 0 18%; }
+  to { translate: 0 -6%; }
+}
+.lu-phone-island {
+  position: absolute;
+  top: 1.1rem;
+  left: 50%;
+  translate: -50% 0;
+  width: 5.5rem;
+  height: 1.6rem;
+  border-radius: 999px;
+  background: var(--lu-fg);
+}
+/* Its lines are read one after another, like the app does. */
+.lu-phone-line {
+  width: var(--w);
+  height: 0.7rem;
+  border-radius: 0.35rem;
+  background: color-mix(in oklab, var(--foreground) 22%, transparent);
+  animation: lu-line 6s linear infinite;
+  animation-delay: calc(var(--i) * 1.2s);
+}
+@keyframes lu-line {
+  0%, 18% { background-color: var(--lu-word); }
+  22%, 100% { background-color: color-mix(in oklab, var(--foreground) 22%, transparent); }
+}
+.lu-phone-pill { margin-top: auto; margin-bottom: 7.5rem; height: 3rem; border-radius: 999px; display: flex; align-items: center; padding: 0 1.1rem; }
+.lu-phone-pill i {
+  flex: 1;
+  height: 0.3rem;
+  border-radius: 999px;
+  background: linear-gradient(var(--accent), var(--accent)) no-repeat 0 0 / 0% 100%, color-mix(in oklab, var(--foreground) 16%, transparent);
+  animation: lu-fill 6s linear infinite;
+}
+@keyframes lu-fill { to { background-size: 100% 100%, auto; } }
+
+/* Self-host */
+.lu-host { display: grid; grid-template-columns: 1fr 1.1fr; gap: 3rem; align-items: center; }
+.lu-host .lu-lede { margin-top: 1.25rem; }
+.lu-host .lu-actions { margin-top: 1.75rem; }
+.lu-term { margin: 0; border-radius: var(--lu-r); overflow: clip; min-width: 0; }
+.lu-term figcaption {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.9rem 1.2rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--lu-muted);
+  border-bottom: 1px solid var(--lu-line);
+}
+.lu-term figcaption span { display: inline-flex; gap: 0.4rem; }
+.lu-term figcaption i { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: color-mix(in oklab, var(--foreground) 20%, transparent); }
+.lu-term figcaption i:first-child { background: var(--accent); }
+.lu-term pre { margin: 0; padding: 1.4rem 1.4rem 1.6rem; overflow-x: auto; font-family: var(--lu-mono); font-size: 0.85rem; line-height: 1.85; }
+.lu-term b { color: var(--lu-accent); font-weight: 600; }
+.lu-term-c { color: var(--lu-muted); }
+/* The commands type themselves out, one line after another, as the terminal scrolls in. */
+@supports (animation-timeline: view()) {
+  .lu-term { view-timeline: --lu-term block; view-timeline-inset: var(--lu-band); }
+  .lu-term-line {
+    animation: lu-type linear both;
+    animation-timeline: --lu-term;
+    animation-range: cover calc(14% + var(--i) * 4.5%) cover calc(19% + var(--i) * 4.5%);
+  }
+}
+@keyframes lu-type { from { clip-path: inset(0 100% 0 0); opacity: 0.2; } }
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+.lu-footer { padding: clamp(4.5rem, 10vw, 8rem) 0 5.5rem; }
+.lu-footer-slab {
+  display: grid;
+  grid-template-columns: 1.1fr 1.6fr;
+  gap: 2.5rem;
+  border-radius: 2.25rem;
+  padding: clamp(1.6rem, 1rem + 3vw, 3rem);
+}
+.lu-footer-lede > p { margin-top: 1rem; max-width: 24rem; line-height: 1.6; color: var(--lu-soft); }
+.lu-footer-cta { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 1.5rem; }
+.lu-footer-cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+.lu-footer-cols div { display: grid; align-content: start; gap: 0.7rem; font-size: 0.94rem; }
+.lu-footer-cols p { font-size: 0.78rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lu-muted); margin-bottom: 0.2rem; }
+.lu-footer-cols a { color: var(--lu-soft); transition: color 0.2s; }
+.lu-footer-cols a:hover { color: var(--lu-accent); }
+/* A giant wordmark whose letters are read, one by one, as it comes into view. */
+.lu-footer-word {
+  margin-top: clamp(2rem, 5vw, 3.5rem);
+  text-align: center;
+  font-size: clamp(3.2rem, 15.5vw, 13.5rem);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 0.85;
+  user-select: none;
+  color: color-mix(in oklab, var(--foreground) 88%, transparent);
+}
+.lu-footer-word span { display: inline-block; }
+@supports (animation-timeline: scroll()) {
+  .lu-footer-word span {
+    animation: lu-letter linear both;
+    animation-timeline: scroll(root);
+    animation-range: calc(100% - 36vh + var(--i) * 2.8vh) calc(100% - 28vh + var(--i) * 2.8vh);
+  }
+}
+@keyframes lu-letter {
+  from { color: color-mix(in oklab, var(--foreground) 8%, transparent); translate: 0 0.3em; rotate: x 70deg; filter: blur(8px); }
+  45% { color: var(--accent); filter: blur(0); }
+}
+.lu-footer-word { perspective: 600px; }
+.lu-footer-base { display: flex; justify-content: space-between; gap: 0.5rem 1rem; padding: 1.5rem 0.5rem 0; font-size: 0.85rem; color: var(--lu-muted); }
+
+/* ── Policy ───────────────────────────────────────────────────────── */
+/* A thin line of light tracks how far through the policy you've read. */
+.lu-progress { display: none; }
+@supports (animation-timeline: scroll()) {
+  .lu-progress {
+    display: block;
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 60;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--secondary-accent));
+    box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 60%, transparent);
+    transform-origin: left;
+    animation: lu-grow linear both;
+    animation-timeline: scroll(root);
+  }
+}
+@keyframes lu-grow { from { transform: scaleX(0); } }
+.lu-policy-head { padding-top: clamp(3.5rem, 8vw, 6.5rem); display: grid; justify-items: center; text-align: center; }
+.lu-policy-title {
+  margin-top: 1.5rem;
+  max-width: 18ch;
+  font-size: clamp(2.2rem, 1.2rem + 4.6vw, 5.25rem);
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  text-wrap: balance;
+}
+.lu-policy-head .lu-lede { max-width: 44rem; overflow-wrap: anywhere; }
+.lu-facts { list-style: none; padding: 0; margin: 2rem 0 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
+.lu-facts li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.lu-facts svg { color: var(--lu-accent); }
+.lu-note { margin-top: 1.75rem; max-width: 46rem; padding: 1.25rem 1.6rem; border-radius: 1.4rem; text-align: left; }
+.lu-note p:last-child { margin-top: 0.4rem; line-height: 1.6; color: var(--lu-soft); }
+.lu-note a { text-decoration: underline; text-underline-offset: 0.2em; }
+
+.lu-glance { padding-top: clamp(3.5rem, 8vw, 6rem); }
+.lu-glance > h2 { text-align: center; margin-bottom: 1.5rem; }
+.lu-glance ol { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+.lu-glance a {
+  height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  padding: 1.4rem 1.5rem 1.5rem;
+  border-radius: 1.4rem;
+  transition: transform 0.4s var(--lu-spring);
+}
+.lu-glance a:hover { transform: translateY(-3px); }
+.lu-glance-num { font-family: var(--lu-mono); font-size: 0.78rem; color: var(--lu-accent); }
+.lu-glance strong { font-size: 1.08rem; letter-spacing: -0.01em; }
+.lu-glance a > span:last-child { font-size: 0.93rem; line-height: 1.55; color: var(--lu-soft); }
+
+.lu-policy-grid {
+  display: grid;
+  grid-template-columns: 17rem 1fr;
+  gap: 2rem;
+  align-items: start;
+  padding-top: clamp(3rem, 7vw, 5.5rem);
+}
+.lu-toc { position: sticky; top: 6rem; padding: 1.25rem 0.75rem 1rem; border-radius: 1.5rem; }
+.lu-toc .lu-eyebrow { padding: 0 0.75rem 0.6rem; }
+.lu-toc ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.lu-toc a {
+  display: block;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.8rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--lu-soft);
+  transition: background 0.3s var(--lu-ease), color 0.3s, translate 0.3s var(--lu-ease);
+}
+.lu-toc a:hover { color: var(--lu-fg); }
+.lu-toc a[aria-current] {
+  color: var(--lu-fg);
+  font-weight: 600;
+  translate: 4px 0;
+  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent);
+}
+.lu-policy-body { display: grid; gap: 1.25rem; min-width: 0; }
+.lu-sheet {
+  scroll-margin-top: 6rem;
+  border-radius: var(--lu-r);
+  padding: clamp(1.4rem, 1rem + 2vw, 2.5rem);
+  /* Long prose reads better on a more opaque pane. */
+  background: linear-gradient(150deg, color-mix(in oklab, var(--base) 82%, transparent), color-mix(in oklab, var(--base) 62%, transparent));
+}
+.lu-sheet h2 { margin-top: 0.5rem; font-size: clamp(1.5rem, 1.2rem + 1.4vw, 2.2rem); line-height: 1.12; font-weight: 700; letter-spacing: -0.03em; text-wrap: balance; }
+/* Each section's summary is highlighted like a sentence being read as it arrives. */
+.lu-summary {
+  margin: 1rem 0 1.4rem;
+  padding: 0.85rem 1.1rem;
+  border-radius: 1rem;
+  font-weight: 500;
+  border-left: 3px solid var(--accent);
+  background: linear-gradient(var(--lu-sentence), var(--lu-sentence)) no-repeat 0 0 / 100% 100%;
+}
+@supports (animation-timeline: view()) {
+  .lu-summary {
+    animation: lu-mark linear both;
+    animation-timeline: view(block var(--lu-band));
+    animation-range: cover 10% cover 32%;
+  }
+}
+.lu-prose { max-width: 46rem; color: var(--lu-soft); line-height: 1.72; overflow-wrap: anywhere; }
+.lu-prose > * + * { margin-top: 1rem; }
+.lu-prose strong { color: var(--lu-fg); font-weight: 650; }
+.lu-prose ul { list-style: none; padding: 0; display: grid; gap: 0.75rem; }
+.lu-prose li { position: relative; padding-left: 1.3rem; }
+.lu-prose li::before { content: ''; position: absolute; left: 0.1rem; top: 0.62em; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: linear-gradient(140deg, var(--accent), var(--secondary-accent)); }
+.lu-prose a { color: var(--lu-fg); text-decoration: underline; text-decoration-color: var(--accent); text-underline-offset: 0.2em; }
+.lu-prose code { font-family: var(--lu-mono); font-size: 0.85em; padding: 0.1em 0.4em; border-radius: 0.4rem; background: color-mix(in oklab, var(--offbase) 50%, transparent); color: var(--lu-fg); }
+.lu-prose [data-callout] { padding: 1rem 1.2rem; border-radius: 1rem; background: color-mix(in oklab, var(--accent) 9%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 28%, transparent); color: var(--lu-fg); }
+.lu-policy-end { padding-top: 1rem; }
+
+/* ── Responsive ───────────────────────────────────────────────────── */
+@media (max-width: 1000px) {
+  .lu-tiles, .lu-glance ol { grid-template-columns: repeat(2, 1fr); }
+  .lu-orbit-grid, .lu-host, .lu-ios { grid-template-columns: 1fr; }
+  .lu-orbit-grid > div:first-child { text-align: center; }
+  .lu-orbit-grid .lu-lede { margin-inline: auto; }
+  .lu-phone { margin-bottom: -8rem; }
+  .lu-floaters { display: none; }
+  .lu-policy-grid { grid-template-columns: 1fr; }
+  .lu-toc { display: none; }
+}
+@media (max-width: 760px) {
+  .lu-wrap { width: calc(100% - 2rem); }
+  .lu-nav { padding-inline: 0.75rem; }
+  .lu-nav-links > a:not(.lu-btn) { display: none; }
+  .lu-steps, .lu-tiles, .lu-glance ol, .lu-footer-slab { grid-template-columns: 1fr; }
+  .lu-steps::before { display: none; }
+  .lu-steps li, .lu-tile { padding: 1.5rem 1.4rem 1.6rem; }
+  .lu-step-num { margin-bottom: 1.1rem; }
+  .lu-footer-cols { grid-template-columns: repeat(2, 1fr); }
+  .lu-window { border-radius: 1.6rem; }
+  .lu-ornament { gap: 0.7rem; padding-right: 1rem; }
+  .lu-ornament-voice { display: none; }
+  .lu-ring span { font-size: 0.7rem; padding: 0.32rem 0.55rem; }
+  .lu-ios { border-radius: 1.9rem; }
+  .lu-footer-base { flex-direction: column; }
+  .lu-term pre { font-size: 0.76rem; padding: 1.1rem; }
+  .lu-phone { width: min(11.5rem, 70%); padding: 3.4rem 1.1rem 0; gap: 0.7rem; margin-bottom: -7rem; rotate: 4deg; }
+  .lu-phone-pill { margin-bottom: 6rem; height: 2.5rem; }
+}
+@media (max-width: 420px) {
+  .lu-hero-copy .lu-actions { display: grid; width: 100%; }
+  .lu-eq, .lu-ornament-time small { display: none; }
+  .lu-ornament-state { font-size: 0.9rem; }
+  .lu-play { width: 3rem; height: 3rem; }
+  .lu-pill { font-size: 0.78rem; }
+  .lu-facts li { font-size: 0.82rem; padding: 0.45rem 0.8rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lumen *, .lumen *::before, .lumen *::after { animation: none !important; transition: none !important; }
+  .lu-window { transform: none !important; }
+}

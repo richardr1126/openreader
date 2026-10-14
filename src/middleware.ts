@@ -29,6 +29,10 @@ const PUBLIC_PATH_PREFIXES = [
   '/forgot-password',
   '/reset-password',
   '/privacy',
+  // Search and social crawlers fetch these before any session exists.
+  '/robots.txt',
+  '/sitemap.xml',
+  '/opengraph-image',
 ];
 /**
  * Public pages served to every country, ahead of the production region gate.

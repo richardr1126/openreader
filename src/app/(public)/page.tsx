@@ -1,36 +1,53 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import type { Metadata } from 'next';
-import { getResolvedRuntimeConfigForRsc } from '@/lib/server/runtime-config-rsc';
-import { ButtonAnchor } from '@/components/ui';
+import Link from 'next/link';
+import { getSiteOrigin } from '@/lib/shared/urls';
+import {
+  FEATURES,
+  FORMATS,
+  LINKS,
+  PROVIDERS,
+  QUICK_START,
+  STEPS,
+  WIZARD_OF_OZ_DEMO,
+  getLandingConfig,
+} from './landing';
+import { FeatureVisual } from './FeatureVisual';
 import { ReaderDemo } from './ReaderDemo';
-import type { ReaderDemo as ReaderDemoData } from './reader-demo-timeline';
-import wizardOfOzTimeline from './wizard-of-oz.timeline.json';
+import { Spotlight } from './Spotlight';
+
+const TITLE = 'OpenReader · Read-along text-to-speech for EPUB, PDF, and DOCX';
+const DESCRIPTION =
+  'Open-source, self-hostable document reader that turns EPUB, PDF, TXT, Markdown, and DOCX into multilingual read-along audio with word-by-word highlighting and audiobook export.';
 
 export const metadata: Metadata = {
-  title: 'Open Source Read-Along Workspace',
-  description:
-    'OpenReader converts EPUB, PDF, TXT, MD, and DOCX files into multilingual, synchronized read-along audio with multi-provider text-to-speech support.',
-  keywords:
-    'OpenReader, document reader, multilingual text to speech, PDF read aloud, EPUB read aloud, OpenAI compatible TTS, self-hosted reader',
-  alternates: {
-    canonical: '/',
-  },
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  keywords: [
+    'OpenReader',
+    'read along',
+    'text to speech',
+    'EPUB read aloud',
+    'PDF read aloud',
+    'word highlighting',
+    'audiobook export',
+    'self-hosted reader',
+    'OpenAI compatible TTS',
+    'Kokoro TTS',
+  ],
+  alternates: { canonical: '/' },
   openGraph: {
     type: 'website',
     locale: 'en_US',
-    url: process.env.BASE_URL || 'https://openreader.richardr.dev',
+    url: '/',
     siteName: 'OpenReader',
-    title: 'OpenReader | Read documents with synchronized audio',
-    description:
-      'Upload documents and turn them into a multilingual, synchronized listening experience with word-level highlighting and audiobook export.',
-    images: [
-      {
-        url: '/web-app-manifest-512x512.png',
-        width: 512,
-        height: 512,
-        alt: 'OpenReader icon',
-      },
-    ],
+    title: 'OpenReader · Every word, lit as it’s spoken',
+    description: DESCRIPTION,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'OpenReader · Every word, lit as it’s spoken',
+    description: DESCRIPTION,
   },
   robots: {
     index: true,
@@ -45,295 +62,252 @@ export const metadata: Metadata = {
   },
 };
 
-// Words that receive the looping read-along highlight sweep in the hero. This
-// is the product's actual word-level highlighting, used as the page's signature.
-const SWEEP = ['highlighted', 'word', 'by', 'word.'];
+const HEADLINE = ['Every', 'word,', 'lit', 'as', 'it’s', 'spoken.'];
+const LIT_WORD = 2;
 
-const WIZARD_OF_OZ_DEMO: ReaderDemoData = {
-  audioSrc: '/demo/wizard-of-oz.mp3',
-  fileName: 'wizard-of-oz.epub',
-  chapter: 'Chapter 1 · The Cyclone',
-  voiceLabel: 'English · Gemini · Kore · 1.5×',
-  ...wizardOfOzTimeline,
-};
+/** A phrase that receives the reader's highlight as the heading scrolls into view. */
+const Lit = ({ children }: { children: ReactNode }) => <mark className="lu-mark">{children}</mark>;
 
-const PROVIDERS = ['Kokoro', 'KittenTTS', 'Orpheus', 'OpenAI', 'Replicate', 'DeepInfra'];
-
-const FORMATS = ['EPUB', 'PDF', 'TXT', 'MD', 'DOCX'];
+function structuredData(origin: string) {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebSite',
+        '@id': `${origin}/#website`,
+        url: origin,
+        name: 'OpenReader',
+        description: DESCRIPTION,
+      },
+      {
+        '@type': 'SoftwareApplication',
+        name: 'OpenReader',
+        url: origin,
+        description: DESCRIPTION,
+        applicationCategory: 'MultimediaApplication',
+        operatingSystem: 'Web, Docker (amd64, arm64)',
+        isAccessibleForFree: true,
+        license: LINKS.license,
+        sameAs: [LINKS.repo],
+        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        featureList: [
+          'Read-along audio for EPUB, PDF, TXT, Markdown, and DOCX',
+          'Word-by-word highlighting from forced alignment',
+          'Multilingual narration',
+          'Audiobook export to m4b and mp3',
+          'Self-hosted with Docker',
+        ],
+      },
+    ],
+  };
+}
 
 export default async function LandingPage() {
-  const runtimeConfig = await getResolvedRuntimeConfigForRsc();
-  const canSignUp = runtimeConfig.signupPolicy !== 'closed';
-
-  const instanceBadge =
-    process.env.RICHARDRDEV_PRODUCTION === 'true'
-      ? 'Official OpenReader instance'
-      : 'Open-source document reader';
+  const { canSignUp, instanceBadge } = await getLandingConfig();
+  const jsonLd = JSON.stringify(structuredData(getSiteOrigin())).replace(/</g, '\\u003c');
 
   return (
-    <main className="public-main">
-      {/* ───────────────────────────── Hero ───────────────────────────── */}
-      <section className="public-hero">
-        <div className="public-wrap public-hero-grid">
-          <div className="public-hero-lede public-reveal-1">
-            <p className="public-eyebrow">
-              <span className="public-eyebrow-dot" aria-hidden="true" />
-              {instanceBadge}
-            </p>
+    <main id="main" className="lu-main">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd }} />
 
-            <h1 className="public-hero-title">
-              Hear every document,
-              <br />
-              <span className="public-sweep" aria-hidden="true">
-                {SWEEP.map((word, i) => (
-                  <span
-                    key={word + i}
-                    className="public-sweep-word"
-                    style={{ '--i': i } as CSSProperties}
-                  >
-                    {word}
-                    {i < SWEEP.length - 1 ? ' ' : ''}
-                  </span>
-                ))}
+      {/* ── Hero ─────────────────────────────────────────────────── */}
+      <section className="lu-hero" aria-labelledby="lu-title">
+        <div className="lu-wrap lu-hero-copy">
+          <p className="lu-pill lu-glass lu-in" style={{ '--d': 0 } as CSSProperties}>
+            <span className="lu-pill-dot" aria-hidden="true" />
+            {instanceBadge}
+          </p>
+          <h1 id="lu-title" className="lu-title lu-in" style={{ '--d': 1 } as CSSProperties}>
+            <span className="lu-sr">Every word, lit as it’s spoken.</span>
+            {HEADLINE.map((word, i) => (
+              <span key={word} aria-hidden="true">
+                {i > 0 ? ' ' : null}
+                <span
+                  className={i === LIT_WORD ? 'lu-k lu-k-lit' : 'lu-k'}
+                  style={{ '--i': i } as CSSProperties}
+                >
+                  {word}
+                </span>
               </span>
-              <span className="public-visually-hidden">highlighted word by word.</span>
-            </h1>
-
-            <p className="public-hero-copy">
-              OpenReader turns EPUB, PDF, TXT, Markdown, and DOCX into a
-              synchronized read-along surface, reading your original file in a
-              native viewer with multilingual text-to-speech, language-aware
-              highlighting, and audiobook export. It&rsquo;s open source, and
-              entirely yours to self-host.
-            </p>
-
-            <div className="public-actions">
-              <ButtonAnchor href="/app" variant="primary" size="lg">Open the reader</ButtonAnchor>
-              {canSignUp ? (
-                <ButtonAnchor href="/signup" variant="outline" size="lg">Sign up</ButtonAnchor>
-              ) : (
-                <ButtonAnchor href="/signin" variant="outline" size="lg">Sign in</ButtonAnchor>
-              )}
-              <ButtonAnchor href="https://docs.openreader.richardr.dev/" target="_blank" rel="noopener noreferrer" variant="ghost" size="lg">Read the docs →</ButtonAnchor>
-            </div>
-
-            <div className="public-formats" aria-label="Supported formats">
-              <span className="public-formats-label">Reads</span>
-              <div className="public-formats-list">
-                {FORMATS.map((fmt) => (
-                  <span key={fmt} className="public-format-chip">
-                    {fmt}
-                  </span>
-                ))}
-              </div>
-            </div>
+            ))}
+          </h1>
+          <p className="lu-lede lu-in" style={{ '--d': 2 } as CSSProperties}>
+            OpenReader turns EPUB, PDF, TXT, Markdown, and DOCX into synchronized read-along audio,
+            highlighting every word on your original page as it&rsquo;s spoken. Multilingual, open source,
+            self-hostable.
+          </p>
+          <div className="lu-actions lu-in" style={{ '--d': 3 } as CSSProperties}>
+            <a href="/app" className="lu-btn lu-btn-solid">Open the reader</a>
+            {canSignUp ? (
+              <a href="/signup" className="lu-btn lu-btn-glass">Create account</a>
+            ) : (
+              <a href="/signin" className="lu-btn lu-btn-glass">Sign in</a>
+            )}
           </div>
+        </div>
 
-          {/* Pre-rendered read-along sample: real cached audio and word timings */}
+        <div className="lu-wrap lu-stage-wrap lu-in" style={{ '--d': 4 } as CSSProperties}>
+          <ul className="lu-floaters" aria-hidden="true">
+            {FORMATS.map((f, i) => (
+              <li key={f} className="lu-glass" style={{ '--i': i } as CSSProperties}>.{f.toLowerCase()}</li>
+            ))}
+          </ul>
           <ReaderDemo demo={WIZARD_OF_OZ_DEMO} />
         </div>
-
-        <div className="public-wrap">
-          <div className="public-providers public-reveal-3" aria-label="Supported text-to-speech providers">
-            <span className="public-providers-label">Speaks through</span>
-            <div className="public-providers-track">
-              {PROVIDERS.map((p) => (
-                <span key={p} className="public-provider">
-                  {p}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
       </section>
 
-      {/* ────────────────────────────── iOS ───────────────────────────── */}
-      <section className="public-ios-section" aria-labelledby="ios-heading">
-        <div className="public-wrap">
-          <div className="public-ios">
-            <div className="public-ios-copy">
-              <p className="public-ios-kicker">iPhone &amp; iPad · Beta</p>
-              <h2 id="ios-heading">OpenReader for iOS</h2>
-              <p className="public-ios-text">
-                Fully on-device reading with several voice models and voice
-                cloning, powered by Apple&rsquo;s Core AI.
-              </p>
-            </div>
-            <ButtonAnchor
-              href="https://testflight.apple.com/join/eJTYjDwV"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="outline"
-              size="md"
-              className="public-ios-cta"
-            >
-              Join the TestFlight beta <span aria-hidden="true">↗</span>
-            </ButtonAnchor>
-          </div>
-        </div>
-      </section>
-
-      {/* ────────────────────────── How it works ───────────────────────── */}
-      <section className="public-section" aria-labelledby="how-heading">
-        <div className="public-wrap">
-          <div className="public-section-head">
-            <p className="public-kicker">The flow</p>
-            <h2 id="how-heading">From a raw file to a voice in three moves.</h2>
-          </div>
-
-          <ol className="public-steps">
-            <li className="public-step">
-              <span className="public-step-num">01</span>
-              <h3>Upload a document</h3>
-              <p>
-                Drop an EPUB, PDF, TXT, Markdown, or DOCX into your library, or
-                import one straight from the server, and it stays organized for
-                every session after.
-              </p>
-            </li>
-            <li className="public-step">
-              <span className="public-step-num">02</span>
-              <h3>Pick a voice</h3>
-              <p>
-                Choose a provider and model: hosted OpenAI, Replicate, or
-                DeepInfra, or your own self-hosted Kokoro, KittenTTS, or Orpheus
-                server. Set the document language, choose a compatible voice,
-                and adjust the speed to your pace.
-              </p>
-            </li>
-            <li className="public-step">
-              <span className="public-step-num">03</span>
-              <h3>Read, listen, export</h3>
-              <p>
-                Follow word-level highlighting right on the original page as it
-                plays, pick up where you left off on any device, and export a
-                CBR MP3 audiobook for the road.
-              </p>
-            </li>
+      {/* ── Steps ────────────────────────────────────────────────── */}
+      <section className="lu-section" aria-labelledby="lu-steps">
+        <div className="lu-wrap">
+          <header className="lu-head lu-reveal">
+            <p className="lu-eyebrow">How it works</p>
+            <h2 id="lu-steps">From file to <Lit>voice</Lit> in three steps.</h2>
+          </header>
+          <ol className="lu-steps">
+            {STEPS.map((step, i) => (
+              <li key={step.title} className="lu-glass lu-reveal" style={{ '--i': i } as CSSProperties}>
+                <span className="lu-step-num" aria-hidden="true">{i + 1}</span>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </li>
+            ))}
           </ol>
         </div>
       </section>
 
-      {/* ──────────────────────────── Features ─────────────────────────── */}
-      <section className="public-section" aria-labelledby="features-heading">
-        <div className="public-wrap">
-          <div className="public-section-head">
-            <p className="public-kicker">Under the hood</p>
-            <h2 id="features-heading">Engineered for deep reading, not playback demos.</h2>
-          </div>
-
-          <div className="public-features">
-            <article className="public-feature public-feature-wide">
-              <span className="public-feature-kicker">Formats</span>
-              <h3>Native EPUB and PDF, kept intact</h3>
-              <p>
-                Your file renders in a built-in EPUB and PDF reader, never
-                flattened to plain text. Layout-aware parsing (PP-DocLayoutV3,
-                ONNX) maps the structure underneath, so read-along highlighting
-                follows the true reading order, even in dense, multi-column
-                PDFs.
-              </p>
-            </article>
-
-            <article className="public-feature">
-              <span className="public-feature-kicker">Alignment</span>
-              <h3>Word-by-word timing</h3>
-              <p>
-                ONNX Whisper alignment through a JetStream-backed compute worker
-                maps each spoken word back to the page, so the cursor tracks
-                speech precisely.
-              </p>
-            </article>
-
-            <article className="public-feature">
-              <span className="public-feature-kicker">Languages</span>
-              <h3>Multilingual support</h3>
-              <p>
-                Choose a document language for language-aware narration,
-                highlighting, and compatible voice selection.
-              </p>
-            </article>
-
-            <article className="public-feature">
-              <span className="public-feature-kicker">Export</span>
-              <h3>Audiobook output</h3>
-              <p>
-                Render m4b and mp3 files with resumable processing,
-                ready for any offline player you already use.
-              </p>
-            </article>
-
-            <article className="public-feature">
-              <span className="public-feature-kicker">Sync</span>
-              <h3>Progress that follows you</h3>
-              <p>
-                Reading position, queue state, and per-document settings sync
-                across browser sessions and devices through your account.
-              </p>
-            </article>
-
-            <article className="public-feature public-feature-wide">
-              <span className="public-feature-kicker">Backend</span>
-              <h3>A stack you actually control</h3>
-              <p>
-                Run on embedded SeaweedFS or any S3-compatible bucket, back it
-                with SQLite or Postgres, and ship it with Docker on amd64 or
-                arm64, with built-in auth and automatic startup migrations.
-              </p>
-            </article>
+      {/* ── Features ─────────────────────────────────────────────── */}
+      <section className="lu-section" aria-labelledby="lu-features">
+        <div className="lu-wrap">
+          <header className="lu-head lu-reveal">
+            <p className="lu-eyebrow">Under the hood</p>
+            <h2 id="lu-features">Made for <Lit>deep reading.</Lit></h2>
+          </header>
+          <div className="lu-seq">
+            <Spotlight className="lu-tiles">
+              {FEATURES.map((f, i) => (
+                <article
+                  key={f.key}
+                  className={`lu-tile lu-tile-${f.key} lu-glass lu-reveal`}
+                  style={{ '--i': i } as CSSProperties}
+                >
+                  <FeatureVisual kind={f.key} />
+                  <p className="lu-eyebrow">{f.kicker}</p>
+                  <h3>{f.title}</h3>
+                  <p>{f.body}</p>
+                </article>
+              ))}
+            </Spotlight>
           </div>
         </div>
       </section>
 
-      {/* ───────────────────────── Self-host CTA ───────────────────────── */}
-      <section className="public-section" aria-labelledby="selfhost-heading">
-        <div className="public-wrap">
-          <div className="public-callout">
-            <div className="public-callout-glow" aria-hidden="true" />
-            <div className="public-callout-copy">
-              <p className="public-kicker">Open source · MIT</p>
-              <h2 id="selfhost-heading">Run your own private reading stack.</h2>
-              <p className="public-callout-text">
-                Deploy OpenReader for yourself or your team in minutes. The docs
-                cover Docker, provider integration, object storage, and the
-                external compute worker. Every piece is yours to host.
-              </p>
-              <div className="public-actions">
-                <ButtonAnchor href="https://github.com/richardr1126/openreader#readme" target="_blank" rel="noopener noreferrer" variant="primary" size="lg">
-                  View the repository
-                </ButtonAnchor>
-                <ButtonAnchor href="https://docs.openreader.richardr.dev/deploy/docker-compose" target="_blank" rel="noopener noreferrer" variant="outline" size="lg">
-                  Deployment guides
-                </ButtonAnchor>
-              </div>
-            </div>
-
-            <div className="public-terminal" aria-hidden="true">
-              <div className="public-terminal-bar">
-                <span className="public-reader-dot" data-tone="a" />
-                <span className="public-reader-dot" data-tone="b" />
-                <span className="public-reader-dot" data-tone="c" />
-                <span className="public-terminal-title">quick start</span>
-              </div>
-              <pre className="public-terminal-body">
-                <code>
-                  <span className="public-term-comment"># run the maintained Compose example</span>
-                  {'\n'}
-                  <span className="public-term-prompt">$</span> git clone https://github.com/richardr1126/openreader.git{'\n'}
-                  <span className="public-term-prompt">$</span> cd openreader{'\n'}
-                  <span className="public-term-comment"># add first-admin credentials to .env</span>{'\n'}
-                  <span className="public-term-prompt">$</span> docker compose -f{' '}
-                  <span className="public-term-accent">examples/docker/compose.yml</span> up -d{'\n'}
-                  {'\n'}
-                  <span className="public-term-comment"># open the reading room</span>
-                  {'\n'}
-                  <span className="public-term-prompt">$</span> open{' '}
-                  <span className="public-term-accent">localhost:3003</span>
-                  <span className="public-term-caret" />
-                </code>
-              </pre>
+      {/* ── Orbit ────────────────────────────────────────────────── */}
+      <section className="lu-section" aria-labelledby="lu-orbit">
+        <div className="lu-wrap lu-orbit-grid">
+          <div className="lu-reveal">
+            <p className="lu-eyebrow">Formats &amp; voices</p>
+            <h2 id="lu-orbit">Five formats in. <Lit>Any voice</Lit> out.</h2>
+            <p className="lu-lede">
+              Read {FORMATS.join(', ')} natively. Narrate with hosted providers or a speech server you
+              run yourself: {PROVIDERS.join(', ')}.
+            </p>
+          </div>
+          <div className="lu-orbit-stage" aria-hidden="true">
+            <div className="lu-orbit">
+              <span className="lu-orb lu-glass">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icon.svg" alt="" />
+              </span>
+              <ul className="lu-ring lu-ring-in" style={{ '--n': FORMATS.length } as CSSProperties}>
+                {FORMATS.map((f, i) => (
+                  <li key={f} style={{ '--i': i } as CSSProperties}>
+                    <span className="lu-glass">{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <ul className="lu-ring lu-ring-out" style={{ '--n': PROVIDERS.length } as CSSProperties}>
+                {PROVIDERS.map((p, i) => (
+                  <li key={p} style={{ '--i': i } as CSSProperties}>
+                    <span className="lu-glass">{p}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* ── iOS ──────────────────────────────────────────────────── */}
+      <section className="lu-section" aria-labelledby="lu-ios">
+        <div className="lu-wrap">
+          <div className="lu-ios lu-glass lu-reveal">
+            <div className="lu-ios-copy">
+              <p className="lu-eyebrow">iPhone + iPad · Beta</p>
+              <h2 id="lu-ios">OpenReader for iOS, <Lit>entirely on-device.</Lit></h2>
+              <p>
+                Several voice models and voice cloning, powered by Apple&rsquo;s Core AI. No account, no
+                analytics, no data collected.
+              </p>
+              <div className="lu-actions">
+                <a href={LINKS.testflight} target="_blank" rel="noopener noreferrer" className="lu-btn lu-btn-solid">
+                  Join the TestFlight beta
+                </a>
+                <Link href="/ios-privacy" className="lu-btn lu-btn-glass">iOS privacy</Link>
+              </div>
+            </div>
+            <div className="lu-phone" aria-hidden="true">
+              <span className="lu-phone-island" />
+              {['82%', '64%', '90%', '48%', '76%'].map((w, i) => (
+                <span key={i} className="lu-phone-line" style={{ '--w': w, '--i': i } as CSSProperties} />
+              ))}
+              <span className="lu-phone-pill lu-glass">
+                <i />
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Self-host ────────────────────────────────────────────── */}
+      <section className="lu-section" aria-labelledby="lu-host">
+        <div className="lu-wrap lu-host">
+          <div className="lu-reveal">
+            <p className="lu-eyebrow">Open source · MIT</p>
+            <h2 id="lu-host">Host it <Lit>yourself.</Lit></h2>
+            <p className="lu-lede">
+              Deploy for yourself or your team in minutes. The docs cover Docker, provider integration,
+              object storage, and the external compute worker.
+            </p>
+            <div className="lu-actions">
+              <a href={LINKS.readme} target="_blank" rel="noopener noreferrer" className="lu-btn lu-btn-solid">
+                View the repository
+              </a>
+              <a href={LINKS.deploy} target="_blank" rel="noopener noreferrer" className="lu-btn lu-btn-glass">
+                Deployment guides
+              </a>
+            </div>
+          </div>
+          <figure className="lu-term lu-glass lu-reveal" aria-label="Quick start commands">
+            <figcaption>
+              <span aria-hidden="true"><i /><i /><i /></span>
+              Terminal
+            </figcaption>
+            <pre>
+              <code>
+                {QUICK_START.map((line, i) => (
+                  <span
+                    key={i}
+                    className={line.kind === 'comment' ? 'lu-term-line lu-term-c' : 'lu-term-line'}
+                    style={{ '--i': i, '--n': QUICK_START.length } as CSSProperties}
+                  >
+                    {line.kind === 'command' ? <b aria-hidden="true">$ </b> : null}
+                    {line.text}
+                    {'\n'}
+                  </span>
+                ))}
+              </code>
+            </pre>
+          </figure>
         </div>
       </section>
     </main>
