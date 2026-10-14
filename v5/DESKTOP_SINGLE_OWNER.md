@@ -1,8 +1,8 @@
 # V5 Desktop Single-Owner Profile
 
 Status: web-app side implemented 2026-10-14 (see "Implementation status" at the
-end). The Electron shell, preload bridge, file associations and the Local
-voices card are not implemented.
+end). The Electron shell is a prototype (`v5/DESKTOP_SHELL.md`); the preload
+bridge, file associations and the Local voices card are not implemented.
 
 ## Decision
 
@@ -224,8 +224,8 @@ measured values.
   hidden email UI, `enqueueAccountEmail` refuses every `.localhost` recipient,
   so verification, reset and admin test mail can never be queued for it.
 - Whether the server profile should also adopt the Voices layout later.
-- Electron packaging (formats, update channel, process supervision) belongs to a
-  separate shell document.
+- Electron packaging (formats, update channel, process supervision) lives in
+  `v5/DESKTOP_SHELL.md`.
 
 ## Implementation status
 
@@ -266,5 +266,7 @@ Implemented (web app):
   signed-in visitor from `/` to `/app`, and the only in-app link to the landing
   page sits in the signed-out Account branch, which desktop never renders.
 
-Not implemented: the shell, the preload bridge actions, file associations,
-the Voices section and the Local voices card.
+Prototype: the shell (`desktop/`, `v5/DESKTOP_SHELL.md`).
+
+Not implemented: the preload bridge actions, file associations, the Voices
+section and the Local voices card.

@@ -1,6 +1,6 @@
 # Fetch the pinned LGPL ffmpeg, verify its SHA-256, and smoke-test it.
 FROM node:lts-slim AS ffmpeg-fetch
-COPY packaging/ffmpeg /packaging/ffmpeg
+COPY packaging /packaging
 RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
 
 FROM node:lts AS deploy-stage

@@ -81,8 +81,10 @@ function resolveWorkspacePath(value, fallback) {
     : path.resolve(workspaceRoot, configuredPath);
 }
 
-function embeddedCredentialBrokerUrl() {
-  return 'http://127.0.0.1:3003/api/internal/compute/tts-credentials';
+// The app listens on PORT when it is set (standalone server.js, the desktop
+// shell) and on 3003 otherwise (`next start -p 3003`).
+function embeddedCredentialBrokerUrl(env) {
+  return `http://127.0.0.1:${withDefault(env.PORT, '3003')}/api/internal/compute/tts-credentials`;
 }
 
 // `openreader [--worker-source] -- <command> [args]`. --worker-source runs the
@@ -110,7 +112,10 @@ function spawnMainCommand(command, env) {
     cwd: workspaceRoot,
     env,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    // Windows needs a shell to run `pnpm` (a .cmd shim). An absolute executable,
+    // such as the desktop shell's bundled node, runs directly so a path with
+    // spaces is not split.
+    shell: process.platform === 'win32' && !path.isAbsolute(cmd),
   });
 
   const exitPromise = new Promise((resolve) => {
@@ -293,6 +298,14 @@ async function main() {
   process.once('SIGTERM', () => {
     void shutdown('SIGTERM').finally(() => exitOnce(143));
   });
+  // A parent that starts bootstrap with an IPC channel (the desktop shell) stops
+  // it by disconnecting, which also works on Windows where there are no signals,
+  // and the channel closes by itself if that parent dies.
+  if (process.send) {
+    process.once('disconnect', () => {
+      void shutdown('SIGTERM').finally(() => exitOnce(0));
+    });
+  }
 
   try {
     const shouldRunDbMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_DRIZZLE_MIGRATIONS', true);
@@ -461,7 +474,7 @@ async function main() {
         PORT: String(embeddedWorkerPort),
         COMPUTE_CREDENTIAL_BROKER_URL: withDefault(
           runtimeEnv.COMPUTE_CREDENTIAL_BROKER_URL,
-          embeddedCredentialBrokerUrl(),
+          embeddedCredentialBrokerUrl(runtimeEnv),
         ),
       });
       const workerLaunch = resolveEmbeddedWorkerLaunch({ fromSource: runWorkerFromSource });

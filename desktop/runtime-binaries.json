@@ -1,0 +1,27 @@
+{
+  "comment": "Upstream binaries the desktop app bundles beside the runtime, pinned by SHA-256 (the same versions the Docker images use). ffmpeg comes from packaging/ffmpeg, and Node.js is the version that ran the build. SeaweedFS publishes no Windows Arm build, so win32-arm64 runs the x64 one under emulation.",
+  "nats": {
+    "version": "2.11.17",
+    "license": "https://raw.githubusercontent.com/nats-io/nats-server/v2.11.17/LICENSE",
+    "targets": {
+      "darwin-arm64": { "url": "https://github.com/nats-io/nats-server/releases/download/v2.11.17/nats-server-v2.11.17-darwin-arm64.tar.gz", "sha256": "e17d11c5e9cb0824e003013304ba3d96ca24adbff9998084c746869c0347be9b" },
+      "darwin-x64": { "url": "https://github.com/nats-io/nats-server/releases/download/v2.11.17/nats-server-v2.11.17-darwin-amd64.tar.gz", "sha256": "17511c7bad18aa6b911d83f8907f5fc371369eec30bd9b16d3fba0100d54518c" },
+      "linux-arm64": { "url": "https://github.com/nats-io/nats-server/releases/download/v2.11.17/nats-server-v2.11.17-linux-arm64.tar.gz", "sha256": "d21df24f262f34f8bf6d1f0bca557c08429e433fd9f60f6983105539ae517feb" },
+      "linux-x64": { "url": "https://github.com/nats-io/nats-server/releases/download/v2.11.17/nats-server-v2.11.17-linux-amd64.tar.gz", "sha256": "ad608dd0ea8bbfa58c40e3b8f58ed67478eec26166ec49c502db8d17589b51b5" },
+      "win32-arm64": { "url": "https://github.com/nats-io/nats-server/releases/download/v2.11.17/nats-server-v2.11.17-windows-arm64.zip", "sha256": "dc047714f30bcddc08d2847c3a0eda9820e0a5e4526d94fd5f18501d37797760" },
+      "win32-x64": { "url": "https://github.com/nats-io/nats-server/releases/download/v2.11.17/nats-server-v2.11.17-windows-amd64.zip", "sha256": "45c6a61420c87afaa31edf89372b3cfb4335ac12838fc8c593967a4d8b503f5a" }
+    }
+  },
+  "weed": {
+    "version": "4.18",
+    "license": "https://raw.githubusercontent.com/seaweedfs/seaweedfs/4.18/LICENSE",
+    "targets": {
+      "darwin-arm64": { "url": "https://github.com/seaweedfs/seaweedfs/releases/download/4.18/darwin_arm64.tar.gz", "sha256": "bb6b5baaf345084c69017f7dd5d14f0a91acb1dd05058b2b67ca9ce4a24facbc" },
+      "darwin-x64": { "url": "https://github.com/seaweedfs/seaweedfs/releases/download/4.18/darwin_amd64.tar.gz", "sha256": "f39eb4d85e3a756f2049fd897b2d61530e181d1669697afd105cd3f2761bbe05" },
+      "linux-arm64": { "url": "https://github.com/seaweedfs/seaweedfs/releases/download/4.18/linux_arm64.tar.gz", "sha256": "6184622ccad0f165cade73d9f7961331b6b4ecc9ecaa82a132e5633190c3ee57" },
+      "linux-x64": { "url": "https://github.com/seaweedfs/seaweedfs/releases/download/4.18/linux_amd64.tar.gz", "sha256": "abe924a3b5a16af889675005b7ee3ffcc424bc78c7f0be1126a8c8681667c22c" },
+      "win32-arm64": { "url": "https://github.com/seaweedfs/seaweedfs/releases/download/4.18/windows_amd64.zip", "sha256": "0164dedc2808ac69091ce3a294d985424a6d6e85fa1d2e4dcff76712589eb974" },
+      "win32-x64": { "url": "https://github.com/seaweedfs/seaweedfs/releases/download/4.18/windows_amd64.zip", "sha256": "0164dedc2808ac69091ce3a294d985424a6d6e85fa1d2e4dcff76712589eb974" }
+    }
+  }
+}

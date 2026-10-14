@@ -8,14 +8,11 @@
 // Usage: node packaging/ffmpeg/fetch.mjs --out <dir> [--target <name>]
 //   <name> is a key of manifest.json's targets; the default is this machine.
 
-import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
+import { downloadVerified, extractArchive } from '../download.mjs';
 import { smokeTestFfmpeg } from './smoke-test.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -35,31 +32,6 @@ function parseArgs(argv) {
   }
   if (!args.out) throw new Error('Usage: node packaging/ffmpeg/fetch.mjs --out <dir> [--target <name>]');
   return args;
-}
-
-async function download(url, file, expectedSha256) {
-  const response = await fetch(url, { redirect: 'follow' });
-  if (!response.ok || !response.body) throw new Error(`Download failed (${response.status}): ${url}`);
-  const hash = createHash('sha256');
-  await pipeline(
-    Readable.fromWeb(response.body),
-    async function* (chunks) {
-      for await (const chunk of chunks) {
-        hash.update(chunk);
-        yield chunk;
-      }
-    },
-    fs.createWriteStream(file),
-  );
-  const actual = hash.digest('hex');
-  if (actual !== expectedSha256) {
-    throw new Error(`SHA-256 mismatch for ${url}\n  expected ${expectedSha256}\n  received ${actual}`);
-  }
-}
-
-function extract(archive, dir) {
-  const result = spawnSync('tar', ['-xzf', archive, '-C', dir], { stdio: 'inherit' });
-  if (result.error || result.status !== 0) throw new Error(`Could not extract ${path.basename(archive)} with tar`);
 }
 
 async function main() {
@@ -94,8 +66,8 @@ async function main() {
   try {
     const archive = path.join(work, `${name}.tar.gz`);
     console.log(`[ffmpeg] downloading ${target} from ${url}`);
-    await download(url, archive, sha256);
-    extract(archive, work);
+    await downloadVerified(url, archive, sha256);
+    extractArchive(archive, work);
 
     fs.mkdirSync(out, { recursive: true });
     fs.copyFileSync(path.join(work, name, 'bin', exe), binaryOut);

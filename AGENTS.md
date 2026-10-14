@@ -60,6 +60,7 @@ Normative architecture and history:
 - `v5/TEST_MIGRATION_PLAN.md`
 - `v5/USER_MANAGEMENT_AND_BOOTSTRAP.md`
 - `v5/DESKTOP_SINGLE_OWNER.md`
+- `v5/DESKTOP_SHELL.md`
 
 ## Playback Invariants
 
@@ -196,6 +197,19 @@ caused conflicts, high CPU, misleading failures, and overheating.
 - The owner commonly takes the old production version offline, applies Neon
   migrations, deploys web and worker, smoke-tests production, and only then
   creates the final version bump/tag/release.
+
+## Desktop App
+
+- `desktop/` is a separate pnpm project (Electron + electron-builder) outside the
+  root workspace. It stages the Docker image's runtime layout for the host
+  platform (`pnpm --dir desktop stage`, after `pnpm build`) and packages it
+  (`pnpm --dir desktop package`). See `v5/DESKTOP_SHELL.md`.
+- The shell adds no server code and no environment variables beyond
+  `DESKTOP_LAUNCH_TOKEN`; it configures the runtime through existing settings.
+- Bundled binaries are pinned by SHA-256 (`desktop/runtime-binaries.json`,
+  `packaging/ffmpeg/manifest.json`). Never ship `.env*` from the checkout.
+- The desktop runtime picks free app ports, but `weed mini` still binds fixed
+  internal ports, so do not run it beside a manual or Playwright stack.
 
 ## Startup Configuration and Upgrades
 

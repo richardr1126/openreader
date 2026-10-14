@@ -11,7 +11,7 @@ RUN cp "$(command -v nats-server)" /tmp/nats-server
 
 # Stage 1c: fetch the pinned LGPL ffmpeg, verify its SHA-256, and smoke-test it.
 FROM node:lts-slim AS ffmpeg-fetch
-COPY packaging/ffmpeg /packaging/ffmpeg
+COPY packaging /packaging
 RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
 
 # Stage 2: build the Next.js app

@@ -188,6 +188,8 @@ describe('shared runtime configuration boundary', () => {
     const dockerfile = source('Dockerfile');
     const bootstrap = source('packages/bootstrap/src/cli.mjs');
     expect(dockerfile).toContain('ENV HOSTNAME=0.0.0.0');
-    expect(bootstrap).toContain("return 'http://127.0.0.1:3003/api/internal/compute/tts-credentials'");
+    // The embedded worker reaches the app's broker on loopback at the app's PORT
+    // (3003 when unset, as with `next start -p 3003`).
+    expect(bootstrap).toContain("return `http://127.0.0.1:${withDefault(env.PORT, '3003')}/api/internal/compute/tts-credentials`;");
   });
 });

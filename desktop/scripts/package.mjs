@@ -1,0 +1,53 @@
+#!/usr/bin/env node
+// Packages the shell and the staged runtime (scripts/stage.mjs) with
+// electron-builder for this machine's platform and architecture: a DMG on macOS,
+// an NSIS installer on Windows, and an AppImage and a .deb on Linux. The app
+// version is the root package version.
+
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import builder from 'electron-builder';
+
+const { Arch, Platform, build } = builder;
+
+const desktopDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoRoot = path.resolve(desktopDir, '..');
+const { version } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+
+if (!fs.existsSync(path.join(desktopDir, 'stage', 'runtime', 'app', 'server.js'))) {
+  console.error('[package] desktop/stage/runtime is missing: run `pnpm stage` first.');
+  process.exit(1);
+}
+
+const config = {
+  appId: 'dev.richardr.openreader',
+  productName: 'OpenReader',
+  copyright: 'Copyright © Richard R',
+  extraMetadata: { version },
+  directories: { output: 'dist' },
+  files: ['src/**/*', 'package.json'],
+  // The runtime runs as separate Node.js processes, so it stays outside the asar.
+  extraResources: [{ from: 'stage/runtime', to: 'runtime' }],
+  icon: path.join(repoRoot, 'public', 'web-app-manifest-512x512.png'),
+  npmRebuild: false,
+  publish: null,
+  mac: {
+    target: 'dmg',
+    category: 'public.app-category.productivity',
+    minimumSystemVersion: '12.0',
+  },
+  win: { target: 'nsis' },
+  nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
+  linux: {
+    target: ['AppImage', 'deb'],
+    category: 'Office',
+    maintainer: 'Richard R <me@richardr.dev>',
+  },
+};
+
+await build({
+  projectDir: desktopDir,
+  targets: Platform.current().createTarget(null, Arch[process.arch]),
+  config,
+});
