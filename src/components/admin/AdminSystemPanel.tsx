@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { Badge, Button, Section, type BadgeTone } from '@/components/ui';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useDesktopBridge } from '@/hooks/useDesktopBridge';
 import {
   evaluateBrowserChecks,
   type SystemCheckItem,
@@ -69,6 +70,7 @@ export function AdminSystemPanel() {
     toast.error('Failed to run system check');
   }, [error]);
 
+  const openLogsFolder = useDesktopBridge()?.openLogsFolder;
   const problems = data?.filter((item) => item.status !== 'ok').length ?? 0;
 
   return (
@@ -81,9 +83,16 @@ export function AdminSystemPanel() {
           : 'Checks the worker, storage, providers, and the addresses this browser uses.'
       }
       action={(
-        <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
-          {isFetching ? 'Checking…' : 'Run again'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {openLogsFolder ? (
+            <Button variant="outline" size="sm" onClick={() => void openLogsFolder()}>
+              Open logs folder
+            </Button>
+          ) : null}
+          <Button variant="outline" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+            {isFetching ? 'Checking…' : 'Run again'}
+          </Button>
+        </div>
       )}
     >
       {data ? (

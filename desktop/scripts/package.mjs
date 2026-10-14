@@ -32,6 +32,12 @@ const config = {
   icon: path.join(repoRoot, 'public', 'web-app-manifest-512x512.png'),
   npmRebuild: false,
   publish: null,
+  // Opened documents go to the library's upload flow (src/open-documents.mjs).
+  // OpenReader claims EPUB but only offers itself for PDF.
+  fileAssociations: [
+    { ext: 'epub', name: 'EPUB Document', mimeType: 'application/epub+zip', role: 'Viewer', rank: 'Default' },
+    { ext: 'pdf', name: 'PDF Document', mimeType: 'application/pdf', role: 'Viewer', rank: 'Alternate' },
+  ],
   mac: {
     target: 'dmg',
     category: 'public.app-category.productivity',

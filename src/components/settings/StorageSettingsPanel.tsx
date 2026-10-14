@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Button } from '@/components/ui';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useDesktopBridge } from '@/hooks/useDesktopBridge';
 import {
   fetchLibraryStorageUsage,
   reclaimLibraryAudio,
@@ -81,6 +82,7 @@ export function StorageSettingsPanel() {
   const queryClient = useQueryClient();
   const sessionKey = session?.user?.id ?? 'no-session';
   const [pendingTarget, setPendingTarget] = useState<LibraryAudioReclaimTarget | null>(null);
+  const revealDataFolder = useDesktopBridge()?.revealDataFolder;
 
   const usageQuery = useQuery({
     queryKey: queryKeys.libraryStorageUsage(sessionKey),
@@ -152,6 +154,14 @@ export function StorageSettingsPanel() {
         <p role="status" className="px-1 text-xs text-danger">
           {usageQuery.error instanceof Error ? usageQuery.error.message : 'Failed to load storage usage'}
         </p>
+      ) : null}
+      {revealDataFolder ? (
+        <div className="flex items-center justify-between gap-3 px-1">
+          <p className="text-xs text-soft">Your library, audio and settings live in OpenReader&apos;s data folder.</p>
+          <Button size="xs" variant="outline" onClick={() => void revealDataFolder()}>
+            Show data folder
+          </Button>
+        </div>
       ) : null}
       {usage?.truncated ? (
         <p className="px-1 text-xs text-soft">Totals are partial; your library has more stored objects than one scan covers.</p>

@@ -1,8 +1,8 @@
 # V5 Desktop Single-Owner Profile
 
 Status: web-app side implemented 2026-10-14 (see "Implementation status" at the
-end). The Electron shell is a prototype (`v5/DESKTOP_SHELL.md`); the preload
-bridge, file associations and the Local voices card are not implemented.
+end). The Electron shell is a prototype (`v5/DESKTOP_SHELL.md`), with the preload
+bridge, menu and file associations; the Local voices card is not implemented.
 
 ## Decision
 
@@ -270,5 +270,11 @@ Implemented (web app):
 
 Prototype: the shell (`desktop/`, `v5/DESKTOP_SHELL.md`).
 
-Not implemented: the preload bridge actions, file associations, the Voices
-section and the Local voices card.
+- **Bridge actions.** `src/lib/client/desktop-bridge.ts` types the bridge;
+  `useDesktopBridge()` reads it after hydration. Settings → Library and storage
+  shows "Show data folder" and Maintenance shows "Open logs folder" when the
+  bridge has them. `DesktopDocumentOpener` in the `/app` layout uploads
+  documents the shell opens (menu, file associations) through `uploadDocuments`.
+  The shell side is in `v5/DESKTOP_SHELL.md`.
+
+Not implemented: the Voices section and the Local voices card.

@@ -25,7 +25,10 @@ desktop/
   scripts/stage.mjs      assembles stage/runtime for this machine
   scripts/package.mjs    electron-builder for this machine
   scripts/smoke.mjs      starts the staged runtime headless and checks sign-in
-  src/main.mjs           window, cookie store, navigation policy, quit
+  src/main.mjs           window, cookie store, navigation policy, bridge, quit
+  src/preload.cjs        the page's bridge into the shell
+  src/open-documents.mjs reads opened documents and hands them to the library
+  src/menu.mjs           the application menu
   src/runtime.mjs        ports, environment, spawn/stop, readiness, token exchange
   src/loading.html       shown while the runtime starts
 ```
@@ -90,8 +93,42 @@ import, so the smoke test runs the shell's own startup and sign-in code.
   exchange and reloads `/app`.
 - Pages outside the app origin open in the system browser (`http`, `https` and
   `mailto` only); new windows on the app origin are allowed.
-- The renderer runs with context isolation and the sandbox, no Node.js
-  integration and no preload yet.
+- The renderer runs with context isolation and the sandbox and no Node.js
+  integration.
+
+## Bridge, menu and opened documents
+
+`preload.cjs` exposes `window.openreaderDesktop` with three fixed actions:
+`onOpenFiles(callback)`, `revealDataFolder()` and `openLogsFolder()`. The page
+never passes a path, and the main process ignores bridge calls from any frame
+outside the app origin. The UI treats the bridge as a capability
+(`useDesktopBridge()` in `src/hooks`). Settings → Library and storage offers
+"Show data folder" and Maintenance offers "Open logs folder" only when the bridge
+has them.
+
+Documents reach the library one way, whatever opened them:
+
+- **File → Open…** (Ctrl/Cmd+O) shows a native dialog filtered to PDF, EPUB,
+  TXT, Markdown and DOCX.
+- **File associations.** The package claims `.epub` and offers itself for
+  `.pdf` (macOS rank Alternate). macOS delivers `open-file` events, which can
+  arrive before the window exists. Windows and Linux pass paths on the command
+  line, and the single-instance lock forwards a second launch's paths.
+- Drag and drop from the file manager needs nothing: the library's dropzone
+  already accepts it.
+
+`DocumentInbox` reads each file and queues it until a library page listens.
+`DesktopDocumentOpener`, mounted in the `/app` layout inside `DocumentProvider`,
+registers through the bridge and calls `uploadDocuments`, the same flow as a
+drop. If no library page is listening (a reader is open, say), the shell loads
+`/app` first. One opened document then opens in its reader; several land in the
+library. A full page load drops the listener, and the inbox notices through
+`did-navigate`.
+
+The menu adds Open…, Settings (Ctrl/Cmd+,, which loads `/app/settings`), and
+Help (documentation, logs folder) to the standard roles. DevTools appear only
+when unpackaged. Play and pause stay with the page's own keys and media keys
+(`mediaSession`).
 
 ## Packaging
 
@@ -154,7 +191,9 @@ output.
   236 MB, SeaweedFS and NATS 149 MB, Node.js 112 MB, the app 84 MB).
 - **Worker data path in a checkout.** The worker prefers a `pnpm-workspace.yaml`
   above its working directory for `docstore/`, so a runtime run from inside the
-  repository (`desktop/stage` or `desktop/dist`) keeps models in the checkout's
-  `docstore/`. Installed apps are unaffected.
-- **Preload bridge, file associations, menus, and the Local voices card**
-  (`v5/DESKTOP_SINGLE_OWNER.md`).
+  repository (`desktop/stage` or `desktop/dist`) keeps models in
+  `desktop/docstore/` (ignored), next to `desktop/pnpm-workspace.yaml`.
+  Installed apps are unaffected.
+- **Local voices card** (`v5/DESKTOP_SINGLE_OWNER.md`).
+- **Associations on Linux.** The `.deb` registers the MIME types. The AppImage
+  registers nothing unless the user integrates it.

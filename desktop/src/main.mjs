@@ -1,11 +1,14 @@
 // The OpenReader desktop shell. It starts the bundled runtime, signs the single
 // owner in through the launch-token exchange (v5/DESKTOP_SINGLE_OWNER.md), and
 // shows the app in one window. Pages the app does not serve open in the system
-// browser.
+// browser. The preload bridge (preload.cjs) is the page's only way into the
+// shell, and every bridge call must come from the app's own origin.
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
+import { buildMenu } from './menu.mjs';
+import { DOCUMENT_EXTENSIONS, DocumentInbox, documentPathsInArgv } from './open-documents.mjs';
 import { exchangeLaunchToken, startRuntime } from './runtime.mjs';
 
 const srcDir = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +27,57 @@ function isAppUrl(url) {
 
 function isSignInUrl(url) {
   return isAppUrl(url) && new URL(url).pathname.startsWith('/signin');
+}
+
+/** Loads an app page in the window once the runtime is up. */
+function showAppPage(pathname) {
+  if (!runtime || !mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+  void mainWindow.loadURL(`${runtime.baseUrl}${pathname}`);
+}
+
+const inbox = new DocumentInbox({
+  openLibrary: () => {
+    // The library page is loading or hydrating when it is already the URL; its
+    // listener collects the documents once it registers.
+    if (mainWindow && isAppUrl(mainWindow.webContents.getURL())
+      && new URL(mainWindow.webContents.getURL()).pathname === '/app') return;
+    showAppPage('/app');
+  },
+});
+
+async function chooseDocuments() {
+  if (!mainWindow) return;
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'Documents', extensions: DOCUMENT_EXTENSIONS }],
+  });
+  if (!canceled) openDocuments(filePaths);
+}
+
+function openDocuments(paths) {
+  inbox.open(paths).catch((error) => {
+    dialog.showErrorBox('OpenReader could not open the document.', error instanceof Error ? error.message : String(error));
+  });
+}
+
+/** Bridge calls are honoured only from the app's own pages. */
+function fromApp(event) {
+  return isAppUrl(event.senderFrame?.url ?? '');
+}
+
+function registerBridge() {
+  ipcMain.on('open-files:listen', (event) => {
+    if (fromApp(event)) inbox.listen(event.sender);
+  });
+  ipcMain.on('open-files:unlisten', (event) => inbox.unlisten(event.sender));
+  ipcMain.handle('reveal-data-folder', async (event) => {
+    if (fromApp(event)) await shell.openPath(app.getPath('userData'));
+  });
+  ipcMain.handle('open-logs-folder', async (event) => {
+    if (fromApp(event)) await shell.openPath(app.getPath('logs'));
+  });
 }
 
 function openExternally(url) {
@@ -102,7 +156,12 @@ function createWindow() {
     minHeight: 480,
     show: false,
     title: 'OpenReader',
-    webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
+    webPreferences: {
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      preload: path.join(srcDir, 'preload.cjs'),
+    },
   });
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => {
@@ -145,7 +204,16 @@ async function launch() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  // macOS delivers opened files as events, possibly before the app is ready;
+  // Windows and Linux pass them on the command line.
+  app.on('open-file', (event, file) => {
+    event.preventDefault();
+    openDocuments([file]);
+  });
+  openDocuments(documentPathsInArgv(process.argv.slice(1)));
+
+  app.on('second-instance', (_event, argv) => {
+    openDocuments(documentPathsInArgv(argv.slice(1)));
     if (!mainWindow) return;
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
@@ -164,5 +232,16 @@ if (!app.requestSingleInstanceLock()) {
     void runtime.stop().finally(() => app.exit(0));
   });
 
-  void app.whenReady().then(launch);
+  void app.whenReady().then(() => {
+    registerBridge();
+    Menu.setApplicationMenu(buildMenu({
+      isMac: process.platform === 'darwin',
+      isPackaged: app.isPackaged,
+      onOpen: () => void chooseDocuments(),
+      onSettings: () => showAppPage('/app/settings'),
+      onOpenLogs: () => void shell.openPath(app.getPath('logs')),
+      openExternal: openExternally,
+    }));
+    return launch();
+  });
 }
