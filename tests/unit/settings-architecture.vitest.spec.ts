@@ -80,7 +80,10 @@ describe('settings ownership', () => {
 
     expect(userMenu).toContain("const canSignOut = installProfile === 'server';");
     expect(userMenu.match(/\{canSignOut \? <IconButton/g)).toHaveLength(2);
-    expect(account).toContain("if (runtimeConfig.installProfile === 'desktop') return <AccountSecurityPanel nameOnly />;");
+    const desktopAccount = account.match(/if \(runtimeConfig\.installProfile === 'desktop'\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
+    expect(desktopAccount).toContain('<AccountSecurityPanel nameOnly />');
+    expect(desktopAccount).toContain('<ExportDataTile />');
+    expect(desktopAccount).not.toContain('Delete Account');
     expect(security).toContain('{nameOnly ? null : <>');
     expect(features).toContain("const multiUser = useRuntimeConfig().installProfile === 'server';");
     expect(features).toContain('{multiUser && computePolicy ? (');

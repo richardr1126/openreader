@@ -165,7 +165,7 @@ Everything else stays: Appearance, Storage, Providers, Instance (TTS defaults,
 features, Gutenberg), Compute generation settings, Maintenance/System check,
 Acknowledgements and the tip link.
 
-The Account section becomes a small **Profile** section: display name only.
+The Account section becomes a small **Profile** section: display name and Export My Data. Delete account stays hidden: removing the only owner leaves nothing to sign in as.
 
 ## Desktop-shaped areas
 
@@ -256,7 +256,7 @@ Implemented (web app):
   sections, the per-section `profiles` list and the per-profile layouts. On
   desktop: Users hidden; Instance hides sign-ups, guest sessions and Account
   email; Compute hides per-user limits (max upload size stays, under
-  "Uploads"); Account becomes Profile (display name only); the user menu shows
+  "Uploads"); Account becomes Profile (display name and data export); the user menu shows
   the display name without Sign out. Desktop groups: General (Appearance,
   Voice, Voice sources, Library and storage, Profile), Advanced (Instance,
   Compute, Maintenance), About. Until the Voices section exists, the per-user
