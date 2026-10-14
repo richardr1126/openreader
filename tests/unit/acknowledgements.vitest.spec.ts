@@ -54,7 +54,9 @@ describe('generated acknowledgements', () => {
     expect(names.has('next')).toBe(true);
     expect(names.has('fastify')).toBe(true);
     expect(names.has('pg')).toBe(true);
-    expect(names.has('ffmpeg-static')).toBe(true);
+    // ffmpeg ships as the pinned LGPL binary (a manifest entry), never ffmpeg-static.
+    expect(names.has('ffmpeg-static')).toBe(false);
+    expect(data.components.find((component) => component.name === 'FFmpeg')?.license).toBe('LGPL-3.0-or-later');
     for (const name of ['vitest', 'vite', '@playwright/test', 'typescript']) expect(names.has(name), name).toBe(false);
     expect([...names].filter((name) => name.startsWith('@openreader/'))).toEqual([]);
     // Native builds are folded so the output does not depend on the generating machine.
@@ -63,7 +65,7 @@ describe('generated acknowledgements', () => {
 
   test('filters by name or licence', () => {
     expect(filterAcknowledgements(data.components, 'gpl').map((component) => component.license))
-      .toEqual(expect.arrayContaining(['GPL-3.0-or-later']));
+      .toEqual(expect.arrayContaining(['LGPL-3.0-or-later', 'LGPL-2.0-or-later']));
     expect(filterAcknowledgements(data.components, '  ')).toHaveLength(data.components.length);
   });
 });

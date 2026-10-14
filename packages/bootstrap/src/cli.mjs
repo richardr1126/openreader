@@ -17,7 +17,7 @@ import {
   resolveWeedMiniAdvertiseHost,
   waitForEndpoint,
 } from './embedded-seaweedfs.mjs';
-import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
+import { resolveDevelopmentFfmpeg, resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
 import { evaluateStartupConfig, formatConfigProblems, formatConfigWarnings } from './preflight.mjs';
 import { applyEmbeddedPlaybackSecret, embeddedServiceEnv } from './runtime-secrets.mjs';
 import { detectPreV5Database, formatV4UpgradeNotice } from './v4-upgrade.mjs';
@@ -413,6 +413,10 @@ async function main() {
       );
       applyEmbeddedPlaybackSecret(runtimeEnv);
       runtimeEnv.COMPUTE_WORKER_HOST = withDefault(runtimeEnv.COMPUTE_WORKER_HOST, '127.0.0.1');
+      if (!runtimeEnv.FFMPEG_BIN?.trim()) {
+        const developmentFfmpeg = resolveDevelopmentFfmpeg(workspaceRoot);
+        if (developmentFfmpeg) runtimeEnv.FFMPEG_BIN = developmentFfmpeg;
+      }
       runtimeEnv.COMPUTE_NATS_REPLICAS = withDefault(runtimeEnv.COMPUTE_NATS_REPLICAS, '1');
 
       const natsStoreDir = withDefault(runtimeEnv.EMBEDDED_NATS_STORE_DIR, path.join(workspaceRoot, 'docstore/nats/jetstream'));

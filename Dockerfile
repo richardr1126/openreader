@@ -9,6 +9,11 @@ RUN cp "$(command -v weed)" /tmp/weed && \
 FROM nats:2.11-alpine AS nats-builder
 RUN cp "$(command -v nats-server)" /tmp/nats-server
 
+# Stage 1c: fetch the pinned LGPL ffmpeg, verify its SHA-256, and smoke-test it.
+FROM node:lts-slim AS ffmpeg-fetch
+COPY packaging/ffmpeg /packaging/ffmpeg
+RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
+
 # Stage 2: build the Next.js app
 FROM node:lts-slim AS app-builder
 
@@ -36,7 +41,7 @@ COPY . .
 RUN pnpm exec next telemetry disable
 RUN AUTH_SECRET=build-placeholder-secret-value-32chars!! BASE_URL=http://localhost:3003 pnpm build
 RUN pnpm --config.inject-workspace-packages=true --filter @openreader/bootstrap deploy /opt/openreader/bootstrap
-RUN pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3 ffmpeg-static
+RUN pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3
 # `pnpm build` above also built the worker to plain JavaScript (dist/); the
 # production deploy ships that output without TypeScript tooling.
 RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy --prod /opt/openreader/embedded-compute-worker
@@ -55,7 +60,7 @@ FROM node:lts-slim AS runner
 
 # Add runtime OS dependencies:
 # - libreoffice-writer-nogui: required for headless DOCX → PDF conversion
-# ffmpeg is provided by ffmpeg-static from node_modules.
+# ffmpeg is the pinned LGPL build from the ffmpeg-fetch stage.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates libreoffice-writer-nogui && \
     rm -rf /var/lib/apt/lists/*
@@ -81,6 +86,9 @@ COPY --from=app-builder /app/packages/compute-worker/src/inference/pdf/assets/LI
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
 RUN chmod +x /usr/local/bin/weed
+# LGPL ffmpeg with its LICENSE.txt and SOURCE.txt (provenance and corresponding source).
+COPY --from=ffmpeg-fetch /opt/ffmpeg /opt/ffmpeg
+ENV FFMPEG_BIN=/opt/ffmpeg/ffmpeg
 # Copy nats-server binary for embedded local JetStream.
 COPY --from=nats-builder /tmp/nats-server /usr/local/bin/nats-server
 RUN chmod +x /usr/local/bin/nats-server

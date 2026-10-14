@@ -16,8 +16,7 @@
 // packages (`-darwin-arm64`, `-linux-x64`, …) are folded into one
 // `-<platform>` entry so the output does not depend on the machine it ran on.
 //
-// Re-run after dependencies change (`pnpm install` first, with build scripts
-// enabled so ffmpeg-static has fetched its binary and notices):
+// Re-run after dependencies change (`pnpm install` first):
 //   pnpm acknowledgements   (node scripts/collect-acknowledgements.mjs)
 // `--check` exits non-zero when the committed output is stale.
 import { execFileSync } from 'node:child_process';

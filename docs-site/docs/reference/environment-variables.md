@@ -114,7 +114,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `COMPUTE_CREDENTIAL_BROKER_TOKEN` | App + worker | generated for embedded startup | Authenticates worker-to-app credential resolution |
 | `COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS` | Standalone worker | `5000` | Credential-broker request timeout |
 | `TTS_PLAYBACK_TOKEN_SECRET` | TTS playback | derived from `AUTH_SECRET` with an embedded worker | Optional embedded; required with an external worker |
-| `FFMPEG_BIN` | Audio runtime | auto-detected (`ffmpeg-static`) | Override ffmpeg binary path |
+| `FFMPEG_BIN` | Audio runtime | set in published images; `ffmpeg` on `PATH` otherwise | ffmpeg executable used by the worker |
 | `DISABLE_AUTH_RATE_LIMIT` | Auth request throttling | `false` | Set `true` to disable Better Auth request rate limiting |
 | `RUN_DRIZZLE_MIGRATIONS` | DB migrations | `true` | Set `false` to skip startup Drizzle migrations |
 | `RUN_V4_DECOMMISSION` | Storage decommission | `true` | Set `false` to skip startup v4 legacy object-prefix purge |
@@ -593,9 +593,11 @@ Secret that signs short-lived browser-facing TTS playback URLs and keys the reus
 
 ### FFMPEG_BIN
 
-Override ffmpeg binary path used for audio processing.
+The ffmpeg executable the compute worker uses for audio normalization, probing, Whisper decoding and audiobook export.
 
-- Used by TTS audio normalization/probing and compute worker Whisper audio decode.
+- Published Docker images set it to `/opt/ffmpeg/ffmpeg`, a pinned LGPL build (see `packaging/ffmpeg` in the repository).
+- A source checkout started with `pnpm dev` or `pnpm start` sets it to the `ffmpeg-static` development dependency for the embedded worker.
+- When unset, the worker runs `ffmpeg` from `PATH`, so a standalone worker run from source needs ffmpeg installed or this variable set.
 
 ## Testing and CI
 

@@ -4,8 +4,8 @@
 // - Worker sources and the TypeScript workspace packages (@openreader/*) are
 //   bundled; every npm package stays external and is installed normally, so
 //   native addons, runtime-resolved binaries, and packages that load their own
-//   files by path (onnxruntime-node, @napi-rs/canvas, ffmpeg-static,
-//   pdfjs-dist, pino transports) behave exactly as they do from source.
+//   files by path (onnxruntime-node, @napi-rs/canvas, pdfjs-dist, pino
+//   transports) behave exactly as they do from source.
 // - Every `src/**/assets/` directory is copied to the same relative path under
 //   dist/. Modules locate them through src/worker-paths.ts, which resolves to
 //   src/ from source and to dist/ once bundled.

@@ -7,7 +7,7 @@ import * as ort from 'onnxruntime-node';
 import { Tokenizer } from '@huggingface/tokenizers';
 import JSZip from 'jszip';
 import type { TTSAudioBuffer, TTSSentenceAlignment } from '../../api/types';
-import { getFFmpegPath } from '../../infrastructure/platform';
+import { getFFmpegPath } from '@openreader/tts/ffmpeg-bin';
 import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import { resolveWorkerPath } from '../../worker-paths';
 import { getComputeTimeoutConfig } from '../../infrastructure/config';

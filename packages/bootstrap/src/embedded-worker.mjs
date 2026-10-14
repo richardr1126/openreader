@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -33,4 +34,16 @@ export function resolveEmbeddedWorkerLaunch({ fromSource = false } = {}) {
       ? 'Keep packages/compute-worker available locally.'
       : 'Run `pnpm build` (or `pnpm compute:build`) first, or include embedded-compute-worker/dist in the runtime image.'),
   );
+}
+
+// Distributed builds set FFMPEG_BIN to the pinned LGPL ffmpeg (packaging/ffmpeg).
+// A source checkout has the ffmpeg-static dev dependency instead; it is never
+// shipped. Returns its path, or null when it is not installed.
+export function resolveDevelopmentFfmpeg(workspaceRoot) {
+  try {
+    const binary = createRequire(path.join(workspaceRoot, 'package.json'))('ffmpeg-static');
+    return typeof binary === 'string' && fs.existsSync(binary) ? binary : null;
+  } catch {
+    return null;
+  }
 }

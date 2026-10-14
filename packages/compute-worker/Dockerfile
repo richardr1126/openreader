@@ -1,3 +1,8 @@
+# Fetch the pinned LGPL ffmpeg, verify its SHA-256, and smoke-test it.
+FROM node:lts-slim AS ffmpeg-fetch
+COPY packaging/ffmpeg /packaging/ffmpeg
+RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
+
 FROM node:lts AS deploy-stage
 
 RUN npm install -g pnpm@10.33.4
@@ -28,6 +33,10 @@ WORKDIR /workspace
 
 COPY --from=deploy-stage /opt/compute-worker ./
 COPY public/web-app-manifest-192x192.png ./public/web-app-manifest-192x192.png
+# LGPL ffmpeg with its LICENSE.txt and SOURCE.txt (provenance and corresponding source).
+COPY --from=ffmpeg-fetch /opt/ffmpeg /opt/ffmpeg
+
+ENV FFMPEG_BIN=/opt/ffmpeg/ffmpeg
 
 ENV COMPUTE_WORKER_HOST=0.0.0.0
 ENV PORT=8081

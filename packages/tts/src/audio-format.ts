@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { getFFmpegPath } from './ffmpeg-bin';
 import { ttsLogger } from './logger';
 
 export type SniffedAudioFormat = 'mp3' | 'wav' | 'ogg' | 'flac' | 'aac' | 'unknown';
@@ -186,67 +187,41 @@ function spawnFfmpegToBuffer(args: string[], signal?: AbortSignal): Promise<Buff
       return;
     }
 
-    let ffmpeg: ReturnType<typeof spawn> | null = null;
     let finished = false;
-
-    // Register abort handling before the async import so a cancel fired during the
-    // lazy module load is honored and we never spawn ffmpeg after an abort.
-    const onAbort = () => {
+    const child = spawn(getFFmpegPath(), args);
+    const stdoutChunks: Buffer[] = [];
+    let stderr = '';
+    const settle = (error: Error | null) => {
       if (finished) return;
       finished = true;
+      signal?.removeEventListener('abort', onAbort);
+      if (error) reject(error);
+      else resolve(Buffer.concat(stdoutChunks));
+    };
+    const onAbort = () => {
       try {
-        ffmpeg?.kill('SIGKILL');
+        child.kill('SIGKILL');
       } catch {}
-      reject(new Error('ABORTED'));
+      settle(new Error('ABORTED'));
     };
     signal?.addEventListener('abort', onAbort, { once: true });
 
-    // Resolve lazily so ffmpeg-static is only loaded in server runtimes that need it.
-    import('./ffmpeg-bin')
-      .then(({ getFFmpegPath }) => {
-        if (finished) return; // aborted during the import
-        const child = spawn(getFFmpegPath(), args);
-        ffmpeg = child;
-        const stdoutChunks: Buffer[] = [];
-        let stderr = '';
-
-        child.stdout.on('data', (chunk: Buffer) => {
-          stdoutChunks.push(chunk);
-        });
-        child.stderr.on('data', (chunk) => {
-          stderr += String(chunk);
-        });
-
-        child.on('close', (code) => {
-          if (finished) return;
-          finished = true;
-          signal?.removeEventListener('abort', onAbort);
-          if (code === 0) {
-            resolve(Buffer.concat(stdoutChunks));
-          } else {
-            reject(new Error(`ffmpeg transcode exited with code ${code}: ${stderr.slice(-500)}`));
-          }
-        });
-
-        child.on('error', (err) => {
-          if (finished) return;
-          finished = true;
-          signal?.removeEventListener('abort', onAbort);
-          reject(err);
-        });
-      })
-      .catch((err) => {
-        if (finished) return;
-        finished = true;
-        signal?.removeEventListener('abort', onAbort);
-        reject(err);
-      });
+    child.stdout.on('data', (chunk: Buffer) => {
+      stdoutChunks.push(chunk);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on('close', (code) => {
+      settle(code === 0 ? null : new Error(`ffmpeg transcode exited with code ${code}: ${stderr.slice(-500)}`));
+    });
+    child.on('error', (err) => settle(err));
   });
 }
 
 /**
  * Transcode an arbitrary audio buffer to a {@link STREAM_AUDIO_PROFILE} mp3 using
- * the bundled ffmpeg. The input is written to a temp file (ffmpeg needs seekable
+ * ffmpeg. The input is written to a temp file (ffmpeg needs seekable
  * input for some containers) and the mp3 is read back from a temp file.
  *
  * Emits CBR (`-b:a`), a fixed sample rate (`-ar`) and mono (`-ac`) so every segment
