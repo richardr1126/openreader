@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('openreaderDesktop', {
       ipcRenderer.send('open-files:unlisten');
     };
   },
+  /** The top bar's colours as hex, for the window controls the shell draws. */
+  setTitleBarColors: (colors) => ipcRenderer.send('title-bar-colors', colors),
   revealDataFolder: () => ipcRenderer.invoke('reveal-data-folder'),
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
 });

@@ -233,6 +233,36 @@ html.custom {
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
+/* Desktop app: the top bar is the window's title bar. The shell's Window
+   Controls Overlay defines the titlebar-area variables and draws the native
+   controls inside the bar; the bar keeps clear of them and drags the window.
+   In a browser the variables are undefined, the fallbacks apply, and none of
+   this changes anything. */
+.titlebar {
+  padding-left: env(titlebar-area-x, 0px);
+  padding-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.titlebar :is(a, button, input, select, textarea, label, summary, [role='button'], [role='combobox'], [role='menu'], [tabindex]) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* Screens without a top bar (loading and error states) keep a strip to drag
+   the window by. It comes first in the document, so the top bars' controls
+   still take their clicks. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: env(titlebar-area-height, 0px);
+  pointer-events: none;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
 html.light,
 html.lavender,
 html.rose,

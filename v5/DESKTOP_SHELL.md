@@ -95,12 +95,24 @@ import, so the smoke test runs the shell's own startup and sign-in code.
   `mailto` only); new windows on the app origin are allowed.
 - The renderer runs with context isolation and the sandbox and no Node.js
   integration.
+- There is no system title bar. The window uses `titleBarStyle: 'hidden'` with
+  the Window Controls Overlay, so the app's own top bar (`AppHeader` and
+  `Toolbar`, both marked `.titlebar` in `globals.css`) is the title bar. The
+  traffic lights (macOS) or the minimize/maximize/close buttons (Windows and
+  Linux) sit inside it. `.titlebar` pads itself with `env(titlebar-area-*)` to
+  clear the controls and is a drag region whose controls opt out; pages without
+  a top bar keep a drag strip from `body::before`. Outside the desktop shell the
+  env values are unset and the rule changes nothing.
+- On Windows and Linux the shell draws the controls, so the page reports the
+  theme's `--base` and `--foreground` through `setTitleBarColors` whenever the
+  theme changes (`DesktopTitleBarColors`); macOS draws its own.
 
 ## Bridge, menu and opened documents
 
-`preload.cjs` exposes `window.openreaderDesktop` with three fixed actions:
-`onOpenFiles(callback)`, `revealDataFolder()` and `openLogsFolder()`. The page
-never passes a path, and the main process ignores bridge calls from any frame
+`preload.cjs` exposes `window.openreaderDesktop` with four fixed actions:
+`onOpenFiles(callback)`, `setTitleBarColors(colors)`, `revealDataFolder()` and
+`openLogsFolder()`. The page never passes a path (the shell accepts only two hex
+colours for the title bar), and the main process ignores bridge calls from any frame
 outside the app origin. The UI treats the bridge as a capability
 (`useDesktopBridge()` in `src/hooks`). Settings → Library and storage offers
 "Show data folder" and Maintenance offers "Open logs folder" only when the bridge

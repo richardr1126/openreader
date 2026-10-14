@@ -22,7 +22,7 @@ export function Toolbar({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
-    <div className={cn('sticky top-0 z-40 w-full border-b border-line-soft bg-surface', className)} {...props}>
+    <div className={cn('titlebar sticky top-0 z-40 w-full border-b border-line-soft bg-surface', className)} {...props}>
       <div className="px-2 sm:px-3 py-1 min-h-10 flex items-center gap-1.5 sm:gap-2">{children}</div>
     </div>
   );

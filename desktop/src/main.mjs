@@ -6,7 +6,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron';
 import { buildMenu } from './menu.mjs';
 import { DOCUMENT_EXTENSIONS, DocumentInbox, documentPathsInArgv } from './open-documents.mjs';
 import { exchangeLaunchToken, startRuntime } from './runtime.mjs';
@@ -72,6 +72,13 @@ function registerBridge() {
     if (fromApp(event)) inbox.listen(event.sender);
   });
   ipcMain.on('open-files:unlisten', (event) => inbox.unlisten(event.sender));
+  ipcMain.on('title-bar-colors', (event, colors) => {
+    if (!fromApp(event) || process.platform === 'darwin') return;
+    const window = BrowserWindow.fromWebContents(event.sender);
+    const { background, foreground } = colors ?? {};
+    if (!window || !HEX_COLOR.test(background) || !HEX_COLOR.test(foreground)) return;
+    window.setTitleBarOverlay(titleBarOverlay(background, foreground));
+  });
   ipcMain.handle('reveal-data-folder', async (event) => {
     if (fromApp(event)) await shell.openPath(app.getPath('userData'));
   });
@@ -148,7 +155,23 @@ function guardNavigation(contents) {
   });
 }
 
+// The app's top bar is the window's title bar on every platform: the native
+// controls (traffic lights, or minimise/maximise/close) sit inside it through
+// the Window Controls Overlay, and the page reserves their space with the
+// titlebar-area CSS environment variables (src/app/globals.css). The height
+// matches the app's 40px top bars.
+const TITLE_BAR_HEIGHT = 40;
+const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/** Windows and Linux draw the controls themselves, in the page's colours. */
+function titleBarOverlay(color, symbolColor) {
+  if (process.platform === 'darwin') return true;
+  return { color, symbolColor, height: TITLE_BAR_HEIGHT };
+}
+
 function createWindow() {
+  // Until the page reports its theme, match loading.html.
+  const dark = nativeTheme.shouldUseDarkColors;
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -156,6 +179,11 @@ function createWindow() {
     minHeight: 480,
     show: false,
     title: 'OpenReader',
+    backgroundColor: dark ? '#141413' : '#f8f8f6',
+    titleBarStyle: 'hidden',
+    titleBarOverlay: titleBarOverlay(dark ? '#141413' : '#f8f8f6', dark ? '#ececea' : '#1c1c1a'),
+    // Centres the traffic lights in the top bar.
+    trafficLightPosition: { x: 14, y: 13 },
     webPreferences: {
       contextIsolation: true,
       sandbox: true,

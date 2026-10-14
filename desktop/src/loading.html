@@ -12,6 +12,8 @@
       display: grid; place-items: center; background: var(--bg); color: var(--fg);
       font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
     }
+    /* The window has no system title bar: keep a strip to drag it by. */
+    .drag { position: fixed; inset: 0 0 auto 0; height: 40px; -webkit-app-region: drag; }
     .box { text-align: center; }
     h1 { font-size: 20px; font-weight: 600; margin: 0 0 6px; }
     p { margin: 0; color: var(--muted); }
@@ -22,6 +24,7 @@
   </style>
 </head>
 <body>
+  <div class="drag"></div>
   <div class="box">
     <h1>OpenReader</h1>
     <p>Starting…</p>

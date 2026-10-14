@@ -11,6 +11,7 @@ export interface DesktopOpenedFile {
 
 export interface OpenReaderDesktopBridge {
   onOpenFiles?: (callback: (files: DesktopOpenedFile[]) => void) => () => void;
+  setTitleBarColors?: (colors: { background: string; foreground: string }) => void;
   revealDataFolder?: () => Promise<void>;
   openLogsFolder?: () => Promise<void>;
 }
