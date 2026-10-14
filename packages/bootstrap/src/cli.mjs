@@ -19,7 +19,7 @@ import {
 } from './embedded-seaweedfs.mjs';
 import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
 import { evaluateStartupConfig, formatConfigProblems, formatConfigWarnings } from './preflight.mjs';
-import { applyEmbeddedPlaybackSecret } from './runtime-secrets.mjs';
+import { applyEmbeddedPlaybackSecret, embeddedServiceEnv } from './runtime-secrets.mjs';
 import { detectPreV5Database, formatV4UpgradeNotice } from './v4-upgrade.mjs';
 
 function applyStorageTransportEnv(env, options = {}) {
@@ -342,7 +342,7 @@ async function main() {
         weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
 
         weedProc = spawn('weed', weedArgs, {
-          env: runtimeEnv,
+          env: embeddedServiceEnv(runtimeEnv),
           stdio: ['ignore', 'pipe', 'pipe'],
         });
         stopWeedStdoutForward = forwardChildStream(weedProc.stdout, process.stdout);
@@ -429,7 +429,7 @@ async function main() {
           '-m', String(embeddedNatsMonitorPort),
         ],
         {
-          env: runtimeEnv,
+          env: embeddedServiceEnv(runtimeEnv),
           stdio: ['ignore', 'pipe', 'pipe'],
         },
       );
@@ -453,14 +453,13 @@ async function main() {
       console.log(`Embedded nats-server is ready at nats://127.0.0.1:${embeddedNatsPort}`);
 
       console.log(`Starting embedded compute-worker on 127.0.0.1:${embeddedWorkerPort}...`);
-      const workerEnv = {
-        ...runtimeEnv,
+      const workerEnv = embeddedServiceEnv(runtimeEnv, {
         PORT: String(embeddedWorkerPort),
         COMPUTE_CREDENTIAL_BROKER_URL: withDefault(
           runtimeEnv.COMPUTE_CREDENTIAL_BROKER_URL,
           embeddedCredentialBrokerUrl(),
         ),
-      };
+      });
       const workerLaunch = resolveEmbeddedWorkerLaunch({ fromSource: runWorkerFromSource });
       workerProc = spawn(
         workerLaunch.cmd,

@@ -19,6 +19,21 @@ function storedMarker(userId: string | null): unknown {
   return process.env.POSTGRES_URL ? value : JSON.stringify(value);
 }
 
+/**
+ * Record that first-administrator setup has happened, so the password bootstrap
+ * stays inert. Never overwrites an existing marker. `conn` is a transaction
+ * connection from `runInDbTransaction`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function markInitialAdminBootstrapped(conn: any, userId: string): Promise<void> {
+  await conn.insert(adminSettings).values({
+    key: BOOTSTRAP_KEY,
+    valueJson: storedMarker(userId) as never,
+    source: 'admin',
+    updatedAt: Date.now(),
+  }).onConflictDoNothing();
+}
+
 async function configuredPassword(): Promise<string | null> {
   const inline = process.env.BOOTSTRAP_ADMIN_PASSWORD;
   const path = process.env.BOOTSTRAP_ADMIN_PASSWORD_FILE?.trim();

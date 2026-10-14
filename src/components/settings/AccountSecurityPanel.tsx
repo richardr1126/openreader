@@ -38,7 +38,11 @@ function SettingRow({ icon: Icon, title, value, action, open, children }: {
   );
 }
 
-export function AccountSecurityPanel() {
+/**
+ * `nameOnly` is the desktop Profile: the owner has no password and no
+ * deliverable email, so only the display name is shown.
+ */
+export function AccountSecurityPanel({ nameOnly = false }: { nameOnly?: boolean } = {}) {
   const { data: session } = useAuthSession();
   const { baseUrl } = useAuthConfig();
   const { accountEmailsEnabled } = useRuntimeConfig();
@@ -173,7 +177,7 @@ export function AccountSecurityPanel() {
       ) : null}
       {error ? <p role="alert" className="rounded-md border border-danger bg-danger-wash px-3 py-2 text-xs text-danger">{error}</p> : null}
 
-      <section className="divide-y divide-line-soft rounded-lg border border-line bg-background" aria-label="Account and security">
+      <section className="divide-y divide-line-soft rounded-lg border border-line bg-background" aria-label={nameOnly ? 'Profile' : 'Account and security'}>
         <SettingRow
           icon={UserIcon}
           title="Display name"
@@ -191,6 +195,7 @@ export function AccountSecurityPanel() {
           </form>
         </SettingRow>
 
+        {nameOnly ? null : <>
         <SettingRow
           icon={MailIcon}
           title="Email address"
@@ -251,6 +256,7 @@ export function AccountSecurityPanel() {
             </div>
           </form>
         </SettingRow>
+        </>}
       </section>
     </div>
   );

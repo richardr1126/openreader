@@ -67,8 +67,9 @@ of this document as each phase lands.
 
 ## Authentication Boundaries
 
-V5 has four explicit request boundaries. A credential valid at one boundary
-must not be reused by a browser at another boundary.
+V5 has five explicit request boundaries. A credential valid at one boundary
+must not be reused by a browser at another boundary. The fifth exists only in
+the desktop app (`v5/DESKTOP_SINGLE_OWNER.md`).
 
 | Boundary | Authentication | Authorization purpose |
 | --- | --- | --- |
@@ -76,10 +77,32 @@ must not be reused by a browser at another boundary.
 | Next.js to compute worker | `COMPUTE_WORKER_TOKEN` bearer token | Create, inspect, update, and clean up worker operations |
 | Browser to worker audio | Short-lived `TTS_PLAYBACK_TOKEN_SECRET` HMAC token | Read one playback session scoped to one user and document |
 | Compute worker to Next.js broker | `COMPUTE_CREDENTIAL_BROKER_TOKEN` bearer token | Resolve one enabled TTS provider for execution |
+| Desktop shell to Next.js | Per-launch `DESKTOP_LAUNCH_TOKEN` bearer token | Obtain one boundary-1 session for the single desktop owner |
 
 The compute-worker bearer token and credential-broker bearer token are
 deliberately separate. The direction, receiving service, and permitted actions
 are different. Neither token is ever returned to the browser.
+
+### Desktop shell to Next.js
+
+Only the desktop app sets `DESKTOP_LAUNCH_TOKEN`: the shell generates 32 random
+bytes per launch and keeps them in memory and in the app process environment.
+When it is unset, the Better Auth plugin that serves
+`POST /api/auth/desktop/session` is not registered and the path returns 404.
+
+The exchange compares the bearer token in constant time, refuses any request
+carrying `Origin` or `Sec-Fetch-Site` (the shell calls it from its main process;
+a browser page always sends one of them), and answers every failure with a bare
+401. Rejections are logged with a reason code, never the token. The first
+successful exchange creates the owner in one transaction (no credential
+account, managed admin grant, `desktopOwner` record, `initialAdminBootstrapped`
+marker, sign-ups closed, guest sessions off). Every exchange then creates a
+Better Auth session for that recorded owner only, through Better Auth's own
+session and cookie code; it never creates a second user or adopts an existing
+account. After the exchange the desktop app runs on boundaries 1–4 unchanged.
+
+The token is never forwarded to the embedded worker, NATS or SeaweedFS, and
+never appears in a browser response, URL, log or the database.
 
 ### Browser to Next.js
 
@@ -536,7 +559,7 @@ Status: complete (2026-09-02).
 
 Update active documentation to explain:
 
-- the four authentication boundaries;
+- the five authentication boundaries;
 - the difference between control, broker, and playback tokens;
 - why `AUTH_SECRET` remains app-only;
 - required HTTPS for a remote broker;
@@ -852,3 +875,18 @@ True v4.4.0-to-v5 full-Compose upgrade checkpoint on 2026-09-02:
   uses the official Resend SDK, fixed escaped HTML/plain-text templates, and
   the delivery UUID as the Resend idempotency key. Successful operation state
   says `accepted`, not delivered.
+
+## Desktop owner session — 2026-10-14
+
+- Added the fifth boundary from `v5/DESKTOP_SINGLE_OWNER.md`:
+  `src/lib/server/auth/desktop-owner.ts` (Better Auth plugin and owner
+  creation), registered by `src/lib/server/auth/auth.ts` only when
+  `src/lib/server/auth/desktop-launch-token.ts` reports a configured token.
+- The owner id lives in the `desktopOwner` `admin_settings` row
+  (`{ version: 1, userId }`); no schema change or migration.
+- `packages/bootstrap` builds every embedded child environment through
+  `embeddedServiceEnv`, which drops the token; preflight refuses a token shorter
+  than 32 characters. Account email delivery refuses `.localhost` recipients, so
+  nothing is ever queued for the owner's placeholder address.
+- Coverage: `tests/unit/desktop-owner-session.vitest.spec.ts` drives the real
+  Better Auth handler against a migrated SQLite database.

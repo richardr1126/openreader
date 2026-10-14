@@ -25,3 +25,14 @@ export function applyEmbeddedPlaybackSecret(env) {
   env.TTS_PLAYBACK_TOKEN_SECRET = deriveEmbeddedPlaybackSecret(authSecret);
   return true;
 }
+
+// Secrets that belong to the Next.js app alone. The desktop launch token is the
+// shell-to-app boundary; no embedded service (worker, NATS) ever receives it.
+const APP_ONLY_SECRETS = ['DESKTOP_LAUNCH_TOKEN'];
+
+/** Environment for an embedded child service, without app-only secrets. */
+export function embeddedServiceEnv(env, overrides = {}) {
+  const serviceEnv = { ...env, ...overrides };
+  for (const name of APP_ONLY_SECRETS) delete serviceEnv[name];
+  return serviceEnv;
+}

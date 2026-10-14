@@ -63,6 +63,7 @@ All OpenReader configuration variables are server-only; none are exposed through
 | `BOOTSTRAP_ADMIN_EMAIL` | First-admin seed (app only) | unset | Initial credential account email on a fresh instance |
 | `BOOTSTRAP_ADMIN_PASSWORD` | First-admin seed (app only) | unset | Initial password (16+ characters); remove after rotation |
 | `BOOTSTRAP_ADMIN_PASSWORD_FILE` | First-admin seed (app only) | unset | Read initial password from a mounted file instead of inline env |
+| `DESKTOP_LAUNCH_TOKEN` | Desktop shell only (internal) | unset | Never set it yourself; the desktop app generates it on every launch |
 | `CRON_SECRET` | Scheduled tasks | unset | Required for Vercel cron invocations |
 | `RICHARDRDEV_PRODUCTION` | Official hosted instance | `false`; enabled only by exact `true` | Enables the official-instance label, privacy notice, and US region gate |
 | `POSTGRES_URL` | Database | unset (SQLite mode) | Set to switch metadata/auth DB to Postgres |
@@ -251,6 +252,19 @@ required; removing the now-inert seed values later is optional secret hygiene.
 The seed is consumed once in the database; restarting or deleting the account does not
 recreate it. An existing admin prevents new seeding. `ADMIN_EMAILS` is no
 longer used for authorization.
+
+### DESKTOP_LAUNCH_TOKEN
+
+Internal to the desktop app. Do not set it on a server, Docker or Vercel
+deployment.
+
+The desktop shell generates 32 random bytes on every launch and passes them to
+the app process. The shell exchanges the token once at
+`POST /api/auth/desktop/session` for an ordinary session for the install's one
+owner account; the owner has no password. When the variable is unset, that
+route does not exist. Setting it also switches the UI to the desktop profile.
+The embedded worker, NATS and SeaweedFS never receive it, and startup refuses a
+value shorter than 32 characters.
 
 ### CRON_SECRET
 

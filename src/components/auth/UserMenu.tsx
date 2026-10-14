@@ -19,8 +19,11 @@ export function UserMenu({
   variant?: UserMenuVariant;
 }) {
   const { baseUrl } = useAuthConfig();
-  const { signupPolicy } = useRuntimeConfig();
+  const { signupPolicy, installProfile } = useRuntimeConfig();
   const canSignUp = signupPolicy !== 'closed';
+  // The desktop shell would sign straight back in, and the owner's address is
+  // a placeholder, so desktop shows the display name and no sign-out control.
+  const canSignOut = installProfile === 'server';
   const { data: session, isPending } = useAuthSession();
   const router = useRouter();
 
@@ -68,6 +71,8 @@ export function UserMenu({
     );
   }
 
+  const accountLabel = (canSignOut ? session.user.email : session.user.name) || 'Account';
+
   if (variant === 'sidebar') {
     return (
       <div className={`flex min-w-0 overflow-hidden rounded-md border border-line bg-surface ${className}`}>
@@ -78,9 +83,9 @@ export function UserMenu({
           title="Account settings"
           aria-label="Open account settings"
           icon={<UserIcon className="h-3.5 w-3.5" />}
-          label={session.user.email || 'Account'}
+          label={accountLabel}
         />
-        <IconButton
+        {canSignOut ? <IconButton
           onClick={handleSignOut}
           title="Sign out"
           aria-label="Sign out"
@@ -92,7 +97,7 @@ export function UserMenu({
             <polyline points="16 17 21 12 16 7"></polyline>
             <line x1="21" y1="12" x2="9" y2="12"></line>
           </svg>
-        </IconButton>
+        </IconButton> : null}
       </div>
     );
   }
@@ -107,11 +112,11 @@ export function UserMenu({
       >
         <UserIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-colors duration-base group-hover:text-accent" />
         <span className="hidden max-w-[150px] truncate sm:block">
-          {session.user.email || 'Account'}
+          {accountLabel}
         </span>
       </Link>
 
-      <IconButton
+      {canSignOut ? <IconButton
         onClick={handleSignOut}
         title="Sign out"
         aria-label="Sign out"
@@ -123,7 +128,7 @@ export function UserMenu({
           <polyline points="16 17 21 12 16 7"></polyline>
           <line x1="21" y1="12" x2="9" y2="12"></line>
         </svg>
-      </IconButton>
+      </IconButton> : null}
     </div>
   );
 }

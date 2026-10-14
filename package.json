@@ -9,6 +9,7 @@
     "build": "pnpm compute:build && next build",
     "build:bundle-guard": "node scripts/check-next-server-bundle.mjs",
     "check:compute-boundary": "node scripts/check-compute-boundary.mjs",
+    "check:install-profile": "node scripts/check-install-profile.mjs",
     "start": "pnpm --filter @openreader/bootstrap start pnpm start:raw",
     "start:raw": "next start -p 3003",
     "lint": "next lint",

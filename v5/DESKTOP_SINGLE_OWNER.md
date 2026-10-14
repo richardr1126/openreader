@@ -1,6 +1,8 @@
 # V5 Desktop Single-Owner Profile
 
-Status: proposed, 2026-10-14. Not implemented.
+Status: web-app side implemented 2026-10-14 (see "Implementation status" at the
+end). The Electron shell, preload bridge, file associations and the Local
+voices card are not implemented.
 
 ## Decision
 
@@ -163,7 +165,7 @@ Everything else stays: Appearance, Storage, Providers, Instance (TTS defaults,
 features, Gutenberg), Compute generation settings, Maintenance/System check,
 Acknowledgements and the tip link.
 
-The Account section becomes a small **Profile** section: display name only.
+The Account section becomes a small **Profile** section: display name and Export My Data. Delete account stays hidden: removing the only owner leaves nothing to sign in as.
 
 ## Desktop-shaped areas
 
@@ -218,9 +220,51 @@ measured values.
 
 ## Open questions
 
-- Owner email: Better Auth users need one. Proposed `owner@openreader.localhost`,
-  which is never deliverable; confirm no path tries to send to it once account
-  email is hidden.
+- Owner email: resolved. The owner is `owner@openreader.localhost`. Besides the
+  hidden email UI, `enqueueAccountEmail` refuses every `.localhost` recipient,
+  so verification, reset and admin test mail can never be queued for it.
 - Whether the server profile should also adopt the Voices layout later.
 - Electron packaging (formats, update channel, process supervision) belongs to a
   separate shell document.
+
+## Implementation status
+
+Implemented (web app):
+
+- **Exchange route.** `src/lib/server/auth/desktop-owner.ts` is the Better Auth
+  plugin (`POST /api/auth/desktop/session`) and owner creation;
+  `src/lib/server/auth/auth.ts` registers it only when
+  `src/lib/server/auth/desktop-launch-token.ts` reports a token. Besides
+  `Origin`, a `Sec-Fetch-Site` header is also refused: a browser always sends at
+  least one of them, the shell's main process sends neither.
+- **Owner record.** The `initialAdminBootstrapped` marker keeps its existing
+  `{ version, userId }` shape and means "first admin set up". The owner id is a
+  separate `desktopOwner` row in `admin_settings` (`{ version: 1, userId }`), so
+  a marker left by an upgrade or the password bootstrap is never reinterpreted
+  as the owner. No schema change. The grant is `isAdmin: true,
+  adminSource: 'managed'`, the same values an admin grant in Users writes. If the
+  owner address is held by an account the exchange did not create, the exchange
+  fails (500) rather than adopting it.
+- **Bootstrap.** `embeddedServiceEnv` in `packages/bootstrap/src/runtime-secrets.mjs`
+  drops the token from the worker, NATS and SeaweedFS environments; preflight
+  refuses a value shorter than 32 characters.
+- **Profile signal.** `resolveInstallProfile()` in
+  `src/lib/server/runtime-config.ts`; `installProfile` on `RuntimeConfig`;
+  `pnpm check:install-profile` (`scripts/check-install-profile.mjs`), run in the
+  Vitest workflow next to `check:compute-boundary`.
+- **Presentation.** `src/components/settings/settings-sections.ts` owns the
+  sections, the per-section `profiles` list and the per-profile layouts. On
+  desktop: Users hidden; Instance hides sign-ups, guest sessions and Account
+  email; Compute hides per-user limits (max upload size stays, under
+  "Uploads"); Account becomes Profile (display name and data export); the user menu shows
+  the display name without Sign out. Desktop groups: General (Appearance,
+  Voice, Voice sources, Library and storage, Profile), Advanced (Instance,
+  Compute, Maintenance), About. Until the Voices section exists, the per-user
+  provider tab (`api`, "Voice") and the shared providers (`providers`,
+  "Voice sources") both sit in General.
+- **Landing page.** The window opens `/app`; middleware already redirects a
+  signed-in visitor from `/` to `/app`, and the only in-app link to the landing
+  page sits in the signed-out Account branch, which desktop never renders.
+
+Not implemented: the shell, the preload bridge actions, file associations,
+the Voices section and the Local voices card.

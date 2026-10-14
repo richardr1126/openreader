@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import type { InstallProfile } from '@/lib/shared/install-profile';
 
 /**
  * Site-wide runtime config resolved at SSR time and injected via
@@ -28,6 +29,8 @@ export interface RuntimeConfig {
   computeAvailable: boolean;
   accountEmailsEnabled: boolean;
   gutenbergCatalogEnabled: boolean;
+  /** Derived deployment fact (not an admin setting); presentation only. */
+  installProfile: InstallProfile;
 }
 
 const RUNTIME_DEFAULTS: RuntimeConfig = {
@@ -47,6 +50,7 @@ const RUNTIME_DEFAULTS: RuntimeConfig = {
   computeAvailable: true,
   accountEmailsEnabled: false,
   gutenbergCatalogEnabled: false,
+  installProfile: 'server',
 };
 
 declare global {

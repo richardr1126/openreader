@@ -112,6 +112,15 @@ export function evaluateStartupConfig(env, { hasNatsBinary = true } = {}) {
     });
   }
 
+  // Set only by the desktop shell, which generates 32 random bytes per launch.
+  const desktopToken = env.DESKTOP_LAUNCH_TOKEN?.trim();
+  if (desktopToken && desktopToken.length < 32) {
+    errors.push({
+      message: 'DESKTOP_LAUNCH_TOKEN is too short to protect the desktop owner session.',
+      fix: 'Leave it unset outside the desktop app; the desktop shell generates a 32-byte value on every launch.',
+    });
+  }
+
   if (!appIsLocal) {
     for (const [name, example, consequence] of KNOWN_EXAMPLE_VALUES) {
       if (env[name]?.trim() === example) {
