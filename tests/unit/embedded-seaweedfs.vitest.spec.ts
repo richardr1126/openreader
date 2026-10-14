@@ -1,9 +1,14 @@
 import { CreateBucketCommand, HeadBucketCommand, type S3Client } from '@aws-sdk/client-s3';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
 import {
   ensureS3Bucket,
   resolveWeedMiniAdvertiseHost,
+  resolveWeedMiniInternalPorts,
+  WEED_MINI_DISABLED_COMPONENTS,
 } from '../../packages/bootstrap/src/embedded-seaweedfs.mjs';
 
 const embeddedS3Env = {
@@ -66,5 +71,54 @@ describe('embedded SeaweedFS addressing', () => {
 
     await expect(ensureS3Bucket(embeddedS3Env, client)).rejects.toBe(storageFailure);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('embedded SeaweedFS internal ports', () => {
+  function dataDir(options?: string) {
+    const dir = mkdtempSync(join(tmpdir(), 'weed-ports-'));
+    if (options !== undefined) writeFileSync(join(dir, 'mini.options'), options);
+    return dir;
+  }
+
+  test('uses mini defaults on a fresh data directory when they are free', async () => {
+    const ports = await resolveWeedMiniInternalPorts(dataDir(), '127.0.0.1', { isFree: async () => true });
+    expect(Object.fromEntries(ports)).toEqual({
+      'master.port': 9333,
+      'master.port.grpc': 19333,
+      'filer.port': 8888,
+      'filer.port.grpc': 18888,
+      'volume.port': 9340,
+      'volume.port.grpc': 19340,
+      's3.port.grpc': 18333,
+      'admin.port': 23646,
+      'admin.port.grpc': 33646,
+    });
+  });
+
+  test('keeps the ports weed persisted', async () => {
+    const dir = dataDir('# Mini server configuration\nmaster.port=41001\nfiler.port = 41003\nip=127.0.0.1\n');
+    const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dir, '127.0.0.1', { isFree: async () => true }));
+    expect(ports['master.port']).toBe(41001);
+    expect(ports['filer.port']).toBe(41003);
+    expect(ports['volume.port']).toBe(9340);
+  });
+
+  test('moves only taken ports, never onto a reserved or already chosen port', async () => {
+    const taken = new Set([8888, 23646]);
+    const free = [8081, 50001, 50002];
+    const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dataDir(), '127.0.0.1', {
+      reserved: [8081],
+      isFree: async (port) => !taken.has(port),
+      pickFree: async () => free.shift()!,
+    }));
+    expect(ports['master.port']).toBe(9333);
+    expect(ports['filer.port']).toBe(50001);
+    expect(ports['admin.port']).toBe(50002);
+    expect(new Set(Object.values(ports)).size).toBe(Object.keys(ports).length);
+  });
+
+  test('turns off components OpenReader never uses, including the admin UI', () => {
+    expect(WEED_MINI_DISABLED_COMPONENTS).toEqual(['-webdav=false', '-s3.port.iceberg=0', '-admin.ui=false']);
   });
 });

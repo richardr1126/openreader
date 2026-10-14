@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
@@ -154,4 +156,100 @@ export function isRunningInDocker() {
   } catch {
     return false;
   }
+}
+
+// weed mini runs a master, filer, volume server and admin server behind its S3
+// gateway. OpenReader only talks to S3, but each of these still listens, on
+// ports mini fixes at these defaults unless told otherwise.
+const WEED_MINI_INTERNAL_PORTS = [
+  ['master.port', 9333],
+  ['master.port.grpc', 19333],
+  ['filer.port', 8888],
+  ['filer.port.grpc', 18888],
+  ['volume.port', 9340],
+  ['volume.port.grpc', 19340],
+  ['s3.port.grpc', 18333],
+  ['admin.port', 23646],
+  ['admin.port.grpc', 33646],
+];
+
+// Components OpenReader never uses. The admin server cannot be turned off, but
+// without its UI it serves only health and metrics. It ignores -ip.bind and
+// listens on every interface, so its UI (which has no login unless a password is
+// configured) must stay off.
+export const WEED_MINI_DISABLED_COMPONENTS = ['-webdav=false', '-s3.port.iceberg=0', '-admin.ui=false'];
+
+/** Reads `key=value` lines from the mini.options file weed mini persists in its data directory. */
+export function readWeedMiniOptions(dir) {
+  const options = new Map();
+  let text;
+  try {
+    text = fs.readFileSync(path.join(dir, 'mini.options'), 'utf8');
+  } catch {
+    return options;
+  }
+  for (const line of text.split('\n')) {
+    const match = /^\s*([\w.]+)\s*=\s*(\S+)\s*$/.exec(line);
+    if (match) options.set(match[1], match[2]);
+  }
+  return options;
+}
+
+function listenOnce(port, host) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', () => resolve(null));
+    server.listen(port, host, () => {
+      const bound = server.address().port;
+      server.close(() => resolve(bound));
+    });
+  });
+}
+
+/** A port is free when it can be bound on the weed bind host and on every interface (the admin server's). */
+export async function isPortFree(port, bindHost) {
+  for (const host of new Set([bindHost, '0.0.0.0'])) {
+    if (await listenOnce(port, host) === null) return false;
+  }
+  return true;
+}
+
+async function pickFreePort(bindHost) {
+  for (;;) {
+    const port = await listenOnce(0, bindHost);
+    if (port !== null && await isPortFree(port, bindHost)) return port;
+  }
+}
+
+/**
+ * Chooses weed mini's internal ports. Each one keeps the value weed persisted in
+ * mini.options, else mini's default, as long as it is free; a taken port moves
+ * to a free one. Every choice is passed explicitly, so weed persists it and the
+ * next start keeps it (the master keeps its state in a directory named after its
+ * port). Another weed, Jupyter on 8888 or a second OpenReader no longer collide.
+ */
+export async function resolveWeedMiniInternalPorts(dir, bindHost, {
+  reserved = [],
+  isFree = isPortFree,
+  pickFree = pickFreePort,
+} = {}) {
+  const persisted = readWeedMiniOptions(dir);
+  const taken = new Set(reserved.map(Number));
+  const chosen = [];
+  for (const [key, fallback] of WEED_MINI_INTERNAL_PORTS) {
+    const candidates = [Number.parseInt(persisted.get(key) ?? '', 10), fallback]
+      .filter((port) => Number.isInteger(port) && port > 0 && port <= 65535);
+    let port = null;
+    for (const candidate of candidates) {
+      if (!taken.has(candidate) && await isFree(candidate, bindHost)) {
+        port = candidate;
+        break;
+      }
+    }
+    while (port === null || taken.has(port)) port = await pickFree(bindHost);
+    taken.add(port);
+    chosen.push([key, port]);
+  }
+  return chosen;
 }

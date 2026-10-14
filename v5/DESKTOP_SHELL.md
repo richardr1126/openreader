@@ -119,10 +119,11 @@ output.
   Node.js 24.
 - **Signing and updates.** Notarization, Windows code signing and an update
   channel.
-- **SeaweedFS fixed ports.** `weed mini` still binds its internal master, filer,
-  volume, admin, WebDAV and Iceberg ports (9333, 8888, 9340, 23646, 7333,
-  8181) on loopback, so it collides with another weed on the same machine.
-  Only the S3 port is configurable through bootstrap today.
+- **SeaweedFS admin gRPC.** Bootstrap now keeps each of `weed mini`'s internal
+  ports (persisted, else mini's default) unless it is taken, and turns off
+  WebDAV, Iceberg and the admin UI. The admin server itself cannot be disabled
+  and ignores `-ip.bind`: its HTTP port serves only health and metrics, but its
+  gRPC port still listens on every interface. Worth an upstream issue.
 - **DOCX.** Conversion needs `soffice`, which desktop does not bundle.
 - **Size.** About 400 MB on macOS arm64, 280 MB of it `onnxruntime-node`
   binaries for every platform; pruning to the target platform is the obvious

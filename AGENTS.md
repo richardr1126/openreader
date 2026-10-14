@@ -208,8 +208,9 @@ caused conflicts, high CPU, misleading failures, and overheating.
   `DESKTOP_LAUNCH_TOKEN`; it configures the runtime through existing settings.
 - Bundled binaries are pinned by SHA-256 (`desktop/runtime-binaries.json`,
   `packaging/ffmpeg/manifest.json`). Never ship `.env*` from the checkout.
-- The desktop runtime picks free app ports, but `weed mini` still binds fixed
-  internal ports, so do not run it beside a manual or Playwright stack.
+- The desktop runtime picks free app ports, and bootstrap moves any of
+  `weed mini`'s internal ports that are taken, so desktop can run beside a dev
+  stack. Keep weed's admin UI off: its server ignores `-ip.bind`.
 
 ## Startup Configuration and Upgrades
 

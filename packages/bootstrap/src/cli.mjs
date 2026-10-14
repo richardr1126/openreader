@@ -15,7 +15,9 @@ import {
   ensureS3Bucket,
   hasWeedBinary,
   resolveWeedMiniAdvertiseHost,
+  resolveWeedMiniInternalPorts,
   waitForEndpoint,
+  WEED_MINI_DISABLED_COMPONENTS,
 } from './embedded-seaweedfs.mjs';
 import { resolveDevelopmentFfmpeg, resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
 import { evaluateStartupConfig, formatConfigProblems, formatConfigWarnings } from './preflight.mjs';
@@ -343,6 +345,20 @@ async function main() {
       fs.mkdirSync(runtimeEnv.WEED_MINI_DIR, { recursive: true });
       const waitSec = Number.parseInt(runtimeEnv.WEED_MINI_WAIT_SEC || '20', 10);
       const waitTimeout = Number.isFinite(waitSec) ? waitSec : 20;
+      const weedInternalPorts = await resolveWeedMiniInternalPorts(
+        runtimeEnv.WEED_MINI_DIR,
+        runtimeEnv.WEED_MINI_BIND_HOST,
+        {
+          // The S3 gateway and the services started after weed.
+          reserved: [
+            runtimeEnv.WEED_MINI_PORT,
+            withDefault(runtimeEnv.PORT, '3003'),
+            withDefault(runtimeEnv.EMBEDDED_COMPUTE_WORKER_PORT, '8081'),
+            withDefault(runtimeEnv.EMBEDDED_NATS_PORT, '4222'),
+            withDefault(runtimeEnv.EMBEDDED_NATS_MONITOR_PORT, '8222'),
+          ],
+        },
+      );
       const launchWeed = () => {
         const weedArgs = [
           '-alsologtostderr=false',
@@ -353,6 +369,8 @@ async function main() {
         weedArgs.push(`-s3.port=${runtimeEnv.WEED_MINI_PORT}`);
         weedArgs.push(`-ip=${runtimeEnv.WEED_MINI_ADVERTISE_HOST}`);
         weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
+        for (const [key, port] of weedInternalPorts) weedArgs.push(`-${key}=${port}`);
+        weedArgs.push(...WEED_MINI_DISABLED_COMPONENTS);
 
         weedProc = spawn('weed', weedArgs, {
           env: embeddedServiceEnv(runtimeEnv),
