@@ -9,7 +9,7 @@ const fake = vi.hoisted(() => ({
   modelDir: '',
   active: 0,
   maxActive: 0,
-  runs: [] as Array<{ ids: bigint[]; style: Float32Array; speed: number }>,
+  runs: [] as Array<{ ids: number[]; style: Float32Array; speed: number }>,
   onRun: null as null | (() => Promise<void>),
 }));
 
@@ -23,7 +23,7 @@ vi.mock('onnxruntime-node', () => {
       fake.maxActive = Math.max(fake.maxActive, fake.active);
       try {
         fake.runs.push({
-          ids: [...(feeds.input_ids!.data as BigInt64Array)],
+          ids: Array.from(feeds.input_ids!.data as BigInt64Array, Number),
           style: feeds.style!.data as Float32Array,
           speed: (feeds.speed!.data as Float32Array)[0]!,
         });
@@ -79,8 +79,8 @@ describe('local Kokoro synthesis', () => {
 
     expect(fake.runs).toHaveLength(1);
     const [run] = fake.runs;
-    expect(run!.ids[0]).toBe(0n);
-    expect(run!.ids.at(-1)).toBe(0n);
+    expect(run!.ids[0]).toBe(0);
+    expect(run!.ids.at(-1)).toBe(0);
     const phonemeCount = run!.ids.length - 2;
     expect(run!.style).toHaveLength(STYLE_DIM);
     expect(run!.style[0]).toBe(phonemeCount - 1);

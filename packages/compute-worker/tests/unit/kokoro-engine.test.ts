@@ -52,8 +52,8 @@ describe('local Kokoro voices', () => {
 
 describe('local Kokoro encoding', () => {
   test('pads phoneme ids at both ends and drops symbols outside the vocabulary', () => {
-    expect([...encodePhonemes('hˈi')]).toEqual([0n, 50n, 156n, 51n, 0n]);
-    expect([...encodePhonemes('h❓i')]).toEqual([0n, 50n, 51n, 0n]);
+    expect(Array.from(encodePhonemes('hˈi'), Number)).toEqual([0, 50, 156, 51, 0]);
+    expect(Array.from(encodePhonemes('h❓i'), Number)).toEqual([0, 50, 51, 0]);
   });
 
   test('writes 16-bit mono WAV and clips out-of-range samples', () => {
