@@ -118,6 +118,26 @@ function stageDeployments() {
   run('pnpm', ['--config.inject-workspace-packages=true', '--filter', '@openreader/compute-worker', 'deploy', '--prod', path.join(runtimeDir, 'embedded-compute-worker')], { cwd: repoRoot });
 }
 
+/**
+ * onnxruntime-node ships its native library for every platform (about 280 MB);
+ * keep only this target's.
+ */
+function pruneOnnxRuntime() {
+  const bin = path.join(runtimeDir, 'embedded-compute-worker', 'node_modules', 'onnxruntime-node', 'bin');
+  for (const napi of fs.readdirSync(bin)) {
+    for (const platform of fs.readdirSync(path.join(bin, napi))) {
+      const platformDir = path.join(bin, napi, platform);
+      if (platform !== process.platform) {
+        fs.rmSync(platformDir, { recursive: true });
+        continue;
+      }
+      for (const arch of fs.readdirSync(platformDir)) {
+        if (arch !== process.arch) fs.rmSync(path.join(platformDir, arch), { recursive: true });
+      }
+    }
+  }
+}
+
 async function stageBinary(name, binaryName) {
   const pin = pins[name].targets[target];
   if (!pin) throw new Error(`No ${name} pinned for ${target} in desktop/runtime-binaries.json`);
@@ -155,6 +175,7 @@ async function main() {
   await stageNode();
   stageApp();
   stageDeployments();
+  pruneOnnxRuntime();
   await stageBinary('nats', 'nats-server');
   await stageBinary('weed', 'weed');
   stageFfmpeg(ffmpegDir);
