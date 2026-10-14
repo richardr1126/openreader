@@ -228,6 +228,15 @@ async function pickFreePort(bindHost) {
  * to a free one. Every choice is passed explicitly, so weed persists it and the
  * next start keeps it (the master keeps its state in a directory named after its
  * port). Another weed, Jupyter on 8888 or a second OpenReader no longer collide.
+ *
+ * @param {string} dir
+ * @param {string} bindHost
+ * @param {{
+ *   reserved?: number[],
+ *   isFree?: (port: number, bindHost: string) => Promise<boolean>,
+ *   pickFree?: (bindHost: string) => Promise<number>,
+ * }} [options]
+ * @returns {Promise<Array<[string, number]>>}
  */
 export async function resolveWeedMiniInternalPorts(dir, bindHost, {
   reserved = [],
