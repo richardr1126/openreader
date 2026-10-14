@@ -71,6 +71,12 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await closeChangelog(page);
   await expect(page).toHaveURL(/\/app\/settings$/);
 
+  await page.getByRole('button', { name: 'About', exact: true }).first().click();
+  await expect(page.getByRole('link', { name: 'Buy Me a Coffee (opens in a new tab)', exact: true }))
+    .toHaveAttribute('href', 'https://buymeacoffee.com/rich2556');
+  await expect(page.getByRole('heading', { name: 'Acknowledgements', exact: true })).toBeVisible();
+  await expect(page.getByText('FFmpeg', { exact: true })).toBeVisible();
+
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Appearance', exact: true }).first().click();
   await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible();

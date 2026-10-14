@@ -35,7 +35,8 @@
     "compute:start": "pnpm --filter @openreader/compute-worker start",
     "compute:openapi:generate": "pnpm --dir packages/compute-worker openapi:generate && openapi-typescript packages/compute-worker/openapi.json -o src/lib/server/compute-worker/generated.ts",
     "compute:openapi:check": "pnpm compute:openapi:generate && git diff --exit-code -- packages/compute-worker/openapi.json src/lib/server/compute-worker/generated.ts",
-    "lint:route-errors": "node scripts/check-route-error-responses.mjs"
+    "lint:route-errors": "node scripts/check-route-error-responses.mjs",
+    "acknowledgements": "node scripts/collect-acknowledgements.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1118.0",
