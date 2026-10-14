@@ -76,8 +76,8 @@ export function DocumentHeaderMenu({
               </MenuActionItem>
             </div>
 
-            {/* Auth Section */}
-            <div className="p-2 border-t border-line-soft flex justify-center">
+            {/* Auth Section (empty on desktop, where there is no account menu) */}
+            <div className="p-2 border-t border-line-soft flex justify-center empty:hidden">
               <UserMenu />
             </div>
           </MenuItemsSurface>

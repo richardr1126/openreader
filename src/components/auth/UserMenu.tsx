@@ -21,13 +21,12 @@ export function UserMenu({
   const { baseUrl } = useAuthConfig();
   const { signupPolicy, installProfile } = useRuntimeConfig();
   const canSignUp = signupPolicy !== 'closed';
-  // The desktop shell would sign straight back in, and the owner's address is
-  // a placeholder, so desktop shows the display name and no sign-out control.
-  const canSignOut = installProfile === 'server';
   const { data: session, isPending } = useAuthSession();
   const router = useRouter();
 
-  if (isPending) return null;
+  // Desktop has one owner: the shell would sign straight back in, the address is
+  // a placeholder, and Settings already lists Profile, so there is no menu.
+  if (isPending || installProfile === 'desktop') return null;
 
   const handleSignOut = async () => {
     const client = getAuthClient(baseUrl);
@@ -71,7 +70,7 @@ export function UserMenu({
     );
   }
 
-  const accountLabel = (canSignOut ? session.user.email : session.user.name) || 'Account';
+  const accountLabel = session.user.email || 'Account';
 
   if (variant === 'sidebar') {
     return (
@@ -85,7 +84,7 @@ export function UserMenu({
           icon={<UserIcon className="h-3.5 w-3.5" />}
           label={accountLabel}
         />
-        {canSignOut ? <IconButton
+        <IconButton
           onClick={handleSignOut}
           title="Sign out"
           aria-label="Sign out"
@@ -97,7 +96,7 @@ export function UserMenu({
             <polyline points="16 17 21 12 16 7"></polyline>
             <line x1="21" y1="12" x2="9" y2="12"></line>
           </svg>
-        </IconButton> : null}
+        </IconButton>
       </div>
     );
   }
@@ -116,7 +115,7 @@ export function UserMenu({
         </span>
       </Link>
 
-      {canSignOut ? <IconButton
+      <IconButton
         onClick={handleSignOut}
         title="Sign out"
         aria-label="Sign out"
@@ -128,7 +127,7 @@ export function UserMenu({
           <polyline points="16 17 21 12 16 7"></polyline>
           <line x1="21" y1="12" x2="9" y2="12"></line>
         </svg>
-      </IconButton> : null}
+      </IconButton>
     </div>
   );
 }

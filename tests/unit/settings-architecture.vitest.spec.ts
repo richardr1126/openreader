@@ -78,8 +78,7 @@ describe('settings ownership', () => {
     const features = source('src/components/admin/AdminFeaturesPanel.tsx');
     const page = source('src/components/settings/SettingsPage.tsx');
 
-    expect(userMenu).toContain("const canSignOut = installProfile === 'server';");
-    expect(userMenu.match(/\{canSignOut \? <IconButton/g)).toHaveLength(2);
+    expect(userMenu).toContain("if (isPending || installProfile === 'desktop') return null;");
     const desktopAccount = account.match(/if \(runtimeConfig\.installProfile === 'desktop'\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
     expect(desktopAccount).toContain('<AccountSecurityPanel nameOnly />');
     expect(desktopAccount).toContain('<ExportDataTile />');

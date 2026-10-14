@@ -156,7 +156,7 @@ type SettingsSection = {
 | Instance → New account sign-ups, Guest sessions | hidden | closed/off at first exchange |
 | Instance → Account email (Resend) | hidden | no inbox to verify |
 | Account → Email, verification, password | hidden | the owner has no credential |
-| Sign out (user menu, Account panel) | hidden | the shell would sign straight back in |
+| User menu (account link and Sign out), Account panel sign-out | hidden | the shell would sign straight back in; Settings lists Profile |
 | Sign-in, sign-up, forgot/reset password pages | unreachable | the shell intercepts `/signin` |
 | Public landing page at `/` | skipped | the window opens `/app` |
 | Compute → per-user limits | hidden | limits protect a multi-user instance |
@@ -258,8 +258,8 @@ Implemented (web app):
   sections, the per-section `profiles` list and the per-profile layouts. On
   desktop: Users hidden; Instance hides sign-ups, guest sessions and Account
   email; Compute hides per-user limits (max upload size stays, under
-  "Uploads"); Account becomes Profile (display name and data export); the user menu shows
-  the display name without Sign out. Desktop groups: General (Appearance,
+  "Uploads"); Account becomes Profile (display name and data export); there is no user
+  menu. Desktop groups: General (Appearance,
   Voice, Voice sources, Library and storage, Profile), Advanced (Instance,
   Compute, Maintenance), About. Until the Voices section exists, the per-user
   provider tab (`api`, "Voice") and the shared providers (`providers`,
