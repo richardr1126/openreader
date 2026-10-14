@@ -1466,4 +1466,7 @@
 @media (prefers-reduced-motion: reduce) {
   .lumen *, .lumen *::before, .lumen *::after { animation: none !important; transition: none !important; }
   .lu-window { transform: none !important; }
+  /* States that only an animation would reach: show them settled. */
+  .lu-nav-inner::after { opacity: 1; }
+  .lu-phone-pill i { background-size: 40% 100%, auto; }
 }

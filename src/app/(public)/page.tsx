@@ -120,7 +120,7 @@ export default async function LandingPage() {
           <h1 id="lu-title" className="lu-title lu-in" style={{ '--d': 1 } as CSSProperties}>
             <span className="lu-sr">Every word, lit as it’s spoken.</span>
             {HEADLINE.map((word, i) => (
-              <span key={word} aria-hidden="true">
+              <span key={i} aria-hidden="true">
                 {i > 0 ? ' ' : null}
                 <span
                   className={i === LIT_WORD ? 'lu-k lu-k-lit' : 'lu-k'}
