@@ -9,12 +9,23 @@ import {
 import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 import { isGutenbergCatalogEnabled } from '@/lib/server/admin/gutendex-settings';
+import { configuredDesktopLaunchToken } from '@/lib/server/auth/desktop-launch-token';
+import type { InstallProfile } from '@/lib/shared/install-profile';
 
 export type ResolvedRuntimeConfig = RuntimeConfig & {
   computeAvailable: boolean;
   accountEmailsEnabled: boolean;
   gutenbergCatalogEnabled: boolean;
+  installProfile: InstallProfile;
 };
+
+/**
+ * Derived deployment fact, not an admin setting: `desktop` exactly when the
+ * desktop shell configured a launch token. Presentation only.
+ */
+export function resolveInstallProfile(): InstallProfile {
+  return configuredDesktopLaunchToken() ? 'desktop' : 'server';
+}
 
 export type PublicRuntimeConfig = Omit<ResolvedRuntimeConfig, 'computeLimitPolicies'>;
 
@@ -48,6 +59,7 @@ export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig>
     computeAvailable: isComputeWorkerAvailable(),
     accountEmailsEnabled,
     gutenbergCatalogEnabled,
+    installProfile: resolveInstallProfile(),
   };
 }
 

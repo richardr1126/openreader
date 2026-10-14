@@ -339,10 +339,16 @@ export async function getRuntimeConfigWithSources(): Promise<{
   return { values, sources };
 }
 
-/** Set a single runtime config key (admin write). Flips source to 'admin'. */
+/**
+ * Set a single runtime config key (admin write). Flips source to 'admin'.
+ * Pass a transaction connection to make the write part of a larger change; the
+ * caller then invalidates the cache again after its transaction commits.
+ */
 export async function setRuntimeConfigKey<K extends RuntimeConfigKey>(
   key: K,
   value: RuntimeConfig[K],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  conn: any = db,
 ): Promise<void> {
   const def = RUNTIME_CONFIG_SCHEMA[key] as RuntimeConfigKeyDef<RuntimeConfig[K]>;
   const validated = def.validate(value);
@@ -351,7 +357,7 @@ export async function setRuntimeConfigKey<K extends RuntimeConfigKey>(
   }
   const serialized = serializeForStorage(validated);
   const now = Date.now();
-  await db
+  await conn
     .insert(adminSettings)
     .values({ key, valueJson: serialized as never, source: 'admin', updatedAt: now })
     .onConflictDoUpdate({
