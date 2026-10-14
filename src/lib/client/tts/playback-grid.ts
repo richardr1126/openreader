@@ -2,6 +2,9 @@ import type { TTSSegmentLocator } from '@/types/client';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import { normalizeLocator } from '@openreader/tts/locator';
 
+/** Highlight slightly ahead of the audio clock so a word lights as it is heard. */
+export const WORD_HIGHLIGHT_LEAD_SEC = 0.12;
+
 export type TtsPlaybackGridSegment = {
   ordinal: number;
   segmentKey: string | null;

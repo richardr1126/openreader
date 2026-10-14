@@ -1,5 +1,5 @@
 {
-  "durationSec": 27.272,
+  "durationSec": 18.197,
   "sentences": [
     {
       "sentenceIndex": 0,
@@ -7,393 +7,393 @@
       "words": [
         {
           "text": "Dorothy",
-          "startSec": 0.96,
-          "endSec": 2.14,
+          "startSec": 0.64,
+          "endSec": 1.427,
           "charStart": 0,
           "charEnd": 7
         },
         {
           "text": "lived",
-          "startSec": 2.14,
-          "endSec": 2.42,
+          "startSec": 1.427,
+          "endSec": 1.613,
           "charStart": 8,
           "charEnd": 13
         },
         {
           "text": "in",
-          "startSec": 2.42,
-          "endSec": 2.74,
+          "startSec": 1.613,
+          "endSec": 1.827,
           "charStart": 14,
           "charEnd": 16
         },
         {
           "text": "the",
-          "startSec": 2.74,
-          "endSec": 3.14,
+          "startSec": 1.827,
+          "endSec": 2.093,
           "charStart": 17,
           "charEnd": 20
         },
         {
           "text": "midst",
-          "startSec": 3.14,
-          "endSec": 3.44,
+          "startSec": 2.093,
+          "endSec": 2.293,
           "charStart": 21,
           "charEnd": 26
         },
         {
           "text": "of",
-          "startSec": 3.44,
-          "endSec": 3.9,
+          "startSec": 2.293,
+          "endSec": 2.6,
           "charStart": 27,
           "charEnd": 29
         },
         {
           "text": "the",
-          "startSec": 3.9,
-          "endSec": 4.48,
+          "startSec": 2.6,
+          "endSec": 2.987,
           "charStart": 30,
           "charEnd": 33
         },
         {
           "text": "great",
-          "startSec": 4.48,
-          "endSec": 5.04,
+          "startSec": 2.987,
+          "endSec": 3.36,
           "charStart": 34,
           "charEnd": 39
         },
         {
           "text": "Kansas",
-          "startSec": 5.04,
-          "endSec": 5.46,
+          "startSec": 3.36,
+          "endSec": 3.64,
           "charStart": 40,
           "charEnd": 46
         },
         {
           "text": "prairies",
-          "startSec": 5.46,
-          "endSec": 6.54,
+          "startSec": 3.64,
+          "endSec": 4.36,
           "charStart": 47,
           "charEnd": 55
         },
         {
           "text": "with",
-          "startSec": 6.54,
-          "endSec": 6.86,
+          "startSec": 4.36,
+          "endSec": 4.573,
           "charStart": 57,
           "charEnd": 61
         },
         {
           "text": "Uncle",
-          "startSec": 6.86,
-          "endSec": 7.18,
+          "startSec": 4.573,
+          "endSec": 4.787,
           "charStart": 62,
           "charEnd": 67
         },
         {
           "text": "Henry,",
-          "startSec": 7.18,
-          "endSec": 7.9,
+          "startSec": 4.787,
+          "endSec": 5.267,
           "charStart": 68,
           "charEnd": 74
         },
         {
           "text": "who",
-          "startSec": 7.9,
-          "endSec": 8.02,
+          "startSec": 5.267,
+          "endSec": 5.347,
           "charStart": 75,
           "charEnd": 78
         },
         {
           "text": "was",
-          "startSec": 8.02,
-          "endSec": 8.18,
+          "startSec": 5.347,
+          "endSec": 5.453,
           "charStart": 79,
           "charEnd": 82
         },
         {
           "text": "a",
-          "startSec": 8.18,
-          "endSec": 8.6,
+          "startSec": 5.453,
+          "endSec": 5.733,
           "charStart": 83,
           "charEnd": 84
         },
         {
           "text": "farmer,",
-          "startSec": 8.6,
-          "endSec": 9.12,
+          "startSec": 5.733,
+          "endSec": 6.08,
           "charStart": 85,
           "charEnd": 92
         },
         {
           "text": "and",
-          "startSec": 9.34,
-          "endSec": 9.64,
+          "startSec": 6.227,
+          "endSec": 6.427,
           "charStart": 93,
           "charEnd": 96
         },
         {
           "text": "an",
-          "startSec": 9.64,
-          "endSec": 10.08,
+          "startSec": 6.427,
+          "endSec": 6.72,
           "charStart": 97,
           "charEnd": 101
         },
         {
           "text": "M,",
-          "startSec": 10.08,
-          "endSec": 10.56,
+          "startSec": 6.72,
+          "endSec": 7.04,
           "charStart": 102,
           "charEnd": 105
         },
         {
           "text": "who",
-          "startSec": 10.56,
-          "endSec": 10.82,
+          "startSec": 7.04,
+          "endSec": 7.213,
           "charStart": 106,
           "charEnd": 109
         },
         {
           "text": "was",
-          "startSec": 10.82,
-          "endSec": 10.98,
+          "startSec": 7.213,
+          "endSec": 7.32,
           "charStart": 110,
           "charEnd": 113
         },
         {
           "text": "the",
-          "startSec": 10.98,
-          "endSec": 11.18,
+          "startSec": 7.32,
+          "endSec": 7.453,
           "charStart": 114,
           "charEnd": 117
         },
         {
           "text": "farmer's",
-          "startSec": 11.18,
-          "endSec": 12.08,
+          "startSec": 7.453,
+          "endSec": 8.053,
           "charStart": 118,
           "charEnd": 126
         },
         {
           "text": "wife.",
-          "startSec": 12.08,
-          "endSec": 12.82,
+          "startSec": 8.053,
+          "endSec": 8.547,
           "charStart": 127,
           "charEnd": 132
         },
         {
           "text": "Their",
-          "startSec": 13.06,
-          "endSec": 13.4,
+          "startSec": 8.707,
+          "endSec": 8.933,
           "charStart": 133,
           "charEnd": 138
         },
         {
           "text": "house",
-          "startSec": 13.4,
-          "endSec": 13.76,
+          "startSec": 8.933,
+          "endSec": 9.173,
           "charStart": 139,
           "charEnd": 144
         },
         {
           "text": "was",
-          "startSec": 13.76,
-          "endSec": 14.34,
+          "startSec": 9.173,
+          "endSec": 9.56,
           "charStart": 145,
           "charEnd": 148
         },
         {
           "text": "small",
-          "startSec": 14.34,
-          "endSec": 15.02,
+          "startSec": 9.56,
+          "endSec": 10.013,
           "charStart": 149,
           "charEnd": 154
         },
         {
           "text": "for",
-          "startSec": 15.02,
-          "endSec": 15.22,
+          "startSec": 10.013,
+          "endSec": 10.147,
           "charStart": 156,
           "charEnd": 159
         },
         {
           "text": "the",
-          "startSec": 15.22,
-          "endSec": 15.44,
+          "startSec": 10.147,
+          "endSec": 10.293,
           "charStart": 160,
           "charEnd": 163
         },
         {
           "text": "lumber",
-          "startSec": 15.44,
-          "endSec": 15.76,
+          "startSec": 10.293,
+          "endSec": 10.507,
           "charStart": 164,
           "charEnd": 170
         },
         {
           "text": "to",
-          "startSec": 15.76,
-          "endSec": 16.06,
+          "startSec": 10.507,
+          "endSec": 10.707,
           "charStart": 171,
           "charEnd": 173
         },
         {
           "text": "build",
-          "startSec": 16.06,
-          "endSec": 16.56,
+          "startSec": 10.707,
+          "endSec": 11.04,
           "charStart": 174,
           "charEnd": 179
         },
         {
           "text": "it",
-          "startSec": 16.56,
-          "endSec": 16.8,
+          "startSec": 11.04,
+          "endSec": 11.2,
           "charStart": 180,
           "charEnd": 182
         },
         {
           "text": "had",
-          "startSec": 16.8,
-          "endSec": 17,
+          "startSec": 11.2,
+          "endSec": 11.333,
           "charStart": 183,
           "charEnd": 186
         },
         {
           "text": "to",
-          "startSec": 17,
-          "endSec": 17.22,
+          "startSec": 11.333,
+          "endSec": 11.48,
           "charStart": 187,
           "charEnd": 189
         },
         {
           "text": "be",
-          "startSec": 17.22,
-          "endSec": 17.48,
+          "startSec": 11.48,
+          "endSec": 11.653,
           "charStart": 190,
           "charEnd": 192
         },
         {
           "text": "carried",
-          "startSec": 17.48,
-          "endSec": 18.04,
+          "startSec": 11.653,
+          "endSec": 12.027,
           "charStart": 193,
           "charEnd": 200
         },
         {
           "text": "by",
-          "startSec": 18.04,
-          "endSec": 18.4,
+          "startSec": 12.027,
+          "endSec": 12.267,
           "charStart": 201,
           "charEnd": 203
         },
         {
           "text": "wagon",
-          "startSec": 18.4,
-          "endSec": 19.12,
+          "startSec": 12.267,
+          "endSec": 12.747,
           "charStart": 204,
           "charEnd": 209
         },
         {
           "text": "many",
-          "startSec": 19.12,
-          "endSec": 19.72,
+          "startSec": 12.747,
+          "endSec": 13.147,
           "charStart": 210,
           "charEnd": 214
         },
         {
           "text": "miles.",
-          "startSec": 19.72,
-          "endSec": 20.72,
+          "startSec": 13.147,
+          "endSec": 13.813,
           "charStart": 215,
           "charEnd": 221
         },
         {
           "text": "There",
-          "startSec": 20.88,
-          "endSec": 21.2,
+          "startSec": 13.92,
+          "endSec": 14.133,
           "charStart": 222,
           "charEnd": 227
         },
         {
           "text": "were",
-          "startSec": 21.2,
-          "endSec": 21.48,
+          "startSec": 14.133,
+          "endSec": 14.32,
           "charStart": 228,
           "charEnd": 232
         },
         {
           "text": "four",
-          "startSec": 21.48,
-          "endSec": 22.02,
+          "startSec": 14.32,
+          "endSec": 14.68,
           "charStart": 233,
           "charEnd": 237
         },
         {
           "text": "walls,",
-          "startSec": 22.02,
-          "endSec": 22.86,
+          "startSec": 14.68,
+          "endSec": 15.24,
           "charStart": 238,
           "charEnd": 244
         },
         {
           "text": "a",
-          "startSec": 22.86,
-          "endSec": 23.28,
+          "startSec": 15.24,
+          "endSec": 15.52,
           "charStart": 245,
           "charEnd": 246
         },
         {
           "text": "floor,",
-          "startSec": 23.28,
-          "endSec": 24.14,
+          "startSec": 15.52,
+          "endSec": 16.093,
           "charStart": 247,
           "charEnd": 252
         },
         {
           "text": "and",
-          "startSec": 24.14,
-          "endSec": 24.26,
+          "startSec": 16.093,
+          "endSec": 16.173,
           "charStart": 253,
           "charEnd": 256
         },
         {
           "text": "a",
-          "startSec": 24.26,
-          "endSec": 24.78,
+          "startSec": 16.173,
+          "endSec": 16.52,
           "charStart": 257,
           "charEnd": 258
         },
         {
           "text": "roof,",
-          "startSec": 24.78,
-          "endSec": 25.48,
+          "startSec": 16.52,
+          "endSec": 16.987,
           "charStart": 259,
           "charEnd": 264
         },
         {
           "text": "which",
-          "startSec": 25.48,
-          "endSec": 25.84,
+          "startSec": 16.987,
+          "endSec": 17.227,
           "charStart": 265,
           "charEnd": 270
         },
         {
           "text": "made",
-          "startSec": 25.84,
-          "endSec": 26.58,
+          "startSec": 17.227,
+          "endSec": 17.72,
           "charStart": 271,
           "charEnd": 275
         },
         {
           "text": "one",
-          "startSec": 26.58,
-          "endSec": 26.92,
+          "startSec": 17.72,
+          "endSec": 17.947,
           "charStart": 276,
           "charEnd": 279
         },
         {
           "text": "room.",
-          "startSec": 26.92,
-          "endSec": 26.96,
+          "startSec": 17.947,
+          "endSec": 17.973,
           "charStart": 280,
           "charEnd": 285
         }

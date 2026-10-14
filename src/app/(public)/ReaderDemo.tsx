@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { WORD_HIGHLIGHT_LEAD_SEC } from '@/lib/client/tts/playback-grid';
 import {
   findActiveDemoWord,
   formatDemoTime,
@@ -36,13 +37,13 @@ export function ReaderDemo({ demo }: { demo: ReaderDemoData }) {
   );
 
   // The audio element is the only clock; one frame loop projects it onto the
-  // highlight while running and stops as soon as playback does.
+  // highlight, with the reader's lead, while running and stops with playback.
   useEffect(() => {
     const audio = audioRef.current;
     if (!running || !audio) return;
     let frame = 0;
     const tick = () => {
-      const next = findActiveDemoWord(demo.sentences, audio.currentTime);
+      const next = findActiveDemoWord(demo.sentences, audio.currentTime + WORD_HIGHLIGHT_LEAD_SEC);
       setActive((prev) => (sameWord(prev, next) ? prev : next));
       setElapsedSec(Math.floor(audio.currentTime));
       frame = requestAnimationFrame(tick);

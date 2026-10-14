@@ -53,7 +53,7 @@ const WIZARD_OF_OZ_DEMO: ReaderDemoData = {
   audioSrc: '/demo/wizard-of-oz.mp3',
   fileName: 'wizard-of-oz.epub',
   chapter: 'Chapter 1 · The Cyclone',
-  voiceLabel: 'English · Gemini · Kore',
+  voiceLabel: 'English · Gemini · Kore · 1.5×',
   ...wizardOfOzTimeline,
 };
 

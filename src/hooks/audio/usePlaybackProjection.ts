@@ -10,6 +10,7 @@ import {
   projectPlaybackGridAtTime,
   shouldRefreshPlaybackSegmentTiming,
   type TtsPlaybackGrid,
+  WORD_HIGHLIGHT_LEAD_SEC,
 } from '@/lib/client/tts/playback-grid';
 import { isPdfLocator, type TTSSegmentLocator } from '@/types/client';
 import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
@@ -22,8 +23,6 @@ export type PlaybackSessionState = {
   audioUrl: string;
   timelineUrl: string;
 };
-
-const WORD_HIGHLIGHT_LEAD_SEC = 0.12;
 
 function locatorProjectionKey(locator: TTSSegmentLocator | null): string {
   if (!locator) return '';
