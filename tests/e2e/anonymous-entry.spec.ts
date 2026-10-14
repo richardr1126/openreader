@@ -7,7 +7,7 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
 
   await expect(
     page.getByRole('heading', {
-      name: 'Hear every document, highlighted word by word.',
+      name: 'Every word, lit as it’s spoken.',
       exact: true,
     }),
   ).toBeVisible();
