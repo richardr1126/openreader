@@ -307,6 +307,9 @@ pnpm build
 pnpm start
 ```
 
+`pnpm build` also builds the embedded compute worker to plain JavaScript, which `pnpm start` runs.
+`pnpm dev` runs the worker from its TypeScript sources instead.
+
   </TabItem>
 </Tabs>
 
