@@ -72,6 +72,39 @@
       ]
     },
     {
+      "name": "Electron",
+      "versions": [
+        "44.5.0"
+      ],
+      "kind": "binary",
+      "license": "MIT",
+      "role": "The desktop app's window (desktop app only)",
+      "notice": "Electron includes Chromium; the desktop app carries Chromium's and its components' licences as LICENSES.chromium.html beside LICENSE.electron.txt.",
+      "url": "https://www.electronjs.org",
+      "copyright": [
+        "Copyright (c) Electron contributors",
+        "Copyright (c) 2013-2020 GitHub Inc."
+      ],
+      "textIds": [
+        "8793aa4141de"
+      ]
+    },
+    {
+      "name": "Node.js",
+      "versions": [],
+      "kind": "binary",
+      "license": "MIT",
+      "role": "Runs the app, bootstrap and compute worker in the desktop app",
+      "notice": "The desktop app ships Node.js's complete LICENSE, which also covers the libraries Node.js includes, beside the node binary.",
+      "url": "https://nodejs.org",
+      "copyright": [
+        "Copyright Node.js contributors. All rights reserved."
+      ],
+      "textIds": [
+        "dc0589ce4ab3"
+      ]
+    },
+    {
       "name": "Whisper",
       "versions": [],
       "kind": "model",

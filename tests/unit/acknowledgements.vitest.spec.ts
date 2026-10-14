@@ -49,6 +49,11 @@ describe('generated acknowledgements', () => {
     expect(Object.keys(data.texts).filter((id) => !referenced.has(id))).toEqual([]);
   });
 
+  test('credits the Electron version the desktop app pins', () => {
+    const desktop = readJson<{ devDependencies: Record<string, string> }>('desktop/package.json');
+    expect(data.components.find((component) => component.name === 'Electron')?.versions).toEqual([desktop.devDependencies.electron]);
+  });
+
   test('credits shipped dependencies, not workspace packages or test tooling', () => {
     const names = new Set(data.components.map((component) => component.name));
     expect(names.has('next')).toBe(true);
