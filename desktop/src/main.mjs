@@ -6,7 +6,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, session, shell } from 'electron';
-import { startRuntime } from './runtime.mjs';
+import { exchangeLaunchToken, startRuntime } from './runtime.mjs';
 
 const srcDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -55,16 +55,7 @@ function parseSetCookie(header, url) {
 
 /** Exchanges the launch token for an owner session in the window's cookie store. */
 async function signInOwner() {
-  const response = await fetch(`${runtime.baseUrl}/api/auth/desktop/session`, {
-    method: 'POST',
-    // Better Auth only accepts JSON request bodies on POST endpoints.
-    headers: { Authorization: `Bearer ${runtime.launchToken}`, 'Content-Type': 'application/json' },
-    body: '{}',
-  });
-  if (!response.ok) throw new Error(`Owner sign-in failed (${response.status}).`);
-  const cookies = response.headers.getSetCookie();
-  if (cookies.length === 0) throw new Error('Owner sign-in returned no session.');
-  for (const header of cookies) {
+  for (const header of await exchangeLaunchToken(runtime)) {
     await session.defaultSession.cookies.set(parseSetCookie(header, runtime.baseUrl));
   }
 }
@@ -134,6 +125,11 @@ async function launch() {
   createWindow();
   try {
     runtime = await startRuntime({
+      root: app.isPackaged
+        ? path.join(process.resourcesPath, 'runtime')
+        : path.resolve(srcDir, '..', 'stage', 'runtime'),
+      dataDir: app.getPath('userData'),
+      logDir: app.getPath('logs'),
       onExit: ({ code, signal, logFile }) => {
         fail('OpenReader stopped unexpectedly.', Object.assign(new Error(`Exit code ${code ?? signal}.`), { logFile }));
       },

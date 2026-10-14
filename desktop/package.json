@@ -11,7 +11,8 @@
   "scripts": {
     "stage": "node scripts/stage.mjs",
     "start": "electron .",
-    "package": "node scripts/package.mjs"
+    "package": "node scripts/package.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "electron": "44.5.0",

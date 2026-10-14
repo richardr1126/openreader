@@ -1,0 +1,73 @@
+name: Desktop
+# Stages, smoke-tests and packages the desktop app on each platform it ships for
+# (v5/DESKTOP_SHELL.md). Packages are unsigned; signing needs owner credentials.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'packaging/**'
+      - 'packages/bootstrap/**'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, windows-2025, windows-11-arm, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    env:
+      # The build bakes nothing from these; next build only needs them present.
+      AUTH_SECRET: build-placeholder-secret-value-32chars!!
+      BASE_URL: http://localhost:3003
+      NEXT_TELEMETRY_DISABLED: 1
+      CSC_IDENTITY_AUTO_DISCOVERY: false
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      # The staged runtime bundles the Node.js that runs staging.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+      - uses: pnpm/action-setup@v6
+      - name: Install fpm
+        # electron-builder's bundled fpm (for the .deb) is x64-only.
+        if: matrix.os == 'ubuntu-24.04-arm'
+        run: |
+          sudo gem install --no-document fpm
+          echo "USE_SYSTEM_FPM=true" >> "$GITHUB_ENV"
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Install desktop dependencies
+        run: pnpm --dir desktop install --frozen-lockfile
+      - name: Stage runtime
+        run: pnpm --dir desktop stage
+      - name: Smoke test
+        run: pnpm --dir desktop smoke
+      - name: Package
+        run: pnpm --dir desktop package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openreader-desktop-${{ matrix.os }}
+          path: |
+            desktop/dist/*.dmg
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+          if-no-files-found: error
+          retention-days: 7

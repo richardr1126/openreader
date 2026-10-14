@@ -1,15 +1,14 @@
 // Starts and stops the bundled OpenReader runtime: the bootstrap supervisor,
 // which runs SeaweedFS, NATS, the embedded worker and the standalone Next.js app
 // exactly as the Docker image does. Every listener binds 127.0.0.1 on a port
-// chosen free at launch, and all data lives under the app's userData directory.
+// chosen free at launch, and all data lives under the given data directory.
+// Plain Node.js, no Electron, so scripts/smoke.mjs runs the same code in CI.
 
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { app } from 'electron';
 
 const LOG_ROTATE_BYTES = 10 * 1024 * 1024;
 const READY_TIMEOUT_MS = 120_000;
@@ -22,11 +21,6 @@ const INHERITED_ENV = [
   'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'TMPDIR',
   'SystemRoot', 'windir', 'ComSpec', 'PATHEXT', 'LANG', 'LC_ALL', 'TZ',
 ];
-
-function runtimeRoot() {
-  if (app.isPackaged) return path.join(process.resourcesPath, 'runtime');
-  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'stage', 'runtime');
-}
 
 function exe(name) {
   return process.platform === 'win32' ? `${name}.exe` : name;
@@ -87,21 +81,19 @@ async function waitUntilReady(url, child) {
 }
 
 /**
- * Starts the runtime and resolves once the app answers. `onExit` is called if
- * the runtime stops by itself afterwards.
+ * Starts the runtime staged at `root` and resolves once the app answers. `onExit`
+ * is called if the runtime stops by itself afterwards.
  */
-export async function startRuntime({ onExit }) {
-  const root = runtimeRoot();
+export async function startRuntime({ root, dataDir, logDir, onExit }) {
   const node = path.join(root, 'node', exe('node'));
   if (!fs.existsSync(node)) {
     throw new Error(`The OpenReader runtime is missing (${root}). Run \`pnpm stage\` first.`);
   }
 
-  const dataDir = app.getPath('userData');
   const docstore = path.join(dataDir, 'docstore');
   const library = path.join(docstore, 'library');
   fs.mkdirSync(library, { recursive: true });
-  const log = openLog(app.getPath('logs'));
+  const log = openLog(logDir);
 
   const [appPort, workerPort, natsPort, natsMonitorPort, s3Port] = await Promise.all(
     Array.from({ length: 5 }, freePort),
@@ -185,4 +177,21 @@ export async function startRuntime({ onExit }) {
       clearTimeout(timer);
     },
   };
+}
+
+/**
+ * Exchanges the launch token for an owner session (v5/DESKTOP_SINGLE_OWNER.md)
+ * and returns the Set-Cookie headers.
+ */
+export async function exchangeLaunchToken(runtime) {
+  const response = await fetch(`${runtime.baseUrl}/api/auth/desktop/session`, {
+    method: 'POST',
+    // Better Auth only accepts JSON request bodies on POST endpoints.
+    headers: { Authorization: `Bearer ${runtime.launchToken}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) throw new Error(`Owner sign-in failed (${response.status}).`);
+  const cookies = response.headers.getSetCookie();
+  if (cookies.length === 0) throw new Error('Owner sign-in returned no session.');
+  return cookies;
 }

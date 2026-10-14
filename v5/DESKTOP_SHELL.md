@@ -24,8 +24,9 @@ desktop/
   runtime-binaries.json  nats-server and weed per target, pinned by SHA-256
   scripts/stage.mjs      assembles stage/runtime for this machine
   scripts/package.mjs    electron-builder for this machine
-  src/main.mjs           window, owner sign-in, navigation policy, quit
-  src/runtime.mjs        ports, environment, spawn/stop, readiness
+  scripts/smoke.mjs      starts the staged runtime headless and checks sign-in
+  src/main.mjs           window, cookie store, navigation policy, quit
+  src/runtime.mjs        ports, environment, spawn/stop, readiness, token exchange
   src/loading.html       shown while the runtime starts
 ```
 
@@ -36,7 +37,7 @@ The staged runtime mirrors the Docker image:
 | `node/` | the official Node.js binary (the version that ran staging) and its LICENSE |
 | `app/` | `.next/standalone` plus `.next/static` and `public`, with `.env*` removed |
 | `bootstrap/` | `pnpm deploy` of `@openreader/bootstrap`, `better-sqlite3` rebuilt |
-| `embedded-compute-worker/` | `pnpm deploy --prod` of the worker |
+| `embedded-compute-worker/` | `pnpm deploy --prod` of the worker, `onnxruntime-node` binaries pruned to the target |
 | `bin/` | nats-server and weed from `runtime-binaries.json` |
 | `ffmpeg/` | the LGPL build from `packaging/ffmpeg` |
 | `licenses/` | NATS and SeaweedFS licence texts |
@@ -49,7 +50,8 @@ every target is staged and packaged on its own platform and architecture.
 ## Runtime supervision
 
 `src/runtime.mjs` spawns `node bootstrap/src/cli.mjs -- node app/server.js`,
-the same command as the Docker entrypoint.
+the same command as the Docker entrypoint. It is plain Node.js with no Electron
+import, so the smoke test runs the shell's own startup and sign-in code.
 
 - **Environment.** Built from an allowlist (home, temp, locale and Windows
   system variables), never the user's whole environment, so a developer's
@@ -98,12 +100,30 @@ package version. On macOS electron-builder signs every Mach-O in the bundle with
 the hardened runtime and Electron's JIT entitlements, which the bundled Node.js
 needs; a local build uses whatever identity is in the keychain.
 
+## CI
+
+`.github/workflows/desktop.yml` runs on pull requests that touch `desktop/`,
+`packaging/` or `packages/bootstrap/`, and on demand. Each of macos-15,
+macos-15-intel, windows-2025, windows-11-arm, ubuntu-24.04 and ubuntu-24.04-arm
+builds the app with Node.js 24.21.0, stages, runs `pnpm --dir desktop smoke`,
+packages unsigned and uploads the installers for seven days.
+
+The smoke test starts the staged runtime in temporary directories and checks
+that a wrong launch token gets 401, the real one returns an HttpOnly session for
+the admin owner, `/app` loads without a redirect, the runtime runs until
+stopped, and the token never reaches the log. It needs no TTS provider and does
+not open a window.
+
+Staging fetches the pinned ffmpeg, so the workflow cannot pass until
+`packaging/ffmpeg/manifest.json` has SHAs.
+
 ## Building
 
 ```bash
 pnpm build
 pnpm --dir desktop install
 pnpm --dir desktop stage
+pnpm --dir desktop smoke
 pnpm --dir desktop start
 pnpm --dir desktop package
 ```
@@ -114,9 +134,7 @@ output.
 
 ## Not done yet
 
-- **CI.** A workflow that stages and packages on macos-15, macos-15-intel,
-  windows-2025, windows-11-arm, ubuntu-24.04 and ubuntu-24.04-arm, pinning
-  Node.js 24.
+- **Windows and Linux builds.** The workflow is written but has not run yet.
 - **Signing and updates.** Notarization, Windows code signing and an update
   channel.
 - **SeaweedFS admin gRPC.** Bootstrap now keeps each of `weed mini`'s internal
@@ -125,9 +143,8 @@ output.
   and ignores `-ip.bind`: its HTTP port serves only health and metrics, but its
   gRPC port still listens on every interface. Worth an upstream issue.
 - **DOCX.** Conversion needs `soffice`, which desktop does not bundle.
-- **Size.** About 400 MB on macOS arm64, 280 MB of it `onnxruntime-node`
-  binaries for every platform; pruning to the target platform is the obvious
-  first cut.
+- **Size.** The staged runtime is about 625 MB on macOS arm64 (the worker
+  236 MB, SeaweedFS and NATS 149 MB, Node.js 112 MB, the app 84 MB).
 - **Worker data path in a checkout.** The worker prefers a `pnpm-workspace.yaml`
   above its working directory for `docstore/`, so a runtime run from inside the
   repository (`desktop/stage` or `desktop/dist`) keeps models in the checkout's
