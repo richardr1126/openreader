@@ -48,4 +48,28 @@ describe('model download progress reporting', () => {
 
     expect(publish).toHaveBeenCalledTimes(2);
   });
+
+  test('publishes every component state change even between byte checkpoints', async () => {
+    const publish = vi.fn(async (progress: ModelDownloadProgress) => {
+      void progress;
+    });
+    const report = createModelDownloadProgressReporter({ publish, now: () => 10_000 });
+    const part = (state: 'downloading' | 'verifying' | 'ready', downloadedBytes: number) => ({
+      downloadedBytes,
+      totalBytes: 100,
+      components: [{ name: 'Model weights', totalBytes: 100, downloadedBytes, state }],
+    });
+
+    await report(part('downloading', 0));
+    await report(part('downloading', 10));
+    await report(part('verifying', 20));
+    await report(part('verifying', 20));
+    await report(part('ready', 20));
+
+    expect(publish.mock.calls.map(([progress]) => progress.components?.[0]?.state)).toEqual([
+      'downloading',
+      'verifying',
+      'ready',
+    ]);
+  });
 });
