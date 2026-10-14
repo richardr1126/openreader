@@ -1,8 +1,19 @@
 import { writeFile } from 'node:fs/promises';
 
+export type ModelComponentState = 'pending' | 'downloading' | 'verifying' | 'ready' | 'failed';
+
+/** One named part of a multi-file model, such as a voice's weights or data. */
+export type ModelComponentProgress = {
+  name: string;
+  totalBytes: number;
+  downloadedBytes: number;
+  state: ModelComponentState;
+};
+
 export type ModelDownloadProgress = {
   downloadedBytes: number;
   totalBytes: number;
+  components?: ModelComponentProgress[];
 };
 
 export type ModelDownloadProgressHandler = (
