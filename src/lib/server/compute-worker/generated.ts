@@ -409,6 +409,13 @@ export interface paths {
                                     stopReason?: "usage_limit";
                                     downloadedBytes?: number;
                                     totalBytes?: number;
+                                    modelComponents?: {
+                                        name: string;
+                                        totalBytes: number;
+                                        downloadedBytes: number;
+                                        /** @enum {string} */
+                                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                    }[];
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -436,6 +443,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | null;
                         };
                     };
@@ -1617,6 +1631,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -1777,6 +1798,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -1934,6 +1962,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -2115,6 +2150,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -2286,6 +2328,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -2571,6 +2620,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -2746,6 +2802,13 @@ export interface paths {
                                     stopReason?: "usage_limit";
                                     downloadedBytes?: number;
                                     totalBytes?: number;
+                                    modelComponents?: {
+                                        name: string;
+                                        totalBytes: number;
+                                        downloadedBytes: number;
+                                        /** @enum {string} */
+                                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                    }[];
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -2904,6 +2967,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -3069,6 +3139,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -3257,6 +3334,13 @@ export interface paths {
                                     stopReason?: "usage_limit";
                                     downloadedBytes?: number;
                                     totalBytes?: number;
+                                    modelComponents?: {
+                                        name: string;
+                                        totalBytes: number;
+                                        downloadedBytes: number;
+                                        /** @enum {string} */
+                                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                    }[];
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -3415,6 +3499,13 @@ export interface paths {
                                     stopReason?: "usage_limit";
                                     downloadedBytes?: number;
                                     totalBytes?: number;
+                                    modelComponents?: {
+                                        name: string;
+                                        totalBytes: number;
+                                        downloadedBytes: number;
+                                        /** @enum {string} */
+                                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                    }[];
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -3600,6 +3691,13 @@ export interface paths {
                                     stopReason?: "usage_limit";
                                     downloadedBytes?: number;
                                     totalBytes?: number;
+                                    modelComponents?: {
+                                        name: string;
+                                        totalBytes: number;
+                                        downloadedBytes: number;
+                                        /** @enum {string} */
+                                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                    }[];
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -3779,6 +3877,13 @@ export interface paths {
                                     stopReason?: "usage_limit";
                                     downloadedBytes?: number;
                                     totalBytes?: number;
+                                    modelComponents?: {
+                                        name: string;
+                                        totalBytes: number;
+                                        downloadedBytes: number;
+                                        /** @enum {string} */
+                                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                    }[];
                                 } | {
                                     /** @enum {string} */
                                     phase: "assembling" | "transcoding" | "uploading";
@@ -3925,6 +4030,13 @@ export interface paths {
                                 stopReason?: "usage_limit";
                                 downloadedBytes?: number;
                                 totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
                             } | {
                                 /** @enum {string} */
                                 phase: "assembling" | "transcoding" | "uploading";
@@ -4302,6 +4414,13 @@ export interface components {
                 stopReason?: "usage_limit";
                 downloadedBytes?: number;
                 totalBytes?: number;
+                modelComponents?: {
+                    name: string;
+                    totalBytes: number;
+                    downloadedBytes: number;
+                    /** @enum {string} */
+                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                }[];
             } | {
                 /** @enum {string} */
                 phase: "assembling" | "transcoding" | "uploading";
@@ -4402,6 +4521,13 @@ export interface components {
                     stopReason?: "usage_limit";
                     downloadedBytes?: number;
                     totalBytes?: number;
+                    modelComponents?: {
+                        name: string;
+                        totalBytes: number;
+                        downloadedBytes: number;
+                        /** @enum {string} */
+                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                    }[];
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -4505,6 +4631,13 @@ export interface components {
                     stopReason?: "usage_limit";
                     downloadedBytes?: number;
                     totalBytes?: number;
+                    modelComponents?: {
+                        name: string;
+                        totalBytes: number;
+                        downloadedBytes: number;
+                        /** @enum {string} */
+                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                    }[];
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -4634,6 +4767,13 @@ export interface components {
                     stopReason?: "usage_limit";
                     downloadedBytes?: number;
                     totalBytes?: number;
+                    modelComponents?: {
+                        name: string;
+                        totalBytes: number;
+                        downloadedBytes: number;
+                        /** @enum {string} */
+                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                    }[];
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -4758,6 +4898,13 @@ export interface components {
                     stopReason?: "usage_limit";
                     downloadedBytes?: number;
                     totalBytes?: number;
+                    modelComponents?: {
+                        name: string;
+                        totalBytes: number;
+                        downloadedBytes: number;
+                        /** @enum {string} */
+                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                    }[];
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -4878,6 +5025,13 @@ export interface components {
                     stopReason?: "usage_limit";
                     downloadedBytes?: number;
                     totalBytes?: number;
+                    modelComponents?: {
+                        name: string;
+                        totalBytes: number;
+                        downloadedBytes: number;
+                        /** @enum {string} */
+                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                    }[];
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";
@@ -4997,6 +5151,13 @@ export interface components {
                     stopReason?: "usage_limit";
                     downloadedBytes?: number;
                     totalBytes?: number;
+                    modelComponents?: {
+                        name: string;
+                        totalBytes: number;
+                        downloadedBytes: number;
+                        /** @enum {string} */
+                        state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                    }[];
                 } | {
                     /** @enum {string} */
                     phase: "assembling" | "transcoding" | "uploading";

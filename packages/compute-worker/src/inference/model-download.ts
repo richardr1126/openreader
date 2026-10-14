@@ -1,8 +1,19 @@
-import { writeFile } from 'node:fs/promises';
+import { open, writeFile } from 'node:fs/promises';
+
+export type ModelComponentState = 'pending' | 'downloading' | 'verifying' | 'ready' | 'failed';
+
+/** One named part of a multi-file model, such as a voice's weights or data. */
+export type ModelComponentProgress = {
+  name: string;
+  totalBytes: number;
+  downloadedBytes: number;
+  state: ModelComponentState;
+};
 
 export type ModelDownloadProgress = {
   downloadedBytes: number;
   totalBytes: number;
+  components?: ModelComponentProgress[];
 };
 
 export type ModelDownloadProgressHandler = (
@@ -32,18 +43,26 @@ export async function downloadModelArtifact(input: {
     return bytes.byteLength;
   }
 
+  // Written as it arrives: a model can be hundreds of megabytes, and holding
+  // it in memory before writing would double the worker's peak.
   const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const file = await open(input.outPath, 'w');
   let downloadedBytes = 0;
-  await input.onProgress?.({ downloadedBytes, totalBytes });
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value?.byteLength) continue;
-    chunks.push(value);
-    downloadedBytes += value.byteLength;
-    await input.onProgress?.({ downloadedBytes, totalBytes: totalBytes || downloadedBytes });
+  try {
+    await input.onProgress?.({ downloadedBytes, totalBytes });
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      await file.write(value);
+      downloadedBytes += value.byteLength;
+      await input.onProgress?.({ downloadedBytes, totalBytes: totalBytes || downloadedBytes });
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  } finally {
+    await file.close();
   }
-  await writeFile(input.outPath, Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
   return downloadedBytes;
 }

@@ -336,6 +336,13 @@ export const pdfLayoutProgressSchema = z.object({
   totalBytes: z.number().optional(),
 });
 
+export const modelComponentProgressSchema = z.object({
+  name: z.string(),
+  totalBytes: z.number(),
+  downloadedBytes: z.number(),
+  state: z.enum(['pending', 'downloading', 'verifying', 'ready', 'failed']),
+});
+
 export const ttsPlaybackProgressSchema = z.object({
   completedThroughOrdinal: z.number(),
   completedCount: z.number(),
@@ -345,6 +352,7 @@ export const ttsPlaybackProgressSchema = z.object({
   stopReason: z.literal('usage_limit').optional(),
   downloadedBytes: z.number().optional(),
   totalBytes: z.number().optional(),
+  modelComponents: z.array(modelComponentProgressSchema).optional(),
 });
 
 export const ttsPlaybackExportProgressSchema = z.object({

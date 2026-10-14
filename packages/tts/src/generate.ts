@@ -22,6 +22,7 @@ import {
 } from '@speech-sdk/core/providers';
 import {
   isBuiltInTtsProviderId,
+  KOKORO_LOCAL_MODEL,
   REPLICATE_KOKORO_82M_VERSIONED_MODEL,
   speechSdkProviderPrefix,
 } from './provider-catalog';
@@ -72,6 +73,23 @@ type ResolvedServerTTSRequest = {
   apiKey: string;
   baseUrl?: string;
 };
+
+/**
+ * Synthesizes `kokoro-local` audio inside the calling process. The compute
+ * worker registers its ONNX engine at startup, so this package (and the
+ * Next.js app that imports it) never loads a model. Returns any audio format
+ * `normalizeToMp3` accepts.
+ */
+export type LocalTtsSynthesizer = (
+  request: { text: string; voice: string; speed: number },
+  signal: AbortSignal,
+) => Promise<Buffer>;
+
+let localSynthesizer: LocalTtsSynthesizer | null = null;
+
+export function registerLocalTtsSynthesizer(synthesize: LocalTtsSynthesizer | null): void {
+  localSynthesizer = synthesize;
+}
 
 type InflightEntry = {
   promise: Promise<Buffer>;
@@ -347,6 +365,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
     : provider === 'replicate' && !input.model ? REPLICATE_KOKORO_82M_VERSIONED_MODEL
     : provider === 'speech-sdk' && !input.model ? 'openai/gpt-4o-mini-tts'
+    : provider === 'kokoro-local' ? KOKORO_LOCAL_MODEL
     : input.model;
   const model = (rawModel ?? 'gpt-4o-mini-tts') as SpeechCreateParams['model'];
   const providerModelPolicy = resolveTtsProviderModelPolicy({
@@ -716,17 +735,26 @@ async function runSpeechSdkRequest(
   }
 }
 
+function runLocalRequest(request: ResolvedServerTTSRequest, signal: AbortSignal): Promise<Buffer> {
+  if (!localSynthesizer) {
+    throw new Error('The local Kokoro provider runs only in the compute worker');
+  }
+  return localSynthesizer({ text: request.text, voice: request.voice, speed: request.speed }, signal);
+}
+
 async function runProviderRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
   upstreamSettings: ResolvedTtsUpstreamRuntimeSettings,
 ): Promise<Buffer> {
   const providerStartedAt = Date.now();
-  const raw = request.provider === 'replicate'
-    ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
-    : request.provider === 'speech-sdk'
-      ? await runSpeechSdkRequest(request, signal, upstreamSettings)
-      : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
+  const raw = request.provider === 'kokoro-local'
+    ? await runLocalRequest(request, signal)
+    : request.provider === 'replicate'
+      ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
+      : request.provider === 'speech-sdk'
+        ? await runSpeechSdkRequest(request, signal, upstreamSettings)
+        : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
   const providerMs = Date.now() - providerStartedAt;
 
   // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;

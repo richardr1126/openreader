@@ -63,7 +63,8 @@ import { notifyComputeAdmissionTerminal } from '../jobs/compute-limit-broker';
 import { cloneComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
 import { ProviderCapacityCoordinator } from '../jobs/provider-capacity';
 import { resolveTtsCredentialsFromBroker } from '../jobs/tts-credential-broker';
-import { generateTTSBuffer } from '@openreader/tts/generate';
+import { generateTTSBuffer, registerLocalTtsSynthesizer } from '@openreader/tts/generate';
+import { synthesizeKokoro } from '../inference/kokoro/engine';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
 import {
   ACCOUNT_EXPORT_JOBS_SUBJECT,
@@ -140,6 +141,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     getTtsCredentialBrokerConfig();
     requireTtsSegmentTextHashSecret();
   }
+  // The model loads on the first local Kokoro request, not here.
+  registerLocalTtsSynthesizer((request, signal) => synthesizeKokoro(request, signal));
   const natsUrl = requireEnv('NATS_URL');
   const timeoutConfig = getComputeTimeoutConfig();
 

@@ -87,8 +87,9 @@ async function checkConnection(
   deps: ProviderCheckDeps,
   signal: AbortSignal,
 ): Promise<ProviderCheckItem | null> {
-  // Speech SDK routes to many vendors with no shared endpoint; the speech sample covers it.
-  if (draft.providerType === 'speech-sdk') return null;
+  // Speech SDK routes to many vendors with no shared endpoint, and the local
+  // Kokoro provider has no endpoint at all; the speech sample covers both.
+  if (draft.providerType === 'speech-sdk' || draft.providerType === 'kokoro-local') return null;
   const item = (status: ProviderCheckItem['status'], detail: string): ProviderCheckItem => ({
     id: 'connection',
     label: 'Connection',
@@ -186,6 +187,9 @@ async function checkSpeech(
     return item('ok', `The worker spoke a sample with ${voice} (${kb} KB).`);
   }
   if (result.status === 429) return item('warn', 'The provider is busy or rate limited. Try again shortly.');
+  if (result.status === 504 && draft.providerType === 'kokoro-local') {
+    return item('warn', 'The sample timed out. The worker may still be downloading the Kokoro model; check again in a few minutes.');
+  }
   if (result.status === 504) return item('error', 'The speech sample timed out.');
   if (result.status === 503) return item('error', 'The worker could not load this provider\'s credentials.');
   if (result.code === 'UPSTREAM_ERROR') {

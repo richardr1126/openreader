@@ -18,6 +18,10 @@ services:
       COMPUTE_WORKER_HOST: 0.0.0.0
       COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}
       TTS_PLAYBACK_TOKEN_SECRET: ${TTS_PLAYBACK_TOKEN_SECRET:-local-tts-playback-token-secret}
+      # To run Kokoro inside the worker instead of the kokoro-tts service, seed
+      # {"slug": "kokoro-local", "displayName": "Kokoro (local)",
+      #  "providerType": "kokoro-local", "enabled": true}
+      # The worker downloads ~353 MB into the docstore volume on first use.
       RUNTIME_SEED_JSON: |-
         {
           "version": 1,

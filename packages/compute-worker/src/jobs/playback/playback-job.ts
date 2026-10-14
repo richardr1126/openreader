@@ -340,7 +340,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           getProviderMaxConcurrent: input.getProviderMaxConcurrent,
           coolDownProviderCapacity: input.coolDownProviderCapacity,
           onModelDownloadProgress: createModelDownloadProgressReporter({
-            publish: async ({ downloadedBytes, totalBytes }) => hooks?.onProgress?.({
+            publish: async ({ downloadedBytes, totalBytes, components }) => hooks?.onProgress?.({
               completedThroughOrdinal: lastCompletedThrough,
               completedCount: completedOrdinals.size,
               skippedCount: erroredOrdinals.size,
@@ -348,6 +348,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
               phase: 'downloading_model',
               downloadedBytes,
               totalBytes,
+              ...(components ? { modelComponents: components } : {}),
             }),
           }),
         });

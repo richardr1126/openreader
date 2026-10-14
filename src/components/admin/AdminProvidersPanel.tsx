@@ -52,6 +52,7 @@ const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'deepinfra', label: 'Deepinfra' },
   { value: 'replicate', label: 'Replicate' },
   { value: 'speech-sdk', label: 'Speech SDK' },
+  { value: 'kokoro-local', label: 'Kokoro (on the compute worker)' },
 ];
 
 interface FormState {
@@ -621,14 +622,21 @@ export function AdminProvidersPanel() {
                 />
               </Field>
             )}
-            <Field label="API key" className="sm:col-span-2">
-              <Input
-                type="password"
-                value={form.apiKey}
-                onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                placeholder={editingProvider?.apiKeyMask.startsWith('••••') ? `Keep existing (${editingProvider.apiKeyMask})` : 'Optional'}
-              />
-            </Field>
+            {form.providerType === 'kokoro-local' ? (
+              <p className="text-sm text-muted sm:col-span-2">
+                Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 353 MB of
+                model, voice and pronunciation data the first time it speaks.
+              </p>
+            ) : (
+              <Field label="API key" className="sm:col-span-2">
+                <Input
+                  type="password"
+                  value={form.apiKey}
+                  onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                  placeholder={editingProvider?.apiKeyMask.startsWith('••••') ? `Keep existing (${editingProvider.apiKeyMask})` : 'Optional'}
+                />
+              </Field>
+            )}
           </div>
 
           <ToggleRow

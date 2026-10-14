@@ -1,6 +1,6 @@
 import { isKokoroModel } from './kokoro';
 
-export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'speech-sdk';
+export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'speech-sdk' | 'kokoro-local';
 export type TtsProviderType = TtsProviderId | 'unknown';
 export type TtsVoiceSource = 'static' | 'deepinfra-api' | 'custom-openai-api' | 'replicate-api';
 export type ReplicateVoiceInputKey = 'voice' | 'voice_id' | 'speaker';
@@ -82,6 +82,14 @@ const SPEECH_SDK_MODELS: TtsModelDefinition[] = [
   { id: 'inworld/inworld-tts-1.5-max', name: 'inworld/inworld-tts-1.5-max' },
   { id: 'custom', name: 'Other' },
 ];
+/**
+ * Kokoro-82M run inside the compute worker on onnxruntime-node. There is no
+ * remote service and no key; the worker downloads and verifies the weights on
+ * first use. One model, so no custom-model entry.
+ */
+export const KOKORO_LOCAL_MODEL = 'kokoro-82m' as const;
+const KOKORO_LOCAL_MODELS: TtsModelDefinition[] = [{ id: KOKORO_LOCAL_MODEL, name: 'Kokoro-82M (on worker)' }];
+
 const DEEPINFRA_API_VOICE_MODELS = new Set([
   'ResembleAI/chatterbox',
   'Zyphra/Zonos-v0.1-hybrid',
@@ -102,6 +110,8 @@ export const KOKORO_DEFAULT_VOICES = [
   'jf_nezumi', 'jf_tebukuro', 'jm_kumo', 'pf_dora', 'pm_alex', 'pm_santa', 'zf_xiaobei', 'zf_xiaoni',
   'zf_xiaoxiao', 'zf_xiaoyi', 'zm_yunjian', 'zm_yunxi', 'zm_yunxia', 'zm_yunyang',
 ] as const;
+/** The English voices the local engine downloads (American `a*`, British `b*`). */
+export const KOKORO_LOCAL_VOICES = KOKORO_DEFAULT_VOICES.filter((voice) => /^[ab][fm]_/.test(voice));
 export const ORPHEUS_DEFAULT_VOICES = ['tara', 'leah', 'jess', 'leo', 'dan', 'mia', 'zac'] as const;
 export const SESAME_DEFAULT_VOICES = ['conversational_a', 'conversational_b', 'read_speech_a', 'read_speech_b', 'read_speech_c', 'read_speech_d', 'none'] as const;
 
@@ -200,6 +210,12 @@ export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
     name: 'Speech SDK',
     supportsCustomModel: true,
     models: () => SPEECH_SDK_MODELS,
+  },
+  {
+    id: 'kokoro-local',
+    name: 'Kokoro (local)',
+    supportsCustomModel: false,
+    models: () => KOKORO_LOCAL_MODELS,
   },
 ];
 
@@ -301,6 +317,10 @@ export function getDefaultVoices(provider: TtsProviderId, model: string): string
     return DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]
       ? [...DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]]
       : [...CUSTOM_OPENAI_DEFAULT_VOICES];
+  }
+
+  if (provider === 'kokoro-local') {
+    return [...KOKORO_LOCAL_VOICES];
   }
 
   if (provider === 'speech-sdk') {

@@ -228,6 +228,13 @@ export const getTtsPlaybackSeekLayout = async (
   };
 };
 
+export type ModelComponentSnapshot = {
+  name: string;
+  totalBytes: number;
+  downloadedBytes: number;
+  state: 'pending' | 'downloading' | 'verifying' | 'ready' | 'failed';
+};
+
 export type TtsPlaybackEventSnapshot = {
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   completedThroughOrdinal: number | null;
@@ -238,7 +245,59 @@ export type TtsPlaybackEventSnapshot = {
   stopReason: 'usage_limit' | null;
   downloadedBytes: number | null;
   totalBytes: number | null;
+  /** Per-part download progress when the worker fetches a multi-file model. */
+  modelComponents: ModelComponentSnapshot[] | null;
 };
+
+const MODEL_COMPONENT_STATES: ReadonlySet<string> = new Set(['pending', 'downloading', 'verifying', 'ready', 'failed']);
+
+function finiteOrNull(value: unknown): number | null {
+  return value !== undefined && value !== null && Number.isFinite(Number(value)) ? Number(value) : null;
+}
+
+function parseModelComponents(value: unknown): ModelComponentSnapshot[] | null {
+  if (!Array.isArray(value)) return null;
+  const components = value.flatMap((entry): ModelComponentSnapshot[] => {
+    if (!entry || typeof entry !== 'object') return [];
+    const record = entry as Record<string, unknown>;
+    if (typeof record.name !== 'string' || typeof record.state !== 'string' || !MODEL_COMPONENT_STATES.has(record.state)) {
+      return [];
+    }
+    return [{
+      name: record.name,
+      totalBytes: finiteOrNull(record.totalBytes) ?? 0,
+      downloadedBytes: finiteOrNull(record.downloadedBytes) ?? 0,
+      state: record.state as ModelComponentSnapshot['state'],
+    }];
+  });
+  return components.length > 0 ? components : null;
+}
+
+/** Reads one `snapshot` SSE frame of a playback or export-generation operation. */
+export function parseTtsPlaybackSnapshotFrame(data: string): TtsPlaybackEventSnapshot | null {
+  const payload = JSON.parse(data) as {
+    snapshot?: {
+      status?: TtsPlaybackEventSnapshot['status'];
+      progress?: Record<string, unknown> | null;
+    };
+  };
+  const snapshot = payload?.snapshot;
+  if (!snapshot?.status) return null;
+  const progress = snapshot.progress ?? null;
+  const phase = progress?.phase;
+  return {
+    status: snapshot.status,
+    completedThroughOrdinal: finiteOrNull(progress?.completedThroughOrdinal),
+    completedCount: finiteOrNull(progress?.completedCount),
+    skippedCount: finiteOrNull(progress?.skippedCount),
+    plannedCount: finiteOrNull(progress?.plannedCount),
+    phase: phase === 'downloading_model' || phase === 'generating' || phase === 'checking_cache' ? phase : null,
+    stopReason: progress?.stopReason === 'usage_limit' ? 'usage_limit' : null,
+    downloadedBytes: finiteOrNull(progress?.downloadedBytes),
+    totalBytes: finiteOrNull(progress?.totalBytes),
+    modelComponents: parseModelComponents(progress?.modelComponents),
+  };
+}
 
 /**
  * Subscribe to a playback session's worker operation-events (SSE) so playback
@@ -258,49 +317,8 @@ export const subscribeTtsPlaybackEvents = (
   source.addEventListener('snapshot', (event) => {
     if (!(event instanceof MessageEvent)) return;
     try {
-      const payload = JSON.parse(event.data) as {
-        snapshot?: {
-          status?: 'queued' | 'running' | 'succeeded' | 'failed';
-          progress?: {
-            completedThroughOrdinal?: number;
-            completedCount?: number;
-            skippedCount?: number;
-            plannedCount?: number;
-            phase?: 'downloading_model' | 'generating' | 'checking_cache';
-            stopReason?: 'usage_limit';
-            downloadedBytes?: number;
-            totalBytes?: number;
-          } | null;
-        };
-      };
-      const snapshot = payload?.snapshot;
-      if (!snapshot?.status) return;
-      const progress = snapshot.progress ?? null;
-      handlers.onSnapshot({
-        status: snapshot.status,
-        completedThroughOrdinal: progress && Number.isFinite(Number(progress.completedThroughOrdinal))
-          ? Number(progress.completedThroughOrdinal)
-          : null,
-        completedCount: progress && Number.isFinite(Number(progress.completedCount))
-          ? Number(progress.completedCount)
-          : null,
-        skippedCount: progress && Number.isFinite(Number(progress.skippedCount))
-          ? Number(progress.skippedCount)
-          : null,
-        plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
-          ? Number(progress.plannedCount)
-          : null,
-        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating' || progress?.phase === 'checking_cache'
-          ? progress.phase
-          : null,
-        stopReason: progress?.stopReason === 'usage_limit' ? 'usage_limit' : null,
-        downloadedBytes: progress && Number.isFinite(Number(progress.downloadedBytes))
-          ? Number(progress.downloadedBytes)
-          : null,
-        totalBytes: progress && Number.isFinite(Number(progress.totalBytes))
-          ? Number(progress.totalBytes)
-          : null,
-      });
+      const snapshot = parseTtsPlaybackSnapshotFrame(event.data);
+      if (snapshot) handlers.onSnapshot(snapshot);
     } catch {
       // Ignore malformed frames so a single bad payload can't break the stream.
     }
@@ -326,49 +344,8 @@ export const subscribeTtsExportGenerationEvents = (
   source.addEventListener('snapshot', (event) => {
     if (!(event instanceof MessageEvent)) return;
     try {
-      const payload = JSON.parse(event.data) as {
-        snapshot?: {
-          status?: 'queued' | 'running' | 'succeeded' | 'failed';
-          progress?: {
-            completedThroughOrdinal?: number;
-            completedCount?: number;
-            skippedCount?: number;
-            plannedCount?: number;
-            phase?: 'downloading_model' | 'generating' | 'checking_cache';
-            stopReason?: 'usage_limit';
-            downloadedBytes?: number;
-            totalBytes?: number;
-          } | null;
-        };
-      };
-      const snapshot = payload?.snapshot;
-      if (!snapshot?.status) return;
-      const progress = snapshot.progress ?? null;
-      handlers.onSnapshot({
-        status: snapshot.status,
-        completedThroughOrdinal: progress && Number.isFinite(Number(progress.completedThroughOrdinal))
-          ? Number(progress.completedThroughOrdinal)
-          : null,
-        completedCount: progress && Number.isFinite(Number(progress.completedCount))
-          ? Number(progress.completedCount)
-          : null,
-        skippedCount: progress && Number.isFinite(Number(progress.skippedCount))
-          ? Number(progress.skippedCount)
-          : null,
-        plannedCount: progress && Number.isFinite(Number(progress.plannedCount))
-          ? Number(progress.plannedCount)
-          : null,
-        phase: progress?.phase === 'downloading_model' || progress?.phase === 'generating' || progress?.phase === 'checking_cache'
-          ? progress.phase
-          : null,
-        stopReason: progress?.stopReason === 'usage_limit' ? 'usage_limit' : null,
-        downloadedBytes: progress && Number.isFinite(Number(progress.downloadedBytes))
-          ? Number(progress.downloadedBytes)
-          : null,
-        totalBytes: progress && Number.isFinite(Number(progress.totalBytes))
-          ? Number(progress.totalBytes)
-          : null,
-      });
+      const snapshot = parseTtsPlaybackSnapshotFrame(event.data);
+      if (snapshot) handlers.onSnapshot(snapshot);
     } catch {
       // Ignore malformed frames so EventSource can continue.
     }

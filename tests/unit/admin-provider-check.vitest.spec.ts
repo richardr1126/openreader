@@ -94,6 +94,23 @@ describe('admin provider check', () => {
     expect(disabled.at(-1)).toMatchObject({ id: 'speech', status: 'skipped' });
   });
 
+  test('checks the local Kokoro provider without a key or a network probe', async () => {
+    const d = deps({ resolveVoices: vi.fn(async () => ['af_bella', 'af_heart']) });
+    const local = draft({ providerType: 'kokoro-local', baseUrl: '', defaultModel: '' });
+    const items = await runProviderCheck(local, { slug: 'kokoro-local', enabled: true, matchesDraft: true }, d, signal);
+    expect(statuses(items)).toEqual({ settings: 'ok', voices: 'ok', speech: 'ok' });
+    expect(d.fetch).not.toHaveBeenCalled();
+    expect(vi.mocked(d.synthesizePreview).mock.calls[0][0]).toMatchObject({
+      settings: { providerType: 'kokoro-local', ttsModel: 'kokoro-82m', voice: 'af_heart' },
+    });
+
+    const downloading = await runProviderCheck(local, { slug: 'kokoro-local', enabled: true, matchesDraft: true }, deps({
+      synthesizePreview: vi.fn(async () => ({ ok: false as const, status: 504, code: 'UPSTREAM_TIMEOUT', retryAfterMs: null })),
+    }), signal);
+    expect(downloading.at(-1)).toMatchObject({ id: 'speech', status: 'warn' });
+    expect(downloading.at(-1)?.detail).toMatch(/downloading the Kokoro model/);
+  });
+
   test('explains a provider rejection from the worker', async () => {
     const d = deps({
       synthesizePreview: vi.fn(async () => ({ ok: false as const, status: 502, code: 'UPSTREAM_ERROR', retryAfterMs: null })),
