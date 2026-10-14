@@ -23,6 +23,7 @@ const OnboardingFlowContext = createContext<OnboardingFlowContextValue | null>(n
 export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending: isSessionPending } = useAuthSession();
   const runtimeConfig = useRuntimeConfig();
+  const { installProfile } = runtimeConfig;
   const user = session?.user as { id?: string; isAnonymous?: boolean } | undefined;
   const userId = user?.id ?? null;
   const isAnonymous = Boolean(user?.isAnonymous);
@@ -61,7 +62,9 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const privacyRequired = true;
+    // The privacy notice describes a hosted instance and its operator. On desktop
+    // the person using the app is its only owner and nothing leaves the machine.
+    const privacyRequired = installProfile === 'server';
     const privacyAccepted = !privacyRequired || isPrivacyAcceptedForPolicy(
       onboardingData.privacyAcceptedAtMs,
       PRIVACY_POLICY_UPDATED_AT_MS,
@@ -137,7 +140,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       pendingChangelogOpenRef.current = false;
       setIsChangelogOpen(true);
     }
-  }, [activeBlockingModal, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
+  }, [activeBlockingModal, installProfile, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
 
   useEffect(() => {
     const previousUserId = currentUserIdRef.current;

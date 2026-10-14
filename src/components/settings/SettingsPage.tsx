@@ -118,13 +118,16 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                 icon={<InfoIcon className="h-3.5 w-3.5" />}
                 label={displayVersion ? `Changelog · v${displayVersion}` : 'Changelog'}
               />
-              <SidebarNavItem
-                compact
-                onClick={() => showPrivacyModal()}
-                aria-label="Privacy"
-                icon={<DocumentIcon className="h-3.5 w-3.5" />}
-                label="Privacy"
-              />
+              {/* The notice describes a hosted instance; desktop has no operator. */}
+              {installProfile === 'server' ? (
+                <SidebarNavItem
+                  compact
+                  onClick={() => showPrivacyModal()}
+                  aria-label="Privacy"
+                  icon={<DocumentIcon className="h-3.5 w-3.5" />}
+                  label="Privacy"
+                />
+              ) : null}
             </SidebarNav>
           </div>
         </Sidebar>

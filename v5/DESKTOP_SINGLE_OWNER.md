@@ -160,6 +160,8 @@ type SettingsSection = {
 | Sign-in, sign-up, forgot/reset password pages | unreachable | the shell intercepts `/signin` |
 | Public landing page at `/` | skipped | the window opens `/app` |
 | Compute → per-user limits | hidden | limits protect a multi-user instance |
+| Privacy notice (first-run modal, Settings link) | hidden | it describes a hosted instance and its operator |
+| Cookie banner and Vercel Analytics | not rendered | a local app has nothing to consent to |
 
 Everything else stays: Appearance, Storage, Providers, Instance (TTS defaults,
 features, Gutenberg), Compute generation settings, Maintenance/System check,
