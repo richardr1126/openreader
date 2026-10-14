@@ -21,7 +21,7 @@ services:
       # To run Kokoro inside the worker instead of the kokoro-tts service, seed
       # {"slug": "kokoro-local", "displayName": "Kokoro (local)",
       #  "providerType": "kokoro-local", "enabled": true}
-      # The worker downloads ~355 MB into the docstore volume on first use.
+      # The worker downloads ~353 MB into the docstore volume on first use.
       RUNTIME_SEED_JSON: |-
         {
           "version": 1,

@@ -239,7 +239,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   }
   const playbackStorage = input.playbackStorage;
   if (requestCreds.providerType === 'kokoro-local') {
-    // The first local request downloads and verifies ~355 MB. Do that here,
+    // The first local request downloads and verifies ~353 MB. Do that here,
     // reporting progress, rather than inside a segment's synthesis timeout.
     // The shared download keeps going if this run is cancelled.
     try {

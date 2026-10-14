@@ -8,9 +8,13 @@
  * Whisper and PDF models use, so it reaches the reader over the existing
  * playback SSE.
  *
+ * The letter-to-sound rules have no upstream home, so they ship with the
+ * worker in `assets/` instead (see `KOKORO_LETTER_TO_SOUND_PATH`).
+ *
  * To work offline, place the files at their paths under the model directory
- * before first use (for example the iOS Misaki `Resources` folder copied to
- * `misaki/`); anything already present and matching its checksum is used as is.
+ * before first use (for example the iOS Misaki `Resources` dictionaries copied
+ * to `misaki/`); anything already present and matching its checksum is used
+ * as is.
  */
 
 import { createHash } from 'node:crypto';
@@ -18,6 +22,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, rename, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
+import { resolveWorkerPath } from '../../worker-paths';
 import {
   downloadModelArtifact,
   type ModelComponentProgress,
@@ -32,14 +37,11 @@ const KOKORO_ONNX_BASE_URL =
 const MISAKI_DATA_BASE_URL =
   'https://raw.githubusercontent.com/hexgrad/misaki/e820629b96334db28227df37f280e4836d46fadb/misaki/data';
 /**
- * Letter-to-sound rules induced from the Misaki dictionaries by the
- * OpenReader iOS tooling (Apache-2.0). They have no upstream home.
- * TODO(owner): publish letter_to_sound.tsv (for example as a release asset of
- * the openreader-ios repository or a Hugging Face dataset under the owner's
- * account) and set this URL. Until then the file must be placed by hand at
- * `<DOCSTORE_DIR>/model/kokoro-82m/misaki/letter_to_sound.tsv`.
+ * Letter-to-sound rules induced from the Misaki dictionaries by the OpenReader
+ * iOS tooling. They have no upstream to download from, so the worker bundles
+ * them (2.3 MB).
  */
-export const KOKORO_LETTER_TO_SOUND_URL = '';
+export const KOKORO_LETTER_TO_SOUND_PATH = resolveWorkerPath('inference', 'kokoro', 'assets', 'letter_to_sound.tsv');
 
 export const KOKORO_MODEL_DIR = path.join(DOCSTORE_DIR, 'model', 'kokoro-82m');
 /**
@@ -129,12 +131,6 @@ export const KOKORO_COMPONENTS: readonly KokoroComponent[] = [
       misakiFile('us_silver.json', 3_099_517, 'de8f67be911bb6c659187b4a65fd966b6a30e56350e0f790d763210b053ac475'),
       misakiFile('gb_gold.json', 2_838_552, '29e62f4b60261c88f7f3c2c7811ca3825978948090b72d2b27d565b729282f71'),
       misakiFile('gb_silver.json', 3_663_898, '48131e2d92ccc41655f4543e87e0f938e71463eb5a54be7f0693bb712ebb6bce'),
-      {
-        path: 'misaki/letter_to_sound.tsv',
-        url: KOKORO_LETTER_TO_SOUND_URL,
-        size: 2_306_291,
-        sha256: '14e0911c6c92ea134c5ae830f89b69038ab9dbca5662896d012394f30309fbf2',
-      },
     ],
   },
 ];
@@ -203,12 +199,6 @@ export async function ensureKokoroAssetFiles(options: {
     if (state.state === 'ready') continue;
     try {
       for (const file of missing[index]!) {
-        if (!file.url) {
-          throw new Error(
-            `Local Kokoro needs ${file.path}, which has no download location yet. `
-            + `Place it at ${kokoroAssetPath(file.path, modelDir)}.`,
-          );
-        }
         const target = kokoroAssetPath(file.path, modelDir);
         const tmp = `${target}.tmp`;
         await mkdir(path.dirname(target), { recursive: true });

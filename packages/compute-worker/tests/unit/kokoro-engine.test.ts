@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -13,7 +13,7 @@ import {
   KOKORO_MAX_PHONEMES,
   parseVoiceBlend,
 } from '../../src/inference/kokoro/engine';
-import { ensureKokoroAssetFiles, KOKORO_COMPONENTS } from '../../src/inference/kokoro/model-files';
+import { ensureKokoroAssetFiles, KOKORO_COMPONENTS, KOKORO_LETTER_TO_SOUND_PATH } from '../../src/inference/kokoro/model-files';
 import { createToken } from '../../src/inference/kokoro/misaki/token';
 
 const cleanupDirs: string[] = [];
@@ -159,16 +159,12 @@ describe('local Kokoro model files', () => {
     await expect(stat(path.join(dir, 'weights.onnx.tmp'))).rejects.toThrow();
   });
 
-  test('uses a file placed by hand when no download location is set', async () => {
-    const dir = await modelDir();
-    const components = [{ name: 'English pronunciation data' as const, files: [file('misaki/rules.tsv', 'rules', '')] }];
-    const fetchImpl = vi.fn();
-
-    await expect(ensureKokoroAssetFiles({ modelDir: dir, components, fetchImpl })).rejects.toThrow(/Place it at/);
-    expect(fetchImpl).not.toHaveBeenCalled();
-
-    await mkdir(path.join(dir, 'misaki'), { recursive: true });
-    await writeFile(path.join(dir, 'misaki/rules.tsv'), 'rules');
-    await expect(ensureKokoroAssetFiles({ modelDir: dir, components, fetchImpl })).resolves.toBeUndefined();
+  test('ships the letter-to-sound rules with the worker', async () => {
+    const rules = await readFile(KOKORO_LETTER_TO_SOUND_PATH);
+    expect(createHash('sha256').update(rules).digest('hex')).toBe(
+      '14e0911c6c92ea134c5ae830f89b69038ab9dbca5662896d012394f30309fbf2',
+    );
+    const downloaded = KOKORO_COMPONENTS.flatMap((component) => component.files.map((entry) => entry.path));
+    expect(downloaded.some((entry) => entry.includes('letter_to_sound'))).toBe(false);
   });
 });

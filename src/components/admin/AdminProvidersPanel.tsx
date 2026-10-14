@@ -624,7 +624,7 @@ export function AdminProvidersPanel() {
             )}
             {form.providerType === 'kokoro-local' ? (
               <p className="text-sm text-muted sm:col-span-2">
-                Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 355 MB of
+                Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 353 MB of
                 model, voice and pronunciation data the first time it speaks.
               </p>
             ) : (

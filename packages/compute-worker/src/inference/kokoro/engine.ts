@@ -16,6 +16,7 @@ import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import type { ModelDownloadProgressHandler } from '../model-download';
 import {
   ensureKokoroAssets,
+  KOKORO_LETTER_TO_SOUND_PATH,
   KOKORO_MODEL_FILE,
   KOKORO_SAMPLE_RATE,
   KOKORO_VOICE_SHA256,
@@ -200,7 +201,7 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
     g2p(british) {
       let pending = dialects.get(british);
       if (!pending) {
-        letterToSound ??= readFile(at('misaki/letter_to_sound.tsv'), 'utf8').then((tsv) => new LetterToSound(tsv));
+        letterToSound ??= readFile(KOKORO_LETTER_TO_SOUND_PATH, 'utf8').then((tsv) => new LetterToSound(tsv));
         const dialect = british ? 'gb' : 'us';
         pending = Promise.all([
           readFile(at(`misaki/${dialect}_gold.json`), 'utf8'),
