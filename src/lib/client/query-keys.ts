@@ -27,4 +27,6 @@ export const queryKeys = {
   // Changelog is public/global content, so it is keyed by URL rather than session.
   changelogManifest: (manifestUrl: string) => ['changelog', 'manifest', manifestUrl] as const,
   changelogReleaseBody: (manifestUrl: string, bodyPath: string) => ['changelog', 'body', manifestUrl, bodyPath] as const,
+  // A static asset that only changes with a deploy.
+  acknowledgements: () => ['acknowledgements'] as const,
 };

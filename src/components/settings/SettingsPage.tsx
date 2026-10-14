@@ -18,12 +18,13 @@ import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { normalizeVersion } from '@/lib/shared/changelog';
+import { AboutSettingsPanel } from './AboutSettingsPanel';
 import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { StorageSettingsPanel } from './StorageSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'storage' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
+export type SettingsSectionId = 'api' | 'theme' | 'account' | 'storage' | 'about' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
 type SettingsSection = {
   id: SettingsSectionId;
   label: string;
@@ -33,69 +34,16 @@ type SettingsSection = {
 };
 
 const SETTINGS_SECTIONS: SettingsSection[] = [
-  {
-    id: 'api',
-    label: 'TTS Provider',
-    shortLabel: 'Provider',
-    icon: KeyIcon,
-    group: 'general',
-  },
-  {
-    id: 'theme',
-    label: 'Appearance',
-    shortLabel: 'Appearance',
-    icon: PaletteIcon,
-    group: 'general',
-  },
-  {
-    id: 'account',
-    label: 'Account',
-    shortLabel: 'Account',
-    icon: UserIcon,
-    group: 'general',
-  },
-  {
-    id: 'storage',
-    label: 'Storage',
-    shortLabel: 'Storage',
-    icon: AudioWaveIcon,
-    group: 'general',
-  },
-  {
-    id: 'users',
-    label: 'Users',
-    shortLabel: 'Users',
-    icon: UserIcon,
-    group: 'admin',
-  },
-  {
-    id: 'providers',
-    label: 'Providers',
-    shortLabel: 'Providers',
-    icon: KeyIcon,
-    group: 'admin',
-  },
-  {
-    id: 'instance',
-    label: 'Instance',
-    shortLabel: 'Instance',
-    icon: SettingsIcon,
-    group: 'admin',
-  },
-  {
-    id: 'compute',
-    label: 'Compute',
-    shortLabel: 'Compute',
-    icon: SpeedometerIcon,
-    group: 'admin',
-  },
-  {
-    id: 'maintenance',
-    label: 'Maintenance',
-    shortLabel: 'Maintenance',
-    icon: ClockIcon,
-    group: 'admin',
-  },
+  { id: 'api', label: 'TTS Provider', shortLabel: 'Provider', icon: KeyIcon, group: 'general' },
+  { id: 'theme', label: 'Appearance', shortLabel: 'Appearance', icon: PaletteIcon, group: 'general' },
+  { id: 'account', label: 'Account', shortLabel: 'Account', icon: UserIcon, group: 'general' },
+  { id: 'storage', label: 'Storage', shortLabel: 'Storage', icon: AudioWaveIcon, group: 'general' },
+  { id: 'about', label: 'About', shortLabel: 'About', icon: InfoIcon, group: 'general' },
+  { id: 'users', label: 'Users', shortLabel: 'Users', icon: UserIcon, group: 'admin' },
+  { id: 'providers', label: 'Providers', shortLabel: 'Providers', icon: KeyIcon, group: 'admin' },
+  { id: 'instance', label: 'Instance', shortLabel: 'Instance', icon: SettingsIcon, group: 'admin' },
+  { id: 'compute', label: 'Compute', shortLabel: 'Compute', icon: SpeedometerIcon, group: 'admin' },
+  { id: 'maintenance', label: 'Maintenance', shortLabel: 'Maintenance', icon: ClockIcon, group: 'admin' },
 ];
 function CloseSettingsLink() {
   return (
@@ -290,6 +238,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                   ) : null}
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
                   {activeSection === 'storage' ? <StorageSettingsPanel /> : null}
+                  {activeSection === 'about' ? <AboutSettingsPanel /> : null}
                   {isAdmin && activeSection === 'users' ? <AdminUsersPanel /> : null}
                   {isAdmin && activeSection === 'providers' ? <AdminProvidersPanel /> : null}
                   {isAdmin && activeSection === 'instance' ? (
