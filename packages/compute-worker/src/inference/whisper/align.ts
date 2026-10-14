@@ -1,15 +1,15 @@
 import { createHash, randomUUID } from 'crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
 import * as ort from 'onnxruntime-node';
 import { Tokenizer } from '@huggingface/tokenizers';
 import JSZip from 'jszip';
 import type { TTSAudioBuffer, TTSSentenceAlignment } from '../../api/types';
 import { getFFmpegPath } from '../../infrastructure/platform';
 import { getOnnxThreadsPerJob } from '../../infrastructure/config';
+import { resolveWorkerPath } from '../../worker-paths';
 import { getComputeTimeoutConfig } from '../../infrastructure/config';
 import {
   mapWordsToSentenceOffsets,
@@ -133,8 +133,7 @@ const MEL_FILTER_BINS = (N_FFT / 2) + 1;
 const hannWindow = buildHannWindow(N_FFT);
 const goertzelCoefficients = buildGoertzelCoefficients(MEL_FILTER_BINS, N_FFT);
 
-const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const MEL_FILTERS_NPZ_PATH = join(MODULE_DIR, 'assets', 'mel_filters.npz');
+const MEL_FILTERS_NPZ_PATH = resolveWorkerPath('inference', 'whisper', 'assets', 'mel_filters.npz');
 
 function buildHannWindow(length: number): Float32Array {
   const window = new Float32Array(length);

@@ -1,9 +1,9 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Resend } from 'resend';
 import { getEmailExecutionBrokerConfig } from '../infrastructure/credential-broker-config';
+import { resolveWorkerPath } from '../worker-paths';
 import type { EmailDeliveryJobRequest, EmailDeliveryJobResult } from '../operations/contracts';
 
 type EmailExecution = {
@@ -24,7 +24,8 @@ const EMAIL_LOGO_CONTENT_ID = 'openreader-logo';
 function resolveEmailLogoPath(): string {
   const candidates = [
     path.join(process.cwd(), 'public', EMAIL_LOGO_FILENAME),
-    fileURLToPath(new URL(`../../../../public/${EMAIL_LOGO_FILENAME}`, import.meta.url)),
+    // The repository's public/ directory when running inside the monorepo.
+    resolveWorkerPath('..', '..', '..', 'public', EMAIL_LOGO_FILENAME),
   ];
   const logoPath = candidates.find((candidate) => existsSync(candidate));
   if (!logoPath) throw new EmailDeliveryError('EMAIL_LOGO_UNAVAILABLE', false);

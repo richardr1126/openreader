@@ -251,9 +251,6 @@ importers:
       resend:
         specifier: ^6.28.0
         version: 6.28.0
-      tsx:
-        specifier: ^4.23.12
-        version: 4.23.12
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -261,6 +258,12 @@ importers:
       '@types/archiver':
         specifier: ^7.0.0
         version: 7.0.0
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
+      tsx:
+        specifier: ^4.23.12
+        version: 4.23.12
 
   packages/database:
     dependencies:
