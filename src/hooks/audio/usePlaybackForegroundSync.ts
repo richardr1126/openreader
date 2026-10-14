@@ -196,12 +196,12 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           const percent = snapshot.totalBytes && snapshot.downloadedBytes !== null
             ? Math.round((snapshot.downloadedBytes / snapshot.totalBytes) * 100)
             : null;
-          toast.loading(
-            percent === null
-              ? 'Preparing word-timing model in the cloud…'
-              : `Preparing word-timing model in the cloud… ${percent}%`,
-            { id: MODEL_DOWNLOAD_TOAST_ID },
-          );
+          // Only the local voice model reports its parts; name the one in flight.
+          const activePart = snapshot.modelComponents?.find((component) => component.state !== 'ready');
+          const label = snapshot.modelComponents
+            ? `Downloading the voice model${activePart ? ` (${activePart.name.toLowerCase()})` : ''}…`
+            : 'Preparing word-timing model in the cloud…';
+          toast.loading(percent === null ? label : `${label} ${percent}%`, { id: MODEL_DOWNLOAD_TOAST_ID });
           // Audio is already available without exact word timing. Download-only
           // progress does not change either playback read model, so avoid two
           // redundant HTTP reads for every model checkpoint.

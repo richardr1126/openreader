@@ -1103,6 +1103,40 @@
                   },
                   "totalBytes": {
                     "type": "number"
+                  },
+                  "modelComponents": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "totalBytes": {
+                          "type": "number"
+                        },
+                        "downloadedBytes": {
+                          "type": "number"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "downloading",
+                            "verifying",
+                            "ready",
+                            "failed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "totalBytes",
+                        "downloadedBytes",
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": [
@@ -1559,6 +1593,40 @@
                       },
                       "totalBytes": {
                         "type": "number"
+                      },
+                      "modelComponents": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "downloading",
+                                "verifying",
+                                "ready",
+                                "failed"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "totalBytes",
+                            "downloadedBytes",
+                            "state"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -2040,6 +2108,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -2625,6 +2727,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -3212,6 +3348,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -3777,6 +3947,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -4331,6 +4535,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -5374,6 +5612,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -5505,6 +5777,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -7628,6 +7934,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -8179,6 +8519,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -8728,6 +9102,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -9375,6 +9783,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -9978,6 +10420,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -10720,6 +11196,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -11343,6 +11853,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -11885,6 +12429,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -12458,6 +13036,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -13120,6 +13732,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -13676,6 +14322,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -14359,6 +15039,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -15023,6 +15737,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -15528,6 +16276,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [

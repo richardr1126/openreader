@@ -9,6 +9,7 @@ import {
   probeAudioDurationMsFromBuffer,
 } from '@openreader/tts/segments';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
+import { prepareKokoro } from '../../inference/kokoro/engine';
 import { runWhisperAlignmentFromAudioBuffer } from '../../inference/runtime';
 import { withTimeout } from '../../infrastructure/config';
 import { requireTtsSegmentTextHashSecret } from '../../infrastructure/credential-broker-config';
@@ -81,6 +82,16 @@ export async function withAbortableTimeout<T>(
     externalSignal?.removeEventListener('abort', abortFromExternalSignal);
     controller.abort();
   }
+}
+
+function abortable<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    if (signal.aborted) return onAbort();
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
 }
 
 export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; retryable: boolean } {
@@ -227,6 +238,17 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     throw new Error('TTS playback storage is required for segment generation');
   }
   const playbackStorage = input.playbackStorage;
+  if (requestCreds.providerType === 'kokoro-local') {
+    // The first local request downloads and verifies ~355 MB. Do that here,
+    // reporting progress, rather than inside a segment's synthesis timeout.
+    // The shared download keeps going if this run is cancelled.
+    try {
+      await abortable(prepareKokoro(input.onModelDownloadProgress), input.signal);
+    } catch (error) {
+      if (input.signal?.aborted) return;
+      throw error;
+    }
+  }
   let stopScheduling = false;
 
   const readSidecar = (segment: (typeof normalized)[number]) =>

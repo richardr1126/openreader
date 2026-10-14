@@ -1,3 +1,4 @@
+import type { ModelComponentProgress } from '../inference/model-download';
 import type { ParsedPdfDocument } from '../api/types';
 import type { WorkerOperationAction } from '@openreader/runtime-config/compute-limits';
 
@@ -342,6 +343,8 @@ export interface TtsPlaybackProgress {
   stopReason?: 'usage_limit';
   downloadedBytes?: number;
   totalBytes?: number;
+  /** Per-part progress while a multi-file model downloads (local Kokoro). */
+  modelComponents?: ModelComponentProgress[];
 }
 
 export interface TtsPlaybackExportProgress {
