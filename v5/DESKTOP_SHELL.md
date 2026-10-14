@@ -55,7 +55,8 @@ import, so the smoke test runs the shell's own startup and sign-in code.
 
 - **Environment.** Built from an allowlist (home, temp, locale and Windows
   system variables), never the user's whole environment, so a developer's
-  OpenReader settings cannot leak in. On top: `AUTH_SECRET`,
+  OpenReader settings cannot leak in. `PATH` gains `runtime/bin` in front and
+  LibreOffice's install folder at the end when present (see DOCX below). On top: `AUTH_SECRET`,
   `DESKTOP_LAUNCH_TOKEN`, `BASE_URL`, `HOSTNAME=127.0.0.1`, `PORT`, the embedded
   service ports, `USE_EMBEDDED_WEED_MINI=true`, `FFMPEG_BIN`, `LOG_FORMAT=json`,
   and `IMPORT_LIBRARY_DIRS`. No new variables.
@@ -142,7 +143,13 @@ output.
   WebDAV, Iceberg and the admin UI. The admin server itself cannot be disabled
   and ignores `-ip.bind`: its HTTP port serves only health and metrics, but its
   gRPC port still listens on every interface. Worth an upstream issue.
-- **DOCX.** Conversion needs `soffice`, which desktop does not bundle.
+- **DOCX.** Conversion needs LibreOffice, which desktop does not bundle (it is
+  several hundred MB and MPL-licensed). The shell appends LibreOffice's standard
+  install folders to the runtime's `PATH` (`/Applications` and
+  `~/Applications/LibreOffice.app/Contents/MacOS`, `%ProgramFiles%\LibreOffice\program`),
+  because apps opened from the Dock or Start menu do not inherit a shell `PATH`.
+  Without it, the upload reports that LibreOffice is not installed. The upload
+  dialog still offers DOCX either way.
 - **Size.** The staged runtime is about 625 MB on macOS arm64 (the worker
   236 MB, SeaweedFS and NATS 149 MB, Node.js 112 MB, the app 84 MB).
 - **Worker data path in a checkout.** The worker prefers a `pnpm-workspace.yaml`

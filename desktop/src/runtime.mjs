@@ -26,6 +26,24 @@ function exe(name) {
   return process.platform === 'win32' ? `${name}.exe` : name;
 }
 
+/**
+ * Where LibreOffice installs `soffice`, which DOCX conversion runs. Apps started
+ * from the Dock or Start menu do not get it on PATH, and on macOS it lives
+ * inside the app bundle. Linux packages put it on the standard PATH.
+ */
+function libreOfficeDirs() {
+  const candidates = {
+    darwin: [
+      '/Applications/LibreOffice.app/Contents/MacOS',
+      path.join(process.env.HOME ?? '', 'Applications', 'LibreOffice.app', 'Contents', 'MacOS'),
+    ],
+    win32: [process.env.ProgramFiles, process.env['ProgramFiles(x86)']]
+      .filter(Boolean)
+      .map((dir) => path.join(dir, 'LibreOffice', 'program')),
+  }[process.platform] ?? [];
+  return candidates.filter((dir) => fs.existsSync(path.join(dir, exe('soffice'))));
+}
+
 function freePort() {
   return new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -108,7 +126,7 @@ export async function startRuntime({ root, dataDir, logDir, onExit }) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
   Object.assign(env, {
-    PATH: [path.join(root, 'bin'), process.env.PATH].filter(Boolean).join(path.delimiter),
+    PATH: [path.join(root, 'bin'), process.env.PATH, ...libreOfficeDirs()].filter(Boolean).join(path.delimiter),
     // Bootstrap and the worker place their data (SQLite, SeaweedFS, NATS, models)
     // in docstore/ beside the working directory when no checkout is around.
     PWD: dataDir,

@@ -31,7 +31,9 @@ async function convertDocxToPdf(inputPath: string, outputDir: string, profileDir
       clearTimeout(timeout);
       if (settled) return;
       settled = true;
-      reject(error);
+      reject((error as NodeJS.ErrnoException).code === 'ENOENT'
+        ? new Error('DOCX conversion needs LibreOffice, which is not installed where OpenReader can find it.')
+        : error);
     });
     proc.on('close', (code) => {
       clearTimeout(timeout);
