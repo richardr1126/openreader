@@ -19,6 +19,7 @@ credential broker; credentials are not embedded in NATS jobs or playback artifac
 - **Replicate**: Cloud. Base URL managed internally by OpenReader. API key required.
 - **DeepInfra**: Cloud. Base URL pre-filled (`https://api.deepinfra.com/v1/openai`). API key required.
 - **Speech SDK**: Cloud. Reaches additional providers (ElevenLabs, Cartesia, Hume, Deepgram, Google, Inworld, and more) directly with your own provider API keys via [speech-sdk](./tts-provider-guides/speech-sdk). No base URL. API key required (the key for the model's provider).
+- **Kokoro (local)**: Runs Kokoro-82M inside the compute worker on onnxruntime, with no separate TTS service and no API key. The worker downloads and verifies about 355 MB of model, voice and pronunciation data into its docstore on first use, reporting progress in the reader. English only (the 28 American and British voices); blends such as `af_heart(0.7)+bf_emma(0.3)` work. Pronunciation comes from a port of Misaki with no espeak, so a few abbreviations (for example `St.`) are skipped rather than read. The letter-to-sound rules file has no download location yet: place `letter_to_sound.tsv` at `<docstore>/model/kokoro-82m/misaki/letter_to_sound.tsv` before first use.
 - **Custom OpenAI-Like**: Self-hosted or any custom endpoint. `API_BASE` must be set manually (typically ending in `/v1`). API key optional.
 
 Admins configure the required fields for each provider type on its shared-provider row (e.g. API key and, where applicable, base URL).
