@@ -83,17 +83,10 @@ function runtimeDependencies(packageDir) {
   return runtimeDependenciesByDir.get(packageDir);
 }
 
-function isInstalledFrom(dir, name) {
-  for (let current = dir; ; current = path.dirname(current)) {
-    if (fs.existsSync(path.join(current, 'node_modules', name, 'package.json'))) return true;
-    if (path.dirname(current) === current) return false;
-  }
-}
-
 // Each external import must be a runtime dependency of the package whose source
 // imports it (the worker or a bundled @openreader/* package), so a production
-// install of the worker provides it, and it must be installed where dist/
-// resolves it at runtime.
+// `pnpm deploy` of the worker installs it. The repository's hoisted node-linker
+// (.npmrc) places those packages where dist/ resolves them.
 const externals = new Set();
 for (const { importer, name } of externalImports) {
   externals.add(name);
@@ -103,11 +96,6 @@ for (const { importer, name } of externalImports) {
       `${path.relative(workerDir, importer)} imports "${name}", which is not in the dependencies of `
       + `${path.relative(workerDir, path.join(ownerDir, 'package.json'))}.`,
     );
-  }
-}
-for (const name of externals) {
-  if (!isInstalledFrom(workerDir, name)) {
-    problems.push(`"${name}" is not installed where ${path.relative(process.cwd(), distDir)} resolves it; run pnpm install.`);
   }
 }
 

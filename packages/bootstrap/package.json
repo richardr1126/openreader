@@ -12,6 +12,7 @@
   },
   "scripts": {
     "start": "node src/cli.mjs --",
+    "dev": "node src/cli.mjs --worker-source --",
     "decommission-v4": "node src/decommission-v4.mjs"
   },
   "dependencies": {

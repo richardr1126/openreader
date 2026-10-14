@@ -8,11 +8,15 @@ COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/compute-worker/package.json packages/compute-worker/package.json
 COPY packages/runtime-config/package.json packages/runtime-config/package.json
 COPY packages/tts/package.json packages/tts/package.json
+RUN pnpm install --frozen-lockfile --filter @openreader/compute-worker...
+
 COPY packages/compute-worker packages/compute-worker
 COPY packages/runtime-config packages/runtime-config
 COPY packages/tts packages/tts
 
-RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy /opt/compute-worker
+# Build plain JavaScript (dist/), then deploy only it with production dependencies.
+RUN pnpm --filter @openreader/compute-worker build
+RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy --prod /opt/compute-worker
 
 FROM node:lts
 
@@ -30,4 +34,4 @@ ENV PORT=8081
 
 EXPOSE 8081
 
-CMD ["node", "--import", "tsx", "src/server.ts"]
+CMD ["node", "--enable-source-maps", "dist/server.js"]

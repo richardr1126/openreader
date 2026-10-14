@@ -5,7 +5,11 @@ import { fileURLToPath } from 'node:url';
 
 const bootstrapDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-export function resolveEmbeddedWorkerLaunch() {
+// Production runs the worker's built JavaScript (`pnpm build` or the image's
+// deployed bundle). `fromSource` is only for `pnpm dev`, which runs the
+// TypeScript sources through tsx from the monorepo checkout.
+export function resolveEmbeddedWorkerLaunch({ fromSource = false } = {}) {
+  const entry = fromSource ? path.join('src', 'server.ts') : path.join('dist', 'server.js');
   const candidateDirs = [
     path.resolve(bootstrapDir, '..', 'embedded-compute-worker'),
     path.resolve(bootstrapDir, '..', 'compute-worker'),
@@ -15,16 +19,18 @@ export function resolveEmbeddedWorkerLaunch() {
   ];
 
   for (const workerDir of candidateDirs) {
-    if (!fs.existsSync(path.join(workerDir, 'src', 'server.ts'))) continue;
+    if (!fs.existsSync(path.join(workerDir, entry))) continue;
     return {
       cmd: process.execPath,
-      args: ['--import', 'tsx', 'src/server.ts'],
+      args: fromSource ? ['--import', 'tsx', entry] : ['--enable-source-maps', entry],
       cwd: workerDir,
     };
   }
 
   throw new Error(
-    'Could not find an embedded compute worker runtime. '
-    + 'Include embedded-compute-worker/src/server.ts in the runtime image or keep packages/compute-worker available locally.',
+    `Could not find the embedded compute worker entry ${entry}. `
+    + (fromSource
+      ? 'Keep packages/compute-worker available locally.'
+      : 'Run `pnpm build` (or `pnpm compute:build`) first, or include embedded-compute-worker/dist in the runtime image.'),
   );
 }

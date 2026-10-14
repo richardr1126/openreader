@@ -37,7 +37,9 @@ RUN pnpm exec next telemetry disable
 RUN AUTH_SECRET=build-placeholder-secret-value-32chars!! BASE_URL=http://localhost:3003 pnpm build
 RUN pnpm --config.inject-workspace-packages=true --filter @openreader/bootstrap deploy /opt/openreader/bootstrap
 RUN pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3 ffmpeg-static
-RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy /opt/openreader/embedded-compute-worker
+# `pnpm build` above also built the worker to plain JavaScript (dist/); the
+# production deploy ships that output without TypeScript tooling.
+RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy --prod /opt/openreader/embedded-compute-worker
 # Generate third-party dependency license report plus copied license files.
 RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
     pnpm dlx license-checker-rseidelsohn@4.3.0 \

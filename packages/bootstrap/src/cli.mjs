@@ -85,10 +85,12 @@ function embeddedCredentialBrokerUrl() {
   return 'http://127.0.0.1:3003/api/internal/compute/tts-credentials';
 }
 
-function parseCommandFromArgs(argv) {
+// `openreader [--worker-source] -- <command> [args]`. --worker-source runs the
+// embedded worker from its TypeScript sources (development only).
+function parseArgs(argv) {
   const marker = argv.indexOf('--');
-  if (marker >= 0) return argv.slice(marker + 1);
-  return argv;
+  if (marker < 0) return { options: [], command: argv };
+  return { options: argv.slice(0, marker), command: argv.slice(marker + 1) };
 }
 
 function forwardChildStream(stream, target) {
@@ -191,11 +193,13 @@ async function terminateChild(child, signal = 'SIGTERM', graceMs = 3000, useProc
 async function main() {
   loadEnvFiles();
 
-  const command = parseCommandFromArgs(process.argv.slice(2));
-  if (command.length === 0) {
-    console.error('Usage: openreader -- <command> [args]');
+  const { options, command } = parseArgs(process.argv.slice(2));
+  const unknownOptions = options.filter((option) => option !== '--worker-source');
+  if (command.length === 0 || unknownOptions.length > 0) {
+    console.error('Usage: openreader [--worker-source] -- <command> [args]');
     process.exit(2);
   }
+  const runWorkerFromSource = options.includes('--worker-source');
 
   const embeddedEnvRaw = process.env.USE_EMBEDDED_WEED_MINI;
   let useEmbeddedWeed = isTrue(embeddedEnvRaw, true);
@@ -457,7 +461,7 @@ async function main() {
           embeddedCredentialBrokerUrl(),
         ),
       };
-      const workerLaunch = resolveEmbeddedWorkerLaunch();
+      const workerLaunch = resolveEmbeddedWorkerLaunch({ fromSource: runWorkerFromSource });
       workerProc = spawn(
         workerLaunch.cmd,
         workerLaunch.args,
