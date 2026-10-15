@@ -1,6 +1,8 @@
 name: Desktop
 # Stages, smoke-tests and packages the desktop app on each platform it ships for
-# (v5/DESKTOP_SHELL.md). Packages are unsigned; signing needs owner credentials.
+# (v5/DESKTOP_SHELL.md). Pull requests build unsigned. A published release (or a
+# manual run naming its tag) signs and notarizes the macOS app with the Release
+# environment's credentials and attaches every installer to that release.
 on:
   pull_request:
     branches: [main]
@@ -9,14 +11,24 @@ on:
       - 'packaging/**'
       - 'packages/bootstrap/**'
       - '.github/workflows/desktop.yml'
+  release:
+    types: [published]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to build, sign and attach installers to (blank builds unsigned)
+        required: false
+        default: ''
 
 permissions:
   contents: read
 
 concurrency:
-  group: desktop-${{ github.ref }}
+  group: desktop-${{ github.event.release.tag_name || inputs.release_tag || github.ref }}
   cancel-in-progress: true
+
+env:
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
 
 jobs:
   package:
@@ -27,6 +39,7 @@ jobs:
       matrix:
         os: [macos-15, windows-2025, windows-11-arm, ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
+    environment: ${{ (github.event.release.tag_name || inputs.release_tag) && 'Release' || '' }}
     env:
       # The build bakes nothing from these; next build only needs them present.
       AUTH_SECRET: build-placeholder-secret-value-32chars!!
@@ -36,7 +49,17 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ env.RELEASE_TAG || github.ref }}
           persist-credentials: false
+      - name: Check release version
+        if: env.RELEASE_TAG != ''
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "$RELEASE_TAG" != "v$version" ]; then
+            echo "::error::Release tag $RELEASE_TAG does not match package version $version"
+            exit 1
+          fi
       # The staged runtime bundles the Node.js that runs staging.
       - uses: actions/setup-node@v5
         with:
@@ -68,7 +91,25 @@ jobs:
       - name: Smoke test
         run: pnpm --dir desktop smoke
       - name: Package
+        if: env.RELEASE_TAG == '' || runner.os != 'macOS'
         run: pnpm --dir desktop package
+      - name: Package, sign and notarize
+        if: env.RELEASE_TAG != '' && runner.os == 'macOS'
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: true
+          CSC_LINK: ${{ secrets.MAC_CERTS }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          export APPLE_API_KEY="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+          printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY"
+          trap 'rm -f "$APPLE_API_KEY"' EXIT
+          pnpm --dir desktop package
+          app=$(echo desktop/dist/mac*/OpenReader.app)
+          xcrun stapler validate "$app"
+          spctl --assess --type execute -vv "$app"
       - uses: actions/upload-artifact@v7
         with:
           name: openreader-desktop-${{ matrix.os }}
@@ -79,3 +120,22 @@ jobs:
             desktop/dist/*.deb
           if-no-files-found: error
           retention-days: 7
+
+  publish:
+    name: Attach to release
+    needs: package
+    if: github.event.release.tag_name || inputs.release_tag
+    runs-on: ubuntu-24.04
+    environment: Release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: openreader-desktop-*
+          path: installers
+          merge-multiple: true
+      - name: Upload installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" installers/* --clobber --repo "$GITHUB_REPOSITORY"

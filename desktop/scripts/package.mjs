@@ -37,6 +37,8 @@ const config = {
   copyright: 'Copyright © Richard R',
   extraMetadata: { version },
   directories: { output: 'dist' },
+  // One name shape for every platform, so a release holds each arch side by side.
+  artifactName: 'OpenReader-${version}-${arch}.${ext}',
   files: ['src/**/*', 'package.json'],
   // The runtime runs as separate Node.js processes, so it stays outside the asar.
   extraResources: [{ from: 'stage/runtime', to: 'runtime' }],

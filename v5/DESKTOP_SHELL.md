@@ -166,9 +166,21 @@ repairs a directory a newer weed already opened without that step.
 ## CI
 
 `.github/workflows/desktop.yml` runs on pull requests that touch `desktop/`,
-`packaging/` or `packages/bootstrap/`, and on demand. Each of macos-15,
-windows-2025, windows-11-arm, ubuntu-24.04 and ubuntu-24.04-arm builds the app with Node.js 24.21.0, stages, runs `pnpm --dir desktop smoke`,
-packages unsigned and uploads the installers for seven days.
+`packaging/` or `packages/bootstrap/`, on demand, and when a GitHub Release is
+published. Each of macos-15, windows-2025, windows-11-arm, ubuntu-24.04 and
+ubuntu-24.04-arm builds the app with Node.js 24.21.0, stages, runs
+`pnpm --dir desktop smoke`, packages and uploads the installers for seven days.
+Installers are named `OpenReader-<version>-<arch>.<ext>` on every platform.
+
+Pull requests package unsigned. A published release builds its tag, which must
+be `v` plus the root package version. Its macOS job runs in the `Release`
+environment: electron-builder signs with `MAC_CERTS` (a base64 Developer ID
+Application `.p12`) and `MAC_CERTS_PASSWORD`, then notarizes and staples with
+the App Store Connect API key (`APPLE_API_KEY_P8`, `APPLE_API_KEY_ID`,
+`APPLE_API_ISSUER`), and the job checks the result with `stapler` and `spctl`.
+A final job attaches every installer to the release. To redo a release, run the
+workflow by hand with its tag as `release_tag`; existing installers are
+replaced. Windows and Linux installers are unsigned.
 
 The smoke test starts the staged runtime in temporary directories and checks
 that a wrong launch token gets 401, the real one returns an HttpOnly session for
@@ -193,8 +205,7 @@ pnpm --dir desktop package
 
 ## Not done yet
 
-- **Signing and updates.** Notarization, Windows code signing and an update
-  channel.
+- **Windows signing and updates.** Windows code signing and an update channel.
 - **SeaweedFS admin gRPC.** Bootstrap now keeps each of `weed mini`'s internal
   ports (persisted, else mini's default) unless it is taken, and turns off
   WebDAV, Iceberg and the admin UI. The admin server itself cannot be disabled
