@@ -152,12 +152,17 @@ package version. On macOS electron-builder signs every Mach-O in the bundle with
 the hardened runtime and Electron's JIT entitlements, which the bundled Node.js
 needs; a local build uses whatever identity is in the keychain.
 
+There is no Intel Mac build: onnxruntime-node has shipped no darwin-x64 binary
+since 1.24, so `stage` stops there. Desktop bundles SeaweedFS 4.48 (Docker is
+still on 4.18). It must stay at 4.25 or later: older `weed mini` routes its
+internal gRPC through `/tmp` Unix sockets, which do not exist on Windows
+(seaweedfs#9430).
+
 ## CI
 
 `.github/workflows/desktop.yml` runs on pull requests that touch `desktop/`,
 `packaging/` or `packages/bootstrap/`, and on demand. Each of macos-15,
-macos-15-intel, windows-2025, windows-11-arm, ubuntu-24.04 and ubuntu-24.04-arm
-builds the app with Node.js 24.21.0, stages, runs `pnpm --dir desktop smoke`,
+windows-2025, windows-11-arm, ubuntu-24.04 and ubuntu-24.04-arm builds the app with Node.js 24.21.0, stages, runs `pnpm --dir desktop smoke`,
 packages unsigned and uploads the installers for seven days.
 
 The smoke test starts the staged runtime in temporary directories and checks
@@ -183,7 +188,8 @@ pnpm --dir desktop package
 
 ## Not done yet
 
-- **Windows and Linux builds.** The workflow is written but has not run yet.
+- **Windows and Linux builds.** Linux packages and smoke-tests in CI; Windows
+  has not passed its smoke test yet.
 - **Signing and updates.** Notarization, Windows code signing and an update
   channel.
 - **SeaweedFS admin gRPC.** Bootstrap now keeps each of `weed mini`'s internal

@@ -136,6 +136,8 @@ function pruneOnnxRuntime() {
       }
     }
   }
+  const kept = fs.readdirSync(bin).some((napi) => fs.existsSync(path.join(bin, napi, process.platform, process.arch)));
+  if (!kept) throw new Error(`onnxruntime-node has no ${target} build, so voices and word timing cannot run there.`);
 }
 
 async function stageBinary(name, binaryName) {
