@@ -146,7 +146,8 @@ case "$TARGET" in
     exe="$BUILD/ffmpeg"
     lipo -create "$BUILD/arm64/ffmpeg-${FFMPEG_VERSION}/ffmpeg" "$BUILD/x86_64/ffmpeg-${FFMPEG_VERSION}/ffmpeg" -output "$exe"
     lipo "$exe" -verify_arch arm64 x86_64
-    if otool -L "$exe" | tail -n +2 | grep -v -E '/usr/lib/|/System/Library/'; then
+    # Dependencies are the indented lines; a universal binary has a header per architecture.
+    if otool -L "$exe" | grep -E '^[[:space:]]' | grep -v -E '/usr/lib/|/System/Library/'; then
       fail "ffmpeg links a library outside the macOS system"
     fi
     node "$HERE/smoke-test.mjs" "$exe"
