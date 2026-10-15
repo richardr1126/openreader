@@ -190,8 +190,6 @@ pnpm --dir desktop package
 
 ## Not done yet
 
-- **Windows and Linux builds.** Linux packages and smoke-tests in CI; Windows
-  has not passed its smoke test yet.
 - **Signing and updates.** Notarization, Windows code signing and an update
   channel.
 - **SeaweedFS admin gRPC.** Bootstrap now keeps each of `weed mini`'s internal
