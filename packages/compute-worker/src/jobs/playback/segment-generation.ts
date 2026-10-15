@@ -168,6 +168,8 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   onSegmentErrored?: (planOrdinal: number) => Promise<void>;
   onUsageDenied?: () => Promise<void>;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
+  /** Alignment failed; it degrades to no word timing, ending any model download it awaited. */
+  onAlignmentFailed?: () => Promise<void>;
   consumeUsage?: (input: {
     action: 'tts_synthesis';
     sessionId: string;
@@ -274,7 +276,10 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   }).then((result) => {
     const first = result.alignments[0];
     return first ? { ...first, sentenceIndex: segment.original.ordinal } : null;
-  }).catch(() => null);
+  }).catch(async () => {
+    await input.onAlignmentFailed?.().catch(() => undefined);
+    return null;
+  });
 
   type PendingAlignment = {
     segment: (typeof normalized)[number];

@@ -139,6 +139,7 @@ type TTSPlaybackProgressContextType = {
   playbackTimeSec: number;
   playbackDurationSec: number;
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
+  modelDownload: ReturnType<typeof useTtsPlayback>['modelDownload'];
 };
 
 type TTSHighlightContextType = {
@@ -407,7 +408,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const {
     playbackPhase,
-    playbackTimeSec,
+    playbackTimeSec, modelDownload,
     abortAudio: controllerAbortAudio,
     cancelPendingSeek: controllerCancelPendingSeek,
     invalidatePlaybackRun: controllerInvalidatePlaybackRun,
@@ -737,8 +738,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const playbackProgressValue = useMemo(() => ({
     playbackTimeSec,
     playbackDurationSec: playbackSeekLayout ? playbackSeekLayout.durationMs / 1000 : 0,
-    playbackSeekLayout,
-  }), [playbackSeekLayout, playbackTimeSec]);
+    playbackSeekLayout, modelDownload,
+  }), [modelDownload, playbackSeekLayout, playbackTimeSec]);
   const highlightValue = useMemo(() => ({
     currentSentence,
     currentSegment,

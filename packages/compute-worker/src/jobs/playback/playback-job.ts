@@ -221,13 +221,19 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         });
       };
       let lastCompletedThrough = completedOrdinals.size > 0 ? Math.max(...completedOrdinals) : -1;
+      // A model download (Kokoro before synthesis, Whisper while segments
+      // align) runs alongside generation. The operation keeps one progress
+      // record, so every snapshot carries the download until it completes;
+      // otherwise segment progress would hide it between checkpoints.
+      let modelDownload: Pick<TtsPlaybackProgress, 'downloadedBytes' | 'totalBytes' | 'modelComponents'> | null = null;
       const emitProgress = async (): Promise<void> => {
         await hooks?.onProgress?.({
           completedThroughOrdinal: lastCompletedThrough,
           completedCount: completedOrdinals.size,
           skippedCount: erroredOrdinals.size,
           plannedCount: plannedSegments.length,
-          phase: 'generating',
+          phase: modelDownload ? 'downloading_model' : 'generating',
+          ...modelDownload,
           ...(usageLimited ? { stopReason: 'usage_limit' as const } : {}),
         });
       };
@@ -340,17 +346,21 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           getProviderMaxConcurrent: input.getProviderMaxConcurrent,
           coolDownProviderCapacity: input.coolDownProviderCapacity,
           onModelDownloadProgress: createModelDownloadProgressReporter({
-            publish: async ({ downloadedBytes, totalBytes, components }) => hooks?.onProgress?.({
-              completedThroughOrdinal: lastCompletedThrough,
-              completedCount: completedOrdinals.size,
-              skippedCount: erroredOrdinals.size,
-              plannedCount: plannedSegments.length,
-              phase: 'downloading_model',
-              downloadedBytes,
-              totalBytes,
-              ...(components ? { modelComponents: components } : {}),
-            }),
+            publish: async ({ downloadedBytes, totalBytes, components }) => {
+              const complete = totalBytes > 0 && downloadedBytes >= totalBytes;
+              modelDownload = complete ? null : {
+                downloadedBytes,
+                totalBytes,
+                ...(components ? { modelComponents: components } : {}),
+              };
+              await emitProgress();
+            },
           }),
+          onAlignmentFailed: async () => {
+            if (!modelDownload) return;
+            modelDownload = null;
+            await emitProgress();
+          },
         });
       } finally {
         stopWatchingGeneration();

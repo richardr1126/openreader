@@ -89,6 +89,8 @@ type WhisperAlignmentState = {
   alignmentCache: Map<string, TTSSentenceAlignment[]>;
   alignmentInFlight: Map<string, Promise<TTSSentenceAlignment[]>>;
   runtimePromises: Map<WhisperModelVariant, Promise<WhisperRuntime>>;
+  /** Every caller waiting on a variant's download hears its progress, not only the first. */
+  downloadListeners: Map<WhisperModelVariant, Set<ModelDownloadProgressHandler>>;
   alignmentLaneTail: Promise<void>;
   officialMelFilters: Float32Array[] | null;
   emptyPastFeedsTemplates: Map<WhisperModelVariant, Record<string, ort.Tensor>>;
@@ -100,12 +102,14 @@ const state = (() => {
   const existing = g[WHISPER_ALIGNMENT_STATE_KEY] as WhisperAlignmentState | undefined;
   if (existing) {
     existing.alignmentLaneTail ??= Promise.resolve();
+    existing.downloadListeners ??= new Map();
     return existing;
   }
   const created: WhisperAlignmentState = {
     alignmentCache: new Map<string, TTSSentenceAlignment[]>(),
     alignmentInFlight: new Map<string, Promise<TTSSentenceAlignment[]>>(),
     runtimePromises: new Map(),
+    downloadListeners: new Map(),
     alignmentLaneTail: Promise.resolve(),
     officialMelFilters: null,
     emptyPastFeedsTemplates: new Map(),
@@ -559,11 +563,30 @@ async function getRuntime(
   onModelDownloadProgress?: ModelDownloadProgressHandler,
 ): Promise<WhisperRuntime> {
   const variant = resolveWhisperModelVariant(language);
-  const existing = state.runtimePromises.get(variant);
-  if (existing) return existing;
+  let listeners = state.downloadListeners.get(variant);
+  if (!listeners) {
+    listeners = new Set();
+    state.downloadListeners.set(variant, listeners);
+  }
+  if (onModelDownloadProgress) listeners.add(onModelDownloadProgress);
+  try {
+    return await (state.runtimePromises.get(variant) ?? loadRuntime(variant, listeners));
+  } finally {
+    if (onModelDownloadProgress) listeners.delete(onModelDownloadProgress);
+  }
+}
 
+function loadRuntime(
+  variant: WhisperModelVariant,
+  listeners: Set<ModelDownloadProgressHandler>,
+): Promise<WhisperRuntime> {
   const runtimePromise = (async () => {
-    await ensureWhisperModel({ variant, onProgress: onModelDownloadProgress });
+    await ensureWhisperModel({
+      variant,
+      onProgress: async (progress) => {
+        await Promise.all([...listeners].map((listener) => listener(progress)));
+      },
+    });
     await loadOfficialMelFilters();
     const paths = getWhisperModelPaths(variant);
 

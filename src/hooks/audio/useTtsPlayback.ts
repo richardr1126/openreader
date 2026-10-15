@@ -138,6 +138,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     syncPlaybackLocator,
   });
   const {
+    modelDownload,
     setWorkerPlaybackActive,
     startPlaybackForegroundSync,
     stopPlaybackForegroundSync,
@@ -625,6 +626,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackActiveRef,
     playbackPhase,
     playbackTimeSec,
+    modelDownload,
     abortAudio,
     cancelPendingSeek,
     invalidatePlaybackRun,

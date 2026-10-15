@@ -1,7 +1,6 @@
 'use client';
 
-import { useCallback, useRef, type MutableRefObject } from 'react';
-import toast from 'react-hot-toast';
+import { useCallback, useRef, useState, type MutableRefObject } from 'react';
 
 import {
   postTtsPlaybackCursor,
@@ -15,8 +14,7 @@ import type { PlaybackSessionState } from '@/hooks/audio/usePlaybackProjection';
 import { createCoalescedPlaybackRefresh, createPlaybackOperationSubscription } from '@/lib/client/tts/playback-refresh';
 import type { TtsPlaybackGrid } from '@/lib/client/tts/playback-grid';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
-import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import { computeLocationPhrase } from '@/lib/shared/install-profile';
+import { describeModelDownload, type PlaybackModelDownload } from '@/lib/client/tts/model-download';
 
 type UsePlaybackForegroundSyncInput = {
   audioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -34,11 +32,8 @@ type PlaybackOperationSubscription = {
   stop: () => void;
 };
 
-const MODEL_DOWNLOAD_TOAST_ID = 'tts-model-download';
-
 export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput) {
   const { refresh: refreshComputeUsage } = useAuthRateLimit();
-  const modelLocation = computeLocationPhrase(useRuntimeConfig().computeLocation);
   const {
     audioRef,
     playbackCursorOrdinalRef,
@@ -56,6 +51,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
   const playbackCursorWriteRef = useRef(false);
   const pendingCursorOrdinalRef = useRef<number | null>(null);
   const usageLimitRefreshRunRef = useRef<number | null>(null);
+  const [modelDownload, setModelDownload] = useState<PlaybackModelDownload | null>(null);
 
   const setWorkerPlaybackActive = useCallback((playbackActive: boolean, requireAcknowledgement = false) => {
     const session = playbackSessionRef.current;
@@ -117,8 +113,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     playbackSessionRef,
   ]);
 
-  const stopPlaybackForegroundSync = useCallback(() => {
-    toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
+  const teardownForegroundSync = useCallback(() => {
     playbackRefreshRef.current?.stop();
     playbackRefreshRef.current = null;
     playbackOverviewRefreshRef.current?.stop();
@@ -138,11 +133,18 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     }
   }, []);
 
+  const stopPlaybackForegroundSync = useCallback(() => {
+    teardownForegroundSync();
+    setModelDownload(null);
+  }, [teardownForegroundSync]);
+
   const startPlaybackForegroundSync = useCallback((runId: number) => {
     const activeSession = playbackSessionRef.current;
     if (!activeSession) return;
 
-    stopPlaybackForegroundSync();
+    // A restart keeps the download popup until the new subscription's first
+    // snapshot replaces it, so a seek or recovery does not make it blink.
+    teardownForegroundSync();
     usageLimitRefreshRunRef.current = null;
     const isCurrent = () => runId === playbackRunIdRef.current
       && playbackSessionRef.current === activeSession;
@@ -188,29 +190,13 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           usageLimitRefreshRunRef.current = runId;
           void refreshComputeUsage();
         }
+        setModelDownload(describeModelDownload(snapshot));
         if (snapshot.status === 'failed') {
-          toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
           // Publish the terminal read model to media recovery. It will detach
           // the failed stream instead of letting the browser retry a 409 URL.
           refresh.request();
           return;
         }
-        if (snapshot.phase === 'downloading_model') {
-          const percent = snapshot.totalBytes && snapshot.downloadedBytes !== null
-            ? Math.round((snapshot.downloadedBytes / snapshot.totalBytes) * 100)
-            : null;
-          // Only the local voice model reports its parts; name the one in flight.
-          const activePart = snapshot.modelComponents?.find((component) => component.state !== 'ready');
-          const label = snapshot.modelComponents
-            ? `Downloading the voice model${activePart ? ` (${activePart.name.toLowerCase()})` : ''}…`
-            : `Preparing word-timing model ${modelLocation}…`;
-          toast.loading(percent === null ? label : `${label} ${percent}%`, { id: MODEL_DOWNLOAD_TOAST_ID });
-          // Audio is already available without exact word timing. Download-only
-          // progress does not change either playback read model, so avoid two
-          // redundant HTTP reads for every model checkpoint.
-          return;
-        }
-        toast.dismiss(MODEL_DOWNLOAD_TOAST_ID);
         const refreshSnapshotKey = [
           snapshot.status,
           snapshot.completedThroughOrdinal ?? '',
@@ -230,14 +216,13 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     }, TTS_PLAYBACK_CURSOR_HEARTBEAT_MS);
   }, [
     audioRef,
-    modelLocation,
     playbackCursorOrdinalRef,
     playbackRunIdRef,
     playbackSessionRef,
     refreshComputeUsage,
     refreshPlaybackTimeline,
     setPlaybackSeekLayout,
-    stopPlaybackForegroundSync,
+    teardownForegroundSync,
     updateWorkerPlaybackCursor,
   ]);
 
@@ -246,6 +231,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
   }, []);
 
   return {
+    modelDownload,
     setWorkerPlaybackActive,
     startPlaybackForegroundSync,
     stopPlaybackForegroundSync,
