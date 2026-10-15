@@ -64,7 +64,7 @@ API_MODEL_NAME=kokoro
 > A remote worker needs a public/private-network URL it can reach. See the
 > [provider topology table](../tts-providers#custom-provider-requirements).
 
-Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
+Users select the configured shared provider, model, and voice from **Settings → Model & Voice**.
 
 ## References
 

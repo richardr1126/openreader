@@ -4,7 +4,8 @@ import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { Button } from '@/components/ui';
+import { AudioWaveIcon, DocumentIcon, TrashIcon } from '@/components/icons/Icons';
+import { Button, RowIcon } from '@/components/ui';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useDesktopBridge } from '@/hooks/useDesktopBridge';
 import {
@@ -19,17 +20,20 @@ const CARD_CLASS = 'divide-y divide-line-soft rounded-lg border border-line-soft
 
 function UsageRow({
   label,
+  icon,
   bytes,
   detail,
   action,
 }: {
   label: string;
+  icon: ReactNode;
   bytes: number | undefined;
   detail?: string;
   action?: ReactNode;
 }) {
   return (
     <div className="flex min-h-14 items-center gap-3 px-3 py-2.5">
+      <RowIcon>{icon}</RowIcon>
       <div className="min-w-0 flex-1">
         <div className="text-sm text-foreground">{label}</div>
         {detail ? <div className="mt-0.5 text-xs text-faint">{detail}</div> : null}
@@ -45,6 +49,7 @@ function StorageSkeleton() {
     <div className={`animate-pulse ${CARD_CLASS}`} aria-label="Loading storage usage" aria-busy="true">
       {[true, true, false].map((hasAction, index) => (
         <div key={index} className="flex min-h-14 items-center gap-3 px-3 py-2.5">
+          <div className="h-7 w-7 shrink-0 rounded-md bg-offbase" />
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="h-4 w-28 rounded bg-offbase" />
             <div className="h-3 w-20 rounded bg-offbase" />
@@ -114,6 +119,7 @@ export function StorageSettingsPanel() {
         <div className={CARD_CLASS}>
           <UsageRow
             label="Audio"
+            icon={<AudioWaveIcon />}
             bytes={usage?.audioBytes}
             action={(
               <Button
@@ -129,6 +135,7 @@ export function StorageSettingsPanel() {
           />
           <UsageRow
             label="Orphaned audio"
+            icon={<TrashIcon />}
             bytes={usage?.orphanedAudioBytes}
             detail={usage && usage.orphanedDocumentCount > 0 ? plural(usage.orphanedDocumentCount, 'removed document') : undefined}
             action={(
@@ -145,6 +152,7 @@ export function StorageSettingsPanel() {
           />
           <UsageRow
             label="Document data"
+            icon={<DocumentIcon />}
             bytes={usage?.documentDataBytes}
             detail={usage ? plural(usage.documentCount, 'document') : undefined}
           />

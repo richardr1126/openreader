@@ -4,6 +4,9 @@ import { useCallback, type MutableRefObject } from 'react';
 
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { AppConfigValues } from '@/types/config';
+import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
+import { putDocumentSettings } from '@/lib/client/api/documents';
+import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 
 type UseTtsPlaybackSettingsInput = {
   isPlaying: boolean;
@@ -16,8 +19,13 @@ type UseTtsPlaybackSettingsInput = {
   setCurrentWordIndex: (wordIndex: number | null) => void;
   setIsPlaying: (isPlaying: boolean) => void;
   setIsProcessing: (isProcessing: boolean) => void;
-  setSpeed: (speed: number) => void;
-  setVoice: (voice: string) => void;
+  documentId: string | null;
+  readerSettings: DocumentSettings | null;
+  setReaderSettings: (settings: DocumentSettings) => void;
+  providerRef: string;
+  ttsModel: string;
+  defaultVoice: string;
+  defaultVoiceSpeed: number;
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
   reacquirePlaybackPlan: () => Promise<void>;
 };
@@ -34,8 +42,13 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     setCurrentWordIndex,
     setIsPlaying,
     setIsProcessing,
-    setSpeed,
-    setVoice,
+    documentId,
+    readerSettings,
+    setReaderSettings,
+    providerRef,
+    ttsModel,
+    defaultVoice,
+    defaultVoiceSpeed,
     updateConfigKey,
     reacquirePlaybackPlan,
   } = input;
@@ -97,24 +110,45 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
   ]);
 
   /**
-   * Applies a voice and/or model-speed change as one restart: a single plan
-   * reset and reacquire, so committing both from the voice panel never
-   * re-plans twice.
+   * Changes this book's own voice and/or model speed as one restart: a single
+   * plan reset and reacquire. `null` returns that field to the user's default,
+   * and a value equal to the default is not stored as an override.
    */
-  const setVoiceSettingsAndRestart = useCallback((change: { voice?: string; nativeSpeed?: number }) => {
+  const setBookVoiceAndRestart = useCallback((change: { voice?: string | null; nativeSpeed?: number | null }) => {
+    if (!documentId || !readerSettings) return;
     if (change.voice === undefined && change.nativeSpeed === undefined) return;
-    void restartAfterConfigUpdate(
-      () => {
-        if (change.voice !== undefined) setVoice(change.voice);
-        if (change.nativeSpeed !== undefined) setSpeed(change.nativeSpeed);
+    const current = readerSettings.voiceOverride;
+    const matching = current?.providerRef === providerRef && current.ttsModel === ttsModel ? current : undefined;
+    const pick = <T,>(next: T | null | undefined, existing: T | undefined, fallback: T): T | undefined => {
+      const value = next === undefined ? existing : next ?? undefined;
+      return value === fallback ? undefined : value;
+    };
+    const next = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, {
+      ...readerSettings,
+      voiceOverride: {
+        providerRef,
+        ttsModel,
+        voice: pick(change.voice, matching?.voice, defaultVoice),
+        voiceSpeed: pick(change.nativeSpeed, matching?.voiceSpeed, defaultVoiceSpeed),
       },
+    });
+    void restartAfterConfigUpdate(
+      () => setReaderSettings(next),
       async () => {
-        if (change.nativeSpeed !== undefined) await updateConfigKey('voiceSpeed', change.nativeSpeed);
-        if (change.voice !== undefined) await updateConfigKey('voice', change.voice);
+        await putDocumentSettings(documentId, next);
       },
       { resetPlan: true },
     );
-  }, [restartAfterConfigUpdate, setSpeed, setVoice, updateConfigKey]);
+  }, [
+    defaultVoice,
+    defaultVoiceSpeed,
+    documentId,
+    providerRef,
+    readerSettings,
+    restartAfterConfigUpdate,
+    setReaderSettings,
+    ttsModel,
+  ]);
 
   const setAudioPlayerSpeedAndRestart = useCallback((speed: number) => {
     // Browser playback rate is deliberately not part of the generated-audio
@@ -130,6 +164,6 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
   return {
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
-    setVoiceSettingsAndRestart,
+    setBookVoiceAndRestart,
   };
 }

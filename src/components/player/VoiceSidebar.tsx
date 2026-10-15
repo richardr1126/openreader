@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { CheckIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
+import { BookIcon, CheckIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, IconButton, Input, RangeField, Section, cn } from '@/components/ui';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
@@ -60,16 +60,19 @@ function PreviewButton({ previewKey, label, state, disabled, onPlay, onStop }: {
  * sample with the draft settings and never touch the document's audio.
  */
 export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { providerRef, providerType, ttsModel, ttsInstructions, voiceSpeed } = useConfig();
+  const { providerRef, providerType, ttsModel, ttsInstructions } = useConfig();
   const {
     voice: appliedVoice,
+    voiceSpeed,
+    ownVoice,
+    ownVoiceSpeed,
     availableVoices,
     documentLanguage,
     resolvedLanguage,
     isPlaying,
     isProcessing,
     pause,
-    setVoiceSettingsAndRestart,
+    setBookVoiceAndRestart,
   } = useTTS();
   const { currentSentence } = useTTSHighlight();
   const { providers } = useSharedProviders();
@@ -156,7 +159,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   const apply = () => {
     if (!pending) return;
     stopPreview();
-    setVoiceSettingsAndRestart(pending);
+    setBookVoiceAndRestart(pending);
     setEdits({});
   };
 
@@ -191,6 +194,28 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       panelClassName="w-full sm:w-[24rem]"
     >
       <div className="space-y-5">
+        <div className="flex items-center gap-3 rounded-xl border border-line-soft bg-surface-solid px-3 py-2.5">
+          <BookIcon className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+          <p className="min-w-0 flex-1 text-xs text-soft">
+            {ownVoice || ownVoiceSpeed
+              ? 'This book has its own voice settings.'
+              : 'Changes here apply to this book only.'}
+          </p>
+          {(ownVoice || ownVoiceSpeed) && (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isProcessing}
+              onClick={() => {
+                stopPreview();
+                setEdits({});
+                setBookVoiceAndRestart({ voice: null, nativeSpeed: null });
+              }}
+            >
+              Use default
+            </Button>
+          )}
+        </div>
         {policy.supportsNativeModelSpeed && (
           <Section title="Model speed" variant="group">
             <RangeField

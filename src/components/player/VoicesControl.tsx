@@ -12,8 +12,8 @@ export const VoicesControl = ({ disabled = false, onOpen }: {
   disabled?: boolean;
   onOpen: () => void;
 }) => {
-  const { ttsModel, providerRef, providerType, voiceSpeed } = useConfig();
-  const { voice, resolvedLanguage } = useTTS();
+  const { ttsModel, providerRef, providerType } = useConfig();
+  const { voice, voiceSpeed, resolvedLanguage } = useTTS();
   const policy = resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel });
   const label = formatVoiceDockLabel({
     voice: voice || '',

@@ -2,10 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Button, Input, Select, SelectOptionDetail, Textarea } from '@/components/ui';
+import { ChatBubbleIcon, CubeIcon, MicrophoneIcon, ServerStackIcon, SpeedometerIcon } from '@/components/icons/Icons';
+import { Button, Input, RangeInput, RowIcon, Section, Select, SelectOptionDetail, SettingRow, Textarea } from '@/components/ui';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
+import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
+import { formatModelSpeed } from '@/lib/client/tts/voice-draft';
+import { MODEL_SPEED_MAX, MODEL_SPEED_MIN } from '@/lib/shared/document-settings';
 import { resolveTtsSettingsViewModel } from '@/lib/client/settings/tts-settings';
 import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 import {
@@ -14,7 +18,6 @@ import {
   resolveTtsProviderModelPolicy,
 } from '@openreader/tts/provider-policy';
 
-const fieldLabelClass = 'block text-sm font-medium text-foreground';
 
 export function ProviderSettingsPanel({
   active = true,
@@ -29,6 +32,8 @@ export function ProviderSettingsPanel({
     providerType,
     ttsModel,
     ttsInstructions,
+    voice,
+    voiceSpeed,
     updateConfigKey,
     isLoading: configLoading,
   } = useConfig();
@@ -38,6 +43,8 @@ export function ProviderSettingsPanel({
   const [modelValue, setModelValue] = useState(ttsModel);
   const [customModelInput, setCustomModelInput] = useState('');
   const [localInstructions, setLocalInstructions] = useState(ttsInstructions);
+  const [localVoice, setLocalVoice] = useState(voice);
+  const [localSpeed, setLocalSpeed] = useState(voiceSpeed);
   const [hydrated, setHydrated] = useState(false);
 
   const viewModel = useMemo(() => resolveTtsSettingsViewModel({
@@ -76,6 +83,23 @@ export function ProviderSettingsPanel({
     model: modelValue,
     sharedProviders,
   });
+  const { availableVoices, voicesPending } = useVoiceManagement(
+    viewModel.selectedProviderRef,
+    effectiveProviderType,
+    modelValue,
+  );
+  const shownVoice = localVoice || availableVoices[0] || '';
+  // A saved blend (e.g. Kokoro "a(0.5)+b(0.5)") is kept as its own option.
+  const voiceOptions = shownVoice && !availableVoices.includes(shownVoice)
+    ? [shownVoice, ...availableVoices]
+    : availableVoices;
+  const chooseProviderModel = (next: { providerRef?: string; providerType?: TtsProviderType; model: string }) => {
+    if (next.providerRef !== undefined) setLocalProviderRef(next.providerRef);
+    if (next.providerType !== undefined) setLocalProviderType(next.providerType);
+    setModelValue(next.model);
+    // Voices belong to a provider and model; the new list supplies the default.
+    setLocalVoice('');
+  };
 
   useEffect(() => {
     if (configLoading || (active && hydrated)) return;
@@ -84,8 +108,10 @@ export function ProviderSettingsPanel({
     setModelValue(ttsModel);
     setCustomModelInput(ttsModel);
     setLocalInstructions(ttsInstructions);
+    setLocalVoice(voice);
+    setLocalSpeed(voiceSpeed);
     setHydrated(true);
-  }, [active, configLoading, hydrated, providerRef, providerType, ttsInstructions, ttsModel]);
+  }, [active, configLoading, hydrated, providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed]);
 
   useEffect(() => {
     if (!viewModel.models.some((model) => model.id === modelValue) && modelValue !== '') {
@@ -104,9 +130,7 @@ export function ProviderSettingsPanel({
       providerType: fallback.providerType,
       sharedProviders,
     });
-    setLocalProviderRef(fallback.id);
-    setLocalProviderType(defaults.providerType);
-    setModelValue(defaults.defaultModel);
+    chooseProviderModel({ providerRef: fallback.id, providerType: defaults.providerType, model: defaults.defaultModel });
     setLocalInstructions(defaults.defaultInstructions);
     setCustomModelInput('');
   }, [selectedProvider, sharedProviders, viewModel.providers]);
@@ -116,11 +140,10 @@ export function ProviderSettingsPanel({
       providerRef: runtimeConfig.defaultTtsProvider,
       sharedProviders,
     });
-    setLocalProviderRef(defaults.providerRef);
-    setLocalProviderType(defaults.providerType);
-    setModelValue(defaults.defaultModel);
+    chooseProviderModel({ providerRef: defaults.providerRef, providerType: defaults.providerType, model: defaults.defaultModel });
     setCustomModelInput('');
     setLocalInstructions(defaults.defaultInstructions);
+    setLocalSpeed(1);
   };
 
   const save = async () => {
@@ -137,6 +160,8 @@ export function ProviderSettingsPanel({
         : defaults.defaultModel;
       await updateConfigKey('ttsModel', finalModel);
       await updateConfigKey('ttsInstructions', localInstructions);
+      if (shownVoice) await updateConfigKey('voice', shownVoice);
+      if (providerModelPolicy.supportsNativeModelSpeed) await updateConfigKey('voiceSpeed', localSpeed);
     } catch (error) {
       console.error('Failed to save TTS settings:', error);
       toast.error('Could not save TTS settings. Please try again.');
@@ -158,107 +183,151 @@ export function ProviderSettingsPanel({
   }
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1.5">
-        <label className={fieldLabelClass}>Provider</label>
-        {sharedProvidersLoading ? (
-          <p className="text-xs text-soft">Loading providers…</p>
-        ) : viewModel.providers.length === 0 ? (
-          <p className="text-xs text-accent">
-            No shared provider is configured. Ask an admin to add one.
-          </p>
-        ) : (
-          <Select
-            value={selectedProvider!}
-            options={viewModel.providers}
-            getOptionKey={(provider) => provider.id}
-            renderValue={(provider) => provider.name}
-            renderOption={(provider, { selected }) => (
-              <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                {provider.name}
-              </span>
-            )}
-            onChange={(provider) => {
-              const defaults = resolveProviderDefaults({
-                providerRef: provider.id,
-                providerType: provider.providerType,
-                sharedProviders,
-              });
-              setLocalProviderRef(provider.id);
-              setLocalProviderType(defaults.providerType);
-              setModelValue(defaults.defaultModel);
-              setLocalInstructions(defaults.defaultInstructions);
-              setCustomModelInput('');
-            }}
-          />
-        )}
-      </div>
-
-      <div className="space-y-1.5">
-        <label className={fieldLabelClass}>Model</label>
-        {!runtimeConfig.showAllProviderModels && (
-          <p className="text-xs text-soft">Model is fixed by your admin.</p>
-        )}
-        <div className="flex flex-col gap-2">
-          <Select
-            value={selectedModel}
-            options={viewModel.models}
-            getOptionKey={(model) => model.id}
-            renderValue={(model) => (
-              <span className="block">
-                <span className="block truncate">{model.name}</span>
-                {selectedModelVersion && (
-                  <span className="block truncate text-xs text-soft">{selectedModelVersion}</span>
-                )}
-              </span>
-            )}
-            renderOption={(model, { selected }) => (
-              <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
-                <span className="block truncate">{model.name}</span>
-                {model.id.includes(':') && (
-                  <SelectOptionDetail className="truncate">
-                    {model.id.slice(model.id.indexOf(':'))}
-                  </SelectOptionDetail>
-                )}
-              </span>
-            )}
-            onChange={(model) => {
-              if (model.id === 'custom') {
-                setModelValue(customModelInput);
-              } else {
-                setModelValue(model.id);
+    <div className="space-y-5">
+      <Section title="Provider" variant="group">
+        <SettingRow label="Provider" icon={<ServerStackIcon />}>
+          {sharedProvidersLoading ? (
+            <p className="text-xs text-soft">Loading providers…</p>
+          ) : viewModel.providers.length === 0 ? (
+            <p className="text-xs text-accent">
+              No shared provider is configured. Ask an admin to add one.
+            </p>
+          ) : (
+            <Select
+              aria-label="Provider"
+              value={selectedProvider!}
+              options={viewModel.providers}
+              getOptionKey={(provider) => provider.id}
+              renderValue={(provider) => provider.name}
+              renderOption={(provider, { selected }) => (
+                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                  {provider.name}
+                </span>
+              )}
+              onChange={(provider) => {
+                const defaults = resolveProviderDefaults({
+                  providerRef: provider.id,
+                  providerType: provider.providerType,
+                  sharedProviders,
+                });
+                chooseProviderModel({ providerRef: provider.id, providerType: defaults.providerType, model: defaults.defaultModel });
+                setLocalInstructions(defaults.defaultInstructions);
                 setCustomModelInput('');
-              }
-            }}
-          />
-
-          {viewModel.supportsCustomModel && viewModel.selectedModelId === 'custom' && (
-            <Input
-              type="text"
-              value={customModelInput}
-              onChange={(event) => {
-                setCustomModelInput(event.target.value);
-                setModelValue(event.target.value);
               }}
-              placeholder="Custom model name"
             />
           )}
-        </div>
-      </div>
+        </SettingRow>
+
+        <SettingRow
+          label="Model"
+          icon={<CubeIcon />}
+          description={runtimeConfig.showAllProviderModels ? undefined : 'Model is fixed by your admin.'}
+        >
+          <div className="flex flex-col gap-2">
+            <Select
+              aria-label="Model"
+              value={selectedModel}
+              options={viewModel.models}
+              getOptionKey={(model) => model.id}
+              renderValue={(model) => (
+                <span className="block">
+                  <span className="block truncate">{model.name}</span>
+                  {selectedModelVersion && (
+                    <span className="block truncate text-xs text-soft">{selectedModelVersion}</span>
+                  )}
+                </span>
+              )}
+              renderOption={(model, { selected }) => (
+                <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
+                  <span className="block truncate">{model.name}</span>
+                  {model.id.includes(':') && (
+                    <SelectOptionDetail className="truncate">
+                      {model.id.slice(model.id.indexOf(':'))}
+                    </SelectOptionDetail>
+                  )}
+                </span>
+              )}
+              onChange={(model) => {
+                if (model.id === 'custom') {
+                  chooseProviderModel({ model: customModelInput });
+                } else {
+                  chooseProviderModel({ model: model.id });
+                  setCustomModelInput('');
+                }
+              }}
+            />
+
+            {viewModel.supportsCustomModel && viewModel.selectedModelId === 'custom' && (
+              <Input
+                type="text"
+                aria-label="Custom model name"
+                value={customModelInput}
+                onChange={(event) => {
+                  setCustomModelInput(event.target.value);
+                  chooseProviderModel({ model: event.target.value });
+                }}
+                placeholder="Custom model name"
+              />
+            )}
+          </div>
+        </SettingRow>
+      </Section>
+
+      <Section title="Default voice" variant="group" subtitle="Books use this unless you pick a voice for one in the reader.">
+        <SettingRow label="Voice" icon={<MicrophoneIcon />}>
+          {voicesPending ? (
+            <p className="text-xs text-soft">Loading voices…</p>
+          ) : voiceOptions.length === 0 ? (
+            <p className="text-xs text-soft">No voices are available for this model.</p>
+          ) : (
+            <Select
+              aria-label="Default voice"
+              value={shownVoice}
+              options={voiceOptions}
+              getOptionKey={(option) => option}
+              renderValue={(option) => <span className="block truncate">{option}</span>}
+              renderOption={(option, { selected }) => (
+                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>{option}</span>
+              )}
+              onChange={setLocalVoice}
+            />
+          )}
+        </SettingRow>
+
+        {providerModelPolicy.supportsNativeModelSpeed && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <RowIcon><SpeedometerIcon /></RowIcon>
+              <label htmlFor="default-model-speed" className="flex-1 text-sm font-medium text-foreground">Model speed</label>
+              <span className="text-sm tabular-nums text-soft">{formatModelSpeed(localSpeed)}</span>
+            </div>
+            <RangeInput
+              id="default-model-speed"
+              min={MODEL_SPEED_MIN}
+              max={MODEL_SPEED_MAX}
+              step={0.1}
+              value={localSpeed}
+              onChange={(event) => setLocalSpeed(Number(Number(event.target.value).toFixed(2)))}
+            />
+          </div>
+        )}
+      </Section>
 
       {providerModelPolicy.supportsInstructions && (
-        <div className="space-y-1.5">
-          <label className={fieldLabelClass}>Instructions</label>
-          <Textarea
-            value={localInstructions}
-            onChange={(event) => setLocalInstructions(event.target.value)}
-            placeholder="Optional voice instructions"
-            className="h-24 resize-none"
-          />
-        </div>
+        <Section title="Instructions" variant="group">
+          <SettingRow label="Voice instructions" icon={<ChatBubbleIcon />} stacked>
+            <Textarea
+              aria-label="Voice instructions"
+              value={localInstructions}
+              onChange={(event) => setLocalInstructions(event.target.value)}
+              placeholder="Optional voice instructions"
+              className="h-24 resize-none"
+            />
+          </SettingRow>
+        </Section>
       )}
 
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex justify-end gap-2">
         <Button type="button" variant="secondary" size="md" onClick={reset}>
           Reset
         </Button>

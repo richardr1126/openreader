@@ -3,12 +3,15 @@ import type { ReactNode } from 'react';
 export function Section({
   title,
   subtitle,
+  footer,
   children,
   action,
   variant = 'panel',
 }: {
   title: string;
   subtitle?: ReactNode;
+  /** Group only: a quiet note under the list, as in iOS section footers. */
+  footer?: ReactNode;
   children: ReactNode;
   action?: ReactNode;
   variant?: 'panel' | 'flat' | 'group';
@@ -24,6 +27,7 @@ export function Section({
         <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid [&>*]:px-3 [&>*]:py-2.5">
           {children}
         </div>
+        {footer ? <p className="px-1 text-xs leading-5 text-faint">{footer}</p> : null}
       </section>
     );
   }

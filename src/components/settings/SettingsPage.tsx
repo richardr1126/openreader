@@ -173,11 +173,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                 </h2>
 
                 <div role="tabpanel" aria-label={currentSection.label}>
-                  {runtimeConfig.enableTtsProvidersTab && activeSection === 'api' ? (
-                    <div className="rounded-lg border border-line bg-surface p-4 sm:p-5">
-                      <ProviderSettingsPanel active />
-                    </div>
-                  ) : null}
+                  {runtimeConfig.enableTtsProvidersTab && activeSection === 'api' ? <ProviderSettingsPanel active /> : null}
                   {activeSection === 'theme' ? (
                     <div className="rounded-lg border border-line bg-surface p-4 sm:p-5">
                       <AppearanceSettingsPanel />

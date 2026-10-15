@@ -11,44 +11,57 @@ import {
   type ProviderLimitPolicy,
   type WorkerResource,
 } from '@openreader/runtime-config/compute-limits';
-import { ChevronRightIcon } from '@/components/icons/Icons';
-import { Button, Input, Select, ToggleRow } from '@/components/ui';
+import type { ComponentType, SVGProps } from 'react';
+import {
+  AudioWaveIcon, ChevronRightIcon, CpuChipIcon, DocumentIcon, DownloadIcon, EyeIcon, HeadphonesIcon,
+  ListIcon, PlayIcon, RefreshIcon, ServerStackIcon, UserIcon,
+} from '@/components/icons/Icons';
+import { Button, Input, RowIcon, Select, ToggleRow } from '@/components/ui';
 import { formatScope, usageLabel } from './compute-limit-labels';
 
-const ACTION_DETAILS: Record<ComputeAction, { label: string; description: string }> = {
+const ACTION_DETAILS: Record<ComputeAction, { label: string; icon: ComponentType<SVGProps<SVGSVGElement>>; description: string }> = {
   pdf_layout: {
+    icon: DocumentIcon,
     label: 'PDF layout analysis',
     description: 'Model-backed page parsing requested while a PDF is prepared.',
   },
   tts_playback: {
+    icon: PlayIcon,
     label: 'Live playback sessions',
     description: 'Session starts only. Leave this off if cached playback must always remain available.',
   },
   tts_playback_document: {
+    icon: HeadphonesIcon,
     label: 'Audiobook generation',
     description: 'Whole-document narration for audiobook export. Runs beside live playback instead of blocking it.',
   },
   tts_playback_plan: {
+    icon: ListIcon,
     label: 'Playback plan creation',
     description: 'Builds the reusable text and segment plan behind playback.',
   },
   tts_playback_export: {
+    icon: DownloadIcon,
     label: 'Audiobook assembly',
     description: 'Builds the downloadable book or chapter file from generated audio.',
   },
   document_preview: {
+    icon: EyeIcon,
     label: 'Document previews',
     description: 'Background cover and preview extraction.',
   },
   document_conversion: {
+    icon: RefreshIcon,
     label: 'Document conversion',
     description: 'DOCX and other source conversion work.',
   },
   account_export: {
+    icon: UserIcon,
     label: 'Account export',
     description: 'Background collection and archive creation for account data.',
   },
   tts_synthesis: {
+    icon: AudioWaveIcon,
     label: 'New TTS generation',
     description: 'Counts only uncached segments immediately before a provider call.',
   },
@@ -103,13 +116,11 @@ function LimitNumber({
 
 function ProviderLimits({
   title,
-  description,
   value,
   onChange,
   onRemove,
 }: {
   title: string;
-  description: string;
   value: ProviderLimitPolicy;
   onChange: (mutate: (draft: ProviderLimitPolicy) => void) => void;
   onRemove?: () => void;
@@ -117,17 +128,14 @@ function ProviderLimits({
   return (
     <div className="rounded-lg border border-line-soft bg-background p-3">
       <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-medium text-foreground">{title}</p>
-          <p className="mt-0.5 text-xs text-soft">{description}</p>
-        </div>
+        <p className="text-sm font-medium text-foreground">{title}</p>
         {onRemove ? (
           <Button variant="ghost" size="xs" onClick={onRemove}>Remove</Button>
         ) : null}
       </div>
       <ToggleRow
         label="Enforce provider capacity"
-        description="Wait for shared provider capacity before starting an uncached segment."
+        info="Waits for shared provider capacity before starting an uncached segment."
         checked={value.enabled}
         onChange={(enabled) => onChange((draft) => { draft.enabled = enabled; })}
         variant="flat"
@@ -197,22 +205,18 @@ export function ComputeLimitsEditor({
 
   return (
     <div className="divide-y divide-line-soft !p-0">
-      <p className="px-3 py-2.5 text-xs text-soft">
-        Request-limit switches control admission only; the TTS switch controls generated-character usage.
-        Worker queues, resource capacity, and provider capacity continue to apply either way.
-      </p>
-
       <div className="divide-y divide-line-soft">
         {COMPUTE_ACTIONS.map((action) => {
           const actionPolicy = policy.actions[action];
           const detail = ACTION_DETAILS[action];
+          const Icon = detail.icon;
           return (
             <details key={action} className="group">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">{detail.label}</p>
-                  <p className="truncate text-xs text-muted">{detail.description}</p>
-                </div>
+                <span className="flex min-w-0 items-center gap-3">
+                  <RowIcon><Icon /></RowIcon>
+                  <span className="truncate text-sm font-medium text-foreground">{detail.label}</span>
+                </span>
                 <span className="flex shrink-0 items-center gap-2">
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                     actionPolicy.enabled
@@ -220,18 +224,19 @@ export function ComputeLimitsEditor({
                       : 'bg-surface-sunken text-muted'
                   }`}>
                     {action === 'tts_synthesis'
-                      ? (actionPolicy.enabled ? 'Usage limited' : 'Usage unlimited')
-                      : (actionPolicy.enabled ? 'Request limits on' : 'Request limits off')}
+                      ? (actionPolicy.enabled ? 'Limited' : 'Unlimited')
+                      : (actionPolicy.enabled ? 'On' : 'Off')}
                   </span>
                   <ChevronRightIcon className="h-3.5 w-3.5 text-soft transition-transform duration-base group-open:rotate-90" />
                 </span>
               </summary>
               <div className="space-y-3 px-3 pb-3 pt-1">
+                <p className="text-xs text-faint">{detail.description}</p>
                 <ToggleRow
                   label={action === 'tts_synthesis' ? 'Limit new generation' : 'Enforce request limits'}
-                  description={action === 'tts_synthesis'
+                  info={action === 'tts_synthesis'
                     ? 'The segment that crosses a daily threshold finishes; the next uncached segment stops.'
-                    : 'Reject new work after any start-window or active-work limit is reached.'}
+                    : 'Rejects new work once any start-window or active-work limit is reached. Worker queues and provider capacity apply either way.'}
                   checked={actionPolicy.enabled}
                   onChange={(enabled) => update((draft) => { draft.actions[action].enabled = enabled; })}
                   variant="flat"
@@ -355,13 +360,14 @@ export function ComputeLimitsEditor({
 
       <details className="group">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-foreground">Worker capacity</span>
-            <span className="block truncate text-xs text-muted">Always-enforced local queues and named resource pools.</span>
+          <span className="flex min-w-0 items-center gap-3">
+            <RowIcon><CpuChipIcon /></RowIcon>
+            <span className="truncate text-sm font-medium text-foreground">Worker capacity</span>
           </span>
           <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
         </summary>
         <div className="space-y-3 px-3 pb-3 pt-1">
+          <p className="text-xs text-faint">Always enforced: local queues and named resource pools.</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <LimitNumber
               label="Executing per worker"
@@ -395,16 +401,16 @@ export function ComputeLimitsEditor({
 
       <details className="group">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
-          <span className="min-w-0">
-            <span className="block text-sm font-medium text-foreground">TTS provider capacity</span>
-            <span className="block truncate text-xs text-muted">Shared concurrency and rolling one-minute throughput.</span>
+          <span className="flex min-w-0 items-center gap-3">
+            <RowIcon><ServerStackIcon /></RowIcon>
+            <span className="truncate text-sm font-medium text-foreground">TTS provider capacity</span>
           </span>
           <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
         </summary>
         <div className="space-y-2 px-3 pb-3 pt-1">
+          <p className="text-xs text-faint">Shared concurrency and rolling one-minute throughput.</p>
           <ProviderLimits
             title="All providers"
-            description="Used whenever a provider does not have its own override."
             value={policy.providers.defaults}
             onChange={(mutate) => updateProvider(null, mutate)}
           />
@@ -414,7 +420,6 @@ export function ComputeLimitsEditor({
               <ProviderLimits
                 key={providerRef}
                 title={displayName}
-                description={`Override for ${providerRef}`}
                 value={limits}
                 onChange={(mutate) => updateProvider(providerRef, mutate)}
                 onRemove={() => update((draft) => { delete draft.providers.overrides[providerRef]; })}

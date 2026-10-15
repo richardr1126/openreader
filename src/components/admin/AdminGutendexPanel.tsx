@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { Button, Input, Section, SettingRow, ToggleRow } from '@/components/ui';
+import { BookIcon, GlobeIcon, KeyIcon } from '@/components/icons/Icons';
 
 type GutendexSettings = {
   enabled: boolean;
@@ -72,16 +73,21 @@ export function AdminGutendexPanel() {
   }
 
   const changed = enabled !== settings.enabled || serverUrl !== settings.serverUrl || Boolean(apiKey.trim());
-  const field = (label: string, input: ReactNode, meta?: ReactNode) => (
-    <SettingRow label={label} meta={meta} controlClassName="w-[min(20rem,60%)]">
+  const field = (label: string, icon: ReactNode, input: ReactNode, meta?: ReactNode, info?: ReactNode) => (
+    <SettingRow label={label} icon={icon} info={info} meta={meta} controlClassName="w-[min(20rem,60%)]">
       {input}
     </SettingRow>
   );
   return (
-    <Section title="Project Gutenberg" variant="group">
+    <Section
+      title="Project Gutenberg"
+      variant="group"
+      footer={<>Books always download from gutenberg.org. An API key is sent only from this server, never to a browser.</>}
+    >
         <ToggleRow
           label="Enable the Project Gutenberg catalog"
-          description="Adds a Project Gutenberg tab to Add Documents, where readers can search the catalog and add public domain books to their library."
+          icon={<BookIcon />}
+          info="Adds a Project Gutenberg tab to Add Documents, where readers search the catalog and add public domain books."
           checked={enabled}
           disabled={saving}
           onChange={setEnabled}
@@ -89,10 +95,17 @@ export function AdminGutendexPanel() {
         />
         {field(
           'Gutendex server',
+          <GlobeIcon />,
           <Input disabled={saving} aria-label="Gutendex server" type="url" value={serverUrl} placeholder="https://gutendex.com" onChange={(event) => setServerUrl(event.target.value)} />,
+          undefined,
+          <>
+            Search goes through a <a href="https://github.com/garethbjohnson/gutendex" target="_blank" rel="noreferrer" className="text-accent hover:underline">Gutendex</a> server.
+            The public gutendex.com needs no key but is shared and can be slow; a self-hosted one may require a key.
+          </>,
         )}
         {field(
           'API key (optional)',
+          <KeyIcon />,
           <Input disabled={saving} aria-label="Gutendex API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 'Only for servers that require one'} onChange={(event) => setApiKey(event.target.value)} />,
           settings.apiKeyConfigured ? `Saved key: ${settings.apiKeyMask}` : 'No key saved',
         )}
@@ -107,11 +120,6 @@ export function AdminGutendexPanel() {
           </Button>
           {settings.apiKeyConfigured && <Button variant="outline" size="sm" disabled={saving} onClick={() => void save({ apiKey: null })}>Remove saved key</Button>}
         </div>
-        <p className="text-xs text-soft">
-          Search goes through a <a href="https://github.com/garethbjohnson/gutendex" target="_blank" rel="noreferrer" className="text-accent hover:underline">Gutendex</a> server.
-          The public one at gutendex.com needs no key but is shared, and searching it can be slow; a self-hosted server can require an API key, which is sent as <code>X-API-Key</code> from this server only and never reaches a browser.
-          Books always download from gutenberg.org.
-        </p>
       </Section>
   );
 }

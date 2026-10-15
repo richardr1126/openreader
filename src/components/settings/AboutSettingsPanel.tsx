@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRightIcon, SearchIcon } from '@/components/icons/Icons';
-import { Badge, ButtonAnchor, SearchField, Section } from '@/components/ui';
+import { ChevronRightIcon, ExternalLinkIcon, HeartIcon, SearchIcon } from '@/components/icons/Icons';
+import { Badge, ButtonAnchor, RowIcon, SearchField, Section } from '@/components/ui';
 import { QueryError } from '@/components/ui/query-states';
 import { requestJson } from '@/lib/client/api/http';
 import { queryKeys } from '@/lib/client/query-keys';
@@ -37,10 +37,10 @@ function ExternalLink({ href, children }: { href: string; children: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex text-xs font-medium text-accent transition-colors duration-base hover:underline"
+      className="inline-flex items-center gap-1 text-xs font-medium text-accent transition-colors duration-base hover:underline"
     >
       {children}
-      <span aria-hidden="true">&nbsp;↗</span>
+      <ExternalLinkIcon className="h-3 w-3" aria-hidden />
       <span className="sr-only"> (opens in a new tab)</span>
     </a>
   );
@@ -50,14 +50,15 @@ function SupportSection() {
   return (
     <Section variant="group" title="Support">
       <div className="flex flex-wrap items-center gap-3">
+        <RowIcon><HeartIcon /></RowIcon>
         <div className="min-w-0 flex-1">
           <div className="text-sm text-foreground">Support OpenReader</div>
           <div className="mt-0.5 text-xs text-faint">
             OpenReader is free and open source. If it is useful to you, you can leave a tip.
           </div>
         </div>
-        <ButtonAnchor href={TIP_URL} target="_blank" rel="noopener noreferrer" size="sm">
-          Buy Me a Coffee<span aria-hidden="true">&nbsp;↗</span>
+        <ButtonAnchor href={TIP_URL} target="_blank" rel="noopener noreferrer" size="sm" className="gap-1.5">
+          Buy Me a Coffee<ExternalLinkIcon className="h-3.5 w-3.5" aria-hidden />
           <span className="sr-only"> (opens in a new tab)</span>
         </ButtonAnchor>
       </div>

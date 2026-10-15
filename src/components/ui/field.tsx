@@ -1,7 +1,10 @@
 'use client';
 
+import { PopoverButton } from '@headlessui/react';
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
+import { InfoCircleIcon } from '@/components/icons/Icons';
 import { cn } from './cn';
+import { PopoverRoot, PopoverSurface } from './popover';
 import { RangeInput } from './range';
 import { Switch } from './switch';
 
@@ -25,31 +28,85 @@ export function Field({
   );
 }
 
+/** A theme-tinted square that holds a row's icon, as in iOS grouped lists. */
+export function RowIcon({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-wash text-accent [&>svg]:h-4 [&>svg]:w-4',
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+/**
+ * An ⓘ button beside a row label that opens a short explanation, so rows stay
+ * one line while the detail remains a tap away.
+ */
+export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span className="inline-flex" onClick={(event) => event.stopPropagation()}>
+      <PopoverRoot className="inline-flex">
+        <PopoverButton
+          aria-label={`About ${label}`}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-faint transition-colors duration-fast ease-standard hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <InfoCircleIcon className="h-4 w-4" />
+        </PopoverButton>
+        <PopoverSurface anchor="bottom start" className="mt-1 w-72 max-w-[calc(100vw-2rem)] text-xs leading-5 text-soft">
+          {children}
+        </PopoverSurface>
+      </PopoverRoot>
+    </span>
+  );
+}
+
+function RowLabel({ id, label, info }: { id?: string; label: string; info?: ReactNode }) {
+  return (
+    <span className="flex items-center gap-1">
+      <span id={id} className="text-sm font-medium leading-5 text-foreground">{label}</span>
+      {info ? <InfoTip label={label}>{info}</InfoTip> : null}
+    </span>
+  );
+}
+
 /**
  * A labelled setting inside a `Section variant="group"`: text on the left, the
  * control on the right (or below it when `stacked`). `meta` is a quiet line
- * under the description, e.g. where the current value came from.
+ * under the description, e.g. where the current value came from; `info` sits
+ * behind an ⓘ button beside the label.
  */
 export function SettingRow({
   label,
+  icon,
   description,
+  info,
   meta,
   stacked = false,
   controlClassName = 'w-[min(15rem,60%)]',
   children,
 }: {
   label: string;
+  icon?: ReactNode;
   description?: ReactNode;
+  info?: ReactNode;
   meta?: ReactNode;
   stacked?: boolean;
   controlClassName?: string;
   children: ReactNode;
 }) {
   const text = (
-    <div className="min-w-0 flex-1 space-y-0.5">
-      <span className="block text-sm font-medium leading-5 text-foreground">{label}</span>
-      {description ? <span className="block text-xs leading-4 text-soft">{description}</span> : null}
-      {meta ? <span className="block text-[11px] leading-4 text-faint">{meta}</span> : null}
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      {icon ? <RowIcon>{icon}</RowIcon> : null}
+      <div className="min-w-0 flex-1 space-y-0.5">
+        <RowLabel label={label} info={info} />
+        {description ? <span className="block text-xs leading-4 text-soft">{description}</span> : null}
+        {meta ? <span className="block text-[11px] leading-4 text-faint">{meta}</span> : null}
+      </div>
     </div>
   );
   if (stacked) {
@@ -70,7 +127,9 @@ export function SettingRow({
 
 export function ToggleRow({
   label,
+  icon,
   description,
+  info,
   checked,
   onChange,
   disabled = false,
@@ -78,7 +137,9 @@ export function ToggleRow({
   variant = 'card',
 }: {
   label: string;
+  icon?: ReactNode;
   description?: string;
+  info?: ReactNode;
   checked: boolean;
   onChange: (checked: boolean) => void;
   disabled?: boolean;
@@ -98,12 +159,13 @@ export function ToggleRow({
   };
   return (
     <div className={rowClass}>
-      <div className={cn('flex gap-2.5', variant === 'plain' ? 'items-center' : 'items-start')}>
+      <div className={cn('flex gap-2.5', variant === 'plain' || icon ? 'items-center' : 'items-start')}>
+        {icon ? <RowIcon className="mr-0.5">{icon}</RowIcon> : null}
         <div
           className={cn('flex-1 min-w-0 space-y-0.5', disabled ? '' : 'cursor-pointer')}
           onClick={handleTextToggle}
         >
-          <span id={labelId} className="block text-sm font-medium leading-5 text-foreground">{label}</span>
+          <RowLabel id={labelId} label={label} info={info} />
           {description ? <span id={descId} className="block text-xs leading-4 text-soft">{description}</span> : null}
           {meta ? <span className="block text-[11px] leading-4 text-faint">{meta}</span> : null}
         </div>

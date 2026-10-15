@@ -13,7 +13,7 @@ describe('account email UI', () => {
       'src/app/(app)/forgot-password/page.tsx',
     ]) {
       const page = source(relativePath);
-      expect(page, relativePath).toContain("import { MailIcon } from '@/components/icons/Icons'");
+      expect(page, relativePath).toMatch(/import \{[^}]*\bMailIcon\b[^}]*\} from '@\/components\/icons\/Icons'/);
       expect(page, relativePath).toContain('<MailIcon');
       expect(page, relativePath).not.toContain('>✉<');
     }

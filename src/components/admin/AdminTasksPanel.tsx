@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Button, Input, Section, Switch } from '@/components/ui';
-import { ClockIcon, RefreshIcon } from '@/components/icons/Icons';
+import { Button, InfoTip, Input, RowIcon, Section, Switch } from '@/components/ui';
+import {
+  ClockIcon, HeadphonesIcon, RefreshIcon, SlidersIcon, TrashIcon, UploadIcon, WrenchIcon,
+} from '@/components/icons/Icons';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
 
@@ -36,6 +38,13 @@ async function fetchTasks(): Promise<{ tasks: TaskView[]; scheduler: TaskSchedul
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as { tasks: TaskView[]; scheduler: TaskSchedulerInfo };
 }
+
+const TASK_ICONS: Record<string, ReactNode> = {
+  'reap-orphaned-blobs': <TrashIcon />,
+  'cleanup-temp-uploads': <UploadIcon />,
+  'expire-export-artifacts': <HeadphonesIcon />,
+  'prune-compute-limits': <SlidersIcon />,
+};
 
 function RunningDot() {
   return (
@@ -121,12 +130,13 @@ export function AdminTasksPanel() {
   });
 
   return (
-    <Section variant="group" title="Scheduled tasks">
-      {data?.scheduler.mode === 'vercel-cron' && (
-        <p className="text-xs text-soft">
-          Vercel Hobby invokes scheduled tasks once daily. Shorter intervals are unavailable on this deployment.
-        </p>
-      )}
+    <Section
+      variant="group"
+      title="Scheduled tasks"
+      footer={data?.scheduler.mode === 'vercel-cron'
+        ? 'Vercel Hobby runs scheduled tasks once daily, so shorter intervals do not apply here.'
+        : undefined}
+    >
       {isLoading ? (
         <TasksSkeleton />
       ) : (
@@ -162,23 +172,15 @@ function TasksSkeleton() {
       aria-busy="true"
     >
       {rows.map((_, index) => (
-        <div key={index} className="px-3 py-2.5">
-          <div className="space-y-2">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 space-y-1.5">
-                <div className="h-4 w-48 rounded bg-offbase" />
-                <div className="h-3 w-64 rounded bg-offbase" />
-              </div>
-              <div className="flex shrink-0 items-center gap-2 pt-0.5">
-                <div className="h-5 w-9 rounded-pill bg-offbase" />
-                <div className="h-8 w-20 rounded-md bg-offbase" />
-              </div>
+        <div key={index} className="space-y-2 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="h-7 w-7 rounded-md bg-offbase" />
+              <div className="h-4 w-48 rounded bg-offbase" />
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="h-3 w-24 rounded bg-offbase" />
-              <div className="h-7 w-28 rounded-md bg-offbase" />
-            </div>
+            <div className="h-5 w-9 rounded-pill bg-offbase" />
           </div>
+          <div className="ml-10 h-6 w-64 rounded bg-offbase" />
         </div>
       ))}
     </div>
@@ -219,79 +221,64 @@ function TaskRow({
 
   const running = task.running || runPending;
 
+  const about = [task.description, task.lastStatus === 'ok' ? task.lastResult : null].filter(Boolean);
+
   return (
-    <li className="px-3 py-2.5">
-      <div>
-        <div className="space-y-2.5">
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                {running && <RunningDot />}
-                <span className="truncate text-sm font-medium text-foreground">{task.name}</span>
-              </div>
-              {task.description && <p className="mt-0.5 text-xs text-soft">{task.description}</p>}
-            </div>
-            <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-start">
-              <Switch checked={task.enabled} onChange={onToggle} ariaLabel={`Enable ${task.name}`} disabled={busy} />
-              <Button variant="outline" size="sm" onClick={onRun} disabled={busy || running}>
-                {running ? 'Running…' : 'Run now'}
-              </Button>
-            </div>
-          </div>
+    <li className="space-y-1.5 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-3">
+          <RowIcon>{TASK_ICONS[task.key] ?? <WrenchIcon />}</RowIcon>
+          <span className="truncate text-sm font-medium text-foreground">{task.name}</span>
+          {about.length > 0 ? (
+            <InfoTip label={task.name}>
+              {about.map((line) => <p key={line} className="[&+p]:mt-1.5">{line}</p>)}
+            </InfoTip>
+          ) : null}
+          {running && <RunningDot />}
+        </span>
+        <Switch checked={task.enabled} onChange={onToggle} ariaLabel={`Enable ${task.name}`} disabled={busy} />
+      </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-1.5">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-soft">
-              <span
-                className="inline-flex items-center gap-1"
-                title={`Ran in ${formatDuration(task.lastDurationMs)}`}
-              >
-                <ClockIcon className="size-3 text-faint" />
-                {formatRelative(task.lastRunAt)}
-              </span>
-              {task.enabled && schedulerMode === 'vercel-cron' && (
-                <span className="inline-flex items-center gap-1 text-faint">
-                  <RefreshIcon className="size-3" />
-                  next daily cron
-                </span>
-              )}
-              {task.enabled && schedulerMode !== 'vercel-cron' && task.nextRunAt != null && (
-                <span className="inline-flex items-center gap-1 text-faint">
-                  <RefreshIcon className="size-3" />
-                  next {formatRelative(task.nextRunAt)}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-center gap-1.5 self-end text-xs text-faint sm:self-auto">
-              <span>Every</span>
-              <Input
-                type="number"
-                min={minimumIntervalMs / 60000}
-                step="any"
-                controlSize="sm"
-                className="w-14 text-center"
-                value={minutes}
-                onChange={(e) => setMinutes(e.target.value)}
-                aria-label={`${task.name} interval in minutes`}
-              />
-              <span>min</span>
-              {intervalDirty && (
-                <Button variant="primary" size="xs" onClick={() => onSaveInterval(newIntervalMs)} disabled={busy}>
-                  Save
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {task.lastStatus === 'error' && task.lastError ? (
-            <p className="truncate text-xs text-danger" title={task.lastError}>{task.lastError}</p>
-          ) : (
-            task.lastStatus === 'ok' && task.lastResult && (
-              <p className="truncate text-xs text-faint" title={task.lastResult}>{task.lastResult}</p>
-            )
+      <div className="ml-10 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-xs text-soft">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="inline-flex items-center gap-1" title={`Ran in ${formatDuration(task.lastDurationMs)}`}>
+            <ClockIcon className="size-3 text-faint" />
+            {formatRelative(task.lastRunAt)}
+          </span>
+          {task.enabled && (schedulerMode === 'vercel-cron' || task.nextRunAt != null) && (
+            <span className="inline-flex items-center gap-1 text-faint">
+              <RefreshIcon className="size-3" />
+              {schedulerMode === 'vercel-cron' ? 'next daily cron' : `next ${formatRelative(task.nextRunAt)}`}
+            </span>
           )}
         </div>
+        <div className="flex items-center gap-1.5 text-faint">
+          <span>Every</span>
+          <Input
+            type="number"
+            min={minimumIntervalMs / 60000}
+            step="any"
+            controlSize="sm"
+            className="!w-16 text-center"
+            value={minutes}
+            onChange={(e) => setMinutes(e.target.value)}
+            aria-label={`${task.name} interval in minutes`}
+          />
+          <span>min</span>
+          {intervalDirty && (
+            <Button variant="primary" size="xs" onClick={() => onSaveInterval(newIntervalMs)} disabled={busy}>
+              Save
+            </Button>
+          )}
+          <Button variant="outline" size="xs" className="whitespace-nowrap" onClick={onRun} disabled={busy || running}>
+            {running ? 'Running…' : 'Run now'}
+          </Button>
+        </div>
       </div>
+
+      {task.lastStatus === 'error' && task.lastError ? (
+        <p className="ml-10 truncate text-xs text-danger" title={task.lastError}>{task.lastError}</p>
+      ) : null}
     </li>
   );
 }
