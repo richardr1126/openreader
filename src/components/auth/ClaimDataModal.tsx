@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { WarningIcon } from '@/components/icons/Icons';
 import { Button, ModalFrame, ModalTitle } from '@/components/ui';
 import { useClaimData } from '@/hooks/useClaimData';
 import type { ClaimableCounts } from '@/types/client';
@@ -68,8 +69,9 @@ export default function ClaimDataModal({
         </ul>
       </div>
 
-      <p className="text-xs text-faint mb-6 italic">
-        ⚠️ First user to claim this data will own it and revoke access for anyone else.
+      <p className="mb-6 flex items-start gap-1.5 text-xs italic text-faint">
+        <WarningIcon className="mt-px h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
+        First user to claim this data will own it and revoke access for anyone else.
       </p>
 
       <div className="flex justify-end gap-3">

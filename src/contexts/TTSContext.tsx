@@ -29,6 +29,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useConfig } from '@/contexts/ConfigContext';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
+import { useDefaultVoice } from '@/hooks/audio/useDefaultVoice';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
 import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
 import {
@@ -61,6 +62,8 @@ import type {
 } from '@/types/tts';
 import type { TTSRequestHeaders, TTSSegmentLocator } from '@/types/client';
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import type { DocumentSettings } from '@/types/document-settings';
+import { resolveBookVoice } from '@/lib/shared/document-settings';
 
 import type { ReaderType } from '@/types/user-state';
 import { playbackPlanIdentity, type TtsPlaybackPlan } from '@/lib/shared/playback-plan';
@@ -77,8 +80,12 @@ type EpubLocationChangeHandler = (
  * Interface defining all available methods and properties in the TTS context
  */
 interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'currentSegment'> {
-  // Voice settings
+  /** The open book's voice and model speed: its own picks, else the defaults. */
   voice: string;
+  voiceSpeed: number;
+  /** Whether the open book overrides the default voice / model speed. */
+  ownVoice: boolean;
+  ownVoiceSpeed: boolean;
   availableVoices: string[];
 
   // Current playback plan text and cursor
@@ -101,13 +108,13 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   setDocumentPlaybackAnchor: (location: TTSLocation, hasReadableText: boolean, locator?: TTSSegmentLocator | null) => void;
   setCurrDocPages: (num: number | undefined) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
-  /** Commit a voice and/or model-speed change with one plan restart. */
-  setVoiceSettingsAndRestart: (change: { voice?: string; nativeSpeed?: number }) => void;
+  /** Set (or with null, reset) the open book's voice and/or model speed with one plan restart. */
+  setBookVoiceAndRestart: (change: { voice?: string | null; nativeSpeed?: number | null }) => void;
   /** Reacquire the server-owned bootstrap payload after plan-affecting settings change. */
   reacquirePlaybackPlan: () => Promise<void>;
   initializeReaderSession: (input: {
     readerType: ReaderType;
-    language: string;
+    settings: DocumentSettings;
     plan: TtsPlaybackPlan;
     initialPosition: ReadingPosition | null;
   }) => void;
@@ -115,7 +122,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
    * Swap in a plan the server re-planned for the open reader (voice, speed,
    * language, segmentation) without resetting the reading position.
    */
-  adoptReplannedPlaybackPlan: (input: { language: string; plan: TtsPlaybackPlan }) => void;
+  adoptReplannedPlaybackPlan: (input: { settings: DocumentSettings; plan: TtsPlaybackPlan }) => void;
   playbackPlanReady: boolean;
   /** Identity of the adopted plan, or null while none is adopted. */
   playbackPlanKey: string | null;
@@ -251,16 +258,31 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setSelectedOrdinal,
     setPlaybackSeekLayout,
   } = useTtsPlaybackModel();
-  const [speed, setSpeed] = useState(voiceSpeed);
+  const { voice, speed } = useDefaultVoice({
+    configIsLoading,
+    configVoice,
+    voiceSpeed,
+    availableVoices,
+    providerRef: configProviderRef,
+    providerType: configProviderType,
+    ttsModel: configTTSModel,
+  });
   const [audioSpeed, setAudioSpeed] = useState(audioPlayerSpeed);
-  const [voice, setVoice] = useState(configVoice);
   const [ttsModel, setTTSModel] = useState(configTTSModel);
   const [ttsInstructions, setTTSInstructions] = useState(configTTSInstructions);
-  const [documentLanguage, setDocumentLanguage] = useState('auto');
+  const [readerSettings, setReaderSettings] = useState<DocumentSettings | null>(null);
+  const documentLanguage = readerSettings?.language ?? 'auto';
+  const bookVoice = resolveBookVoice({
+    override: readerSettings?.voiceOverride,
+    providerRef: configProviderRef,
+    ttsModel,
+    defaultVoice: voice,
+    defaultVoiceSpeed: speed,
+  });
   const [pdfSkipBlockKinds, setPdfSkipBlockKinds] = useState<ParsedPdfBlockKind[] | null>(null);
   const resolvedLanguage = useMemo(
-    () => resolveTtsLanguage({ configuredLanguage: documentLanguage, voice }),
-    [documentLanguage, voice],
+    () => resolveTtsLanguage({ configuredLanguage: documentLanguage, voice: bookVoice.voice }),
+    [documentLanguage, bookVoice.voice],
   );
   const providerModelPolicy = useMemo(
     () => resolveTtsProviderModelPolicy({
@@ -270,17 +292,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     }),
     [configProviderRef, configProviderType, ttsModel],
   );
-  const configModelPolicy = useMemo(
-    () => resolveTtsProviderModelPolicy({
-      providerRef: configProviderRef,
-      providerType: configProviderType,
-      model: configTTSModel,
-    }),
-    [configProviderRef, configProviderType, configTTSModel],
-  );
   const effectiveNativeSpeed = useMemo(
-    () => (providerModelPolicy.supportsNativeModelSpeed ? speed : 1),
-    [providerModelPolicy.supportsNativeModelSpeed, speed],
+    () => (providerModelPolicy.supportsNativeModelSpeed ? bookVoice.voiceSpeed : 1),
+    [providerModelPolicy.supportsNativeModelSpeed, bookVoice.voiceSpeed],
   );
 
   const playbackRunIdRef = useRef(0);
@@ -329,7 +343,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     // Settings identify the plan and audio cache. Wait for voice resolution
     // (including a failed lookup's fallback) instead of publishing a
     // voice-less placeholder that is replaced moments later.
-    if (!voice && (voicesPending || availableVoices.length > 0)) return null;
+    if (!bookVoice.voice && (voicesPending || availableVoices.length > 0)) return null;
     const headers: TTSRequestHeaders = {
       'Content-Type': 'application/json',
       'x-tts-provider': configProviderRef,
@@ -342,7 +356,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
           providerRef: configProviderRef,
           providerType: configProviderType,
           ttsModel,
-          voice,
+          voice: bookVoice.voice,
           nativeSpeed: effectiveNativeSpeed,
           ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
           language: resolvedLanguage,
@@ -367,7 +381,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsInstructions,
     ttsModel,
     ttsSegmentMaxBlockLength,
-    voice,
+    bookVoice.voice,
     voicesPending,
   ]);
   const {
@@ -484,65 +498,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     syncPlaybackLocator,
   });
 
-  const updateVoiceAndSpeed = useCallback(() => {
-    setVoice(configVoice);
-    setSpeed(voiceSpeed);
+  useEffect(() => {
+    if (configIsLoading) return;
     setAudioSpeed(audioPlayerSpeed);
-  }, [configVoice, voiceSpeed, audioPlayerSpeed]);
-
-  /**
-   * Initializes configuration and fetches available voices
-   */
-  useEffect(() => {
-    if (!configIsLoading) {
-      updateVoiceAndSpeed();
-      setTTSModel(configTTSModel);
-      setTTSInstructions(configTTSInstructions);
-    }
-  }, [configIsLoading, updateVoiceAndSpeed, configTTSModel, configTTSInstructions]);
-
-  /**
-   * Validates that the current voice is in the available voices list
-   * If voice is empty or invalid, use the first available voice (only in local state, don't save)
-   */
-  useEffect(() => {
-    if (availableVoices.length > 0) {
-      // Allow Kokoro multi-voice strings (e.g., "voice1(0.5)+voice2(0.5)") for any provider
-      const isKokoro = configModelPolicy.isKokoroModel;
-      const fallbackVoice = configVoice || availableVoices[0];
-      const providerUnresolved = !configModelPolicy.isResolvedProviderType;
-
-      if (isKokoro && providerUnresolved && voice.includes('+')) {
-        const firstVoice = voice.split('+')[0]?.replace(/\([^)]*\)/g, '').trim();
-        if (firstVoice) {
-          setVoice(firstVoice);
-        }
-        return;
-      }
-
-      if (isKokoro) {
-        // If Kokoro and we have any voice string (including plus/weights), don't override it.
-        // Only default when local voice is empty.
-        if (!voice) {
-          setVoice(fallbackVoice);
-        }
-        return;
-      }
-
-      // For non-Kokoro, only force a fallback when there is no active local voice.
-      // If a persisted config voice exists, keep it rather than overriding from a
-      // potentially stale in-flight voices response during reload.
-      if (!voice) {
-        setVoice(fallbackVoice);
-        return;
-      }
-
-      if (!configVoice && !availableVoices.includes(voice)) {
-        setVoice(availableVoices[0]);
-        // Don't save to config - just use it temporarily until user explicitly selects one
-      }
-    }
-  }, [availableVoices, voice, configVoice, configModelPolicy]);
+    setTTSModel(configTTSModel);
+    setTTSInstructions(configTTSInstructions);
+  }, [configIsLoading, audioPlayerSpeed, configTTSModel, configTTSInstructions]);
 
   /**
    * Stops the current audio playback and resets all state
@@ -564,13 +525,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const initializeReaderSession = useCallback((input: {
     readerType: ReaderType;
-    language: string;
+    settings: DocumentSettings;
     plan: TtsPlaybackPlan;
     initialPosition: ReadingPosition | null;
   }) => {
     stop();
     resetBootstrapPlanAdoption();
-    setDocumentLanguage(input.language);
+    setReaderSettings(input.settings);
     setIsEPUB(input.readerType === 'epub');
     acceptBootstrapPlaybackPlan(input.plan);
 
@@ -607,13 +568,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   ]);
 
   const adoptReplannedPlaybackPlan = useCallback((input: {
-    language: string;
+    settings: DocumentSettings;
     plan: TtsPlaybackPlan;
   }) => {
     abortAudio();
     setIsPlaying(false);
     resetBootstrapPlanAdoption();
-    setDocumentLanguage(input.language);
+    setReaderSettings(input.settings);
     acceptBootstrapPlaybackPlan(input.plan);
   }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption]);
 
@@ -628,7 +589,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const {
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
-    setVoiceSettingsAndRestart,
+    setBookVoiceAndRestart,
   } = useTtsPlaybackSettings({
     isPlaying,
     restartSeqRef,
@@ -640,8 +601,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrentWordIndex,
     setIsPlaying,
     setIsProcessing,
-    setSpeed,
-    setVoice,
+    documentId,
+    readerSettings,
+    setReaderSettings,
+    providerRef: configProviderRef,
+    ttsModel,
+    defaultVoice: voice,
+    defaultVoiceSpeed: speed,
     updateConfigKey,
     reacquirePlaybackPlan,
   });
@@ -664,7 +630,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPage,
     currDocPageNumber,
     currDocPages,
-    voice,
+    voice: bookVoice.voice,
+    voiceSpeed: bookVoice.voiceSpeed,
+    ownVoice: bookVoice.ownVoice,
+    ownVoiceSpeed: bookVoice.ownVoiceSpeed,
     availableVoices,
     togglePlay,
     skipForward,
@@ -677,7 +646,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setDocumentPlaybackAnchor,
     setCurrDocPages,
     setAudioPlayerSpeedAndRestart,
-    setVoiceSettingsAndRestart,
+    setBookVoiceAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
@@ -707,7 +676,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     currDocPage,
     currDocPageNumber,
     currDocPages,
-    voice,
+    bookVoice.voice,
+    bookVoice.voiceSpeed,
+    bookVoice.ownVoice,
+    bookVoice.ownVoiceSpeed,
     availableVoices,
     togglePlay,
     skipForward,
@@ -720,7 +692,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setDocumentPlaybackAnchor,
     setCurrDocPages,
     setAudioPlayerSpeedAndRestart,
-    setVoiceSettingsAndRestart,
+    setBookVoiceAndRestart,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,

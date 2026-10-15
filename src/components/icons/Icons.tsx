@@ -707,3 +707,310 @@ export function BookmarksListIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** Outline icon on the shared 24px grid with a 1.5 stroke. */
+function OutlineIcon({ children, ...props }: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={props.width || "1.5em"}
+      height={props.height || "1.5em"}
+      {...props}
+    >
+      {children}
+    </svg>
+  );
+}
+
+export function BookIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M12 6.5C10.5 5.3 8.4 4.75 6 4.75c-1.1 0-2.15.12-3 .35v13.5c.85-.23 1.9-.35 3-.35 2.4 0 4.5.55 6 1.75m0-13.5c1.5-1.2 3.6-1.75 6-1.75 1.1 0 2.15.12 3 .35v13.5c-.85-.23-1.9-.35-3-.35-2.4 0-4.5.55-6 1.75m0-13.5v13.5" />
+    </OutlineIcon>
+  );
+}
+
+export function MicrophoneIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.75 21h6.5" />
+    </OutlineIcon>
+  );
+}
+
+export function ServerStackIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <rect x="3.5" y="4" width="17" height="6.5" rx="2" />
+      <rect x="3.5" y="13.5" width="17" height="6.5" rx="2" />
+      <path d="M7 7.25h.01M10 7.25h.01M7 16.75h.01M10 16.75h.01" strokeWidth={2.25} />
+    </OutlineIcon>
+  );
+}
+
+export function UsersIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="9" cy="8" r="3.25" />
+      <path d="M3 19.5a6 6 0 0 1 12 0M15.5 4.9a3.25 3.25 0 0 1 0 6.2M17.5 13.9a6 6 0 0 1 3.5 5.6" />
+    </OutlineIcon>
+  );
+}
+
+export function DatabaseIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <ellipse cx="12" cy="6" rx="7.5" ry="2.75" />
+      <path d="M4.5 6v12c0 1.52 3.36 2.75 7.5 2.75s7.5-1.23 7.5-2.75V6M4.5 12c0 1.52 3.36 2.75 7.5 2.75s7.5-1.23 7.5-2.75" />
+    </OutlineIcon>
+  );
+}
+
+export function CpuChipIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <rect x="6.5" y="6.5" width="11" height="11" rx="2" />
+      <rect x="9.5" y="9.5" width="5" height="5" rx="0.75" />
+      <path d="M9.5 3v3.5M14.5 3v3.5M9.5 17.5V21M14.5 17.5V21M3 9.5h3.5M3 14.5h3.5M17.5 9.5H21M17.5 14.5H21" />
+    </OutlineIcon>
+  );
+}
+
+export function WrenchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M21.75 6.75a4.5 4.5 0 0 1-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 1 1-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 0 1 6.336-4.486l-3.276 3.276a3.004 3.004 0 0 0 2.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852z" />
+    </OutlineIcon>
+  );
+}
+
+export function GlobeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.6 3.75 5.6 3.75 9S14.5 18.4 12 21c-2.5-2.6-3.75-5.6-3.75-9S9.5 5.6 12 3z" />
+    </OutlineIcon>
+  );
+}
+
+export function ShieldIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M12 3l7.5 3v5.25c0 4.6-3.2 8.4-7.5 9.75-4.3-1.35-7.5-5.15-7.5-9.75V6L12 3z" />
+      <path d="M9 12l2 2 4-4" />
+    </OutlineIcon>
+  );
+}
+
+export function LockIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <rect x="5" y="10.5" width="14" height="10" rx="2" />
+      <path d="M8 10.5v-3a4 4 0 0 1 8 0v3M12 14.5v2" />
+    </OutlineIcon>
+  );
+}
+
+export function LogoutIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M9.75 4.5h-3A2.25 2.25 0 0 0 4.5 6.75v10.5a2.25 2.25 0 0 0 2.25 2.25h3M14.25 8.25 18 12l-3.75 3.75M18 12H8.25" />
+    </OutlineIcon>
+  );
+}
+
+export function TrashIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M4.5 6.75h15M9.75 6.75V4.5h4.5v2.25M6.75 6.75l.75 12.75a1.5 1.5 0 0 0 1.5 1.5h6a1.5 1.5 0 0 0 1.5-1.5l.75-12.75M10 10.5v6.5M14 10.5v6.5" />
+    </OutlineIcon>
+  );
+}
+
+export function CubeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3zM4 7.5l8 4.5 8-4.5M12 12v9" />
+    </OutlineIcon>
+  );
+}
+
+export function ChatBubbleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M7.5 8.25h9M7.5 12h5.25M3.75 6.75A2.25 2.25 0 0 1 6 4.5h12a2.25 2.25 0 0 1 2.25 2.25v8.25A2.25 2.25 0 0 1 18 17.25h-6.75L6.75 21v-3.75H6a2.25 2.25 0 0 1-2.25-2.25V6.75z" />
+    </OutlineIcon>
+  );
+}
+
+export function SlidersIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1" />
+      <circle cx="15" cy="6" r="2" />
+      <circle cx="9" cy="12" r="2" />
+      <circle cx="17" cy="18" r="2" />
+    </OutlineIcon>
+  );
+}
+
+export function ExternalLinkIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M13.5 4.5h6v6M19.5 4.5l-8.25 8.25M17.25 13.5v4.5a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5V8.25a1.5 1.5 0 0 1 1.5-1.5h4.5" />
+    </OutlineIcon>
+  );
+}
+
+export function SunIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
+    </OutlineIcon>
+  );
+}
+
+export function MoonIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M20.25 14.6A8.25 8.25 0 0 1 9.4 3.75 8.25 8.25 0 1 0 20.25 14.6z" />
+    </OutlineIcon>
+  );
+}
+
+export function MonitorIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <rect x="3" y="4" width="18" height="12.5" rx="2" />
+      <path d="M8.5 20.5h7M12 16.5v4" />
+    </OutlineIcon>
+  );
+}
+
+export function EnvelopeOpenIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M3.75 9.5v9.25a1.5 1.5 0 0 0 1.5 1.5h13.5a1.5 1.5 0 0 0 1.5-1.5V9.5M3.75 9.5 12 3.75l8.25 5.75M3.75 9.5 12 15l8.25-5.5" />
+    </OutlineIcon>
+  );
+}
+
+export function RssIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M5 11a8 8 0 0 1 8 8M5 5a14 14 0 0 1 14 14" />
+      <circle cx="6" cy="18" r="1.25" fill="currentColor" stroke="none" />
+    </OutlineIcon>
+  );
+}
+
+export function UserPlusIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="10" cy="8" r="3.5" />
+      <path d="M3.5 20a6.5 6.5 0 0 1 13 0M19 8.5v5M16.5 11h5" />
+    </OutlineIcon>
+  );
+}
+
+export function HeadphonesIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M4 15v-3a8 8 0 0 1 16 0v3" />
+      <rect x="3.5" y="14" width="4.5" height="6.5" rx="1.5" />
+      <rect x="16" y="14" width="4.5" height="6.5" rx="1.5" />
+    </OutlineIcon>
+  );
+}
+
+export function InfoCircleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5M12 7.75v.01" />
+    </OutlineIcon>
+  );
+}
+
+export function HourglassIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M6.5 3.5h11M6.5 20.5h11M7.5 3.5c0 4 4.5 5.5 4.5 8.5S7.5 16.5 7.5 20.5M16.5 3.5c0 4-4.5 5.5-4.5 8.5s4.5 4.5 4.5 8.5" />
+    </OutlineIcon>
+  );
+}
+
+export function HighlighterIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M14.5 4.5l5 5-8.25 8.25H6.25v-5L14.5 4.5zM6.25 17.75 4 20h5M11.5 7.5l5 5" />
+    </OutlineIcon>
+  );
+}
+
+export function LanguageIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M3.5 5.5h9M8 3.5v2M10.5 5.5c-.75 3.5-3 6.25-6.5 7.75M5.75 8.25c1.25 2 3 3.5 5.25 4.5M12.5 20.5l3.75-9 3.75 9M13.75 17.5h5" />
+    </OutlineIcon>
+  );
+}
+
+export function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </OutlineIcon>
+  );
+}
+
+export function ScissorsIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="6" cy="6.5" r="2.5" />
+      <circle cx="6" cy="17.5" r="2.5" />
+      <path d="M8.1 7.9 20 18M8.1 16.1 20 6M13.5 12h.01" />
+    </OutlineIcon>
+  );
+}
+
+export function WarningIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M10.3 4.2 2.9 17.1A2 2 0 0 0 4.6 20h14.8a2 2 0 0 0 1.7-2.9L13.7 4.2a2 2 0 0 0-3.4 0zM12 9.5v4M12 16.75h.01" />
+    </OutlineIcon>
+  );
+}
+
+export function CircleIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="12" cy="12" r="7.5" />
+    </OutlineIcon>
+  );
+}
+
+export function HeartIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M12 20s-7.5-4.6-7.5-10.1A4.4 4.4 0 0 1 12 7.1a4.4 4.4 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20z" />
+    </OutlineIcon>
+  );
+}
+
+export function TextCursorIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M9 4.5h1.5A1.5 1.5 0 0 1 12 6v12a1.5 1.5 0 0 1-1.5 1.5H9M15 4.5h-1.5A1.5 1.5 0 0 0 12 6v12a1.5 1.5 0 0 0 1.5 1.5H15M10 12h4" />
+    </OutlineIcon>
+  );
+}

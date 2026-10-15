@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Badge, Button, Section, type BadgeTone } from '@/components/ui';
+import {
+  CpuChipIcon, DatabaseIcon, GlobeIcon, HeadphonesIcon, LockIcon, ServerStackIcon, WrenchIcon,
+} from '@/components/icons/Icons';
+import { Badge, Button, InfoTip, RowIcon, Section, type BadgeTone } from '@/components/ui';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useDesktopBridge } from '@/hooks/useDesktopBridge';
-import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import {
   evaluateBrowserChecks,
   type SystemCheckItem,
@@ -22,6 +24,15 @@ const STATUS_BADGE: Record<SystemCheckStatus, { tone: BadgeTone; label: string }
   ok: { tone: 'accent', label: 'OK' },
   warn: { tone: 'foreground', label: 'Check' },
   error: { tone: 'danger', label: 'Fix' },
+};
+
+const CHECK_ICONS: Record<string, ReactNode> = {
+  worker: <CpuChipIcon />,
+  storage: <DatabaseIcon />,
+  'playback-secret': <LockIcon />,
+  providers: <ServerStackIcon />,
+  'base-url': <GlobeIcon />,
+  'worker-public-url': <HeadphonesIcon />,
 };
 
 // A no-cors request resolves (opaque) when the worker answers and rejects when the
@@ -72,20 +83,13 @@ export function AdminSystemPanel() {
   }, [error]);
 
   const openLogsFolder = useDesktopBridge()?.openLogsFolder;
-  const onDevice = useRuntimeConfig().installProfile === 'desktop';
   const problems = data?.filter((item) => item.status !== 'ok').length ?? 0;
 
   return (
     <Section
       variant="group"
       title="System check"
-      subtitle={
-        data
-          ? (problems === 0 ? 'Everything checked is working.' : `${problems} item${problems === 1 ? '' : 's'} need attention.`)
-          : onDevice
-            ? 'Checks the background services, storage, voice sources, and the addresses this window uses.'
-            : 'Checks the worker, storage, providers, and the addresses this browser uses.'
-      }
+      footer={data && problems > 0 ? `${problems} item${problems === 1 ? ' needs' : 's need'} attention.` : undefined}
       action={(
         <div className="flex items-center gap-2">
           {openLogsFolder ? (
@@ -106,11 +110,19 @@ export function AdminSystemPanel() {
             return (
               <li key={item.id} className="px-3 py-2.5" data-status={item.status}>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-foreground">{item.label}</span>
+                  <span className="flex min-w-0 items-center gap-3">
+                    <RowIcon>{CHECK_ICONS[item.id] ?? <WrenchIcon />}</RowIcon>
+                    <span className="text-sm font-medium text-foreground">{item.label}</span>
+                    {item.status === 'ok' ? <InfoTip label={item.label}>{item.detail}</InfoTip> : null}
+                  </span>
                   <Badge tone={badge.tone}>{badge.label}</Badge>
                 </div>
-                <p className="mt-0.5 text-xs text-soft">{item.detail}</p>
-                {item.fix ? <p className="mt-1 text-xs text-faint">{item.fix}</p> : null}
+                {item.status === 'ok' ? null : (
+                  <div className="ml-10 mt-1.5 space-y-1 text-xs">
+                    <p className="text-soft">{item.detail}</p>
+                    {item.fix ? <p className="text-faint">{item.fix}</p> : null}
+                  </div>
+                )}
               </li>
             );
           })}

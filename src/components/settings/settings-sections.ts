@@ -1,6 +1,6 @@
 import type { ComponentType, SVGProps } from 'react';
-import { AudioWaveIcon, ClockIcon, InfoIcon, KeyIcon,
-  PaletteIcon, SettingsIcon, SpeedometerIcon, UserIcon } from '@/components/icons/Icons';
+import { CpuChipIcon, DatabaseIcon, GlobeIcon, InfoIcon, MicrophoneIcon, PaletteIcon,
+  ServerStackIcon, UserIcon, UsersIcon, WrenchIcon } from '@/components/icons/Icons';
 import type { InstallProfile } from '@/lib/shared/install-profile';
 
 export type SettingsSectionId = 'api' | 'theme' | 'account' | 'storage' | 'about' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
@@ -19,16 +19,16 @@ export type SettingsSection = {
 export type SettingsNavGroup = { label: string; sections: SettingsSection[] };
 
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
-  { id: 'api', label: 'TTS Provider', shortLabel: 'Provider', icon: KeyIcon, group: 'general' },
+  { id: 'api', label: 'Model & Voice', shortLabel: 'Voice', icon: MicrophoneIcon, group: 'general' },
   { id: 'theme', label: 'Appearance', shortLabel: 'Appearance', icon: PaletteIcon, group: 'general' },
   { id: 'account', label: 'Account', shortLabel: 'Account', icon: UserIcon, group: 'general' },
-  { id: 'storage', label: 'Storage', shortLabel: 'Storage', icon: AudioWaveIcon, group: 'general' },
+  { id: 'storage', label: 'Storage', shortLabel: 'Storage', icon: DatabaseIcon, group: 'general' },
   { id: 'about', label: 'About', shortLabel: 'About', icon: InfoIcon, group: 'general' },
-  { id: 'users', label: 'Users', shortLabel: 'Users', icon: UserIcon, group: 'admin', profiles: ['server'] },
-  { id: 'providers', label: 'Providers', shortLabel: 'Providers', icon: KeyIcon, group: 'admin' },
-  { id: 'instance', label: 'Instance', shortLabel: 'Instance', icon: SettingsIcon, group: 'admin' },
-  { id: 'compute', label: 'Compute', shortLabel: 'Compute', icon: SpeedometerIcon, group: 'admin' },
-  { id: 'maintenance', label: 'Maintenance', shortLabel: 'Maintenance', icon: ClockIcon, group: 'admin' },
+  { id: 'users', label: 'Users', shortLabel: 'Users', icon: UsersIcon, group: 'admin', profiles: ['server'] },
+  { id: 'providers', label: 'Providers', shortLabel: 'Providers', icon: ServerStackIcon, group: 'admin' },
+  { id: 'instance', label: 'Instance', shortLabel: 'Instance', icon: GlobeIcon, group: 'admin' },
+  { id: 'compute', label: 'Compute', shortLabel: 'Compute', icon: CpuChipIcon, group: 'admin' },
+  { id: 'maintenance', label: 'Maintenance', shortLabel: 'Maintenance', icon: WrenchIcon, group: 'admin' },
 ];
 
 type NavLayout = ReadonlyArray<{ label: string; ids: readonly SettingsSectionId[] }>;
@@ -51,8 +51,6 @@ const NAV_LAYOUTS: Record<InstallProfile, NavLayout> = {
 };
 
 const DESKTOP_LABELS: Partial<Record<SettingsSectionId, Pick<SettingsSection, 'label' | 'shortLabel'>>> = {
-  api: { label: 'Voice', shortLabel: 'Voice' },
-  providers: { label: 'Voice sources', shortLabel: 'Sources' },
   storage: { label: 'Library and storage', shortLabel: 'Library' },
   account: { label: 'Profile', shortLabel: 'Profile' },
 };

@@ -1,6 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  AudioWaveIcon, ClockIcon, CubeIcon, DatabaseIcon, DocumentIcon, HeadphonesIcon, HourglassIcon,
+  MicrophoneIcon, RefreshIcon, RssIcon, ServerStackIcon, UploadIcon, UserIcon, UserPlusIcon,
+} from '@/components/icons/Icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import {
@@ -229,13 +233,15 @@ export function AdminFeaturesPanel({
     );
   }
 
-  const numberRow = ({ key, label, ariaLabel, unit }: {
+  const numberRow = ({ key, label, icon, info, ariaLabel, unit }: {
     key: string;
     label: string;
+    icon: ReactNode;
+    info?: string;
     ariaLabel?: string;
     unit?: string;
   }) => (
-    <SettingRow label={label} meta={renderSource(key)} controlClassName="w-40">
+    <SettingRow label={label} icon={icon} info={info} meta={renderSource(key)} controlClassName="w-40">
       <div className="flex items-center gap-1.5">
         <Input
           type="number"
@@ -257,7 +263,8 @@ export function AdminFeaturesPanel({
       {showInstanceSettings ? <Section title="TTS defaults" variant="group">
         <SettingRow
           label="Default TTS provider"
-          description="Starting provider for new users."
+          icon={<ServerStackIcon />}
+          info="The provider new users start with."
           meta={renderSource('defaultTtsProvider')}
           controlClassName="w-56"
         >
@@ -280,8 +287,9 @@ export function AdminFeaturesPanel({
           )}
         </SettingRow>
         <ToggleRow
-          label="Show TTS provider settings tab"
-          description="Allow per-user provider overrides."
+          label="Show Model & Voice settings"
+          icon={<MicrophoneIcon />}
+          info="Let users choose their own provider, model and voice."
           checked={Boolean(draft.enableTtsProvidersTab)}
           onChange={(checked) => updateDraft('enableTtsProvidersTab', checked)}
           meta={renderSource('enableTtsProvidersTab')}
@@ -289,7 +297,8 @@ export function AdminFeaturesPanel({
         />
         <ToggleRow
           label="Show all provider models"
-          description="Allow model selection beyond defaults."
+          icon={<CubeIcon />}
+          info="Offer every model a provider reports, not only the recommended ones."
           checked={Boolean(draft.showAllProviderModels)}
           onChange={(checked) => updateDraft('showAllProviderModels', checked)}
           meta={renderSource('showAllProviderModels')}
@@ -300,7 +309,8 @@ export function AdminFeaturesPanel({
       {showInstanceSettings ? <Section title={multiUser ? 'Site features' : 'Features'} variant="group">
         {multiUser ? <SettingRow
           label="Changelog feed URL"
-          description="Public URL used by the standalone changelog page."
+          icon={<RssIcon />}
+          info="Public URL the standalone changelog page reads."
           meta={renderSource('changelogFeedUrl')}
           stacked
         >
@@ -315,7 +325,9 @@ export function AdminFeaturesPanel({
         {multiUser ? <>
         <SettingRow
           label="New account sign-ups"
-          description="Open access, collect requests for approval, or close registration. Approval does not verify email ownership."
+          icon={<UserPlusIcon />}
+          info="Open lets anyone register, Approve holds new accounts until an admin accepts them, and Closed stops registration."
+          description="Approval does not verify email ownership."
           meta={renderSource('signupPolicy')}
           stacked
         >
@@ -333,7 +345,8 @@ export function AdminFeaturesPanel({
         </SettingRow>
         <ToggleRow
           label="Guest sessions"
-          description="Let visitors use the app without an account. Guests can keep their data by signing up later."
+          icon={<UserIcon />}
+          info="Visitors can use the app without an account and keep their data by signing up later."
           checked={Boolean(draft.allowAnonymousSessions)}
           onChange={(checked) => updateDraft('allowAnonymousSessions', checked)}
           meta={renderSource('allowAnonymousSessions')}
@@ -342,7 +355,8 @@ export function AdminFeaturesPanel({
         </> : null}
         <ToggleRow
           label="Audiobook export"
-          description='Show "Export audiobook" on PDF/EPUB pages.'
+          icon={<HeadphonesIcon />}
+          info="Shows Export audiobook on PDF and EPUB pages."
           checked={Boolean(draft.enableAudiobookExport)}
           onChange={(checked) => updateDraft('enableAudiobookExport', checked)}
           meta={renderSource('enableAudiobookExport')}
@@ -350,7 +364,8 @@ export function AdminFeaturesPanel({
         />
         <ToggleRow
           label="DOCX upload conversion"
-          description="Allow DOCX uploads (converted to PDF)."
+          icon={<DocumentIcon />}
+          info="Allows DOCX uploads, converted to PDF on the worker."
           checked={Boolean(draft.enableDocxConversion)}
           onChange={(checked) => updateDraft('enableDocxConversion', checked)}
           meta={renderSource('enableDocxConversion')}
@@ -361,10 +376,10 @@ export function AdminFeaturesPanel({
       {showComputeSettings ? <Section
         title={multiUser ? 'Limits' : 'Uploads'}
         variant="group"
-        subtitle={multiUser ? 'Enabled limits reject new work at the configured threshold. TTS usage is checked per uncached segment; cached audio stays available after a limit is reached.' : undefined}
         action={multiUser ? renderSource('computeLimitPolicies') : undefined}
+        footer={multiUser ? 'Cached audio stays playable after a limit is reached.' : undefined}
       >
-        {numberRow({ key: 'maxUploadMb', label: 'Max upload size', ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
+        {numberRow({ key: 'maxUploadMb', label: 'Max upload size', icon: <UploadIcon />, ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
         {multiUser && computePolicy ? (
           <ComputeLimitsEditor
             policy={computePolicy}
@@ -377,7 +392,8 @@ export function AdminFeaturesPanel({
       {showComputeSettings ? <Section title="TTS generation" variant="group">
         <SettingRow
           label="Background generation"
-          description="How far the worker keeps generating after playback cursor updates stop."
+          icon={<AudioWaveIcon />}
+          info="How far the worker keeps generating after the reader stops sending its position."
           meta={renderSource('ttsPlaybackBackgroundExtent')}
           controlClassName="w-52"
         >
@@ -398,10 +414,10 @@ export function AdminFeaturesPanel({
             chevronClassName="h-4 w-4 text-muted"
           />
         </SettingRow>
-        {numberRow({ key: 'ttsUpstreamMaxRetries', label: 'Retry attempts' })}
-        {numberRow({ key: 'ttsUpstreamTimeoutMs', label: 'Upstream timeout', unit: 'ms' })}
-        {numberRow({ key: 'ttsCacheMaxSizeBytes', label: 'Audio cache size', unit: 'bytes' })}
-        {numberRow({ key: 'ttsCacheTtlMs', label: 'Audio cache TTL', unit: 'ms' })}
+        {numberRow({ key: 'ttsUpstreamMaxRetries', label: 'Retry attempts', icon: <RefreshIcon />, info: 'Times a failed provider request is retried before the segment fails.' })}
+        {numberRow({ key: 'ttsUpstreamTimeoutMs', label: 'Upstream timeout', icon: <ClockIcon />, unit: 'ms' })}
+        {numberRow({ key: 'ttsCacheMaxSizeBytes', label: 'Audio cache size', icon: <DatabaseIcon />, info: 'In-memory cache of recently generated audio on the worker.', unit: 'bytes' })}
+        {numberRow({ key: 'ttsCacheTtlMs', label: 'Audio cache TTL', icon: <HourglassIcon />, unit: 'ms' })}
       </Section> : null}
 
       {dirty.size > 0 || saving ? (

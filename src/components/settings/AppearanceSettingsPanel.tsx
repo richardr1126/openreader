@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ColorPicker } from '@/components/ColorPicker';
-import { CheckIcon } from '@/components/icons/Icons';
+import { CheckIcon, MoonIcon, SunIcon } from '@/components/icons/Icons';
 import { ChoiceTile, IconButton } from '@/components/ui';
 import {
   getCustomThemeColors,
@@ -221,20 +221,22 @@ export function AppearanceSettingsPanel() {
         </div>
       </div>
 
-      <ThemeGroup label="Light" themes={lightThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
-      <ThemeGroup label="Dark" themes={darkThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
+      <ThemeGroup label="Light" icon={<SunIcon className="h-3.5 w-3.5" aria-hidden />} themes={lightThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
+      <ThemeGroup label="Dark" icon={<MoonIcon className="h-3.5 w-3.5" aria-hidden />} themes={darkThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
     </div>
   );
 }
 
 function ThemeGroup({
   label,
+  icon,
   themes,
   activeTheme,
   getColors,
   onSelect,
 }: {
   label: string;
+  icon: ReactNode;
   themes: { id: ThemeId; name: string }[];
   activeTheme: ThemeId;
   getColors: (id: string) => ThemeColorSet;
@@ -242,7 +244,7 @@ function ThemeGroup({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-xs font-medium text-soft uppercase tracking-wide">{label}</label>
+      <h3 className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-soft">{icon}{label}</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
         {themes.map((theme) => (
           <ThemeChoice

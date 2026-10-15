@@ -294,10 +294,10 @@ Implemented (web app):
   email; Compute hides per-user limits (max upload size stays, under
   "Uploads"); Account becomes Profile (display name and data export); there is no user
   menu. Desktop groups: General (Appearance,
-  Voice, Voice sources, Library and storage, Profile), Advanced (Instance,
-  Compute, Maintenance), About. Until the Voices section exists, the per-user
-  provider tab (`api`, "Voice") and the shared providers (`providers`,
-  "Voice sources") both sit in General.
+  Model & Voice, Providers, Library and storage, Profile), Advanced (Instance,
+  Compute, Maintenance), About. The per-user tab (`api`, "Model & Voice") holds
+  provider, model, default voice and model speed; the shared providers
+  (`providers`, "Providers") sit beside it in General.
 - **Landing page.** The window opens `/app`; middleware already redirects a
   signed-in visitor from `/` to `/app`, and the only in-app link to the landing
   page sits in the signed-out Account branch, which desktop never renders.

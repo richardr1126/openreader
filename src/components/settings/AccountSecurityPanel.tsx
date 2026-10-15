@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
-import { KeyIcon, MailIcon, PencilIcon, UserIcon, XIcon } from '@/components/icons/Icons';
+import { LockIcon, MailIcon, PencilIcon, UserIcon, XIcon } from '@/components/icons/Icons';
 import { Badge, Button, Field, Input } from '@/components/ui';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
@@ -232,7 +232,7 @@ export function AccountSecurityPanel({ nameOnly = false }: { nameOnly?: boolean 
         ) : null}
 
         <SettingRow
-          icon={KeyIcon}
+          icon={LockIcon}
           title="Password"
           value={<span>{bootstrapPending ? 'Deployment password' : 'Changing it signs out other sessions'}</span>}
           action={editButton('password', bootstrapPending ? 'Activate' : 'Change')}

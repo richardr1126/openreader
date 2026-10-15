@@ -32,7 +32,7 @@ API_BASE=http://your-tts-server/v1
 API_MODEL_NAME=your-model-name
 ```
 
-Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
+Users select the configured shared provider, model, and voice from **Settings → Model & Voice**.
 
 :::warning Provider reachability
 Speech synthesis runs in the compute worker, while optional voice discovery runs in the Next.js app

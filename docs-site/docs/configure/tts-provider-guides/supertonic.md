@@ -48,7 +48,7 @@ API_BASE=http://host.docker.internal:7788/v1
 API_MODEL_NAME=supertonic-3
 ```
 
-Users select the configured shared provider, model, and voice from **Settings → TTS Provider**.
+Users select the configured shared provider, model, and voice from **Settings → Model & Voice**.
 
 ## Running OpenReader directly on the host
 

@@ -20,7 +20,7 @@ API_BASE=https://api.openai.com/v1
 API_KEY=sk-...
 ```
 
-Users select the enabled shared provider, model, and voice from **Settings → TTS Provider**.
+Users select the enabled shared provider, model, and voice from **Settings → Model & Voice**.
 
 ## Notes
 

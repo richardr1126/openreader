@@ -9,7 +9,7 @@ credential broker; credentials are not embedded in NATS jobs or playback artifac
 
 **Admin-managed shared providers** (Settings > Admin > Shared providers): DB-backed instances configured by an admin and visible to all users. Keys are encrypted at rest and never exposed to the client. Available only when [auth is enabled](./auth) and your account has an administrator grant. See [Admin Panel](./admin-panel).
 
-**Per-user Settings modal** (Settings > TTS Provider): users may select an enabled shared provider, model, instructions, and voice. Credentials remain server-side.
+**Per-user Settings modal** (Settings > Model & Voice): users may select an enabled shared provider, model, instructions, and voice. Credentials remain server-side.
 
 **Environment variables**: `API_KEY`, `API_BASE`, and `API_MODEL_NAME` form a one-shot first-boot seed that auto-creates a `default-openai` admin shared provider. `API_MODEL_NAME` defaults to `kokoro` and does not trigger provider creation by itself. After the first boot these variables are no longer read by the running app.
 

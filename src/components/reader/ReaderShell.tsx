@@ -100,7 +100,7 @@ export function ReaderShell<T extends ReaderType>({
       if (!payload) return;
       initializeReaderSession({
         readerType,
-        language: payload.settings.language ?? 'auto',
+        settings: payload.settings,
         plan: payload.plan,
         initialPosition: payload.initialPosition,
       });
@@ -113,9 +113,9 @@ export function ReaderShell<T extends ReaderType>({
   const readyVersion = bootstrap.readyVersion;
   const replanning = bootstrap.replanning;
   const replannedPlan = payload?.plan;
-  const replannedLanguage = payload?.settings.language ?? 'auto';
+  const replannedSettings = payload?.settings;
   useEffect(() => {
-    if (!adoptedSurface || replanning || !replannedPlan) return;
+    if (!adoptedSurface || replanning || !replannedPlan || !replannedSettings) return;
     const adopted = adoptedReadyVersionRef.current;
     if (adopted?.attemptKey !== attemptKey) {
       adoptedReadyVersionRef.current = { attemptKey, version: readyVersion };
@@ -124,15 +124,15 @@ export function ReaderShell<T extends ReaderType>({
     if (adopted.version === readyVersion) return;
     adoptedReadyVersionRef.current = { attemptKey, version: readyVersion };
     if (playbackPlanKey === playbackPlanIdentity(replannedPlan)) return;
-    adoptReplannedPlaybackPlan({ language: replannedLanguage, plan: replannedPlan });
+    adoptReplannedPlaybackPlan({ settings: replannedSettings, plan: replannedPlan });
   }, [
     adoptReplannedPlaybackPlan,
     adoptedSurface,
     attemptKey,
     playbackPlanKey,
     readyVersion,
-    replannedLanguage,
     replannedPlan,
+    replannedSettings,
     replanning,
   ]);
   const initializationError = adoption.failure?.attemptKey === attemptKey

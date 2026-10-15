@@ -21,7 +21,7 @@ API_KEY=r8_...
 
 Then update the shared provider's **Default model** in **Settings → Admin → Shared providers**.
 
-Users select the enabled shared provider, model, and voice from **Settings → TTS Provider**.
+Users select the enabled shared provider, model, and voice from **Settings → Model & Voice**.
 
 ## Notes
 

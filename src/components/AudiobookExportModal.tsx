@@ -148,11 +148,11 @@ export function AudiobookExportModal({
     providerRef,
     providerType,
     ttsModel,
-    voiceSpeed,
     audioPlayerSpeed,
   } = useConfig();
   const {
     voice,
+    voiceSpeed,
     documentLanguage,
     setAudioPlayerSpeedAndRestart,
     resolveDocumentAudioExport,

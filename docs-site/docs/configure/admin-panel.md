@@ -118,7 +118,7 @@ Each shared provider is one named instance bound to one of the four built-in pro
 | **Default model** | Optional. Used as the initial model when a user selects this provider. |
 | **Enabled** | Toggle to hide the provider from non-admin users without deleting it. |
 
-When a non-admin user picks a provider in **Settings → TTS Provider**:
+When a non-admin user picks a provider in **Settings → Model & Voice**:
 
 - The API key / base URL fields are hidden — those credentials never leave the server.
 - The TTS request still goes through the user's browser, but the server replaces the slug with the matching admin row's decrypted key and base URL before calling the upstream provider.
@@ -148,7 +148,7 @@ Runtime-editable settings, one row per key:
 | `changelogFeedUrl` | Public changelog manifest URL used by the Settings modal changelog panel. |
 | `signupPolicy` | `open`, `approval`, or `closed`. Approval creates pending accounts that cannot sign in until approved under **Admin → Users**; closed refuses new accounts. |
 | `allowAnonymousSessions` | Guest sessions (default `false`). When on, signed-out visitors get an anonymous session and can later claim its data by signing up. Turning it off refuses new guest sessions and signs existing guests out on their next page load. |
-| `enableTtsProvidersTab` | Whether the user-facing TTS Provider tab in Settings is shown. |
+| `enableTtsProvidersTab` | Whether the user-facing Model & Voice tab in Settings is shown. |
 | `showAllProviderModels` | When `false`, users are restricted to each provider's default model (shared provider `defaultModel` or built-in provider default). |
 | `enableAudiobookExport` | Show the audiobook export entry points on PDF/EPUB pages. |
 | `enableDocxConversion` | Accept .docx uploads (converted to PDF server-side). |

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { DownloadIcon, RefreshIcon, SpeedometerIcon } from '@/components/icons/Icons';
+import { DownloadIcon, LogoutIcon, RefreshIcon, SpeedometerIcon, TrashIcon } from '@/components/icons/Icons';
 import { Button, ChoiceTile } from '@/components/ui';
 import { formatCharCount, useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
@@ -183,7 +183,8 @@ export function AccountSettingsPanel() {
         <div className="space-y-2">
           {session?.user && !session.user.isAnonymous ? (
             <>
-              <Button onClick={handleSignOut} variant="outline" size="md">
+              <Button onClick={handleSignOut} variant="outline" size="md" className="gap-1.5">
+                <LogoutIcon className="h-4 w-4" aria-hidden />
                 Sign out
               </Button>
 
@@ -193,7 +194,9 @@ export function AccountSettingsPanel() {
                   onClick={() => setShowDeleteConfirm(true)}
                   variant="danger"
                   size="md"
+                  className="gap-1.5"
                 >
+                  <TrashIcon className="h-4 w-4" aria-hidden />
                   Delete Account
                 </Button>
               </div>

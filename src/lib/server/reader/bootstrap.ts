@@ -21,7 +21,7 @@ import type {
   ReaderBootstrapResult,
   ReaderPayload,
 } from '@/types/reader-bootstrap';
-import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import { mergeDocumentSettings, resolveBookVoice } from '@/lib/shared/document-settings';
 import type { ReadingPosition } from '@/lib/shared/reading-position';
 import {
   assertAuthoritativePlaybackPlan,
@@ -253,7 +253,13 @@ async function resolvePlan(
     providerType: provider.providerType,
     model,
   });
-  const voice = preferences.voice;
+  const { voice, voiceSpeed } = resolveBookVoice({
+    override: settings.voiceOverride,
+    providerRef: provider.providerRef,
+    ttsModel: model,
+    defaultVoice: preferences.voice,
+    defaultVoiceSpeed: preferences.voiceSpeed,
+  });
   const language = resolveTtsLanguage({
     configuredLanguage: settings.language || 'auto',
     voice,
@@ -265,7 +271,7 @@ async function resolvePlan(
       providerType: provider.providerType,
       ttsModel: model,
       voice,
-      nativeSpeed: policy.supportsNativeModelSpeed ? preferences.voiceSpeed : 1,
+      nativeSpeed: policy.supportsNativeModelSpeed ? voiceSpeed : 1,
       ...(policy.supportsInstructions && (preferences.ttsInstructions || provider.defaultInstructions)
         ? { ttsInstructions: preferences.ttsInstructions || provider.defaultInstructions }
         : {}),

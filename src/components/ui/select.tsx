@@ -133,6 +133,7 @@ export function Select<T = SelectOption>({
   optionItemClassName,
   showCheckmark = true,
   chevronClassName = 'h-5 w-5 text-soft',
+  'aria-label': ariaLabel,
 }: {
   value: T | undefined;
   onChange: (value: T) => void;
@@ -148,6 +149,7 @@ export function Select<T = SelectOption>({
   optionItemClassName?: string;
   showCheckmark?: boolean;
   chevronClassName?: string;
+  'aria-label'?: string;
 }) {
   const defaultKey = (option: T): Key => {
     if (typeof option === 'string' || typeof option === 'number') return option;
@@ -165,7 +167,7 @@ export function Select<T = SelectOption>({
 
   return (
     <Listbox value={value} onChange={onChange} disabled={disabled}>
-      <SharedListboxButton className={buttonClassName}>
+      <SharedListboxButton className={buttonClassName} aria-label={ariaLabel}>
         <span className="block truncate">{value === undefined ? placeholder : valueRenderer(value)}</span>
         <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
           <ChevronUpDownIcon className={chevronClassName} aria-hidden="true" />

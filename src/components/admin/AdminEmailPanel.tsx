@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { Button, Input, Section, SettingRow, ToggleRow } from '@/components/ui';
+import { ChatBubbleIcon, EnvelopeOpenIcon, KeyIcon, MailIcon, UserIcon } from '@/components/icons/Icons';
 import {
   buildEmailSettingsPatch,
   emailSettingsDraftFromResponse,
@@ -95,26 +96,32 @@ export function AdminEmailPanel() {
   const saved = emailSettingsDraftFromResponse(settings);
   const changed = Boolean(apiKey.trim()) || (Object.keys(saved) as (keyof EmailSettingsDraft)[])
     .some((key) => draft[key] !== saved[key]);
-  const emailField = (label: string, input: ReactNode, meta?: ReactNode) => (
-    <SettingRow label={label} meta={meta} controlClassName="w-[min(20rem,60%)]">
+  const emailField = (label: string, icon: ReactNode, input: ReactNode, meta?: ReactNode) => (
+    <SettingRow label={label} icon={icon} meta={meta} controlClassName="w-[min(20rem,60%)]">
       {input}
     </SettingRow>
   );
   return (
-    <Section title="Account email" variant="group">
+    <Section
+      title="Account email"
+      variant="group"
+      footer="Verify the sender domain in Resend, use a sending-only key restricted to it, and send a test before enabling."
+    >
         <ToggleRow
           label="Enable account emails"
-          description="Require verified email addresses for password sign-in and enable password recovery. Existing sessions stay active."
+          icon={<EnvelopeOpenIcon />}
+          info="Password sign-in then requires a verified email address, and password recovery turns on. Existing sessions stay active."
           checked={draft.enabled}
           disabled={saving}
           onChange={(enabled) => setDraft({ ...draft, enabled })}
           variant="plain"
         />
-        {emailField('Sender name', <Input disabled={saving} aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} />)}
-        {emailField('Sender email', <Input disabled={saving} aria-label="Sender email" type="email" value={draft.senderEmail} placeholder="reader@example.com" onChange={(event) => setDraft({ ...draft, senderEmail: event.target.value })} />)}
-        {emailField('Reply-to (optional)', <Input disabled={saving} aria-label="Reply-to (optional)" type="email" value={draft.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setDraft({ ...draft, replyTo: event.target.value || null })} />)}
+        {emailField('Sender name', <UserIcon />, <Input disabled={saving} aria-label="Sender name" value={draft.senderName} onChange={(event) => setDraft({ ...draft, senderName: event.target.value })} />)}
+        {emailField('Sender email', <MailIcon />, <Input disabled={saving} aria-label="Sender email" type="email" value={draft.senderEmail} placeholder="reader@example.com" onChange={(event) => setDraft({ ...draft, senderEmail: event.target.value })} />)}
+        {emailField('Reply-to (optional)', <ChatBubbleIcon />, <Input disabled={saving} aria-label="Reply-to (optional)" type="email" value={draft.replyTo ?? ''} placeholder="support@example.com" onChange={(event) => setDraft({ ...draft, replyTo: event.target.value || null })} />)}
         {emailField(
           'Resend API key',
+          <KeyIcon />,
           <Input disabled={saving} aria-label="Resend API key" type="password" autoComplete="new-password" value={apiKey} placeholder={settings.apiKeyConfigured ? 'Enter to replace' : 're_…'} onChange={(event) => setApiKey(event.target.value)} />,
           settings.apiKeyConfigured ? `Saved key: ${settings.apiKeyMask}` : 'No key saved',
         )}
@@ -130,9 +137,6 @@ export function AdminEmailPanel() {
             </p>
           )}
         </div>
-        <p className="text-xs text-soft">
-          Verify the sender domain in Resend and create a sending-only API key restricted to it. Save the key and sender, then send a test before enabling account emails.
-        </p>
       </Section>
   );
 }

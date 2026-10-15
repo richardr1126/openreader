@@ -20,7 +20,7 @@ API_BASE=https://api.deepinfra.com/v1/openai
 API_KEY=your-deepinfra-key
 ```
 
-Users select the enabled shared provider, model, and voice from **Settings → TTS Provider**.
+Users select the enabled shared provider, model, and voice from **Settings → Model & Voice**.
 
 ## Notes
 

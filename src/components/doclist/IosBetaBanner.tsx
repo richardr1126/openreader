@@ -1,6 +1,7 @@
 'use client';
 
 import { Transition } from '@headlessui/react';
+import { ExternalLinkIcon, XIcon } from '@/components/icons/Icons';
 import { IconButton } from '@/components/ui';
 
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/eJTYjDwV';
@@ -47,12 +48,10 @@ export function IosBetaBanner({ show, onDismiss }: { show: boolean; onDismiss: (
           >
             <span className="sm:hidden">Join beta</span>
             <span className="hidden sm:inline">Join iOS beta</span>
-            <span aria-hidden="true">↗</span>
+            <ExternalLinkIcon className="h-3.5 w-3.5" aria-hidden />
           </a>
           <IconButton onClick={onDismiss} size="sm" aria-label="Dismiss iOS beta banner">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-4 w-4" aria-hidden="true">
-              <path d="m6 6 12 12M18 6 6 18" strokeLinecap="round" />
-            </svg>
+            <XIcon className="h-4 w-4" aria-hidden />
           </IconButton>
         </aside>
       </div>

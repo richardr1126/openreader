@@ -87,7 +87,7 @@ describe('reader server-state ownership', () => {
     // content identity remounts the renderer.
     expect(surfaceKey).not.toContain('payload.plan');
     expect(surfaceKey).toContain('payload.document.contentVersion');
-    expect(shell).toContain('adoptReplannedPlaybackPlan({ language: replannedLanguage, plan: replannedPlan })');
+    expect(shell).toContain('adoptReplannedPlaybackPlan({ settings: replannedSettings, plan: replannedPlan })');
     expect(shell).toContain('const attemptKey = `${surfaceKey}:${rendererAttempt}`');
     expect(shell).toContain('restartBootstrap,');
     expect(shell).toContain('enabled: Boolean(payload && sourceDocument)');

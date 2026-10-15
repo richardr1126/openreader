@@ -19,7 +19,9 @@ import {
   SegmentedControl,
   Select,
 } from '@/components/ui';
-import { RefreshIcon } from '@/components/icons/Icons';
+import {
+  BookIcon, DocumentIcon, EyeIcon, HighlighterIcon, PaletteIcon, RefreshIcon, TextCursorIcon,
+} from '@/components/icons/Icons';
 import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
 import { DocumentStorageSection } from '@/components/documents/DocumentStorageSection';
 import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
@@ -179,6 +181,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           <Section title="Display" variant="group">
             <ToggleRow
               label={isPdfMode ? 'Show the pages' : 'Show the book'}
+              icon={isPdfMode ? <DocumentIcon /> : <BookIcon />}
               description="Turn off to read the text as flowing sentences."
               checked={readerShowsLayout}
               onChange={(checked) => updateConfigKey('readerShowsLayout', checked)}
@@ -201,6 +204,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
             {epub && readerShowsLayout ? (
               <ToggleRow
                 label="Use app theme"
+                icon={<PaletteIcon />}
                 checked={epubTheme}
                 onChange={(checked) => updateConfigKey('epubTheme', checked)}
                 variant="plain"
@@ -212,12 +216,14 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
         <Section title="Highlighting" variant="group">
           <ToggleRow
             label="Highlight sentence"
+            icon={<HighlighterIcon />}
             checked={highlight.sentence}
             onChange={(checked) => updateConfigKey(highlight.sentenceKey, checked)}
             variant="plain"
           />
           <ToggleRow
             label="Highlight words"
+            icon={<TextCursorIcon />}
             checked={highlight.word && highlight.sentence}
             disabled={!highlight.sentence}
             onChange={(checked) => updateConfigKey(highlight.wordKey, checked)}
@@ -263,6 +269,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           >
             <ToggleRow
               label="Show block overlay"
+              icon={<EyeIcon />}
               checked={pdf.parsedOverlayEnabled}
               onChange={pdf.onToggleOverlay}
               disabled={pdf.parseStatus !== 'ready'}

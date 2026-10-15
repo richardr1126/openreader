@@ -292,6 +292,7 @@ test('anonymous user controls playback across every accepted document journey', 
   await expect(voiceButton).toHaveAttribute('aria-label', / · 1\.1x$/);
   const changedVoiceLabel = await voiceButton.getAttribute('aria-label');
   expect(changedVoiceLabel).toBeTruthy();
+  await expect(voicePanel.getByText('This book has its own voice settings.', { exact: true })).toBeVisible();
   await voicePanel.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(voicePanel).toBeHidden();
   await expect(playButton).toBeEnabled({ timeout: 60_000 });
@@ -340,6 +341,8 @@ test('anonymous user controls playback across every accepted document journey', 
     page.getByRole('link', { name: 'sample.md', exact: true }),
     'sample.md',
   );
+  // The voice picked in the reader belongs to that book; others keep the default.
+  await expect(page.getByRole('button', { name: initialVoiceLabel!, exact: true })).toBeVisible();
   await startAndCancelPlayback(page);
   await returnToLibrary(page);
 

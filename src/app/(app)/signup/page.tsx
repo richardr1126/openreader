@@ -8,7 +8,7 @@ import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { LoadingSpinner } from '@/components/Spinner';
-import { MailIcon } from '@/components/icons/Icons';
+import { CheckIcon, CircleIcon, MailIcon, XIcon } from '@/components/icons/Icons';
 import { Button, ButtonLink, Field, IconButton, InlineButton, Input, Surface } from '@/components/ui';
 import toast from 'react-hot-toast';
 
@@ -265,13 +265,16 @@ export default function SignUpPage() {
                 <div className="text-xs space-y-0.5 text-soft">
                   {Object.entries(checks).map(([key, passed]) => (
                     <div key={key} className={`flex items-center gap-1 ${passed ? 'text-accent' : ''}`}>
-                      <span>{passed ? '✓' : '○'}</span>
+                      {passed
+                        ? <CheckIcon className="h-3 w-3 shrink-0" aria-hidden />
+                        : <CircleIcon className="h-3 w-3 shrink-0" aria-hidden />}
                       <span>
                         {key === 'length' && 'At least 8 characters'}
                         {key === 'uppercase' && 'Uppercase letter'}
                         {key === 'lowercase' && 'Lowercase letter'}
                         {key === 'number' && 'Number'}
                         {key === 'special' && 'Special character'}
+                        <span className="sr-only">{passed ? ' (met)' : ' (not met)'}</span>
                       </span>
                     </div>
                   ))}
@@ -290,8 +293,10 @@ export default function SignUpPage() {
               controlSize="lg"
             />
             {passwordConfirmation && password && (
-              <p className={`text-xs mt-1 ${password === passwordConfirmation ? 'text-accent' : 'text-danger'}`}>
-                {password === passwordConfirmation ? '✓ Passwords match' : '✗ Passwords do not match'}
+              <p className={`mt-1 flex items-center gap-1 text-xs ${password === passwordConfirmation ? 'text-accent' : 'text-danger'}`}>
+                {password === passwordConfirmation
+                  ? <><CheckIcon className="h-3 w-3 shrink-0" aria-hidden />Passwords match</>
+                  : <><XIcon className="h-3 w-3 shrink-0" aria-hidden />Passwords do not match</>}
               </p>
             )}
           </Field>
