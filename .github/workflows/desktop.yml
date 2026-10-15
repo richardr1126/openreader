@@ -2,7 +2,8 @@ name: Desktop
 # Stages, smoke-tests and packages the desktop app on each platform it ships for
 # (v5/DESKTOP_SHELL.md). Pull requests build unsigned. A published release (or a
 # manual run naming its tag) signs and notarizes the macOS app with the Release
-# environment's credentials and attaches every installer to that release.
+# environment's credentials and attaches every installer to that release. A
+# manual run with `sign` checks those credentials without touching a release.
 on:
   pull_request:
     branches: [main]
@@ -19,6 +20,10 @@ on:
         description: Existing release tag to build, sign and attach installers to (blank builds unsigned)
         required: false
         default: ''
+      sign:
+        description: Sign and notarize the macOS app without attaching it to a release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -29,6 +34,7 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+  SIGN_MAC: ${{ (github.event.release.tag_name || inputs.release_tag || inputs.sign) && 'true' || '' }}
 
 jobs:
   package:
@@ -39,7 +45,7 @@ jobs:
       matrix:
         os: [macos-15, windows-2025, windows-11-arm, ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.os }}
-    environment: ${{ (github.event.release.tag_name || inputs.release_tag) && 'Release' || '' }}
+    environment: ${{ (github.event.release.tag_name || inputs.release_tag || inputs.sign) && 'Release' || '' }}
     env:
       # The build bakes nothing from these; next build only needs them present.
       AUTH_SECRET: build-placeholder-secret-value-32chars!!
@@ -91,10 +97,10 @@ jobs:
       - name: Smoke test
         run: pnpm --dir desktop smoke
       - name: Package
-        if: env.RELEASE_TAG == '' || runner.os != 'macOS'
+        if: env.SIGN_MAC == '' || runner.os != 'macOS'
         run: pnpm --dir desktop package
       - name: Package, sign and notarize
-        if: env.RELEASE_TAG != '' && runner.os == 'macOS'
+        if: env.SIGN_MAC != '' && runner.os == 'macOS'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: true
           CSC_LINK: ${{ secrets.MAC_CERTS }}

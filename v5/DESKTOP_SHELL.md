@@ -180,7 +180,8 @@ the App Store Connect API key (`APPLE_API_KEY_P8`, the base64 `.p8`;
 `APPLE_API_KEY_ID`; `APPLE_API_ISSUER`), and the job checks the result with `stapler` and `spctl`.
 A final job attaches every installer to the release. To redo a release, run the
 workflow by hand with its tag as `release_tag`; existing installers are
-replaced. Windows and Linux installers are unsigned.
+replaced. A manual run with `sign` checked signs and notarizes without touching
+a release, to check the credentials. Windows and Linux installers are unsigned.
 
 The smoke test starts the staged runtime in temporary directories and checks
 that a wrong launch token gets 401, the real one returns an HttpOnly session for
