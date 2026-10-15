@@ -539,7 +539,11 @@ async function main() {
         console.error(`Embedded compute-worker failed to start: ${error instanceof Error ? error.message : String(error)}`);
         scheduleFatalShutdown('compute-worker', null, null, 'failed to start');
       });
-      await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30, 'Embedded compute-worker');
+      // The worker loads large native modules first, and a cold Windows start can
+      // spend most of a minute on them while Defender scans each one. A worker
+      // that exits instead ends startup at once through the exit handler above;
+      // the desktop shell allows the whole runtime 120 s.
+      await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 90, 'Embedded compute-worker');
       console.log(`Embedded compute-worker is ready at http://127.0.0.1:${embeddedWorkerPort}`);
     }
 

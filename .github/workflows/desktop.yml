@@ -114,9 +114,11 @@ jobs:
           grep -q 'BEGIN PRIVATE KEY' "$APPLE_API_KEY" || { echo "::error::APPLE_API_KEY_P8 is not a base64 .p8 key"; exit 1; }
           trap 'rm -f "$APPLE_API_KEY"' EXIT
           pnpm --dir desktop package
+          # electron-builder stops on a failed notarization or staple; this checks
+          # Gatekeeper's verdict on the result without another ticket lookup.
           app=$(echo desktop/dist/mac*/OpenReader.app)
-          xcrun stapler validate "$app"
-          spctl --assess --type execute -vv "$app"
+          spctl --assess --type execute -vv "$app" 2>&1 | tee "$RUNNER_TEMP/spctl.txt"
+          grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl.txt"
       - uses: actions/upload-artifact@v7
         with:
           name: openreader-desktop-${{ matrix.os }}

@@ -44,7 +44,6 @@ const config = {
   extraResources: [{ from: 'stage/runtime', to: 'runtime' }],
   icon: path.join(repoRoot, 'public', 'web-app-manifest-512x512.png'),
   npmRebuild: false,
-  publish: null,
   // Opened documents go to the library's upload flow (src/open-documents.mjs).
   // OpenReader claims EPUB but only offers itself for PDF.
   fileAssociations: [
@@ -69,4 +68,6 @@ await build({
   projectDir: desktopDir,
   targets: Platform.current().createTarget(null, Arch[process.arch]),
   config,
+  // CI attaches installers to the release itself (.github/workflows/desktop.yml).
+  publish: 'never',
 });

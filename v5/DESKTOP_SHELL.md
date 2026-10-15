@@ -177,7 +177,7 @@ be `v` plus the root package version. Its macOS job runs in the `Release`
 environment: electron-builder signs with `MAC_CERTS` (a base64 Developer ID
 Application `.p12`) and `MAC_CERTS_PASSWORD`, then notarizes and staples with
 the App Store Connect API key (`APPLE_API_KEY_P8`, the base64 `.p8`;
-`APPLE_API_KEY_ID`; `APPLE_API_ISSUER`), and the job checks the result with `stapler` and `spctl`.
+`APPLE_API_KEY_ID`; `APPLE_API_ISSUER`), and the job requires `spctl` to report a notarized Developer ID app.
 A final job attaches every installer to the release. To redo a release, run the
 workflow by hand with its tag as `release_tag`; existing installers are
 replaced. A manual run with `sign` checked signs and notarizes without touching
