@@ -37,9 +37,6 @@ export function VoicesSetupModal({
       className="z-[80]"
     >
       <ModalTitle>Choose how OpenReader speaks</ModalTitle>
-      <p className="mt-2 text-sm text-soft">
-        Reading works now. Listening needs a voice: download one to this device, or connect a voice service.
-      </p>
 
       {installed ? (
         <div className="mt-5 rounded-lg border border-accent-line bg-accent-wash p-3 text-sm text-foreground" aria-live="polite">
@@ -63,7 +60,6 @@ export function VoicesSetupModal({
           >
             <div className="h-full bg-accent transition-[width]" style={{ width: `${percent}%` }} />
           </div>
-          <p className="text-xs text-soft">You can keep reading while it downloads.</p>
         </div>
       ) : (
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
