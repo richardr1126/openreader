@@ -153,10 +153,12 @@ the hardened runtime and Electron's JIT entitlements, which the bundled Node.js
 needs; a local build uses whatever identity is in the keychain.
 
 There is no Intel Mac build: onnxruntime-node has shipped no darwin-x64 binary
-since 1.24, so `stage` stops there. Desktop bundles SeaweedFS 4.48 (Docker is
-still on 4.18). It must stay at 4.25 or later: older `weed mini` routes its
-internal gRPC through `/tmp` Unix sockets, which do not exist on Windows
-(seaweedfs#9430).
+since 1.24, so `stage` stops there. Desktop and Docker bundle SeaweedFS 4.48.
+It must stay at 4.25 or later: older `weed mini` routes its internal gRPC
+through `/tmp` Unix sockets, which do not exist on Windows (seaweedfs#9430).
+Newer `weed mini` keeps its SSE-S3 key in `.mini_sse_kek` and ignores the key
+4.18 stored on the filer, so bootstrap copies that key across once, from a
+filer-only start, before S3 first runs on an upgraded data directory.
 
 ## CI
 

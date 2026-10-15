@@ -12,8 +12,10 @@ import { resolveStorageTransport } from '@openreader/runtime-config/storage-tran
 import { runV4Decommission } from './decommission-v4.mjs';
 import { hasNatsBinary } from './embedded-nats.mjs';
 import {
+  adoptWeedMiniFilerKek,
   ensureS3Bucket,
   hasWeedBinary,
+  needsWeedMiniKekAdoption,
   resolveWeedMiniAdvertiseHost,
   resolveWeedMiniInternalPorts,
   waitForEndpoint,
@@ -359,21 +361,39 @@ async function main() {
           ],
         },
       );
-      const launchWeed = () => {
-        const weedArgs = [
-          '-alsologtostderr=false',
-          '-stderrthreshold=WARNING',
-          'mini',
-          `-dir=${runtimeEnv.WEED_MINI_DIR}`,
-        ];
-        weedArgs.push(`-s3.port=${runtimeEnv.WEED_MINI_PORT}`);
-        weedArgs.push(`-ip=${runtimeEnv.WEED_MINI_ADVERTISE_HOST}`);
-        weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
-        for (const [key, port] of weedInternalPorts) weedArgs.push(`-${key}=${port}`);
-        weedArgs.push(...WEED_MINI_DISABLED_COMPONENTS);
+      const weedArgs = [
+        '-alsologtostderr=false',
+        '-stderrthreshold=WARNING',
+        'mini',
+        `-dir=${runtimeEnv.WEED_MINI_DIR}`,
+      ];
+      weedArgs.push(`-s3.port=${runtimeEnv.WEED_MINI_PORT}`);
+      weedArgs.push(`-ip=${runtimeEnv.WEED_MINI_ADVERTISE_HOST}`);
+      weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
+      for (const [key, port] of weedInternalPorts) weedArgs.push(`-${key}=${port}`);
+      weedArgs.push(...WEED_MINI_DISABLED_COMPONENTS);
+      const weedEnv = embeddedServiceEnv(runtimeEnv);
 
+      if (needsWeedMiniKekAdoption(runtimeEnv.WEED_MINI_DIR, runtimeEnv)) {
+        console.log('Carrying the SeaweedFS encryption key forward for this storage upgrade...');
+        const filerPort = weedInternalPorts.find(([key]) => key === 'filer.port')[1];
+        const filerOnly = spawn('weed', [...weedArgs, '-s3=false'], {
+          env: weedEnv,
+          stdio: ['ignore', 'ignore', 'inherit'],
+        });
+        try {
+          const adopted = await adoptWeedMiniFilerKek(runtimeEnv.WEED_MINI_DIR, `http://127.0.0.1:${filerPort}`, {
+            waitTimeout,
+          });
+          if (adopted) console.log('SeaweedFS encryption key carried forward.');
+        } finally {
+          await terminateChild(filerOnly, 'SIGTERM', 4000);
+        }
+      }
+
+      const launchWeed = () => {
         weedProc = spawn('weed', weedArgs, {
-          env: embeddedServiceEnv(runtimeEnv),
+          env: weedEnv,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
         stopWeedStdoutForward = forwardChildStream(weedProc.stdout, process.stdout);

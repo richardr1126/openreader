@@ -1,6 +1,7 @@
 # Stage 1: extract seaweedfs weed binary (for optional embedded weed mini)
-# Pin to 4.18 because CI observed upload regressions on 4.19.
-FROM chrislusf/seaweedfs:4.18 AS seaweedfs-builder
+# Keep in step with desktop/runtime-binaries.json. Bootstrap carries a 4.18 data
+# directory's encryption key forward on its first start (see embedded-seaweedfs.mjs).
+FROM chrislusf/seaweedfs:4.48 AS seaweedfs-builder
 RUN cp "$(command -v weed)" /tmp/weed && \
     (wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/master/LICENSE" || \
      wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/main/LICENSE")

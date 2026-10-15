@@ -130,13 +130,13 @@ export function parseUrlHost(urlValue, fieldName) {
   return url.hostname;
 }
 
-export async function waitForEndpoint(url, timeoutSeconds, serviceName = 'service') {
+export async function waitForEndpoint(url, timeoutSeconds, serviceName = 'service', fetchImpl = fetch) {
   const deadline = Date.now() + Math.max(1, timeoutSeconds) * 1000;
   while (Date.now() < deadline) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
     try {
-      const response = await fetch(url, { method: 'GET', signal: controller.signal });
+      const response = await fetchImpl(url, { method: 'GET', signal: controller.signal });
       if (response) return;
     } catch {
       // Retry until the startup deadline.
@@ -193,6 +193,58 @@ export function readWeedMiniOptions(dir) {
     if (match) options.set(match[1], match[2]);
   }
   return options;
+}
+
+// OpenReader stores every object with SSE-S3. SeaweedFS before 4.26 keeps that
+// key (the KEK) only on the filer, at /etc/s3/sse_kek. Since seaweedfs#9524,
+// weed mini creates a random key in this file on its first start, never looks
+// at the filer's, and then refuses to decrypt anything the old key wrapped.
+const WEED_MINI_KEK_FILE = '.mini_sse_kek';
+const FILER_KEK_PATH = '/etc/s3/sse_kek';
+
+/**
+ * Whether this data directory was last run by a weed mini that kept its SSE-S3
+ * key only on the filer, so that key has to be carried into `.mini_sse_kek`
+ * before a newer weed mini starts S3 here. An operator-supplied key wins.
+ */
+export function needsWeedMiniKekAdoption(dir, env = {}) {
+  if (env.WEED_S3_SSE_KEK || env.WEED_S3_SSE_KEY) return false;
+  return fs.existsSync(path.join(dir, 'mini.options'))
+    && !fs.existsSync(path.join(dir, WEED_MINI_KEK_FILE));
+}
+
+/**
+ * Copies the filer's SSE-S3 key into `.mini_sse_kek`, read from a weed mini
+ * the caller started with S3 off (S3 startup would rewrap the key and lock out
+ * the data). Without a filer key nothing was ever encrypted, so mini's own key
+ * is kept.
+ *
+ * @param {string} dir
+ * @param {string} filerUrl
+ * @param {{ waitTimeout?: number, fetchImpl?: typeof fetch }} [options]
+ * @returns {Promise<boolean>} whether a filer key was adopted
+ */
+export async function adoptWeedMiniFilerKek(dir, filerUrl, { waitTimeout = 20, fetchImpl = fetch } = {}) {
+  const keyFile = path.join(dir, WEED_MINI_KEK_FILE);
+  try {
+    await waitForEndpoint(filerUrl, waitTimeout, 'Embedded SeaweedFS filer', fetchImpl);
+    const response = await fetchImpl(`${filerUrl}${FILER_KEK_PATH}`);
+    if (response.status === 404) return false;
+    if (!response.ok) throw new Error(`the filer answered ${response.status}`);
+    const kek = (await response.text()).trim();
+    if (!/^[0-9a-f]{64}$/i.test(kek)) throw new Error('the filer key is not a plaintext 32-byte hex key');
+    fs.writeFileSync(keyFile, kek, { mode: 0o600 });
+    fs.chmodSync(keyFile, 0o600);
+    return true;
+  } catch (error) {
+    // Mini wrote a random key while it ran; left in place it would hide the
+    // filer's key from the next start.
+    fs.rmSync(keyFile, { force: true });
+    throw new Error(
+      `Could not carry the SeaweedFS encryption key from ${FILER_KEK_PATH} into ${keyFile}: `
+      + `${error instanceof Error ? error.message : String(error)}. No stored data was changed.`,
+    );
+  }
 }
 
 function listenOnce(port, host) {

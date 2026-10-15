@@ -19,7 +19,7 @@
     {
       "name": "SeaweedFS",
       "versions": [
-        "4.18"
+        "4.48"
       ],
       "kind": "binary",
       "license": "Apache-2.0",

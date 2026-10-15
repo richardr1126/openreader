@@ -1,11 +1,13 @@
 import { CreateBucketCommand, HeadBucketCommand, type S3Client } from '@aws-sdk/client-s3';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
 import {
+  adoptWeedMiniFilerKek,
   ensureS3Bucket,
+  needsWeedMiniKekAdoption,
   resolveWeedMiniAdvertiseHost,
   resolveWeedMiniInternalPorts,
   WEED_MINI_DISABLED_COMPONENTS,
@@ -120,5 +122,57 @@ describe('embedded SeaweedFS internal ports', () => {
 
   test('turns off components OpenReader never uses, including the admin UI', () => {
     expect(WEED_MINI_DISABLED_COMPONENTS).toEqual(['-webdav=false', '-s3.port.iceberg=0', '-admin.ui=false']);
+  });
+});
+
+describe('weed mini SSE-S3 key upgrade', () => {
+  const filerKek = 'ab'.repeat(32);
+  const dataDir = () => mkdtempSync(join(tmpdir(), 'weed-kek-'));
+  // The filer answers its root (readiness) and then the key path.
+  const filer = (kekResponse: Response) => vi.fn(async (url: string) => (
+    url.endsWith('/etc/s3/sse_kek') ? kekResponse : new Response('')
+  )) as unknown as typeof fetch;
+
+  test('adopts only for a data directory that weed ran in before keeping its own key', () => {
+    const fresh = dataDir();
+    expect(needsWeedMiniKekAdoption(fresh)).toBe(false);
+
+    writeFileSync(join(fresh, 'mini.options'), 'filer.port=8888\n');
+    expect(needsWeedMiniKekAdoption(fresh)).toBe(true);
+    expect(needsWeedMiniKekAdoption(fresh, { WEED_S3_SSE_KEK: filerKek })).toBe(false);
+
+    writeFileSync(join(fresh, '.mini_sse_kek'), filerKek);
+    expect(needsWeedMiniKekAdoption(fresh)).toBe(false);
+  });
+
+  test('writes the filer key over the key mini generated', async () => {
+    const dir = dataDir();
+    writeFileSync(join(dir, '.mini_sse_kek'), 'cd'.repeat(32));
+
+    await expect(adoptWeedMiniFilerKek(dir, 'http://127.0.0.1:8888', {
+      fetchImpl: filer(new Response(`${filerKek}\n`)),
+    })).resolves.toBe(true);
+    expect(readFileSync(join(dir, '.mini_sse_kek'), 'utf8')).toBe(filerKek);
+    if (process.platform !== 'win32') expect(statSync(join(dir, '.mini_sse_kek')).mode & 0o777).toBe(0o600);
+  });
+
+  test("keeps mini's key when the filer never stored one", async () => {
+    const dir = dataDir();
+    writeFileSync(join(dir, '.mini_sse_kek'), 'cd'.repeat(32));
+
+    await expect(adoptWeedMiniFilerKek(dir, 'http://127.0.0.1:8888', {
+      fetchImpl: filer(new Response('', { status: 404 })),
+    })).resolves.toBe(false);
+    expect(readFileSync(join(dir, '.mini_sse_kek'), 'utf8')).toBe('cd'.repeat(32));
+  });
+
+  test("discards mini's key when the filer key cannot be carried forward", async () => {
+    const dir = dataDir();
+    writeFileSync(join(dir, '.mini_sse_kek'), 'cd'.repeat(32));
+
+    await expect(adoptWeedMiniFilerKek(dir, 'http://127.0.0.1:8888', {
+      fetchImpl: filer(new Response('d3JhcHBlZA==')),
+    })).rejects.toThrow(/not a plaintext 32-byte hex key.*No stored data was changed/);
+    expect(existsSync(join(dir, '.mini_sse_kek'))).toBe(false);
   });
 });
