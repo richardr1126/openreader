@@ -73,8 +73,13 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       </head>
       <body className="antialiased">
         {children}
-        <CookieConsentBanner />
-        <ConsentAwareAnalytics />
+        {/* Desktop is a local app with no hosted analytics to consent to. */}
+        {runtimeConfig.installProfile === 'server' ? (
+          <>
+            <CookieConsentBanner />
+            <ConsentAwareAnalytics />
+          </>
+        ) : null}
       </body>
     </html>
   );

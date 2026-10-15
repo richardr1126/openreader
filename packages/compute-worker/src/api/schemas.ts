@@ -109,6 +109,21 @@ export const emailDeliveryOperationCreateSchema = z.object({
   expiresAt: z.number().int().positive(),
 }).strict();
 
+export const modelParamsSchema = z.object({
+  model: z.enum(['kokoro-82m']),
+}).strict();
+
+export const modelDownloadProgressSchema = z.object({
+  downloadedBytes: z.number(),
+  totalBytes: z.number(),
+  components: z.array(z.object({
+    name: z.string(),
+    totalBytes: z.number(),
+    downloadedBytes: z.number(),
+    state: z.enum(['pending', 'downloading', 'verifying', 'ready', 'failed']),
+  })).optional(),
+});
+
 export const ttsPlaybackPlanningSchema = z.object({
   selectedOrdinal: z.number().int().nonnegative().optional(),
   maxBlockLength: z.number().int().positive().max(20_000).optional(),
@@ -336,15 +351,24 @@ export const pdfLayoutProgressSchema = z.object({
   totalBytes: z.number().optional(),
 });
 
+export const modelComponentProgressSchema = z.object({
+  name: z.string(),
+  totalBytes: z.number(),
+  downloadedBytes: z.number(),
+  state: z.enum(['pending', 'downloading', 'verifying', 'ready', 'failed']),
+});
+
 export const ttsPlaybackProgressSchema = z.object({
   completedThroughOrdinal: z.number(),
   completedCount: z.number(),
   skippedCount: z.number().optional(),
   plannedCount: z.number(),
+  alignedCount: z.number().optional(),
   phase: z.enum(['downloading_model', 'generating', 'checking_cache']).optional(),
   stopReason: z.literal('usage_limit').optional(),
   downloadedBytes: z.number().optional(),
   totalBytes: z.number().optional(),
+  modelComponents: z.array(modelComponentProgressSchema).optional(),
 });
 
 export const ttsPlaybackExportProgressSchema = z.object({
@@ -492,6 +516,10 @@ export const computeOperationSchema = z.object({
       kind: z.literal('email_delivery'),
       deliveryId: z.string(),
     }),
+    z.object({
+      kind: z.literal('model_download'),
+      model: z.literal('kokoro-82m'),
+    }),
   ]),
   status: z.enum(['queued', 'running', 'succeeded', 'failed']),
   queuedAt: z.number(),
@@ -510,6 +538,7 @@ export const computeOperationSchema = z.object({
     ttsPlaybackExportProgressSchema,
     documentConversionProgressSchema,
     accountExportProgressSchema,
+    modelDownloadProgressSchema,
   ]).optional(),
 });
 
@@ -517,6 +546,19 @@ export const computeOperationEventSchema = z.object({
   eventId: z.number(),
   snapshot: computeOperationSchema,
 });
+
+export const modelStatusSchema = z.object({
+  model: z.literal('kokoro-82m'),
+  components: z.array(z.object({
+    name: z.string(),
+    totalBytes: z.number(),
+    installedBytes: z.number(),
+  })),
+  downloading: z.boolean(),
+  operation: computeOperationSchema.nullable(),
+});
+
+export const modelCancelResultSchema = z.object({ cancelled: z.boolean() });
 
 export const pdfLayoutResolutionSchema = z.object({
   artifact: artifactReferenceSchema.nullable(),

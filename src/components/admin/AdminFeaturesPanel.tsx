@@ -18,6 +18,7 @@ import { type TtsProviderId } from '@openreader/tts/provider-catalog';
 import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import {
   parseComputeLimitPolicyDocument,
 } from '@openreader/runtime-config/compute-limits';
@@ -80,6 +81,9 @@ export function AdminFeaturesPanel({
 }) {
   const queryClient = useQueryClient();
   const { data: session } = useAuthSession();
+  // Sign-up policy, guest sessions and per-user limits govern a multi-user
+  // instance. The desktop owner is the only account, so they stay hidden there.
+  const multiUser = useRuntimeConfig().installProfile === 'server';
   const adminSettingsQueryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
   const { data, error } = useQuery({
     queryKey: adminSettingsQueryKey,
@@ -221,7 +225,7 @@ export function AdminFeaturesPanel({
 
   if (!data) {
     return (
-      <AdminFeaturesSkeleton />
+      <AdminFeaturesSkeleton multiUser={multiUser} />
     );
   }
 
@@ -293,8 +297,8 @@ export function AdminFeaturesPanel({
         />
       </Section> : null}
 
-      {showInstanceSettings ? <Section title="Site features" variant="group">
-        <SettingRow
+      {showInstanceSettings ? <Section title={multiUser ? 'Site features' : 'Features'} variant="group">
+        {multiUser ? <SettingRow
           label="Changelog feed URL"
           description="Public URL used by the standalone changelog page."
           meta={renderSource('changelogFeedUrl')}
@@ -307,7 +311,8 @@ export function AdminFeaturesPanel({
             onChange={(event) => updateDraft('changelogFeedUrl', event.target.value)}
             placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
           />
-        </SettingRow>
+        </SettingRow> : null}
+        {multiUser ? <>
         <SettingRow
           label="New account sign-ups"
           description="Open access, collect requests for approval, or close registration. Approval does not verify email ownership."
@@ -334,6 +339,7 @@ export function AdminFeaturesPanel({
           meta={renderSource('allowAnonymousSessions')}
           variant="plain"
         />
+        </> : null}
         <ToggleRow
           label="Audiobook export"
           description='Show "Export audiobook" on PDF/EPUB pages.'
@@ -353,13 +359,13 @@ export function AdminFeaturesPanel({
       </Section> : null}
 
       {showComputeSettings ? <Section
-        title="Limits"
+        title={multiUser ? 'Limits' : 'Uploads'}
         variant="group"
-        subtitle="Enabled limits reject new work at the configured threshold. TTS usage is checked per uncached segment; cached audio stays available after a limit is reached."
-        action={renderSource('computeLimitPolicies')}
+        subtitle={multiUser ? 'Enabled limits reject new work at the configured threshold. TTS usage is checked per uncached segment; cached audio stays available after a limit is reached.' : undefined}
+        action={multiUser ? renderSource('computeLimitPolicies') : undefined}
       >
         {numberRow({ key: 'maxUploadMb', label: 'Max upload size', ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
-        {computePolicy ? (
+        {multiUser && computePolicy ? (
           <ComputeLimitsEditor
             policy={computePolicy}
             providers={sharedProviders.map(({ slug, displayName }) => ({ slug, displayName }))}
@@ -427,10 +433,10 @@ export function AdminFeaturesPanel({
   );
 }
 
-function AdminFeaturesSkeleton() {
+function AdminFeaturesSkeleton({ multiUser }: { multiUser: boolean }) {
   return (
     <div className="space-y-5 animate-pulse" aria-label="Loading feature settings" aria-busy="true">
-      {['TTS defaults', 'Site features'].map((title) => (
+      {['TTS defaults', multiUser ? 'Site features' : 'Features'].map((title) => (
         <Section key={title} title={title} variant="group">
           {[0, 1, 2].map((row) => (
             <div key={row} className="flex items-center justify-between gap-3">

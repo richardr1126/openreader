@@ -8,6 +8,7 @@ import { RUNTIME_KEYS, seedRuntimeConfigFromValues } from '../../src/lib/server/
 import { __seedInternals } from '../../src/lib/server/admin/seed';
 import { getAccountEmailSettings } from '../../src/lib/server/admin/email-settings';
 import { cloneComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
+import { RUNTIME_SEED as DESKTOP_RUNTIME_SEED } from '../../desktop/src/runtime.mjs';
 
 type SettingRow = {
   key: string;
@@ -150,6 +151,14 @@ describe('runtime seed JSON parsing', () => {
     const parsed = __seedInternals.parseRuntimeSeedDocument(raw);
     expect(Object.keys(parsed.seed.runtimeConfig ?? {}).sort()).toEqual([...RUNTIME_KEYS].sort());
     expect(parsed.seed.runtimeConfig?.computeLimitPolicies).toEqual(cloneComputeLimitPolicyDocument());
+  });
+
+  test('accepts the desktop shell seed, a Kokoro provider on the device', () => {
+    const parsed = __seedInternals.parseRuntimeSeedDocument(DESKTOP_RUNTIME_SEED);
+    expect(parsed.hasProvidersSection).toBe(true);
+    expect(parsed.seed.providers).toEqual([
+      { slug: 'kokoro', displayName: 'Kokoro', providerType: 'kokoro-local' },
+    ]);
   });
 
   test('rejects malformed JSON input', () => {

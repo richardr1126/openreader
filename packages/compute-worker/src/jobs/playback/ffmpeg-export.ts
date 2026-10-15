@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import ffmpegPath from 'ffmpeg-static';
+import { getFFmpegPath } from '@openreader/tts/ffmpeg-bin';
 import { groupExportChapters } from './export-chapters';
 import type { TtsPlaybackSegmentInput } from './plan';
 
@@ -111,8 +111,7 @@ export async function runFfmpegExport(input: {
   title: string;
   chapters: ExportChapter[];
 }): Promise<void> {
-  const executable = ffmpegPath;
-  if (!executable) throw new Error('ffmpeg-static did not provide an executable path');
+  const executable = getFFmpegPath();
   const { inputPath, outputPath, workDir } = input;
   const metadataPath = join(workDir, 'chapters.ffmetadata');
   const args = ['-hide_banner', '-loglevel', 'error', '-i', inputPath];

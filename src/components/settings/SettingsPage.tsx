@@ -1,10 +1,9 @@
 'use client';
 
-import { useMemo, type ComponentType, type SVGProps } from 'react';
+import { Fragment, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AudioWaveIcon, ClockIcon, DocumentIcon, InfoIcon, KeyIcon,
-  PaletteIcon, SettingsIcon, SpeedometerIcon, UserIcon } from '@/components/icons/Icons';
+import { DocumentIcon, InfoIcon } from '@/components/icons/Icons';
 import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
 import { AdminGutendexPanel } from '@/components/admin/AdminGutendexPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
@@ -18,85 +17,13 @@ import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { normalizeVersion } from '@/lib/shared/changelog';
+import { AboutSettingsPanel } from './AboutSettingsPanel';
 import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { StorageSettingsPanel } from './StorageSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
+import { settingsNavGroups, visibleSettingsSections, type SettingsSectionId } from './settings-sections';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'storage' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
-type SettingsSection = {
-  id: SettingsSectionId;
-  label: string;
-  shortLabel: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-  group: 'general' | 'admin';
-};
-
-const SETTINGS_SECTIONS: SettingsSection[] = [
-  {
-    id: 'api',
-    label: 'TTS Provider',
-    shortLabel: 'Provider',
-    icon: KeyIcon,
-    group: 'general',
-  },
-  {
-    id: 'theme',
-    label: 'Appearance',
-    shortLabel: 'Appearance',
-    icon: PaletteIcon,
-    group: 'general',
-  },
-  {
-    id: 'account',
-    label: 'Account',
-    shortLabel: 'Account',
-    icon: UserIcon,
-    group: 'general',
-  },
-  {
-    id: 'storage',
-    label: 'Storage',
-    shortLabel: 'Storage',
-    icon: AudioWaveIcon,
-    group: 'general',
-  },
-  {
-    id: 'users',
-    label: 'Users',
-    shortLabel: 'Users',
-    icon: UserIcon,
-    group: 'admin',
-  },
-  {
-    id: 'providers',
-    label: 'Providers',
-    shortLabel: 'Providers',
-    icon: KeyIcon,
-    group: 'admin',
-  },
-  {
-    id: 'instance',
-    label: 'Instance',
-    shortLabel: 'Instance',
-    icon: SettingsIcon,
-    group: 'admin',
-  },
-  {
-    id: 'compute',
-    label: 'Compute',
-    shortLabel: 'Compute',
-    icon: SpeedometerIcon,
-    group: 'admin',
-  },
-  {
-    id: 'maintenance',
-    label: 'Maintenance',
-    shortLabel: 'Maintenance',
-    icon: ClockIcon,
-    group: 'admin',
-  },
-];
 function CloseSettingsLink() {
   return (
     <Link
@@ -121,20 +48,16 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
   const isAdmin = Boolean(
     (session?.user as unknown as { isAdmin?: boolean } | undefined)?.isAdmin,
   );
-  const visibleSections = useMemo(
-    () => SETTINGS_SECTIONS.filter((section) => {
-      if (section.id === 'api' && !runtimeConfig.enableTtsProvidersTab) return false;
-      if (section.group === 'admin' && !isAdmin) return false;
-      return true;
-    }),
-    [isAdmin, runtimeConfig.enableTtsProvidersTab],
+  const { installProfile, enableTtsProvidersTab } = runtimeConfig;
+  const navGroups = useMemo(
+    () => settingsNavGroups(installProfile, visibleSettingsSections({ installProfile, isAdmin, enableTtsProvidersTab })),
+    [enableTtsProvidersTab, installProfile, isAdmin],
   );
+  const orderedSections = navGroups.flatMap((group) => group.sections);
   const requestedSection = searchParams.get('section') ?? initialSection;
-  const currentSection = visibleSections.find((section) => section.id === requestedSection)
-    ?? visibleSections[0];
+  const currentSection = orderedSections.find((section) => section.id === requestedSection)
+    ?? orderedSections[0];
   const activeSection = currentSection?.id ?? 'theme';
-  const generalSections = visibleSections.filter((section) => section.group === 'general');
-  const adminSections = visibleSections.filter((section) => section.group === 'admin');
   const displayVersion = normalizeVersion(runtimeConfig.appVersion || '');
   const selectSection = (section: SettingsSectionId) => {
     router.replace(`/app/settings?section=${section}`, { scroll: false });
@@ -164,36 +87,25 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
         <Sidebar className="hidden h-full w-[220px] shrink-0 flex-col rounded-none border-y-0 border-l-0 border-r border-line-soft bg-surface shadow-none md:flex">
           <div className="min-h-0 flex-1 overflow-y-auto">
             <SidebarNav className="p-2">
-              <SidebarNavGroup isFirst>General</SidebarNavGroup>
-              {generalSections.map((section) => {
-                const Icon = section.icon;
-                return (
-                  <SidebarNavItem
-                    key={section.id}
-                    compact
-                    active={activeSection === section.id}
-                    onClick={() => selectSection(section.id)}
-                    aria-label={section.label}
-                    icon={<Icon className="h-3.5 w-3.5" />}
-                    label={section.label}
-                  />
-                );
-              })}
-              {adminSections.length > 0 ? <SidebarNavGroup>Admin</SidebarNavGroup> : null}
-              {adminSections.map((section) => {
-                const Icon = section.icon;
-                return (
-                  <SidebarNavItem
-                    key={section.id}
-                    compact
-                    active={activeSection === section.id}
-                    onClick={() => selectSection(section.id)}
-                    aria-label={section.label}
-                    icon={<Icon className="h-3.5 w-3.5" />}
-                    label={section.label}
-                  />
-                );
-              })}
+              {navGroups.map((group, index) => (
+                <Fragment key={group.label}>
+                  <SidebarNavGroup isFirst={index === 0}>{group.label}</SidebarNavGroup>
+                  {group.sections.map((section) => {
+                    const Icon = section.icon;
+                    return (
+                      <SidebarNavItem
+                        key={section.id}
+                        compact
+                        active={activeSection === section.id}
+                        onClick={() => selectSection(section.id)}
+                        aria-label={section.label}
+                        icon={<Icon className="h-3.5 w-3.5" />}
+                        label={section.label}
+                      />
+                    );
+                  })}
+                </Fragment>
+              ))}
             </SidebarNav>
           </div>
 
@@ -206,13 +118,16 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                 icon={<InfoIcon className="h-3.5 w-3.5" />}
                 label={displayVersion ? `Changelog · v${displayVersion}` : 'Changelog'}
               />
-              <SidebarNavItem
-                compact
-                onClick={() => showPrivacyModal()}
-                aria-label="Privacy"
-                icon={<DocumentIcon className="h-3.5 w-3.5" />}
-                label="Privacy"
-              />
+              {/* The notice describes a hosted instance; desktop has no operator. */}
+              {installProfile === 'server' ? (
+                <SidebarNavItem
+                  compact
+                  onClick={() => showPrivacyModal()}
+                  aria-label="Privacy"
+                  icon={<DocumentIcon className="h-3.5 w-3.5" />}
+                  label="Privacy"
+                />
+              ) : null}
             </SidebarNav>
           </div>
         </Sidebar>
@@ -223,50 +138,30 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
             className="shrink-0 overflow-x-auto border-b border-line-soft bg-surface px-2 py-1.5 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             <div className="flex min-w-max gap-1">
-              <span className="flex h-8 items-center px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-faint">General</span>
-              {generalSections.map((section) => {
-                const Icon = section.icon;
-                const active = section.id === activeSection;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => selectSection(section.id)}
-                    aria-label={section.label}
-                    aria-current={active ? 'page' : undefined}
-                    className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-base focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                      active
-                        ? 'border-accent-line bg-surface-sunken text-accent'
-                        : 'border-transparent text-foreground hover:bg-accent-wash hover:text-accent'
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {section.shortLabel}
-                  </button>
-                );
-              })}
-              {adminSections.length > 0 ? <span className="ml-2 flex h-8 items-center px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-faint">Admin</span> : null}
-              {adminSections.map((section) => {
-                const Icon = section.icon;
-                const active = section.id === activeSection;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    onClick={() => selectSection(section.id)}
-                    aria-label={section.label}
-                    aria-current={active ? 'page' : undefined}
-                    className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-base focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                      active
-                        ? 'border-accent-line bg-surface-sunken text-accent'
-                        : 'border-transparent text-foreground hover:bg-accent-wash hover:text-accent'
-                    }`}
-                  >
-                    <Icon className="h-3.5 w-3.5" />
-                    {section.shortLabel}
-                  </button>
-                );
-              })}
+              {navGroups.map((group, index) => [
+                <span key={group.label} className={`${index === 0 ? '' : 'ml-2 '}flex h-8 items-center px-1 text-[10px] font-bold uppercase tracking-[0.12em] text-faint`}>{group.label}</span>,
+                ...group.sections.map((section) => {
+                  const Icon = section.icon;
+                  const active = section.id === activeSection;
+                  return (
+                    <button
+                      key={section.id}
+                      type="button"
+                      onClick={() => selectSection(section.id)}
+                      aria-label={section.label}
+                      aria-current={active ? 'page' : undefined}
+                      className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-base focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                        active
+                          ? 'border-accent-line bg-surface-sunken text-accent'
+                          : 'border-transparent text-foreground hover:bg-accent-wash hover:text-accent'
+                      }`}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {section.shortLabel}
+                    </button>
+                  );
+                }),
+              ])}
             </div>
           </nav>
 
@@ -290,12 +185,13 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                   ) : null}
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
                   {activeSection === 'storage' ? <StorageSettingsPanel /> : null}
+                  {activeSection === 'about' ? <AboutSettingsPanel /> : null}
                   {isAdmin && activeSection === 'users' ? <AdminUsersPanel /> : null}
                   {isAdmin && activeSection === 'providers' ? <AdminProvidersPanel /> : null}
                   {isAdmin && activeSection === 'instance' ? (
                     <div className="space-y-5">
                       <AdminFeaturesPanel scope="instance" />
-                      <AdminEmailPanel />
+                      {installProfile === 'server' ? <AdminEmailPanel /> : null}
                       <AdminGutendexPanel />
                     </div>
                   ) : null}

@@ -1,0 +1,13 @@
+{
+  "comment": "The LGPL ffmpeg that OpenReader distributes (Docker images, desktop packages), built by packaging/ffmpeg/build.sh and published as the GitHub release named here. Fetch with `node packaging/ffmpeg/fetch.mjs`; see packaging/ffmpeg/README.md before changing a pin.",
+  "ffmpegVersion": "9.0.2",
+  "license": "LGPL-3.0-or-later",
+  "release": "ffmpeg-lgpl-9.0.2-1",
+  "sha256": {
+    "darwin-universal": "19fb90ec54beb7bf4c29728141c4f0e4e13c9acdc40ac62f7a9ba59e323a44a6",
+    "linux-x64": "860cfd89fe971c3c2b0bf1387b387f2739dfb660b77abba9ca317d3f7208f325",
+    "linux-arm64": "8b9ebb4fa9d554d3303e29f6b71bb269687ee81dbbf678c0105a3f07e490e153",
+    "win32-x64": "daf779429cd72bced0e442d901e8c9c3a5056ab3d8389863dd785772bd787bdf",
+    "win32-arm64": "4dd48eef3550de556bb7d4ed6f2d4ed31f2de1bd461ca54d2dc2c435e15c1797"
+  }
+}

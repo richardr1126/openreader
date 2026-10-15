@@ -4,10 +4,22 @@ import {
   buildInferProgressForPageParsed,
   buildInferProgressForPageStart,
 } from '../../src/jobs/pdf-progress';
-import { buildPdfOperationKey, buildTtsPlaybackOperationKey } from '../../src/operations/keys';
+import {
+  buildModelDownloadOperationKey,
+  buildPdfOperationKey,
+  buildTtsPlaybackOperationKey,
+  modelDownloadSubjectFromOperationKey,
+} from '../../src/operations/keys';
 import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
 
 describe('compute worker helpers', () => {
+  test('keys one model download per model', () => {
+    const opKey = buildModelDownloadOperationKey('kokoro-82m');
+    expect(opKey).toBe('model_download|v1|kokoro-82m');
+    expect(modelDownloadSubjectFromOperationKey(opKey)).toEqual({ kind: 'model_download', model: 'kokoro-82m' });
+    expect(modelDownloadSubjectFromOperationKey('model_download|v1|other')).toBeNull();
+  });
+
   test('hash and kv key helpers are stable and deterministic', () => {
     const hashA = hashOpKey('doc-123|layout|v1');
     const hashB = hashOpKey('doc-123|layout|v1');

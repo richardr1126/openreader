@@ -26,4 +26,4 @@ jobs:
       - name: Run Vitest suites
         run: pnpm test:unit
       - name: Verify compute worker contract and boundary
-        run: pnpm compute:openapi:check && pnpm check:compute-boundary
+        run: pnpm compute:openapi:check && pnpm check:compute-boundary && pnpm check:install-profile

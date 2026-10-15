@@ -29,6 +29,8 @@ import type {
   AccountExportJobResult,
   EmailDeliveryJobRequest,
   EmailDeliveryJobResult,
+  ModelDownloadJobRequest,
+  ModelDownloadJobResult,
   DocumentPreviewJobRequest,
   DocumentPreviewJobResult,
   DocumentConversionJobRequest,
@@ -63,11 +65,13 @@ import { notifyComputeAdmissionTerminal } from '../jobs/compute-limit-broker';
 import { cloneComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
 import { ProviderCapacityCoordinator } from '../jobs/provider-capacity';
 import { resolveTtsCredentialsFromBroker } from '../jobs/tts-credential-broker';
-import { generateTTSBuffer } from '@openreader/tts/generate';
+import { generateTTSBuffer, registerLocalTtsSynthesizer } from '@openreader/tts/generate';
+import { synthesizeKokoro } from '../inference/kokoro/engine';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
 import {
   ACCOUNT_EXPORT_JOBS_SUBJECT,
   EMAIL_DELIVERY_JOBS_SUBJECT,
+  MODEL_DOWNLOAD_JOBS_SUBJECT,
   EVENTS_STREAM_NAME,
   DOCUMENT_PREVIEW_JOBS_SUBJECT,
   DOCUMENT_CONVERSION_JOBS_SUBJECT,
@@ -140,6 +144,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     getTtsCredentialBrokerConfig();
     requireTtsSegmentTextHashSecret();
   }
+  // The model loads on the first local Kokoro request, not here.
+  registerLocalTtsSynthesizer((request, signal) => synthesizeKokoro(request, signal));
   const natsUrl = requireEnv('NATS_URL');
   const timeoutConfig = getComputeTimeoutConfig();
 
@@ -295,12 +301,13 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const documentConversionJobCodec = createJsonCodec<QueuedJob<DocumentConversionJobRequest>>();
   const accountExportJobCodec = createJsonCodec<QueuedJob<AccountExportJobRequest>>();
   const emailDeliveryJobCodec = createJsonCodec<QueuedJob<EmailDeliveryJobRequest>>();
+  const modelDownloadJobCodec = createJsonCodec<QueuedJob<ModelDownloadJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult>({
     getKv: async () => (await ensureConnected()).kv,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
@@ -322,6 +329,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     documentConversionSubject: DOCUMENT_CONVERSION_JOBS_SUBJECT,
     accountExportSubject: ACCOUNT_EXPORT_JOBS_SUBJECT,
     emailDeliverySubject: EMAIL_DELIVERY_JOBS_SUBJECT,
+    modelDownloadSubject: MODEL_DOWNLOAD_JOBS_SUBJECT,
   });
 
   const defaultOrchestrator = new OperationOrchestrator({
@@ -420,6 +428,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     documentConversionCodec: documentConversionJobCodec,
     accountExportCodec: accountExportJobCodec,
     emailDeliveryCodec: emailDeliveryJobCodec,
+    modelDownloadCodec: modelDownloadJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -501,6 +510,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         documentConversion: session.documentConversionConsumer,
         accountExport: session.accountExportConsumer,
         emailDelivery: session.emailDeliveryConsumer,
+        modelDownload: session.modelDownloadConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

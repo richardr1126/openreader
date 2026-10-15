@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import BetterSqlite3 from 'better-sqlite3';
@@ -11,6 +11,7 @@ import {
 import {
   applyEmbeddedPlaybackSecret,
   deriveEmbeddedPlaybackSecret,
+  embeddedServiceEnv,
 } from '../../packages/bootstrap/src/runtime-secrets.mjs';
 import {
   detectPreV5Database,
@@ -53,7 +54,45 @@ describe('embedded playback secret', () => {
   });
 });
 
+describe('embedded service environment', () => {
+  test('never forwards app-only settings to embedded services', () => {
+    const env = {
+      AUTH_SECRET: 'a',
+      DESKTOP_LAUNCH_TOKEN: 'shell-secret',
+      POSTGRES_URL: 'postgres://app',
+      SQLITE_DB_PATH: '/data/app.db',
+      COMPUTE_WORKER_TOKEN: 'w',
+    };
+    const serviceEnv = embeddedServiceEnv(env, { PORT: '8081' });
+    expect(serviceEnv).not.toHaveProperty('DESKTOP_LAUNCH_TOKEN');
+    for (const name of ['AUTH_SECRET', 'POSTGRES_URL', 'SQLITE_DB_PATH']) {
+      expect(serviceEnv).not.toHaveProperty(name);
+    }
+    expect(serviceEnv).toMatchObject({ COMPUTE_WORKER_TOKEN: 'w', PORT: '8081' });
+    expect(embeddedServiceEnv(env, { DESKTOP_LAUNCH_TOKEN: 'override' })).not.toHaveProperty('DESKTOP_LAUNCH_TOKEN');
+    expect(env.DESKTOP_LAUNCH_TOKEN).toBe('shell-secret');
+    expect(env.AUTH_SECRET).toBe('a');
+  });
+
+  test('builds every embedded child environment through the filter', () => {
+    const cli = readFileSync(path.join(process.cwd(), 'packages/bootstrap/src/cli.mjs'), 'utf8');
+    for (const child of ["spawn('weed'", "'nats-server',", 'workerLaunch.cmd,']) {
+      const start = cli.indexOf(child);
+      expect(start, child).toBeGreaterThan(-1);
+      expect(cli.slice(start, start + 400), child).not.toMatch(/env: runtimeEnv\b/);
+    }
+    expect(cli).toContain('const workerEnv = embeddedServiceEnv(runtimeEnv, {');
+    expect(cli.match(/embeddedServiceEnv\(runtimeEnv/g)).toHaveLength(3);
+  });
+});
+
 describe('startup configuration preflight', () => {
+  test('refuses a desktop launch token too short to protect the owner session', () => {
+    expect(messages(evaluateStartupConfig({ ...validEnv, DESKTOP_LAUNCH_TOKEN: 'short' }).errors))
+      .toEqual([expect.stringContaining('DESKTOP_LAUNCH_TOKEN is too short')]);
+    expect(evaluateStartupConfig({ ...validEnv, DESKTOP_LAUNCH_TOKEN: 'x'.repeat(43) }).errors).toEqual([]);
+  });
+
   test('accepts a minimal embedded configuration without warnings', () => {
     expect(evaluateStartupConfig(validEnv)).toEqual({ errors: [], warnings: [] });
   });

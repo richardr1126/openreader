@@ -1,6 +1,7 @@
 # Stage 1: extract seaweedfs weed binary (for optional embedded weed mini)
-# Pin to 4.18 because CI observed upload regressions on 4.19.
-FROM chrislusf/seaweedfs:4.18 AS seaweedfs-builder
+# Keep in step with desktop/runtime-binaries.json. Bootstrap keeps an upgraded data
+# directory on the encryption key it already had (see embedded-seaweedfs.mjs).
+FROM chrislusf/seaweedfs:4.48 AS seaweedfs-builder
 RUN cp "$(command -v weed)" /tmp/weed && \
     (wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/master/LICENSE" || \
      wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/main/LICENSE")
@@ -8,6 +9,11 @@ RUN cp "$(command -v weed)" /tmp/weed && \
 # Stage 1b: extract nats-server binary for embedded single-container worker mode.
 FROM nats:2.11-alpine AS nats-builder
 RUN cp "$(command -v nats-server)" /tmp/nats-server
+
+# Stage 1c: fetch the pinned LGPL ffmpeg, verify its SHA-256, and smoke-test it.
+FROM node:lts-slim AS ffmpeg-fetch
+COPY packaging /packaging
+RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
 
 # Stage 2: build the Next.js app
 FROM node:lts-slim AS app-builder
@@ -36,8 +42,10 @@ COPY . .
 RUN pnpm exec next telemetry disable
 RUN AUTH_SECRET=build-placeholder-secret-value-32chars!! BASE_URL=http://localhost:3003 pnpm build
 RUN pnpm --config.inject-workspace-packages=true --filter @openreader/bootstrap deploy /opt/openreader/bootstrap
-RUN pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3 ffmpeg-static
-RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy /opt/openreader/embedded-compute-worker
+RUN pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3
+# `pnpm build` above also built the worker to plain JavaScript (dist/); the
+# production deploy ships that output without TypeScript tooling.
+RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy --prod /opt/openreader/embedded-compute-worker
 # Generate third-party dependency license report plus copied license files.
 RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
     pnpm dlx license-checker-rseidelsohn@4.3.0 \
@@ -53,7 +61,7 @@ FROM node:lts-slim AS runner
 
 # Add runtime OS dependencies:
 # - libreoffice-writer-nogui: required for headless DOCX → PDF conversion
-# ffmpeg is provided by ffmpeg-static from node_modules.
+# ffmpeg is the pinned LGPL build from the ffmpeg-fetch stage.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends ca-certificates libreoffice-writer-nogui && \
     rm -rf /var/lib/apt/lists/*
@@ -79,12 +87,17 @@ COPY --from=app-builder /app/packages/compute-worker/src/inference/pdf/assets/LI
 # Copy seaweedfs weed binary for optional embedded local S3.
 COPY --from=seaweedfs-builder /tmp/weed /usr/local/bin/weed
 RUN chmod +x /usr/local/bin/weed
+# LGPL ffmpeg with its LICENSE.txt and SOURCE.txt (provenance and corresponding source).
+COPY --from=ffmpeg-fetch /opt/ffmpeg /opt/ffmpeg
+ENV FFMPEG_BIN=/opt/ffmpeg/ffmpeg
 # Copy nats-server binary for embedded local JetStream.
 COPY --from=nats-builder /tmp/nats-server /usr/local/bin/nats-server
 RUN chmod +x /usr/local/bin/nats-server
 
 # Include OpenAI Whisper license text for runtime-downloaded ONNX artifacts.
 COPY --from=app-builder /app/packages/compute-worker/src/inference/whisper/assets/LICENSE.txt /licenses/openai-whisper-LICENSE.txt
+# Kokoro-82M, Misaki and letter-to-sound notices for the local Kokoro provider's runtime downloads.
+COPY --from=app-builder /app/packages/compute-worker/src/inference/kokoro/assets/LICENSE.txt /licenses/kokoro-82m-misaki-LICENSE.txt
 
 # Match the app's historical container port now that standalone server.js
 # is started directly instead of `next start -p 3003`.

@@ -41,8 +41,8 @@ jobs:
           soffice --version
       - name: Install SeaweedFS weed binary
         run: |
-          WEED_PATH=$(docker run --rm --entrypoint sh chrislusf/seaweedfs:4.18 -lc 'command -v weed')
-          CID=$(docker create chrislusf/seaweedfs:4.18)
+          WEED_PATH=$(docker run --rm --entrypoint sh chrislusf/seaweedfs:4.48 -lc 'command -v weed')
+          CID=$(docker create chrislusf/seaweedfs:4.48)
           docker cp "${CID}:${WEED_PATH}" ./weed
           docker rm "${CID}"
           sudo install -m 0755 ./weed /usr/local/bin/weed

@@ -1,6 +1,9 @@
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
+import path from 'node:path';
 import process from 'node:process';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
@@ -128,13 +131,13 @@ export function parseUrlHost(urlValue, fieldName) {
   return url.hostname;
 }
 
-export async function waitForEndpoint(url, timeoutSeconds, serviceName = 'service') {
+export async function waitForEndpoint(url, timeoutSeconds, serviceName = 'service', fetchImpl = fetch) {
   const deadline = Date.now() + Math.max(1, timeoutSeconds) * 1000;
   while (Date.now() < deadline) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 2000);
     try {
-      const response = await fetch(url, { method: 'GET', signal: controller.signal });
+      const response = await fetchImpl(url, { method: 'GET', signal: controller.signal });
       if (response) return;
     } catch {
       // Retry until the startup deadline.
@@ -154,4 +157,191 @@ export function isRunningInDocker() {
   } catch {
     return false;
   }
+}
+
+// weed mini runs a master, filer, volume server and admin server behind its S3
+// gateway. OpenReader only talks to S3, but each of these still listens, on
+// ports mini fixes at these defaults unless told otherwise.
+const WEED_MINI_INTERNAL_PORTS = [
+  ['master.port', 9333],
+  ['master.port.grpc', 19333],
+  ['filer.port', 8888],
+  ['filer.port.grpc', 18888],
+  ['volume.port', 9340],
+  ['volume.port.grpc', 19340],
+  ['s3.port.grpc', 18333],
+  ['admin.port', 23646],
+  ['admin.port.grpc', 33646],
+];
+
+// Components OpenReader never uses. The admin server cannot be turned off, but
+// without its UI it serves only health and metrics. It ignores -ip.bind and
+// listens on every interface, so its UI (which has no login unless a password is
+// configured) must stay off.
+export const WEED_MINI_DISABLED_COMPONENTS = ['-webdav=false', '-s3.port.iceberg=0', '-admin.ui=false'];
+
+/** Reads `key=value` lines from the mini.options file weed mini persists in its data directory. */
+export function readWeedMiniOptions(dir) {
+  const options = new Map();
+  let text;
+  try {
+    text = fs.readFileSync(path.join(dir, 'mini.options'), 'utf8');
+  } catch {
+    return options;
+  }
+  for (const line of text.split('\n')) {
+    const match = /^\s*([\w.]+)\s*=\s*(\S+)\s*$/.exec(line);
+    if (match) options.set(match[1], match[2]);
+  }
+  return options;
+}
+
+// OpenReader stores every object with SSE-S3. SeaweedFS keeps the key that
+// wraps each object key (the KEK) on the filer at /etc/s3/sse_kek. Since
+// seaweedfs#9524 (4.26), weed mini also writes a random KEK to .mini_sse_kek on
+// its first start and refuses to serve SSE-S3 when the two differ. A data
+// directory from an older weed already has a filer KEK, so its objects become
+// unreadable. Mini leaves the filer's key in place (wrapped with
+// .mini_kek_passphrase), so it can still be read back and made the one in
+// .mini_sse_kek.
+const WEED_MINI_KEK_FILE = '.mini_sse_kek';
+const WEED_MINI_KEK_PASSPHRASE_FILE = '.mini_kek_passphrase';
+const FILER_KEK_PATH = '/etc/s3/sse_kek';
+const WRAPPED_KEK_MAGIC = Buffer.from('SWv2');
+const WRAPPED_KEK_SALT_BYTES = 32;
+const WRAPPED_KEK_NONCE_BYTES = 12;
+const GCM_TAG_BYTES = 16;
+const HEX_KEK = /^[0-9a-f]{64}$/i;
+
+function readTrimmed(file) {
+  try {
+    return fs.readFileSync(file, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Unwraps a KEK that weed stored as base64(`SWv2` || salt || nonce || ciphertext+tag). */
+export function unwrapWeedFilerKek(wrapped, passphrase) {
+  const raw = Buffer.from(wrapped, 'base64');
+  const header = WRAPPED_KEK_MAGIC.length + WRAPPED_KEK_SALT_BYTES;
+  if (raw.length <= header + WRAPPED_KEK_NONCE_BYTES + GCM_TAG_BYTES
+    || !raw.subarray(0, WRAPPED_KEK_MAGIC.length).equals(WRAPPED_KEK_MAGIC)) {
+    throw new Error('the filer key is in an unknown format');
+  }
+  const salt = raw.subarray(WRAPPED_KEK_MAGIC.length, header);
+  const nonce = raw.subarray(header, header + WRAPPED_KEK_NONCE_BYTES);
+  const sealed = raw.subarray(header + WRAPPED_KEK_NONCE_BYTES);
+  const key = Buffer.from(crypto.hkdfSync('sha256', Buffer.from(passphrase), salt, Buffer.from('kek-wrapping'), 32));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, nonce);
+  decipher.setAuthTag(sealed.subarray(sealed.length - GCM_TAG_BYTES));
+  return Buffer.concat([
+    decipher.update(sealed.subarray(0, sealed.length - GCM_TAG_BYTES)),
+    decipher.final(),
+  ]).toString('hex');
+}
+
+/**
+ * Makes `.mini_sse_kek` hold the KEK the filer already has, read from the
+ * running filer. Returns true when the file changed, in which case weed must be
+ * restarted to load it. An operator-supplied key or passphrase is left alone.
+ *
+ * @param {string} dir
+ * @param {string} filerUrl
+ * @param {Record<string, string | undefined>} [env]
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<boolean>}
+ */
+export async function reconcileWeedMiniKek(dir, filerUrl, env = {}, fetchImpl = fetch) {
+  if (env.WEED_S3_SSE_KEK || env.WEED_S3_SSE_KEY || env.WEED_S3_SSE_KEK_PASSPHRASE) return false;
+  const keyFile = path.join(dir, WEED_MINI_KEK_FILE);
+  const current = readTrimmed(keyFile);
+  if (!current) return false;
+
+  try {
+    const response = await fetchImpl(`${filerUrl}${FILER_KEK_PATH}`);
+    if (response.status === 404) return false;
+    if (!response.ok) throw new Error(`the filer answered ${response.status}`);
+    const stored = (await response.text()).trim();
+    const filerKek = HEX_KEK.test(stored)
+      ? stored
+      : unwrapWeedFilerKek(stored, readTrimmed(path.join(dir, WEED_MINI_KEK_PASSPHRASE_FILE)));
+    if (filerKek.toLowerCase() === current.toLowerCase()) return false;
+    fs.writeFileSync(keyFile, filerKek, { mode: 0o600 });
+    fs.chmodSync(keyFile, 0o600);
+    return true;
+  } catch (error) {
+    throw new Error(
+      `Could not check the SeaweedFS encryption key in ${keyFile} against ${FILER_KEK_PATH}: `
+      + `${error instanceof Error ? error.message : String(error)}. No stored data was changed.`,
+    );
+  }
+}
+
+function listenOnce(port, host) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', () => resolve(null));
+    server.listen(port, host, () => {
+      const bound = server.address().port;
+      server.close(() => resolve(bound));
+    });
+  });
+}
+
+/** A port is free when it can be bound on the weed bind host and on every interface (the admin server's). */
+export async function isPortFree(port, bindHost) {
+  for (const host of new Set([bindHost, '0.0.0.0'])) {
+    if (await listenOnce(port, host) === null) return false;
+  }
+  return true;
+}
+
+async function pickFreePort(bindHost) {
+  for (;;) {
+    const port = await listenOnce(0, bindHost);
+    if (port !== null && await isPortFree(port, bindHost)) return port;
+  }
+}
+
+/**
+ * Chooses weed mini's internal ports. Each one keeps the value weed persisted in
+ * mini.options, else mini's default, as long as it is free; a taken port moves
+ * to a free one. Every choice is passed explicitly, so weed persists it and the
+ * next start keeps it (the master keeps its state in a directory named after its
+ * port). Another weed, Jupyter on 8888 or a second OpenReader no longer collide.
+ *
+ * @param {string} dir
+ * @param {string} bindHost
+ * @param {{
+ *   reserved?: number[],
+ *   isFree?: (port: number, bindHost: string) => Promise<boolean>,
+ *   pickFree?: (bindHost: string) => Promise<number>,
+ * }} [options]
+ * @returns {Promise<Array<[string, number]>>}
+ */
+export async function resolveWeedMiniInternalPorts(dir, bindHost, {
+  reserved = [],
+  isFree = isPortFree,
+  pickFree = pickFreePort,
+} = {}) {
+  const persisted = readWeedMiniOptions(dir);
+  const taken = new Set(reserved.map(Number));
+  const chosen = [];
+  for (const [key, fallback] of WEED_MINI_INTERNAL_PORTS) {
+    const candidates = [Number.parseInt(persisted.get(key) ?? '', 10), fallback]
+      .filter((port) => Number.isInteger(port) && port > 0 && port <= 65535);
+    let port = null;
+    for (const candidate of candidates) {
+      if (!taken.has(candidate) && await isFree(candidate, bindHost)) {
+        port = candidate;
+        break;
+      }
+    }
+    while (port === null || taken.has(port)) port = await pickFree(bindHost);
+    taken.add(port);
+    chosen.push([key, port]);
+  }
+  return chosen;
 }

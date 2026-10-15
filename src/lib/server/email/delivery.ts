@@ -27,6 +27,15 @@ function assertConfigured(settings: AccountEmailSettings, allowWhenDisabled: boo
   }
 }
 
+/**
+ * Reserved, never-deliverable recipients (RFC 6761 `.localhost`), such as the
+ * desktop owner's address. They are refused before anything is queued.
+ */
+export function isUndeliverableRecipient(recipient: string): boolean {
+  const domain = recipient.trim().toLowerCase().split('@').pop() ?? '';
+  return domain === 'localhost' || domain.endsWith('.localhost');
+}
+
 export async function enqueueAccountEmail(input: {
   purpose: AccountEmailPurpose;
   recipient: string;
@@ -35,6 +44,7 @@ export async function enqueueAccountEmail(input: {
   deliveryId?: string;
   expiresAt?: number;
 }): Promise<ComputeOperation> {
+  if (isUndeliverableRecipient(input.recipient)) throw new Error('ACCOUNT_EMAIL_RECIPIENT_UNDELIVERABLE');
   const settings = await getAccountEmailSettings();
   const allowWhenDisabled = input.allowWhenDisabled === true;
   assertConfigured(settings, allowWhenDisabled);

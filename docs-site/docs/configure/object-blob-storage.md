@@ -19,9 +19,10 @@ This page documents storage backends, blob upload routing, and core Docker mount
 
 Metadata database mode (SQLite vs Postgres) is configured separately in [Database](./database).
 
-:::warning SeaweedFS Compatibility Note (April 16, 2026)
-OpenReader currently pins embedded SeaweedFS to `4.18` in CI and Docker builds.
-`4.19` introduced intermittent `InternalError` responses on S3 `PutObject` in our upload flow.
+:::note Embedded storage encryption
+Embedded SeaweedFS encrypts every object with a key kept in its data directory
+(`.mini_sse_kek`). Back up the whole `docstore` volume; the object files alone
+cannot be read without that key.
 :::
 
 Storage variables are documented in [Environment Variables](../reference/environment-variables#database-and-object-blob-storage).

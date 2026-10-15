@@ -1,15 +1,15 @@
 import { createHash, randomUUID } from 'crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
-import { dirname, join } from 'path';
+import { join } from 'path';
 import { spawn } from 'child_process';
-import { fileURLToPath } from 'url';
 import * as ort from 'onnxruntime-node';
 import { Tokenizer } from '@huggingface/tokenizers';
 import JSZip from 'jszip';
 import type { TTSAudioBuffer, TTSSentenceAlignment } from '../../api/types';
-import { getFFmpegPath } from '../../infrastructure/platform';
+import { getFFmpegPath } from '@openreader/tts/ffmpeg-bin';
 import { getOnnxThreadsPerJob } from '../../infrastructure/config';
+import { resolveWorkerPath } from '../../worker-paths';
 import { getComputeTimeoutConfig } from '../../infrastructure/config';
 import {
   mapWordsToSentenceOffsets,
@@ -89,6 +89,8 @@ type WhisperAlignmentState = {
   alignmentCache: Map<string, TTSSentenceAlignment[]>;
   alignmentInFlight: Map<string, Promise<TTSSentenceAlignment[]>>;
   runtimePromises: Map<WhisperModelVariant, Promise<WhisperRuntime>>;
+  /** Every caller waiting on a variant's download hears its progress, not only the first. */
+  downloadListeners: Map<WhisperModelVariant, Set<ModelDownloadProgressHandler>>;
   alignmentLaneTail: Promise<void>;
   officialMelFilters: Float32Array[] | null;
   emptyPastFeedsTemplates: Map<WhisperModelVariant, Record<string, ort.Tensor>>;
@@ -100,12 +102,14 @@ const state = (() => {
   const existing = g[WHISPER_ALIGNMENT_STATE_KEY] as WhisperAlignmentState | undefined;
   if (existing) {
     existing.alignmentLaneTail ??= Promise.resolve();
+    existing.downloadListeners ??= new Map();
     return existing;
   }
   const created: WhisperAlignmentState = {
     alignmentCache: new Map<string, TTSSentenceAlignment[]>(),
     alignmentInFlight: new Map<string, Promise<TTSSentenceAlignment[]>>(),
     runtimePromises: new Map(),
+    downloadListeners: new Map(),
     alignmentLaneTail: Promise.resolve(),
     officialMelFilters: null,
     emptyPastFeedsTemplates: new Map(),
@@ -133,8 +137,7 @@ const MEL_FILTER_BINS = (N_FFT / 2) + 1;
 const hannWindow = buildHannWindow(N_FFT);
 const goertzelCoefficients = buildGoertzelCoefficients(MEL_FILTER_BINS, N_FFT);
 
-const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
-const MEL_FILTERS_NPZ_PATH = join(MODULE_DIR, 'assets', 'mel_filters.npz');
+const MEL_FILTERS_NPZ_PATH = resolveWorkerPath('inference', 'whisper', 'assets', 'mel_filters.npz');
 
 function buildHannWindow(length: number): Float32Array {
   const window = new Float32Array(length);
@@ -560,11 +563,30 @@ async function getRuntime(
   onModelDownloadProgress?: ModelDownloadProgressHandler,
 ): Promise<WhisperRuntime> {
   const variant = resolveWhisperModelVariant(language);
-  const existing = state.runtimePromises.get(variant);
-  if (existing) return existing;
+  let listeners = state.downloadListeners.get(variant);
+  if (!listeners) {
+    listeners = new Set();
+    state.downloadListeners.set(variant, listeners);
+  }
+  if (onModelDownloadProgress) listeners.add(onModelDownloadProgress);
+  try {
+    return await (state.runtimePromises.get(variant) ?? loadRuntime(variant, listeners));
+  } finally {
+    if (onModelDownloadProgress) listeners.delete(onModelDownloadProgress);
+  }
+}
 
+function loadRuntime(
+  variant: WhisperModelVariant,
+  listeners: Set<ModelDownloadProgressHandler>,
+): Promise<WhisperRuntime> {
   const runtimePromise = (async () => {
-    await ensureWhisperModel({ variant, onProgress: onModelDownloadProgress });
+    await ensureWhisperModel({
+      variant,
+      onProgress: async (progress) => {
+        await Promise.all([...listeners].map((listener) => listener(progress)));
+      },
+    });
     await loadOfficialMelFilters();
     const paths = getWhisperModelPaths(variant);
 

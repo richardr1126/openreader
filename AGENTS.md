@@ -34,11 +34,19 @@ version or tag a release unless asked.
   execution configuration from the authenticated app-owned credential broker.
 - Provider credentials must never appear in NATS jobs, operation state, events,
   logs, browser responses, or artifacts.
-- Keep the four authentication boundaries distinct:
+- Keep the five authentication boundaries distinct:
   1. browser to Next.js: Better Auth session/cookie;
   2. Next.js to worker: `COMPUTE_WORKER_TOKEN`;
   3. browser to worker audio: short-lived HMAC playback token;
-  4. worker to app broker: `COMPUTE_CREDENTIAL_BROKER_TOKEN`.
+  4. worker to app broker: `COMPUTE_CREDENTIAL_BROKER_TOKEN`;
+  5. desktop shell to Next.js: per-launch `DESKTOP_LAUNCH_TOKEN`, exchanged once
+     at `POST /api/auth/desktop/session` for a boundary-1 session for the single
+     owner. Unset everywhere except the desktop app; the route is then absent.
+     Embedded services never receive it (`packages/bootstrap` filters it).
+- `installProfile` (`server` | `desktop`, see `v5/DESKTOP_SINGLE_OWNER.md`) is a
+  derived, presentation-only fact. It must never take part in authorization;
+  `pnpm check:install-profile` keeps it out of `src/app/api/**`,
+  `src/lib/server/auth/**` and `src/middleware.ts`.
 - Existing v4 provider ciphertext remains app-owned and encrypted with
   `AUTH_SECRET`; do not invent a second at-rest key without a complete migration.
 
@@ -51,6 +59,8 @@ Normative architecture and history:
 - `v5/CLEANUP_PLAN.md`
 - `v5/TEST_MIGRATION_PLAN.md`
 - `v5/USER_MANAGEMENT_AND_BOOTSTRAP.md`
+- `v5/DESKTOP_SINGLE_OWNER.md`
+- `v5/DESKTOP_SHELL.md`
 
 ## Playback Invariants
 
@@ -92,7 +102,8 @@ Commands:
 - `pnpm exec tsc --noEmit` checks the application.
 - `pnpm --dir packages/compute-worker exec tsc --noEmit` checks the worker.
 - `pnpm build` is the production build and lint/type gate.
-- `pnpm lint:route-errors` and `pnpm check:compute-boundary` enforce boundaries.
+- `pnpm lint:route-errors`, `pnpm check:compute-boundary` and
+  `pnpm check:install-profile` enforce boundaries.
 
 Browser tests were rebuilt from a clean slate. For new or changed user journeys:
 
@@ -186,6 +197,20 @@ caused conflicts, high CPU, misleading failures, and overheating.
 - The owner commonly takes the old production version offline, applies Neon
   migrations, deploys web and worker, smoke-tests production, and only then
   creates the final version bump/tag/release.
+
+## Desktop App
+
+- `desktop/` is a separate pnpm project (Electron + electron-builder) outside the
+  root workspace. It stages the Docker image's runtime layout for the host
+  platform (`pnpm --dir desktop stage`, after `pnpm build`) and packages it
+  (`pnpm --dir desktop package`). See `v5/DESKTOP_SHELL.md`.
+- The shell adds no server code and no environment variables beyond
+  `DESKTOP_LAUNCH_TOKEN`; it configures the runtime through existing settings.
+- Bundled binaries are pinned by SHA-256 (`desktop/runtime-binaries.json`,
+  `packaging/ffmpeg/manifest.json`). Never ship `.env*` from the checkout.
+- The desktop runtime picks free app ports, and bootstrap moves any of
+  `weed mini`'s internal ports that are taken, so desktop can run beside a dev
+  stack. Keep weed's admin UI off: its server ignores `-ip.bind`.
 
 ## Startup Configuration and Upgrades
 

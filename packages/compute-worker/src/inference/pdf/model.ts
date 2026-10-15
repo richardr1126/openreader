@@ -1,9 +1,9 @@
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { access, mkdir, rename, readFile, unlink, copyFile } from 'fs/promises';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
+import { resolveWorkerPath } from '../../worker-paths';
 import {
   downloadModelArtifact,
   type ModelDownloadProgressHandler,
@@ -11,15 +11,15 @@ import {
 
 const DEFAULT_MODEL_BASE_URL = 'https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX/resolve/main';
 const PDF_LAYOUT_MODEL_BASE_URL_ENV = 'PDF_LAYOUT_MODEL_BASE_URL';
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ASSETS_DIR = resolveWorkerPath('inference', 'pdf', 'assets');
 const MODEL_DIR = path.join(DOCSTORE_DIR, 'model');
-const MANIFEST_PATH = path.join(MODULE_DIR, 'assets', 'manifest.json');
+const MANIFEST_PATH = path.join(ASSETS_DIR, 'manifest.json');
 export const MODEL_PATH = path.join(MODEL_DIR, 'PP-DocLayoutV3.onnx');
 export const MODEL_DATA_PATH = path.join(MODEL_DIR, 'PP-DocLayoutV3.onnx.data');
 export const MODEL_CONFIG_PATH = path.join(MODEL_DIR, 'pp-doclayoutv3.config.json');
 export const MODEL_PREPROCESSOR_PATH = path.join(MODEL_DIR, 'pp-doclayoutv3.preprocessor_config.json');
 const LICENSE_PATH = path.join(MODEL_DIR, 'pp-doclayoutv3.LICENSE.txt');
-const STATIC_LICENSE_PATH = path.join(MODULE_DIR, 'assets', 'LICENSE.txt');
+const STATIC_LICENSE_PATH = path.join(ASSETS_DIR, 'LICENSE.txt');
 
 type ManifestEntry = {
   path: string;

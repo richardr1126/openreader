@@ -981,6 +981,28 @@
                   "deliveryId"
                 ],
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "model_download"
+                    ]
+                  },
+                  "model": {
+                    "type": "string",
+                    "enum": [
+                      "kokoro-82m"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "model"
+                ],
+                "additionalProperties": false
               }
             ]
           },
@@ -1084,6 +1106,9 @@
                   "plannedCount": {
                     "type": "number"
                   },
+                  "alignedCount": {
+                    "type": "number"
+                  },
                   "phase": {
                     "type": "string",
                     "enum": [
@@ -1103,6 +1128,40 @@
                   },
                   "totalBytes": {
                     "type": "number"
+                  },
+                  "modelComponents": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "totalBytes": {
+                          "type": "number"
+                        },
+                        "downloadedBytes": {
+                          "type": "number"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "downloading",
+                            "verifying",
+                            "ready",
+                            "failed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "totalBytes",
+                        "downloadedBytes",
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    }
                   }
                 },
                 "required": [
@@ -1178,6 +1237,56 @@
                   "phase",
                   "completedFiles",
                   "plannedFiles"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "downloadedBytes": {
+                    "type": "number"
+                  },
+                  "totalBytes": {
+                    "type": "number"
+                  },
+                  "components": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "totalBytes": {
+                          "type": "number"
+                        },
+                        "downloadedBytes": {
+                          "type": "number"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "downloading",
+                            "verifying",
+                            "ready",
+                            "failed"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "totalBytes",
+                        "downloadedBytes",
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": [
+                  "downloadedBytes",
+                  "totalBytes"
                 ],
                 "additionalProperties": false
               }
@@ -1437,6 +1546,28 @@
                       "deliveryId"
                     ],
                     "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "model_download"
+                        ]
+                      },
+                      "model": {
+                        "type": "string",
+                        "enum": [
+                          "kokoro-82m"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "model"
+                    ],
+                    "additionalProperties": false
                   }
                 ]
               },
@@ -1540,6 +1671,9 @@
                       "plannedCount": {
                         "type": "number"
                       },
+                      "alignedCount": {
+                        "type": "number"
+                      },
                       "phase": {
                         "type": "string",
                         "enum": [
@@ -1559,6 +1693,40 @@
                       },
                       "totalBytes": {
                         "type": "number"
+                      },
+                      "modelComponents": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "downloading",
+                                "verifying",
+                                "ready",
+                                "failed"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "totalBytes",
+                            "downloadedBytes",
+                            "state"
+                          ],
+                          "additionalProperties": false
+                        }
                       }
                     },
                     "required": [
@@ -1634,6 +1802,56 @@
                       "phase",
                       "completedFiles",
                       "plannedFiles"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "downloadedBytes": {
+                        "type": "number"
+                      },
+                      "totalBytes": {
+                        "type": "number"
+                      },
+                      "components": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "state": {
+                              "type": "string",
+                              "enum": [
+                                "pending",
+                                "downloading",
+                                "verifying",
+                                "ready",
+                                "failed"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "totalBytes",
+                            "downloadedBytes",
+                            "state"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "downloadedBytes",
+                      "totalBytes"
                     ],
                     "additionalProperties": false
                   }
@@ -1918,6 +2136,28 @@
                           "deliveryId"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model_download"
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "enum": [
+                              "kokoro-82m"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "model"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -2021,6 +2261,9 @@
                           "plannedCount": {
                             "type": "number"
                           },
+                          "alignedCount": {
+                            "type": "number"
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
@@ -2040,6 +2283,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -2115,6 +2392,56 @@
                           "phase",
                           "completedFiles",
                           "plannedFiles"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
+                          },
+                          "components": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "downloadedBytes",
+                          "totalBytes"
                         ],
                         "additionalProperties": false
                       }
@@ -2503,6 +2830,28 @@
                           "deliveryId"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model_download"
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "enum": [
+                              "kokoro-82m"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "model"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -2606,6 +2955,9 @@
                           "plannedCount": {
                             "type": "number"
                           },
+                          "alignedCount": {
+                            "type": "number"
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
@@ -2625,6 +2977,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -2700,6 +3086,56 @@
                           "phase",
                           "completedFiles",
                           "plannedFiles"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
+                          },
+                          "components": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "downloadedBytes",
+                          "totalBytes"
                         ],
                         "additionalProperties": false
                       }
@@ -3090,6 +3526,28 @@
                           "deliveryId"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model_download"
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "enum": [
+                              "kokoro-82m"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "model"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -3193,6 +3651,9 @@
                           "plannedCount": {
                             "type": "number"
                           },
+                          "alignedCount": {
+                            "type": "number"
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
@@ -3212,6 +3673,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -3287,6 +3782,56 @@
                           "phase",
                           "completedFiles",
                           "plannedFiles"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
+                          },
+                          "components": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "downloadedBytes",
+                          "totalBytes"
                         ],
                         "additionalProperties": false
                       }
@@ -3655,6 +4200,28 @@
                           "deliveryId"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model_download"
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "enum": [
+                              "kokoro-82m"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "model"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -3758,6 +4325,9 @@
                           "plannedCount": {
                             "type": "number"
                           },
+                          "alignedCount": {
+                            "type": "number"
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
@@ -3777,6 +4347,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -3852,6 +4456,56 @@
                           "phase",
                           "completedFiles",
                           "plannedFiles"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
+                          },
+                          "components": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "downloadedBytes",
+                          "totalBytes"
                         ],
                         "additionalProperties": false
                       }
@@ -4209,6 +4863,28 @@
                           "deliveryId"
                         ],
                         "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "model_download"
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "enum": [
+                              "kokoro-82m"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "model"
+                        ],
+                        "additionalProperties": false
                       }
                     ]
                   },
@@ -4312,6 +4988,9 @@
                           "plannedCount": {
                             "type": "number"
                           },
+                          "alignedCount": {
+                            "type": "number"
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
@@ -4331,6 +5010,40 @@
                           },
                           "totalBytes": {
                             "type": "number"
+                          },
+                          "modelComponents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
                           }
                         },
                         "required": [
@@ -4406,6 +5119,56 @@
                           "phase",
                           "completedFiles",
                           "plannedFiles"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "downloadedBytes": {
+                            "type": "number"
+                          },
+                          "totalBytes": {
+                            "type": "number"
+                          },
+                          "components": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string"
+                                },
+                                "totalBytes": {
+                                  "type": "number"
+                                },
+                                "downloadedBytes": {
+                                  "type": "number"
+                                },
+                                "state": {
+                                  "type": "string",
+                                  "enum": [
+                                    "pending",
+                                    "downloading",
+                                    "verifying",
+                                    "ready",
+                                    "failed"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "totalBytes",
+                                "downloadedBytes",
+                                "state"
+                              ],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "required": [
+                          "downloadedBytes",
+                          "totalBytes"
                         ],
                         "additionalProperties": false
                       }
@@ -5252,6 +6015,28 @@
                                     "deliveryId"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "model_download"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kokoro-82m"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -5355,6 +6140,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -5374,6 +6162,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -5451,6 +6273,56 @@
                                     "plannedFiles"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "components": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "downloadedBytes",
+                                    "totalBytes"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             }
@@ -5486,6 +6358,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -5505,6 +6380,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -7506,6 +8415,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -7609,6 +8540,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -7628,6 +8562,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -7703,6 +8671,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }
@@ -8057,6 +9075,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -8160,6 +9200,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -8179,6 +9222,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -8254,6 +9331,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }
@@ -8606,6 +9733,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -8709,6 +9858,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -8728,6 +9880,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -8803,6 +9989,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }
@@ -9253,6 +10489,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -9356,6 +10614,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -9375,6 +10636,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -9450,6 +10745,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }
@@ -9856,6 +11201,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -9959,6 +11326,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -9978,6 +11348,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -10053,6 +11457,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }
@@ -10598,6 +12052,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -10701,6 +12177,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -10720,6 +12199,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -10795,6 +12308,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }
@@ -11221,6 +12784,28 @@
                                     "deliveryId"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "model_download"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kokoro-82m"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -11324,6 +12909,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -11343,6 +12931,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -11418,6 +13040,56 @@
                                     "phase",
                                     "completedFiles",
                                     "plannedFiles"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "components": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "downloadedBytes",
+                                    "totalBytes"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -11763,6 +13435,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -11866,6 +13560,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -11885,6 +13582,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -11962,6 +13693,56 @@
                             "plannedFiles"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     }
@@ -11972,6 +13753,1380 @@
                     "status",
                     "queuedAt",
                     "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models/{model}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kokoro-82m"
+              ]
+            },
+            "in": "path",
+            "name": "model",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string",
+                      "enum": [
+                        "kokoro-82m"
+                      ]
+                    },
+                    "components": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "totalBytes": {
+                            "type": "number"
+                          },
+                          "installedBytes": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "totalBytes",
+                          "installedBytes"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "downloading": {
+                      "type": "boolean"
+                    },
+                    "operation": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "opId": {
+                              "type": "string"
+                            },
+                            "subject": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "pdf_layout"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "sessionId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "sessionId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_plan"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "settingsHash": {
+                                      "type": "string"
+                                    },
+                                    "planSignature": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "settingsHash",
+                                    "planSignature"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "tts_playback_export"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "artifactId": {
+                                      "type": "string"
+                                    },
+                                    "format": {
+                                      "type": "string",
+                                      "enum": [
+                                        "mp3",
+                                        "m4b"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "artifactId",
+                                    "format"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_preview"
+                                      ]
+                                    },
+                                    "documentId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "previewKind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "card"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "documentId",
+                                    "namespace",
+                                    "previewKind"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "document_conversion"
+                                      ]
+                                    },
+                                    "conversionId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "conversionId",
+                                    "namespace"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "account_export"
+                                      ]
+                                    },
+                                    "storageUserId": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "anyOf": [
+                                        {
+                                          "type": "string"
+                                        },
+                                        {
+                                          "type": "null"
+                                        }
+                                      ]
+                                    },
+                                    "artifactId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "storageUserId",
+                                    "namespace",
+                                    "artifactId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "email_delivery"
+                                      ]
+                                    },
+                                    "deliveryId": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "deliveryId"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "model_download"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kokoro-82m"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": [
+                                "queued",
+                                "running",
+                                "succeeded",
+                                "failed"
+                              ]
+                            },
+                            "queuedAt": {
+                              "type": "number"
+                            },
+                            "updatedAt": {
+                              "type": "number"
+                            },
+                            "startedAt": {
+                              "type": "number"
+                            },
+                            "result": {},
+                            "error": {
+                              "type": "object",
+                              "properties": {
+                                "message": {
+                                  "type": "string"
+                                },
+                                "code": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "message"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "timing": {
+                              "type": "object",
+                              "properties": {
+                                "queueWaitMs": {
+                                  "type": "number"
+                                },
+                                "s3FetchMs": {
+                                  "type": "number"
+                                },
+                                "computeMs": {
+                                  "type": "number"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "progress": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "totalPages": {
+                                      "type": "number"
+                                    },
+                                    "pagesParsed": {
+                                      "type": "number"
+                                    },
+                                    "currentPage": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "download_model",
+                                        "infer",
+                                        "merge"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "totalPages",
+                                    "pagesParsed",
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "completedThroughOrdinal": {
+                                      "type": "number"
+                                    },
+                                    "completedCount": {
+                                      "type": "number"
+                                    },
+                                    "skippedCount": {
+                                      "type": "number"
+                                    },
+                                    "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "downloading_model",
+                                        "generating",
+                                        "checking_cache"
+                                      ]
+                                    },
+                                    "stopReason": {
+                                      "type": "string",
+                                      "enum": [
+                                        "usage_limit"
+                                      ]
+                                    },
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "completedThroughOrdinal",
+                                    "completedCount",
+                                    "plannedCount"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "assembling",
+                                        "transcoding",
+                                        "uploading"
+                                      ]
+                                    },
+                                    "completedSegments": {
+                                      "type": "number"
+                                    },
+                                    "plannedSegments": {
+                                      "type": "number"
+                                    },
+                                    "skippedSegments": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "phase",
+                                    "completedSegments",
+                                    "plannedSegments"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "fetching",
+                                        "converting",
+                                        "uploading"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "phase"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "phase": {
+                                      "type": "string",
+                                      "enum": [
+                                        "assembling",
+                                        "uploading"
+                                      ]
+                                    },
+                                    "completedFiles": {
+                                      "type": "number"
+                                    },
+                                    "plannedFiles": {
+                                      "type": "number"
+                                    }
+                                  },
+                                  "required": [
+                                    "phase",
+                                    "completedFiles",
+                                    "plannedFiles"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "components": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "downloadedBytes",
+                                    "totalBytes"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "opId",
+                            "subject",
+                            "status",
+                            "queuedAt",
+                            "updatedAt"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "components",
+                    "downloading",
+                    "operation"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kokoro-82m"
+              ]
+            },
+            "in": "path",
+            "name": "model",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models/{model}/download": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kokoro-82m"
+              ]
+            },
+            "in": "path",
+            "name": "model",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_plan"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "settingsHash": {
+                              "type": "string"
+                            },
+                            "planSignature": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "settingsHash",
+                            "planSignature"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "account_export"
+                              ]
+                            },
+                            "storageUserId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "anyOf": [
+                                {
+                                  "type": "string"
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "storageUserId",
+                            "namespace",
+                            "artifactId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "email_delivery"
+                              ]
+                            },
+                            "deliveryId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "deliveryId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "download_model",
+                                "infer",
+                                "merge"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "skippedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating",
+                                "checking_cache"
+                              ]
+                            },
+                            "stopReason": {
+                              "type": "string",
+                              "enum": [
+                                "usage_limit"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "uploading"
+                              ]
+                            },
+                            "completedFiles": {
+                              "type": "number"
+                            },
+                            "plannedFiles": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedFiles",
+                            "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models/{model}/cancel": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kokoro-82m"
+              ]
+            },
+            "in": "path",
+            "name": "model",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cancelled": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "cancelled"
                   ],
                   "additionalProperties": false
                 }
@@ -12336,6 +15491,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -12439,6 +15616,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -12458,6 +15638,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -12533,6 +15747,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }
@@ -12998,6 +16262,28 @@
                                     "deliveryId"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "model_download"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kokoro-82m"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -13101,6 +16387,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -13120,6 +16409,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -13195,6 +16518,56 @@
                                     "phase",
                                     "completedFiles",
                                     "plannedFiles"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "components": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "downloadedBytes",
+                                    "totalBytes"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -13554,6 +16927,28 @@
                                     "deliveryId"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "model_download"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kokoro-82m"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -13657,6 +17052,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -13676,6 +17074,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -13751,6 +17183,56 @@
                                     "phase",
                                     "completedFiles",
                                     "plannedFiles"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "components": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "downloadedBytes",
+                                    "totalBytes"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -14237,6 +17719,28 @@
                                     "deliveryId"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "model_download"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kokoro-82m"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -14340,6 +17844,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -14359,6 +17866,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -14434,6 +17975,56 @@
                                     "phase",
                                     "completedFiles",
                                     "plannedFiles"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "components": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "downloadedBytes",
+                                    "totalBytes"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -14901,6 +18492,28 @@
                                     "deliveryId"
                                   ],
                                   "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "model_download"
+                                      ]
+                                    },
+                                    "model": {
+                                      "type": "string",
+                                      "enum": [
+                                        "kokoro-82m"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "model"
+                                  ],
+                                  "additionalProperties": false
                                 }
                               ]
                             },
@@ -15004,6 +18617,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -15023,6 +18639,40 @@
                                     },
                                     "totalBytes": {
                                       "type": "number"
+                                    },
+                                    "modelComponents": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
                                     }
                                   },
                                   "required": [
@@ -15098,6 +18748,56 @@
                                     "phase",
                                     "completedFiles",
                                     "plannedFiles"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                {
+                                  "type": "object",
+                                  "properties": {
+                                    "downloadedBytes": {
+                                      "type": "number"
+                                    },
+                                    "totalBytes": {
+                                      "type": "number"
+                                    },
+                                    "components": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "object",
+                                        "properties": {
+                                          "name": {
+                                            "type": "string"
+                                          },
+                                          "totalBytes": {
+                                            "type": "number"
+                                          },
+                                          "downloadedBytes": {
+                                            "type": "number"
+                                          },
+                                          "state": {
+                                            "type": "string",
+                                            "enum": [
+                                              "pending",
+                                              "downloading",
+                                              "verifying",
+                                              "ready",
+                                              "failed"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "name",
+                                          "totalBytes",
+                                          "downloadedBytes",
+                                          "state"
+                                        ],
+                                        "additionalProperties": false
+                                      }
+                                    }
+                                  },
+                                  "required": [
+                                    "downloadedBytes",
+                                    "totalBytes"
                                   ],
                                   "additionalProperties": false
                                 }
@@ -15406,6 +19106,28 @@
                             "deliveryId"
                           ],
                           "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
                         }
                       ]
                     },
@@ -15509,6 +19231,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -15528,6 +19253,40 @@
                             },
                             "totalBytes": {
                               "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
                             }
                           },
                           "required": [
@@ -15603,6 +19362,56 @@
                             "phase",
                             "completedFiles",
                             "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
                           ],
                           "additionalProperties": false
                         }

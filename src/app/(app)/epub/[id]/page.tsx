@@ -1,14 +1,14 @@
 'use client';
 
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { useParams } from "next/navigation";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { EPUBViewer } from '@/components/views/EPUBViewer';
 import {
   ReaderShell,
   type ReaderRendererProps,
 } from '@/components/reader/ReaderShell';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
-import { Header } from '@/components/Header';
+import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
@@ -16,7 +16,6 @@ import { ZoomControl } from '@/components/documents/ZoomControl';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useEpubDocument } from './useEpubDocument';
@@ -44,13 +43,12 @@ function EpubReader({
   document: sourceDocument,
   bootstrap,
   rendererReady,
+  onBackToDocuments,
   onReady,
   onError,
 }: ReaderRendererProps<'epub'>) {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
-  const router = useRouter();
-  const { disableProgressPersistence } = bootstrap;
   const epubState = useEpubDocument(sourceDocument, payload.initialPosition);
   const {
     currDocName,
@@ -65,10 +63,7 @@ function EpubReader({
     ),
     [tocRef],
   );
-  const {
-    sentences,
-    stop,
-  } = useTTS();
+  const { sentences } = useTTS();
   const documentSettings = mergeDocumentSettings(
     DEFAULT_DOCUMENT_SETTINGS,
     payload.settings,
@@ -134,25 +129,10 @@ function EpubReader({
     window.dispatchEvent(new Event('resize'));
   }, [padPct]);
 
-  const handleBackToDocuments = useCallback((event: MouseEvent) => {
-    event.preventDefault();
-    disableProgressPersistence();
-    stop();
-    setActiveSidebar(null);
-    router.push('/app');
-  }, [disableProgressPersistence, router, stop]);
-
   return (
     <>
-      <Header
-        left={
-          <ButtonLink href="/app" variant="secondary" size="sm" className="gap-2" aria-label="Back to documents" onClick={handleBackToDocuments}>
-            <svg className="w-3 h-3" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Documents
-          </ButtonLink>
-        }
+      <ReaderHeader
+        onBackToDocuments={onBackToDocuments}
         title={currDocName || payload.document.name}
         right={rendererReady ? (
           <div className="flex items-center gap-3">

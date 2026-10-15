@@ -1,9 +1,17 @@
 import { CreateBucketCommand, HeadBucketCommand, type S3Client } from '@aws-sdk/client-s3';
+import { createCipheriv, hkdfSync, randomBytes } from 'node:crypto';
+import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 
 import {
   ensureS3Bucket,
+  reconcileWeedMiniKek,
   resolveWeedMiniAdvertiseHost,
+  resolveWeedMiniInternalPorts,
+  unwrapWeedFilerKek,
+  WEED_MINI_DISABLED_COMPONENTS,
 } from '../../packages/bootstrap/src/embedded-seaweedfs.mjs';
 
 const embeddedS3Env = {
@@ -66,5 +74,123 @@ describe('embedded SeaweedFS addressing', () => {
 
     await expect(ensureS3Bucket(embeddedS3Env, client)).rejects.toBe(storageFailure);
     expect(send).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('embedded SeaweedFS internal ports', () => {
+  function dataDir(options?: string) {
+    const dir = mkdtempSync(join(tmpdir(), 'weed-ports-'));
+    if (options !== undefined) writeFileSync(join(dir, 'mini.options'), options);
+    return dir;
+  }
+
+  test('uses mini defaults on a fresh data directory when they are free', async () => {
+    const ports = await resolveWeedMiniInternalPorts(dataDir(), '127.0.0.1', { isFree: async () => true });
+    expect(Object.fromEntries(ports)).toEqual({
+      'master.port': 9333,
+      'master.port.grpc': 19333,
+      'filer.port': 8888,
+      'filer.port.grpc': 18888,
+      'volume.port': 9340,
+      'volume.port.grpc': 19340,
+      's3.port.grpc': 18333,
+      'admin.port': 23646,
+      'admin.port.grpc': 33646,
+    });
+  });
+
+  test('keeps the ports weed persisted', async () => {
+    const dir = dataDir('# Mini server configuration\nmaster.port=41001\nfiler.port = 41003\nip=127.0.0.1\n');
+    const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dir, '127.0.0.1', { isFree: async () => true }));
+    expect(ports['master.port']).toBe(41001);
+    expect(ports['filer.port']).toBe(41003);
+    expect(ports['volume.port']).toBe(9340);
+  });
+
+  test('moves only taken ports, never onto a reserved or already chosen port', async () => {
+    const taken = new Set([8888, 23646]);
+    const free = [8081, 50001, 50002];
+    const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dataDir(), '127.0.0.1', {
+      reserved: [8081],
+      isFree: async (port) => !taken.has(port),
+      pickFree: async () => free.shift()!,
+    }));
+    expect(ports['master.port']).toBe(9333);
+    expect(ports['filer.port']).toBe(50001);
+    expect(ports['admin.port']).toBe(50002);
+    expect(new Set(Object.values(ports)).size).toBe(Object.keys(ports).length);
+  });
+
+  test('turns off components OpenReader never uses, including the admin UI', () => {
+    expect(WEED_MINI_DISABLED_COMPONENTS).toEqual(['-webdav=false', '-s3.port.iceberg=0', '-admin.ui=false']);
+  });
+});
+
+describe('weed mini SSE-S3 key', () => {
+  const filerKek = 'ab'.repeat(32);
+  const miniKek = 'cd'.repeat(32);
+  const passphrase = 'ef'.repeat(32);
+  const filerUrl = 'http://127.0.0.1:8888';
+  const filer = (body: string, status = 200) => vi.fn(async () => (
+    new Response(body, { status })
+  )) as unknown as typeof fetch;
+  const dataDir = (key = miniKek) => {
+    const dir = mkdtempSync(join(tmpdir(), 'weed-kek-'));
+    writeFileSync(join(dir, '.mini_sse_kek'), key);
+    writeFileSync(join(dir, '.mini_kek_passphrase'), passphrase);
+    return dir;
+  };
+  // The format weed stores once it has a passphrase: base64(SWv2 || salt || nonce || ciphertext+tag).
+  const wrap = (kek: string, secret = passphrase) => {
+    const salt = randomBytes(32);
+    const nonce = randomBytes(12);
+    const key = Buffer.from(hkdfSync('sha256', Buffer.from(secret), salt, Buffer.from('kek-wrapping'), 32));
+    const cipher = createCipheriv('aes-256-gcm', key, nonce);
+    const sealed = Buffer.concat([cipher.update(Buffer.from(kek, 'hex')), cipher.final(), cipher.getAuthTag()]);
+    return Buffer.concat([Buffer.from('SWv2'), salt, nonce, sealed]).toString('base64');
+  };
+  const keyIn = (dir: string) => readFileSync(join(dir, '.mini_sse_kek'), 'utf8');
+
+  test('unwraps a key the way weed wraps it', () => {
+    expect(unwrapWeedFilerKek(wrap(filerKek), passphrase)).toBe(filerKek);
+    expect(() => unwrapWeedFilerKek(wrap(filerKek), 'other')).toThrow();
+  });
+
+  test("restores the filer's key after weed wrapped it under a key of its own", async () => {
+    const dir = dataDir();
+    await expect(reconcileWeedMiniKek(dir, filerUrl, {}, filer(wrap(filerKek)))).resolves.toBe(true);
+    expect(keyIn(dir)).toBe(filerKek);
+    if (process.platform !== 'win32') expect(statSync(join(dir, '.mini_sse_kek')).mode & 0o777).toBe(0o600);
+  });
+
+  test("restores a filer key still stored in plaintext by an older weed", async () => {
+    const dir = dataDir();
+    await expect(reconcileWeedMiniKek(dir, filerUrl, {}, filer(`${filerKek}\n`))).resolves.toBe(true);
+    expect(keyIn(dir)).toBe(filerKek);
+  });
+
+  test('changes nothing when the keys already agree or the filer has none', async () => {
+    const dir = dataDir(filerKek);
+    await expect(reconcileWeedMiniKek(dir, filerUrl, {}, filer(wrap(filerKek)))).resolves.toBe(false);
+    await expect(reconcileWeedMiniKek(dir, filerUrl, {}, filer('', 404))).resolves.toBe(false);
+    expect(keyIn(dir)).toBe(filerKek);
+  });
+
+  test('leaves an operator-supplied key alone', async () => {
+    const dir = dataDir();
+    const fetchImpl = filer(wrap(filerKek));
+    await expect(reconcileWeedMiniKek(dir, filerUrl, { WEED_S3_SSE_KEK: miniKek }, fetchImpl)).resolves.toBe(false);
+    await expect(reconcileWeedMiniKek(dir, filerUrl, { WEED_S3_SSE_KEK_PASSPHRASE: 'x' }, fetchImpl)).resolves.toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(keyIn(dir)).toBe(miniKek);
+  });
+
+  test('refuses a filer key it cannot read without touching the local key', async () => {
+    const dir = dataDir();
+    await expect(reconcileWeedMiniKek(dir, filerUrl, {}, filer('d3JhcHBlZA==')))
+      .rejects.toThrow(/unknown format.*No stored data was changed/);
+    await expect(reconcileWeedMiniKek(dir, filerUrl, {}, filer(wrap(filerKek, 'other'))))
+      .rejects.toThrow(/No stored data was changed/);
+    expect(keyIn(dir)).toBe(miniKek);
   });
 });

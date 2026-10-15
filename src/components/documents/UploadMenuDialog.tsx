@@ -58,10 +58,12 @@ export function UploadMenuDialog({
   folderId,
 }: UploadMenuDialogProps) {
   const { uploadDocuments } = useDocuments();
-  const { gutenbergCatalogEnabled } = useRuntimeConfig();
-  const sections = gutenbergCatalogEnabled
-    ? SIDEBAR_SECTIONS
-    : SIDEBAR_SECTIONS.filter((section) => section.id !== 'gutenberg');
+  const { gutenbergCatalogEnabled, installProfile } = useRuntimeConfig();
+  // On desktop the mounted library is a folder in OpenReader's data folder.
+  const onDevice = installProfile === 'desktop';
+  const sections = SIDEBAR_SECTIONS
+    .filter((section) => gutenbergCatalogEnabled || section.id !== 'gutenberg')
+    .map((section) => (onDevice && section.id === 'library' ? { ...section, label: 'Library Folder' } : section));
   const libraryImport = useLibraryImport(folderId);
   const [activeTab, setActiveTab] = useState<TabValue>('file');
 
@@ -375,9 +377,13 @@ export function UploadMenuDialog({
       {activeTab === 'library' && (
         <div className="flex h-full flex-col justify-center rounded-lg border border-line bg-surface-sunken p-6 text-center animate-fade-in">
           <DownloadIcon className="mx-auto h-8 w-8 text-accent" />
-          <h3 className="mt-3 text-sm font-semibold text-foreground">Import from the server</h3>
+          <h3 className="mt-3 text-sm font-semibold text-foreground">
+            {onDevice ? 'Import from the library folder' : 'Import from the server'}
+          </h3>
           <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-soft">
-            Browse documents exposed through this OpenReader server&apos;s mounted library folders and copy selected files into your library.
+            {onDevice
+              ? 'Browse documents in the library folder inside OpenReader\'s data folder (Settings → Library and storage → Show data folder) and copy selected files into your library.'
+              : 'Browse documents exposed through this OpenReader server\'s mounted library folders and copy selected files into your library.'}
           </p>
           <Button
             variant="primary"
@@ -388,7 +394,7 @@ export function UploadMenuDialog({
               libraryImport.openSelection();
             }}
           >
-            Browse server library
+            {onDevice ? 'Browse library folder' : 'Browse server library'}
           </Button>
         </div>
       )}
@@ -407,7 +413,7 @@ export function UploadMenuDialog({
         isOpen={libraryImport.isSelectionOpen}
         onClose={libraryImport.closeSelection}
         onConfirm={libraryImport.importDocuments}
-        title="Import from Server Library"
+        title={onDevice ? "Import from Library Folder" : "Import from Server Library"}
         confirmLabel="Import"
         isProcessing={libraryImport.isImporting}
         defaultSelected={false}

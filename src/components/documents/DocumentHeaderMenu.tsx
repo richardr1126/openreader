@@ -5,7 +5,8 @@ import { UserMenu } from '@/components/auth/UserMenu';
 import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton } from '@/components/ui';
 
 interface DocumentHeaderMenuProps {
-  onOpenSettings: () => void;
+  /** Without it the document actions show disabled, as while the reader prepares. */
+  onOpenSettings?: () => void;
   onOpenAudiobook?: () => void;
   isSettingsOpen?: boolean;
   isAudiobookOpen?: boolean;
@@ -19,13 +20,15 @@ export function DocumentHeaderMenu({
   isAudiobookOpen = false,
   showAudiobookExport,
 }: DocumentHeaderMenuProps) {
+  const disabled = !onOpenSettings;
 
   // --- Desktop View ---
   const DesktopView = (
     <div className="hidden sm:flex items-center gap-2">
-      {showAudiobookExport && onOpenAudiobook && (
+      {showAudiobookExport && (onOpenAudiobook || disabled) && (
         <ToolbarButton
           onClick={onOpenAudiobook}
+          disabled={disabled}
           active={isAudiobookOpen}
           aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
           title={isAudiobookOpen ? 'Hide Export Audiobook' : 'Export Audiobook'}
@@ -35,6 +38,7 @@ export function DocumentHeaderMenu({
       )}
       <ToolbarButton
         onClick={onOpenSettings}
+        disabled={disabled}
         active={isSettingsOpen}
         aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
         title={isSettingsOpen ? 'Hide Settings' : 'Settings'}
@@ -64,20 +68,20 @@ export function DocumentHeaderMenu({
           <MenuItemsSurface className="absolute right-0 z-50 mt-2 min-w-max origin-top-right divide-y divide-line-soft focus:outline-none">
             {/* Actions Section */}
             <div className="p-1">
-              {showAudiobookExport && onOpenAudiobook && (
-                <MenuActionItem onClick={onOpenAudiobook} activeOverride={isAudiobookOpen}>
+              {showAudiobookExport && (onOpenAudiobook || disabled) && (
+                <MenuActionItem onClick={onOpenAudiobook} disabled={disabled} activeOverride={isAudiobookOpen}>
                   <DownloadIcon className="h-4 w-4" />
                   {isAudiobookOpen ? 'Hide Audiobook' : 'Export Audiobook'}
                 </MenuActionItem>
               )}
-              <MenuActionItem onClick={onOpenSettings} activeOverride={isSettingsOpen}>
+              <MenuActionItem onClick={onOpenSettings} disabled={disabled} activeOverride={isSettingsOpen}>
                 <FileSettingsIcon aria-hidden="true" className="h-4 w-4" />
                 {isSettingsOpen ? 'Hide Settings' : 'Settings'}
               </MenuActionItem>
             </div>
 
-            {/* Auth Section */}
-            <div className="p-2 border-t border-line-soft flex justify-center">
+            {/* Auth Section (empty on desktop, where there is no account menu) */}
+            <div className="p-2 border-t border-line-soft flex justify-center empty:hidden">
               <UserMenu />
             </div>
           </MenuItemsSurface>

@@ -1,9 +1,13 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ClaimDataModal from '@/components/auth/ClaimDataModal';
 import { PrivacyModal } from '@/components/PrivacyModal';
 import { ChangelogModal } from '@/components/settings/ChangelogModal';
+import { useLocalVoices } from '@/components/admin/useLocalVoices';
+import { VoicesSetupModal } from '@/components/admin/VoicesSetupModal';
+import { useSharedProviders } from '@/hooks/useSharedProviders';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { postChangelogVersionCheck } from '@/lib/client/api/user-state';
@@ -23,20 +27,34 @@ const OnboardingFlowContext = createContext<OnboardingFlowContextValue | null>(n
 export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const { data: session, isPending: isSessionPending } = useAuthSession();
   const runtimeConfig = useRuntimeConfig();
-  const user = session?.user as { id?: string; isAnonymous?: boolean } | undefined;
+  const { installProfile } = runtimeConfig;
+  const router = useRouter();
+  const user = session?.user as { id?: string; isAnonymous?: boolean; isAdmin?: boolean } | undefined;
   const userId = user?.id ?? null;
   const isAnonymous = Boolean(user?.isAnonymous);
   const { query: claimCountsQuery } = useClaimData(Boolean(userId && !isAnonymous));
   const refetchClaimCounts = claimCountsQuery.refetch;
 
   const { query: onboardingQuery } = useOnboardingState();
-  const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | null>(null);
+
+  // Desktop has no usable voice until Kokoro is downloaded or a voice service
+  // is added. Derived from that state alone, so the step returns on the next
+  // launch while it is still true (an interrupted download, say).
+  const offerVoices = installProfile === 'desktop' && Boolean(user?.isAdmin);
+  const voices = useLocalVoices({ enabled: offerVoices });
+  const { providers: sharedProviders, isLoading: sharedProvidersLoading } = useSharedProviders();
+  const voicesLoading = offerVoices && (voices.isPending || sharedProvidersLoading);
+  const voicesNeeded = offerVoices && Boolean(voices.status) && !voices.error
+    && !voices.installed && !voices.downloading && !voices.status?.downloading
+    && !sharedProviders.some((provider) => provider.providerType !== 'kokoro-local');
+  const voicesHandledRef = useRef(false);
+  const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | 'voices' | null>(null);
   const [claimModalOwnerId, setClaimModalOwnerId] = useState<string | null>(null);
   const [claimableCounts, setClaimableCounts] = useState<ClaimableCounts>(EMPTY_CLAIM_COUNTS);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   const pendingChangelogOpenRef = useRef(false);
-  const leavingBlockingModalRef = useRef<'privacy' | 'claim' | null>(null);
+  const leavingBlockingModalRef = useRef<'privacy' | 'claim' | 'voices' | null>(null);
   const claimDismissedUsersRef = useRef<Set<string>>(new Set());
   const changelogVersionCheckKeyRef = useRef<string | null>(null);
   const changelogVersionCheckInFlightRef = useRef<string | null>(null);
@@ -61,7 +79,9 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const privacyRequired = true;
+    // The privacy notice describes a hosted instance and its operator. On desktop
+    // the person using the app is its only owner and nothing leaves the machine.
+    const privacyRequired = installProfile === 'server';
     const privacyAccepted = !privacyRequired || isPrivacyAcceptedForPolicy(
       onboardingData.privacyAcceptedAtMs,
       PRIVACY_POLICY_UPDATED_AT_MS,
@@ -102,15 +122,22 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       }
     }
 
+    // Decide the voices step only once its inputs have loaded, so it never
+    // opens over the changelog.
+    if (voicesLoading) return;
+
     const nextStep = resolveNextOnboardingStep({
       privacyRequired,
       privacyAccepted,
       claimEligible: isClaimEligible,
       claimHasData,
+      // Once open, the step stays until the owner chooses, even as the
+      // download it started changes what voicesNeeded reads.
+      voicesPending: !voicesHandledRef.current && (activeBlockingModal === 'voices' || voicesNeeded),
       changelogPending: pendingChangelogOpenRef.current,
     });
 
-    const nextBlockingModal = nextStep === 'privacy' || nextStep === 'claim'
+    const nextBlockingModal = nextStep === 'privacy' || nextStep === 'claim' || nextStep === 'voices'
       ? nextStep
       : null;
     // Blocking dialogs own focus and page inertness. Let the current dialog fully
@@ -133,11 +160,16 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (nextStep === 'voices') {
+      setActiveBlockingModal('voices');
+      return;
+    }
+
     if (nextStep === 'changelog') {
       pendingChangelogOpenRef.current = false;
       setIsChangelogOpen(true);
     }
-  }, [activeBlockingModal, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId]);
+  }, [activeBlockingModal, installProfile, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId, voicesLoading, voicesNeeded]);
 
   useEffect(() => {
     const previousUserId = currentUserIdRef.current;
@@ -169,7 +201,14 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     setActiveBlockingModal(null);
   }, []);
 
-  const handleBlockingModalAfterLeave = useCallback((modal: 'privacy' | 'claim') => {
+  const handleVoicesChosen = useCallback((useService: boolean) => {
+    voicesHandledRef.current = true;
+    leavingBlockingModalRef.current = 'voices';
+    setActiveBlockingModal(null);
+    if (useService) router.push('/app/settings?section=providers');
+  }, [router]);
+
+  const handleBlockingModalAfterLeave = useCallback((modal: 'privacy' | 'claim' | 'voices') => {
     if (leavingBlockingModalRef.current !== modal) return;
     leavingBlockingModalRef.current = null;
     void runFlow();
@@ -177,7 +216,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void runFlow();
-  }, [isAnonymous, onboardingQuery.data, runFlow, userId]);
+  }, [isAnonymous, onboardingQuery.data, runFlow, userId, voicesLoading, voicesNeeded]);
 
   useEffect(() => {
     return scheduleChangelogCheck({
@@ -215,6 +254,13 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
         onDismiss={handleClaimComplete}
         onClaimed={handleClaimComplete}
         onAfterLeave={() => handleBlockingModalAfterLeave('claim')}
+      />
+      <VoicesSetupModal
+        isOpen={activeBlockingModal === 'voices'}
+        voices={voices}
+        onContinue={() => handleVoicesChosen(false)}
+        onUseService={() => handleVoicesChosen(true)}
+        onAfterLeave={() => handleBlockingModalAfterLeave('voices')}
       />
       <ChangelogModal
         open={isChangelogOpen}

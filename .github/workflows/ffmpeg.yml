@@ -1,0 +1,146 @@
+name: Build LGPL ffmpeg
+
+# Builds the LGPL ffmpeg that Docker images and desktop packages ship, for every
+# target, and publishes it with its exact sources as the release named in
+# packaging/ffmpeg/manifest.json. Start it by pushing that release's tag
+# (ffmpeg-lgpl-<version>-<revision>); then record the printed SHA-256 values in
+# the manifest. See packaging/ffmpeg/README.md.
+
+on:
+  push:
+    tags:
+      - 'ffmpeg-lgpl-*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: darwin-universal, runner: macos-15 }
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          - { target: win32-x64, runner: ubuntu-24.04 }
+          - { target: win32-arm64, runner: ubuntu-24.04 }
+          - { target: sources, runner: ubuntu-24.04 }
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Check the tag names the pinned release
+        run: test "$GITHUB_REF_NAME" = "$(node -p "require('./packaging/ffmpeg/manifest.json').release")"
+
+      - name: Build on macOS
+        if: startsWith(matrix.target, 'darwin-')
+        run: |
+          brew install nasm gnupg
+          bash packaging/ffmpeg/build.sh ${{ matrix.target }} "$RUNNER_TEMP/ffmpeg"
+
+      # Static musl builds, so the binary runs on any Linux distribution.
+      - name: Build on Alpine Linux
+        if: startsWith(matrix.target, 'linux-')
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -v "$RUNNER_TEMP/ffmpeg:/work" alpine:3.22 sh -c '
+            apk add -q bash build-base curl gnupg nodejs tar xz $([ "$(uname -m)" = x86_64 ] && echo nasm) &&
+            bash /repo/packaging/ffmpeg/build.sh ${{ matrix.target }} /work'
+
+      - name: Cross-compile for Windows, or collect the sources
+        if: startsWith(matrix.target, 'win32-') || matrix.target == 'sources'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq nasm
+          bash packaging/ffmpeg/build.sh ${{ matrix.target }} "$RUNNER_TEMP/ffmpeg"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ffmpeg-${{ matrix.target }}
+          path: ${{ runner.temp }}/ffmpeg/out/*
+          if-no-files-found: error
+
+  # Runs every OpenReader ffmpeg operation where the build itself could not: the
+  # Intel half of the macOS binary, the Linux binaries on a glibc system, and
+  # the Windows binaries on Windows.
+  verify:
+    name: Smoke-test ${{ matrix.target }} on ${{ matrix.runner }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { target: darwin-universal, runner: macos-15-intel }
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm }
+          - { target: win32-x64, runner: windows-2025 }
+          - { target: win32-arm64, runner: windows-11-arm }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: ffmpeg-${{ matrix.target }}
+          path: artifact
+
+      - name: Smoke test
+        run: |
+          tar -xzf artifact/ffmpeg-*-lgpl-${{ matrix.target }}.tar.gz -C artifact
+          node packaging/ffmpeg/smoke-test.mjs artifact/ffmpeg-*-lgpl-${{ matrix.target }}/bin/ffmpeg*
+
+  release:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ffmpeg-*
+          path: release
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd release && sha256sum -- * > checksums.sha256)
+          {
+            echo "LGPL FFmpeg $(node -p "require('./packaging/ffmpeg/manifest.json').ffmpegVersion") with LAME, built by packaging/ffmpeg/build.sh at ${GITHUB_SHA}."
+            echo
+            echo "The FFmpeg and LAME source tarballs, the FFmpeg signature, build.sh and smoke-test.mjs attached here are the corresponding source."
+            echo
+            echo '```'
+            cat release/checksums.sha256
+            echo '```'
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" release/* --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" --latest=false
+
+      - name: Print the manifest pins
+        run: |
+          node -e '
+            const fs = require("fs");
+            const sums = Object.fromEntries(fs.readFileSync("release/checksums.sha256", "utf8").trim().split("\n")
+              .map((line) => line.split(/\s+\*?/)).map(([sha, file]) => [file, sha]));
+            const manifest = require("./packaging/ffmpeg/manifest.json");
+            for (const target of Object.keys(manifest.sha256)) {
+              manifest.sha256[target] = sums[`ffmpeg-${manifest.ffmpegVersion}-lgpl-${target}.tar.gz`];
+            }
+            console.log("Record in packaging/ffmpeg/manifest.json:");
+            console.log(JSON.stringify({ sha256: manifest.sha256 }, null, 2));'

@@ -1,18 +1,18 @@
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { access, copyFile, mkdir, readFile, rename, unlink } from 'fs/promises';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
+import { resolveWorkerPath } from '../../worker-paths';
 import {
   downloadModelArtifact,
   type ModelDownloadProgressHandler,
 } from '../model-download';
 
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const STATIC_LICENSE_PATH = path.join(MODULE_DIR, 'assets', 'LICENSE.txt');
-const BASE_MANIFEST_PATH = path.join(MODULE_DIR, 'assets', 'manifest.json');
-const TINY_EN_MANIFEST_PATH = path.join(MODULE_DIR, 'assets', 'tiny-en-manifest.json');
+const ASSETS_DIR = resolveWorkerPath('inference', 'whisper', 'assets');
+const STATIC_LICENSE_PATH = path.join(ASSETS_DIR, 'LICENSE.txt');
+const BASE_MANIFEST_PATH = path.join(ASSETS_DIR, 'manifest.json');
+const TINY_EN_MANIFEST_PATH = path.join(ASSETS_DIR, 'tiny-en-manifest.json');
 
 export type WhisperModelVariant = 'base-multilingual' | 'tiny-english';
 

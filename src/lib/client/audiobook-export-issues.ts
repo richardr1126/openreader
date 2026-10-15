@@ -30,11 +30,11 @@ export function describeExportIssue(issue: TtsExportIssue | null): string | null
     case 'COMPUTE_USAGE_LIMIT_REACHED':
       return 'The text-to-speech usage limit for your account was reached.';
     case 'COMPUTE_QUEUE_AGE_EXCEEDED':
-      return 'It waited too long for other audiobook exports on this server to finish.';
+      return 'It waited too long for other audiobook exports to finish.';
     case 'WORKER_ORPHANED_OP':
-      return 'The compute worker stopped while generating (for example, it restarted).';
+      return 'Generation stopped unexpectedly (for example, OpenReader restarted).';
     case 'COMPUTE_WORK_NOT_STARTED':
-      return 'The compute worker stopped or was too busy before this export could start.';
+      return 'OpenReader stopped or was too busy before this export could start.';
     case 'UPSTREAM_TIMEOUT':
       return 'The TTS provider took too long to respond.';
     case 'UPSTREAM_RATE_LIMIT':
@@ -57,7 +57,7 @@ export function describeGenerationState(
   const cause = describeExportIssue(issue);
   switch (state) {
     case 'queued':
-      return 'Queued: another audiobook export on this server is generating. This one starts automatically when a slot frees up.';
+      return 'Queued: another audiobook export is generating. This one starts automatically when a slot frees up.';
     case 'stopped':
       return 'Generation stopped. Audio generated so far is kept; resume to continue.';
     case 'usage_limited':

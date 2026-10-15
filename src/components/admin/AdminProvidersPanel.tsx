@@ -29,6 +29,9 @@ import {
 import { queryKeys } from '@/lib/client/query-keys';
 import type { ProviderCheckItem, ProviderCheckStatus } from '@/lib/shared/provider-check';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { computeLocationPhrase } from '@/lib/shared/install-profile';
+import { LocalVoicesCard } from './LocalVoicesCard';
 
 type ProviderType = TtsProviderId;
 
@@ -52,6 +55,7 @@ const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'deepinfra', label: 'Deepinfra' },
   { value: 'replicate', label: 'Replicate' },
   { value: 'speech-sdk', label: 'Speech SDK' },
+  { value: 'kokoro-local', label: 'Kokoro' },
 ];
 
 interface FormState {
@@ -207,6 +211,12 @@ async function deleteAdminProvider(id: string): Promise<void> {
 }
 
 export function AdminProvidersPanel() {
+  const { installProfile, computeLocation } = useRuntimeConfig();
+  const where = computeLocationPhrase(computeLocation);
+  // Kokoro runs wherever the compute worker does.
+  const providerTypeOptions = useMemo(() => PROVIDER_TYPE_OPTIONS.map((option) => (
+    option.value === 'kokoro-local' ? { ...option, label: `Kokoro (${where})` } : option
+  )), [where]);
   const { data: session } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
   const adminProvidersQueryKey = queryKeys.admin(sessionId, 'providers');
@@ -384,8 +394,8 @@ export function AdminProvidersPanel() {
     !form.displayName.trim();
 
   const selectedProviderType =
-    PROVIDER_TYPE_OPTIONS.find((opt) => opt.value === form.providerType)
-    ?? PROVIDER_TYPE_OPTIONS[0];
+    providerTypeOptions.find((opt) => opt.value === form.providerType)
+    ?? providerTypeOptions[0];
   const modelDefinitions: TtsModelDefinition[] = useMemo(
     () => resolveProviderModels(form.providerType, {
       apiKey: form.apiKey,
@@ -434,6 +444,7 @@ export function AdminProvidersPanel() {
 
   return (
     <div className="space-y-3">
+      {(installProfile === 'desktop' || providers.some((p) => p.providerType === 'kokoro-local')) && <LocalVoicesCard />}
       <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid">
         {isLoading ? (
           <ProvidersListSkeleton />
@@ -449,7 +460,7 @@ export function AdminProvidersPanel() {
                   {!p.enabled && <Badge tone="muted">Disabled</Badge>}
                 </div>
                 <div className="mt-0.5 truncate font-mono text-[11px] text-soft" title={p.defaultModel ?? undefined}>
-                  {p.slug} · {p.defaultModel ? truncateModelLabel(p.defaultModel) : 'no default model'}
+                  {p.slug} · {truncateModelLabel(p.defaultModel ?? defaultModelForProviderType(p.providerType))}
                   {p.baseUrl ? ` · ${baseUrlHost(p.baseUrl)}` : ''}
                 </div>
               </div>
@@ -490,14 +501,17 @@ export function AdminProvidersPanel() {
             </div>
           ))
         )}
-        <button
-          type="button"
-          onClick={startCreate}
-          className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2.5 text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
-        >
-          <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
-          Add provider
-        </button>
+        {/* Shown once the list settles, so it never moves under the pointer. */}
+        {isLoading ? null : (
+          <button
+            type="button"
+            onClick={startCreate}
+            className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2.5 text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+          >
+            <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            Add provider
+          </button>
+        )}
       </div>
 
       <ModalFrame open={editingId !== null} onClose={cancelEdit} size="lg">
@@ -524,7 +538,7 @@ export function AdminProvidersPanel() {
             <Field label="Provider type">
               <Select
                 value={selectedProviderType}
-                options={PROVIDER_TYPE_OPTIONS}
+                options={providerTypeOptions}
                 getOptionKey={(option) => option.value}
                 renderValue={(option) => option.label}
                 renderOption={(option, { selected }) => (
@@ -621,14 +635,20 @@ export function AdminProvidersPanel() {
                 />
               </Field>
             )}
-            <Field label="API key" className="sm:col-span-2">
-              <Input
-                type="password"
-                value={form.apiKey}
-                onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                placeholder={editingProvider?.apiKeyMask.startsWith('••••') ? `Keep existing (${editingProvider.apiKeyMask})` : 'Optional'}
-              />
-            </Field>
+            {form.providerType === 'kokoro-local' ? (
+              <p className="text-sm text-muted sm:col-span-2">
+                {`Runs Kokoro-82M ${where}. No key is needed; about 336 MB of model, voice and pronunciation data downloads the first time it speaks.`}
+              </p>
+            ) : (
+              <Field label="API key" className="sm:col-span-2">
+                <Input
+                  type="password"
+                  value={form.apiKey}
+                  onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                  placeholder={editingProvider?.apiKeyMask.startsWith('••••') ? `Keep existing (${editingProvider.apiKeyMask})` : 'Optional'}
+                />
+              </Field>
+            )}
           </div>
 
           <ToggleRow

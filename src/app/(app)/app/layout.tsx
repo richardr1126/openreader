@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 
+import { DesktopDocumentOpener } from '@/components/documents/DesktopDocumentOpener';
 import { DocumentProvider } from '@/contexts/DocumentContext';
 import { OnboardingFlowProvider } from '@/contexts/OnboardingFlowContext';
 
@@ -10,6 +11,7 @@ import { OnboardingFlowProvider } from '@/contexts/OnboardingFlowContext';
 export default function AppHomeLayout({ children }: { children: ReactNode }) {
   return (
     <DocumentProvider>
+      <DesktopDocumentOpener />
       <OnboardingFlowProvider>
         {children}
       </OnboardingFlowProvider>

@@ -1,3 +1,4 @@
+import type { ModelComponentProgress, ModelDownloadProgress } from '../inference/model-download';
 import type { ParsedPdfDocument } from '../api/types';
 import type { WorkerOperationAction } from '@openreader/runtime-config/compute-limits';
 
@@ -289,6 +290,17 @@ export interface EmailDeliveryJobResult {
   resendMessageId: string;
 }
 
+/** A model the worker can download ahead of first use. Only local Kokoro today. */
+export type DownloadableModel = 'kokoro-82m';
+
+export interface ModelDownloadJobRequest {
+  model: DownloadableModel;
+}
+
+export interface ModelDownloadJobResult {
+  model: DownloadableModel;
+}
+
 export type PdfLayoutJobResult =
   | {
     parsed: ParsedPdfDocument;
@@ -338,10 +350,14 @@ export interface TtsPlaybackProgress {
   /** Terminal error sidecars intentionally omitted from playback/export audio. */
   skippedCount?: number;
   plannedCount: number;
+  /** Segments whose exact word timing landed after their audio completed. */
+  alignedCount?: number;
   phase?: 'downloading_model' | 'generating' | 'checking_cache';
   stopReason?: 'usage_limit';
   downloadedBytes?: number;
   totalBytes?: number;
+  /** Per-part progress while a multi-file model downloads (local Kokoro). */
+  modelComponents?: ModelComponentProgress[];
 }
 
 export interface TtsPlaybackExportProgress {
@@ -368,7 +384,8 @@ export type WorkerOperationProgress =
   | TtsPlaybackProgress
   | TtsPlaybackExportProgress
   | DocumentConversionProgress
-  | AccountExportProgress;
+  | AccountExportProgress
+  | ModelDownloadProgress;
 
 export type WorkerOperationKind =
   | 'pdf_layout'
@@ -378,7 +395,14 @@ export type WorkerOperationKind =
   | 'document_preview'
   | 'document_conversion'
   | 'account_export'
-  | 'email_delivery';
+  | 'email_delivery'
+  | 'model_download';
+
+/**
+ * Kinds outside compute limits: email is queued by the app itself, and model
+ * downloads are started by an admin.
+ */
+type UnlimitedOperationKind = 'email_delivery' | 'model_download';
 
 /**
  * The two exhaustive sides keep worker operation kinds and the shared compute
@@ -396,8 +420,8 @@ export const WORKER_OPERATION_COMPUTE_ACTION = {
   document_preview: 'document_preview',
   document_conversion: 'document_conversion',
   account_export: 'account_export',
-} as const satisfies Record<Exclude<WorkerOperationKind, 'email_delivery'>, WorkerOperationAction>
-  & Record<WorkerOperationAction, Exclude<WorkerOperationKind, 'email_delivery'>>;
+} as const satisfies Record<Exclude<WorkerOperationKind, UnlimitedOperationKind>, WorkerOperationAction>
+  & Record<WorkerOperationAction, Exclude<WorkerOperationKind, UnlimitedOperationKind>>;
 
 /**
  * Per-kind operation policy. The exhaustive Record forces every new operation
@@ -427,6 +451,8 @@ export const WORKER_OPERATION_KIND_POLICY: Record<WorkerOperationKind, {
   document_conversion: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
   account_export: { reusesSucceeded: true, slowJobLogThresholdMs: 120_000 },
   email_delivery: { reusesSucceeded: true, slowJobLogThresholdMs: 10_000 },
+  // The files on disk are the cache; each request checks them again.
+  model_download: { reusesSucceeded: false, slowJobLogThresholdMs: 600_000 },
 };
 
 export interface PdfLayoutOperationRequest {
@@ -477,6 +503,12 @@ export interface EmailDeliveryOperationRequest {
   payload: EmailDeliveryJobRequest;
 }
 
+export interface ModelDownloadOperationRequest {
+  kind: 'model_download';
+  opKey: string;
+  payload: ModelDownloadJobRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
   | TtsPlaybackOperationRequest
@@ -485,7 +517,8 @@ export type WorkerOperationRequest =
   | DocumentPreviewOperationRequest
   | DocumentConversionOperationRequest
   | AccountExportOperationRequest
-  | EmailDeliveryOperationRequest;
+  | EmailDeliveryOperationRequest
+  | ModelDownloadOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

@@ -9,6 +9,8 @@ import type {
   AccountExportRequest,
   AccountExportResolveRequest,
   AccountExportResolution,
+  DownloadableModel,
+  ModelStatus,
   TtsPlaybackRequest,
   TtsPlaybackSessionPrepareRequest,
   TtsPlaybackSessionPrepareResponse,
@@ -59,6 +61,11 @@ export function isComputeWorkerUnavailableError(error: unknown): boolean {
 
 export function isComputeWorkerEndpointMissingError(error: unknown): boolean {
   return error instanceof WorkerHttpError && error.status === 404;
+}
+
+/** The worker refused because the request conflicts with work in progress. */
+export function isComputeWorkerConflictError(error: unknown): boolean {
+  return error instanceof WorkerHttpError && error.status === 409;
 }
 
 function readRequiredEnv(name: string): string {
@@ -142,6 +149,22 @@ export class ComputeWorkerClient {
     expiresAt: number;
   }): Promise<ComputeOperation> {
     return this.requestJson('POST', '/v1/email-deliveries/jobs', input);
+  }
+
+  getModelStatus(model: DownloadableModel): Promise<ModelStatus> {
+    return this.requestJson('GET', `/v1/models/${model}`);
+  }
+
+  createModelDownloadOperation(model: DownloadableModel): Promise<ComputeOperation> {
+    return this.requestJson('POST', `/v1/models/${model}/download`);
+  }
+
+  cancelModelDownload(model: DownloadableModel): Promise<{ cancelled: boolean }> {
+    return this.requestJson('POST', `/v1/models/${model}/cancel`);
+  }
+
+  async removeModel(model: DownloadableModel): Promise<void> {
+    await this.requestJson('DELETE', `/v1/models/${model}`);
   }
 
   resolvePdfLayout(input: PdfLayoutRequest): Promise<PdfLayoutResolution> {
@@ -398,7 +421,7 @@ export class ComputeWorkerClient {
   }
 
   private async requestJson<T>(
-    method: 'GET' | 'POST' | 'PUT',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
     path: string,
     body?: unknown,
     init?: { signal?: AbortSignal },
@@ -422,6 +445,7 @@ export class ComputeWorkerClient {
         parseRetryAfterMs(response.headers.get('retry-after')),
       );
     }
+    if (response.status === 204) return undefined as T;
     const parsed = await response.json() as T;
     return parsed;
   }

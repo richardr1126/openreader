@@ -69,6 +69,14 @@ passwords out of logs, source control, seed JSON, and browser-visible runtime
 configuration. For containers, a mounted secret file is preferable to a
 long-lived inline password.
 
+## Desktop owner
+
+The desktop app has no password bootstrap. Its first launch-token exchange
+(`v5/DESKTOP_SINGLE_OWNER.md`) creates one active managed admin without a
+credential account, records it in the `desktopOwner` setting, writes the
+`initialAdminBootstrapped` marker so this password seed stays inert, closes
+sign-ups and turns guest sessions off.
+
 ## Account self-service
 
 Registered users can edit their display name and change a known password in

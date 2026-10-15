@@ -1,5 +1,6 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { resolveDevelopmentFfmpeg } from './packages/bootstrap/src/embedded-worker.mjs';
 
 if (!process.env.AUTH_SECRET?.trim()) {
   process.env.AUTH_SECRET = 'vitest-auth-secret';
@@ -7,6 +8,12 @@ if (!process.env.AUTH_SECRET?.trim()) {
 
 if (!/^https?:\/\//.test(process.env.BASE_URL ?? '')) {
   process.env.BASE_URL = 'http://localhost:3003';
+}
+
+// Tests spawn the same development ffmpeg that `pnpm dev` and `pnpm start` use.
+if (!process.env.FFMPEG_BIN?.trim()) {
+  const developmentFfmpeg = resolveDevelopmentFfmpeg(fileURLToPath(new URL('.', import.meta.url)));
+  if (developmentFfmpeg) process.env.FFMPEG_BIN = developmentFfmpeg;
 }
 
 // These files write the shared admin_providers table, whose emptiness decides

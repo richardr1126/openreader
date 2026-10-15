@@ -9,6 +9,8 @@ import type { NextRequest } from 'next/server';
 import { db } from "@openreader/database";
 import { getOidcAuthConfig, getRequiredAuthEnv } from "@/lib/server/auth/config";
 import { ensureInitialAdmin } from '@/lib/server/auth/bootstrap-admin';
+import { configuredDesktopLaunchToken } from '@/lib/server/auth/desktop-launch-token';
+import { desktopOwnerSession } from '@/lib/server/auth/desktop-owner';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { assertUserSignupAllowed, initialAccessStatus } from '@/lib/server/auth/signup-policy';
 import * as authSchemaSqlite from "@openreader/database/schema-auth-sqlite";
@@ -57,6 +59,8 @@ const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSql
 const authUserTable = authSchema.user;
 const requiredAuthEnv = getRequiredAuthEnv();
 const oidcAuthConfig = getOidcAuthConfig();
+// Desktop shell only. Unset everywhere else, so the exchange route is absent.
+const desktopLaunchToken = configuredDesktopLaunchToken();
 
 const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) => betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -295,6 +299,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
         }),
       ]
       : []),
+    ...(desktopLaunchToken ? [desktopOwnerSession(desktopLaunchToken)] : []),
     // Better Auth requires cookie integration plugins last so post-hooks can
     // still append Set-Cookie headers that are forwarded to Next.js.
     nextCookies(),

@@ -2,6 +2,7 @@ import { encodeSseFrame } from '../../operations/sse';
 import type {
   AccountExportJobResult,
   EmailDeliveryJobResult,
+  ModelDownloadJobResult,
   DocumentConversionJobResult,
   DocumentPreviewJobResult,
   PdfLayoutJobResult,
@@ -33,7 +34,8 @@ type OperationRouteResult =
   | DocumentPreviewJobResult
   | DocumentConversionJobResult
   | AccountExportJobResult
-  | EmailDeliveryJobResult;
+  | EmailDeliveryJobResult
+  | ModelDownloadJobResult;
 
 export function registerOperationRoutes(context: ComputeWorkerRouteContext): void {
   const {

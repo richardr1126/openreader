@@ -59,30 +59,20 @@ brew install seaweedfs
 weed version
 ```
 
-:::warning SeaweedFS Compatibility Note (April 16, 2026)
-If you see intermittent S3 `InternalError` upload failures with embedded storage, use SeaweedFS `4.18`.
-OpenReader currently pins `4.18` in CI and Docker builds while `4.19` compatibility is investigated.
-:::
-
 </TabItem>
 <TabItem value="linux" label="Linux">
 
 ```bash
-# Linux amd64 example (pin 4.18)
+# Linux amd64 example (4.48, the version Docker ships)
 mkdir -p "$HOME/.local/bin"
 curl -fsSL -o /tmp/seaweedfs.tar.gz \
-  https://github.com/seaweedfs/seaweedfs/releases/download/4.18/linux_amd64.tar.gz
+  https://github.com/seaweedfs/seaweedfs/releases/download/4.48/linux_amd64.tar.gz
 tar -xzf /tmp/seaweedfs.tar.gz -C /tmp weed
 install -m 0755 /tmp/weed "$HOME/.local/bin/weed"
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 export PATH="$HOME/.local/bin:$PATH"
 weed version
 ```
-
-:::warning SeaweedFS Compatibility Note (April 16, 2026)
-If you see intermittent S3 `InternalError` upload failures with embedded storage, use SeaweedFS `4.18`.
-OpenReader currently pins `4.18` in CI and Docker builds while `4.19` compatibility is investigated.
-:::
 
 </TabItem>
 </Tabs>
@@ -306,6 +296,9 @@ install `nats-server` locally or switch to external worker mode.
 pnpm build
 pnpm start
 ```
+
+`pnpm build` also builds the embedded compute worker to plain JavaScript, which `pnpm start` runs.
+`pnpm dev` runs the worker from its TypeScript sources instead.
 
   </TabItem>
 </Tabs>

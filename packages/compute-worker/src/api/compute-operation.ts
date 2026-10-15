@@ -1,4 +1,4 @@
-import type { WorkerOperationState } from '../operations/contracts';
+import type { DownloadableModel, WorkerOperationState } from '../operations/contracts';
 import {
   accountExportSubjectFromOperationKey,
   documentConversionSubjectFromOperationKey,
@@ -8,6 +8,7 @@ import {
   ttsPlaybackPlanSubjectFromOperationKey,
   ttsPlaybackSubjectFromOperationKey,
   emailDeliverySubjectFromOperationKey,
+  modelDownloadSubjectFromOperationKey,
 } from '../operations/keys';
 
 export type ComputeOperationSubject =
@@ -18,7 +19,8 @@ export type ComputeOperationSubject =
   | { kind: 'document_preview'; documentId: string; namespace: string | null; previewKind: 'card' }
   | { kind: 'document_conversion'; conversionId: string; namespace: string | null }
   | { kind: 'account_export'; storageUserId: string; namespace: string | null; artifactId: string }
-  | { kind: 'email_delivery'; deliveryId: string };
+  | { kind: 'email_delivery'; deliveryId: string }
+  | { kind: 'model_download'; model: DownloadableModel };
 
 export interface ComputeOperation<Result = unknown> {
   opId: string;
@@ -79,6 +81,8 @@ export function toComputeOperation<Result>(
               })
               : state.kind === 'email_delivery'
                 ? (emailDeliverySubjectFromOperationKey(state.opKey) ?? { kind: 'email_delivery', deliveryId: '' })
+                : state.kind === 'model_download'
+                  ? (modelDownloadSubjectFromOperationKey(state.opKey) ?? { kind: 'model_download', model: 'kokoro-82m' })
                 : (ttsPlaybackSubjectFromOperationKey(state.opKey) ?? { kind: 'tts_playback', documentId: '', sessionId: '' });
   return {
     opId: state.opId,

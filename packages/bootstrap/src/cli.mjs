@@ -14,12 +14,15 @@ import { hasNatsBinary } from './embedded-nats.mjs';
 import {
   ensureS3Bucket,
   hasWeedBinary,
+  reconcileWeedMiniKek,
   resolveWeedMiniAdvertiseHost,
+  resolveWeedMiniInternalPorts,
   waitForEndpoint,
+  WEED_MINI_DISABLED_COMPONENTS,
 } from './embedded-seaweedfs.mjs';
-import { resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
+import { resolveDevelopmentFfmpeg, resolveEmbeddedWorkerLaunch } from './embedded-worker.mjs';
 import { evaluateStartupConfig, formatConfigProblems, formatConfigWarnings } from './preflight.mjs';
-import { applyEmbeddedPlaybackSecret } from './runtime-secrets.mjs';
+import { applyEmbeddedPlaybackSecret, embeddedServiceEnv } from './runtime-secrets.mjs';
 import { detectPreV5Database, formatV4UpgradeNotice } from './v4-upgrade.mjs';
 
 function applyStorageTransportEnv(env, options = {}) {
@@ -81,14 +84,18 @@ function resolveWorkspacePath(value, fallback) {
     : path.resolve(workspaceRoot, configuredPath);
 }
 
-function embeddedCredentialBrokerUrl() {
-  return 'http://127.0.0.1:3003/api/internal/compute/tts-credentials';
+// The app listens on PORT when it is set (standalone server.js, the desktop
+// shell) and on 3003 otherwise (`next start -p 3003`).
+function embeddedCredentialBrokerUrl(env) {
+  return `http://127.0.0.1:${withDefault(env.PORT, '3003')}/api/internal/compute/tts-credentials`;
 }
 
-function parseCommandFromArgs(argv) {
+// `openreader [--worker-source] -- <command> [args]`. --worker-source runs the
+// embedded worker from its TypeScript sources (development only).
+function parseArgs(argv) {
   const marker = argv.indexOf('--');
-  if (marker >= 0) return argv.slice(marker + 1);
-  return argv;
+  if (marker < 0) return { options: [], command: argv };
+  return { options: argv.slice(0, marker), command: argv.slice(marker + 1) };
 }
 
 function forwardChildStream(stream, target) {
@@ -108,7 +115,10 @@ function spawnMainCommand(command, env) {
     cwd: workspaceRoot,
     env,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    // Windows needs a shell to run `pnpm` (a .cmd shim). An absolute executable,
+    // such as the desktop shell's bundled node, runs directly so a path with
+    // spaces is not split.
+    shell: process.platform === 'win32' && !path.isAbsolute(cmd),
   });
 
   const exitPromise = new Promise((resolve) => {
@@ -191,11 +201,13 @@ async function terminateChild(child, signal = 'SIGTERM', graceMs = 3000, useProc
 async function main() {
   loadEnvFiles();
 
-  const command = parseCommandFromArgs(process.argv.slice(2));
-  if (command.length === 0) {
-    console.error('Usage: openreader -- <command> [args]');
+  const { options, command } = parseArgs(process.argv.slice(2));
+  const unknownOptions = options.filter((option) => option !== '--worker-source');
+  if (command.length === 0 || unknownOptions.length > 0) {
+    console.error('Usage: openreader [--worker-source] -- <command> [args]');
     process.exit(2);
   }
+  const runWorkerFromSource = options.includes('--worker-source');
 
   const embeddedEnvRaw = process.env.USE_EMBEDDED_WEED_MINI;
   let useEmbeddedWeed = isTrue(embeddedEnvRaw, true);
@@ -289,6 +301,14 @@ async function main() {
   process.once('SIGTERM', () => {
     void shutdown('SIGTERM').finally(() => exitOnce(143));
   });
+  // A parent that starts bootstrap with an IPC channel (the desktop shell) stops
+  // it by disconnecting, which also works on Windows where there are no signals,
+  // and the channel closes by itself if that parent dies.
+  if (process.send) {
+    process.once('disconnect', () => {
+      void shutdown('SIGTERM').finally(() => exitOnce(0));
+    });
+  }
 
   try {
     const shouldRunDbMigrations = resolveBooleanEnv(runtimeEnv, 'RUN_DRIZZLE_MIGRATIONS', true);
@@ -326,27 +346,46 @@ async function main() {
       fs.mkdirSync(runtimeEnv.WEED_MINI_DIR, { recursive: true });
       const waitSec = Number.parseInt(runtimeEnv.WEED_MINI_WAIT_SEC || '20', 10);
       const waitTimeout = Number.isFinite(waitSec) ? waitSec : 20;
-      const launchWeed = () => {
-        const weedArgs = [
-          '-alsologtostderr=false',
-          '-stderrthreshold=WARNING',
-          'mini',
-          `-dir=${runtimeEnv.WEED_MINI_DIR}`,
-        ];
-        weedArgs.push(`-s3.port=${runtimeEnv.WEED_MINI_PORT}`);
-        weedArgs.push(`-ip=${runtimeEnv.WEED_MINI_ADVERTISE_HOST}`);
-        weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
+      const weedInternalPorts = await resolveWeedMiniInternalPorts(
+        runtimeEnv.WEED_MINI_DIR,
+        runtimeEnv.WEED_MINI_BIND_HOST,
+        {
+          // The S3 gateway and the services started after weed.
+          reserved: [
+            runtimeEnv.WEED_MINI_PORT,
+            withDefault(runtimeEnv.PORT, '3003'),
+            withDefault(runtimeEnv.EMBEDDED_COMPUTE_WORKER_PORT, '8081'),
+            withDefault(runtimeEnv.EMBEDDED_NATS_PORT, '4222'),
+            withDefault(runtimeEnv.EMBEDDED_NATS_MONITOR_PORT, '8222'),
+          ],
+        },
+      );
+      const weedArgs = [
+        '-alsologtostderr=false',
+        '-stderrthreshold=WARNING',
+        'mini',
+        `-dir=${runtimeEnv.WEED_MINI_DIR}`,
+      ];
+      weedArgs.push(`-s3.port=${runtimeEnv.WEED_MINI_PORT}`);
+      weedArgs.push(`-ip=${runtimeEnv.WEED_MINI_ADVERTISE_HOST}`);
+      weedArgs.push(`-ip.bind=${runtimeEnv.WEED_MINI_BIND_HOST}`);
+      for (const [key, port] of weedInternalPorts) weedArgs.push(`-${key}=${port}`);
+      weedArgs.push(...WEED_MINI_DISABLED_COMPONENTS);
+      const weedEnv = embeddedServiceEnv(runtimeEnv);
 
-        weedProc = spawn('weed', weedArgs, {
-          env: runtimeEnv,
+      const launchWeed = () => {
+        const proc = spawn('weed', weedArgs, {
+          env: weedEnv,
           stdio: ['ignore', 'pipe', 'pipe'],
         });
-        stopWeedStdoutForward = forwardChildStream(weedProc.stdout, process.stdout);
-        stopWeedStderrForward = forwardChildStream(weedProc.stderr, process.stderr);
-        weedExitPromise = once(weedProc, 'exit').then(() => undefined).catch(() => undefined);
+        weedProc = proc;
+        stopWeedStdoutForward = forwardChildStream(proc.stdout, process.stdout);
+        stopWeedStderrForward = forwardChildStream(proc.stderr, process.stderr);
+        weedExitPromise = once(proc, 'exit').then(() => undefined).catch(() => undefined);
 
-        weedProc.on('exit', (code, signal) => {
-          if (isShuttingDown) return;
+        proc.on('exit', (code, signal) => {
+          // A deliberate restart replaces weedProc before stopping the old one.
+          if (isShuttingDown || proc !== weedProc) return;
           if (typeof code === 'number' && code !== 0) {
             console.error(`Embedded weed mini exited with code ${code}.`);
           } else if (signal) {
@@ -359,6 +398,20 @@ async function main() {
       console.log('Starting embedded SeaweedFS weed mini...');
       launchWeed();
       await waitForEndpoint(`http://127.0.0.1:${runtimeEnv.WEED_MINI_PORT}`, waitTimeout, 'Embedded SeaweedFS');
+      const filerUrl = `http://127.0.0.1:${weedInternalPorts.find(([key]) => key === 'filer.port')[1]}`;
+      await waitForEndpoint(filerUrl, waitTimeout, 'Embedded SeaweedFS filer');
+      if (await reconcileWeedMiniKek(runtimeEnv.WEED_MINI_DIR, filerUrl, runtimeEnv)) {
+        console.log('Restoring the SeaweedFS encryption key this storage already used; restarting SeaweedFS...');
+        const previous = weedProc;
+        const previousExit = weedExitPromise;
+        stopWeedStdoutForward();
+        stopWeedStderrForward();
+        weedProc = null;
+        await terminateChild(previous, 'SIGTERM', 4000);
+        await previousExit;
+        launchWeed();
+        await waitForEndpoint(`http://127.0.0.1:${runtimeEnv.WEED_MINI_PORT}`, waitTimeout, 'Embedded SeaweedFS');
+      }
       const embeddedBucket = await ensureS3Bucket(runtimeEnv);
       if (embeddedBucket.created) {
         console.log(`Created embedded S3 bucket ${embeddedBucket.bucket}.`);
@@ -409,6 +462,10 @@ async function main() {
       );
       applyEmbeddedPlaybackSecret(runtimeEnv);
       runtimeEnv.COMPUTE_WORKER_HOST = withDefault(runtimeEnv.COMPUTE_WORKER_HOST, '127.0.0.1');
+      if (!runtimeEnv.FFMPEG_BIN?.trim()) {
+        const developmentFfmpeg = resolveDevelopmentFfmpeg(workspaceRoot);
+        if (developmentFfmpeg) runtimeEnv.FFMPEG_BIN = developmentFfmpeg;
+      }
       runtimeEnv.COMPUTE_NATS_REPLICAS = withDefault(runtimeEnv.COMPUTE_NATS_REPLICAS, '1');
 
       const natsStoreDir = withDefault(runtimeEnv.EMBEDDED_NATS_STORE_DIR, path.join(workspaceRoot, 'docstore/nats/jetstream'));
@@ -425,7 +482,7 @@ async function main() {
           '-m', String(embeddedNatsMonitorPort),
         ],
         {
-          env: runtimeEnv,
+          env: embeddedServiceEnv(runtimeEnv),
           stdio: ['ignore', 'pipe', 'pipe'],
         },
       );
@@ -449,15 +506,14 @@ async function main() {
       console.log(`Embedded nats-server is ready at nats://127.0.0.1:${embeddedNatsPort}`);
 
       console.log(`Starting embedded compute-worker on 127.0.0.1:${embeddedWorkerPort}...`);
-      const workerEnv = {
-        ...runtimeEnv,
+      const workerEnv = embeddedServiceEnv(runtimeEnv, {
         PORT: String(embeddedWorkerPort),
         COMPUTE_CREDENTIAL_BROKER_URL: withDefault(
           runtimeEnv.COMPUTE_CREDENTIAL_BROKER_URL,
-          embeddedCredentialBrokerUrl(),
+          embeddedCredentialBrokerUrl(runtimeEnv),
         ),
-      };
-      const workerLaunch = resolveEmbeddedWorkerLaunch();
+      });
+      const workerLaunch = resolveEmbeddedWorkerLaunch({ fromSource: runWorkerFromSource });
       workerProc = spawn(
         workerLaunch.cmd,
         workerLaunch.args,
@@ -483,7 +539,11 @@ async function main() {
         console.error(`Embedded compute-worker failed to start: ${error instanceof Error ? error.message : String(error)}`);
         scheduleFatalShutdown('compute-worker', null, null, 'failed to start');
       });
-      await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 30, 'Embedded compute-worker');
+      // The worker loads large native modules first, and a cold Windows start can
+      // spend most of a minute on them while Defender scans each one. A worker
+      // that exits instead ends startup at once through the exit handler above;
+      // the desktop shell allows the whole runtime 120 s.
+      await waitForEndpoint(`http://127.0.0.1:${embeddedWorkerPort}/health/ready`, 90, 'Embedded compute-worker');
       console.log(`Embedded compute-worker is ready at http://127.0.0.1:${embeddedWorkerPort}`);
     }
 

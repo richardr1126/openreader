@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthRateLimitProvider, type OidcAuthPublicConfig } from '@/contexts/AuthRateLimitContext';
 import { RuntimeConfigProvider } from '@/contexts/RuntimeConfigContext';
 import { AuthLoader } from '@/components/auth/AuthLoader';
+import { DesktopTitleBarColors } from '@/components/layout/DesktopTitleBarColors';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -52,6 +53,7 @@ export function Providers({ children, authBaseUrl, githubAuthEnabled, oidcAuth }
           oidcAuth={oidcAuth}
         >
           <ThemeProvider>
+            <DesktopTitleBarColors />
             <AuthLoader>
               {children}
             </AuthLoader>

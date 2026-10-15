@@ -27,6 +27,8 @@
     "node_modules",
     "docs-site",
     "docs-site/**",
+    "desktop",
+    "desktop/**",
     "compute-worker",
     "compute-worker/**"
   ]

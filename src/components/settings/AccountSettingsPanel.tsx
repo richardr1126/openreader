@@ -101,13 +101,33 @@ function TtsUsageCard() {
   );
 }
 
+function ExportDataTile() {
+  const { isExporting, startExport } = useAccountExport();
+  return (
+    <ChoiceTile
+      onClick={startExport}
+      disabled={isExporting}
+      className="w-full rounded-lg bg-background p-4 text-left hover:bg-accent-wash"
+    >
+      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center">
+        <DownloadIcon className="w-5 h-5 text-accent" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground">Export My Data</p>
+        <p className="text-xs text-soft">
+          {isExporting ? 'Preparing ZIP…' : 'Download everything as a ZIP'}
+        </p>
+      </div>
+    </ChoiceTile>
+  );
+}
+
 export function AccountSettingsPanel() {
   const runtimeConfig = useRuntimeConfig();
   const { baseUrl: authBaseUrl } = useAuthConfig();
   const { data: session } = useAuthSession();
   const router = useRouter();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { isExporting, startExport } = useAccountExport();
 
   const handleSignOut = async () => {
     const client = getAuthClient(authBaseUrl);
@@ -133,6 +153,18 @@ export function AccountSettingsPanel() {
     setShowDeleteConfirm(false);
   };
 
+  // The desktop owner has one account, no password and no inbox; signing out
+  // would only be undone by the shell. Its Profile is the display name and the
+  // data export.
+  if (runtimeConfig.installProfile === 'desktop') {
+    return (
+      <div className="space-y-2">
+        <AccountSecurityPanel nameOnly />
+        <ExportDataTile />
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="space-y-2">
@@ -146,23 +178,7 @@ export function AccountSettingsPanel() {
 
         {session?.user && <TtsUsageCard />}
 
-        {session?.user && (
-          <ChoiceTile
-            onClick={startExport}
-            disabled={isExporting}
-            className="w-full rounded-lg bg-background p-4 text-left hover:bg-accent-wash"
-          >
-            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center">
-              <DownloadIcon className="w-5 h-5 text-accent" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-foreground">Export My Data</p>
-              <p className="text-xs text-soft">
-                {isExporting ? 'Preparing ZIP…' : 'Download everything as a ZIP'}
-              </p>
-            </div>
-          </ChoiceTile>
-        )}
+        {session?.user && <ExportDataTile />}
 
         <div className="space-y-2">
           {session?.user && !session.user.isAnonymous ? (

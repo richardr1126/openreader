@@ -19,12 +19,14 @@ export function UserMenu({
   variant?: UserMenuVariant;
 }) {
   const { baseUrl } = useAuthConfig();
-  const { signupPolicy } = useRuntimeConfig();
+  const { signupPolicy, installProfile } = useRuntimeConfig();
   const canSignUp = signupPolicy !== 'closed';
   const { data: session, isPending } = useAuthSession();
   const router = useRouter();
 
-  if (isPending) return null;
+  // Desktop has one owner: the shell would sign straight back in, the address is
+  // a placeholder, and Settings already lists Profile, so there is no menu.
+  if (isPending || installProfile === 'desktop') return null;
 
   const handleSignOut = async () => {
     const client = getAuthClient(baseUrl);
@@ -68,6 +70,8 @@ export function UserMenu({
     );
   }
 
+  const accountLabel = session.user.email || 'Account';
+
   if (variant === 'sidebar') {
     return (
       <div className={`flex min-w-0 overflow-hidden rounded-md border border-line bg-surface ${className}`}>
@@ -78,7 +82,7 @@ export function UserMenu({
           title="Account settings"
           aria-label="Open account settings"
           icon={<UserIcon className="h-3.5 w-3.5" />}
-          label={session.user.email || 'Account'}
+          label={accountLabel}
         />
         <IconButton
           onClick={handleSignOut}
@@ -107,7 +111,7 @@ export function UserMenu({
       >
         <UserIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-colors duration-base group-hover:text-accent" />
         <span className="hidden max-w-[150px] truncate sm:block">
-          {session.user.email || 'Account'}
+          {accountLabel}
         </span>
       </Link>
 

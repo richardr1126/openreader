@@ -13,6 +13,7 @@ import {
 import { registerHealthRoutes } from './routes/health';
 import { registerOperationRoutes } from './routes/operations';
 import { registerEmailDeliveryRoutes } from './routes/email-deliveries';
+import { registerModelRoutes } from './routes/models';
 import { registerPlaybackAudioRoutes } from './routes/playback/audio';
 import {
   registerPlaybackExportJobRoutes,
@@ -48,6 +49,7 @@ export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext):
   registerVoicePreviewRoutes(context);
   registerAccountExportRoutes(context);
   registerEmailDeliveryRoutes(context);
+  registerModelRoutes(context);
   registerPlaybackExportJobRoutes(context);
   registerDocumentResolutionRoutes(context);
   registerOperationRoutes(context);

@@ -13,7 +13,7 @@ export function AppHeader({
   className?: string;
 }) {
   return (
-    <div className={cn('sticky top-0 z-40 w-full border-b border-line-soft bg-surface', className)} data-app-header>
+    <div className={cn('titlebar sticky top-0 z-40 w-full border-b border-line-soft bg-surface', className)} data-app-header>
       <div className="px-2 sm:px-3 py-1 flex items-center justify-between gap-2 min-h-10">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           {left}

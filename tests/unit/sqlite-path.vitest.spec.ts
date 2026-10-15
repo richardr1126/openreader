@@ -25,7 +25,7 @@ describe('SQLite database path', () => {
     const bootstrap = readFileSync(path.join(process.cwd(), 'packages/bootstrap/src/cli.mjs'), 'utf8');
     const pathSetup = bootstrap.indexOf('runtimeEnv.SQLITE_DB_PATH = withDefault(');
     const migrations = bootstrap.indexOf('await runDbMigrations(runtimeEnv)');
-    const workerSpawn = bootstrap.indexOf('const workerEnv = {');
+    const workerSpawn = bootstrap.indexOf('const workerEnv = embeddedServiceEnv(runtimeEnv, {');
 
     expect(pathSetup).toBeGreaterThan(-1);
     expect(migrations).toBeGreaterThan(pathSetup);

@@ -206,6 +206,33 @@ describe('compute worker API routes', () => {
     });
   });
 
+  test('downloads a model as an operation and reports it with the model status', async () => {
+    const response = await runtime.app.inject({
+      method: 'POST',
+      url: '/v1/models/kokoro-82m/download',
+      headers: AUTH,
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({ subject: { kind: 'model_download', model: 'kokoro-82m' }, status: 'queued' });
+    expect(fake.enqueuedRequests.at(-1)).toMatchObject({ kind: 'model_download', payload: { model: 'kokoro-82m' } });
+
+    const status = await runtime.app.inject({ method: 'GET', url: '/v1/models/kokoro-82m', headers: AUTH });
+    expect(status.statusCode).toBe(200);
+    expect(status.json()).toMatchObject({
+      model: 'kokoro-82m',
+      downloading: false,
+      operation: { opId: response.json().opId, subject: { kind: 'model_download' } },
+    });
+    expect(status.json().components.map((component: { name: string }) => component.name))
+      .toEqual(['Model weights', 'Voice pack', 'English pronunciation data']);
+
+    const unknown = await runtime.app.inject({ method: 'GET', url: '/v1/models/other', headers: AUTH });
+    expect(unknown.statusCode).toBe(400);
+    const idle = await runtime.app.inject({ method: 'POST', url: '/v1/models/kokoro-82m/cancel', headers: AUTH });
+    expect(idle.json()).toEqual({ cancelled: false });
+  });
+
   test('reuses idempotent PDF requests and replaces them only with an explicit token', async () => {
     const documentId = 'e'.repeat(64);
     const payload = {

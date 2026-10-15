@@ -11,6 +11,7 @@ import {
   SkipBackwardIcon,
 } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
+import { ProgressPopup } from '@/components/ProgressPopup';
 import { VoicesControl } from '@/components/player/VoicesControl';
 import { SpeedControl } from '@/components/player/SpeedControl';
 import { IconButton } from '@/components/ui';
@@ -56,7 +57,12 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
     playbackTimeSec,
     playbackDurationSec,
     playbackSeekLayout,
+    modelDownload,
   } = useTTSPlaybackProgress();
+  // Keep the last download on screen while the popup animates out.
+  const lastModelDownloadRef = useRef(modelDownload);
+  if (modelDownload) lastModelDownloadRef.current = modelDownload;
+  const shownModelDownload = modelDownload ?? lastModelDownloadRef.current;
   const [previewSec, setPreviewSec] = useState<number | null>(null);
   const shownSec = previewSec ?? playbackTimeSec;
   const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);
@@ -127,6 +133,13 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
   });
 
   return (
+    <>
+    <ProgressPopup
+      isOpen={Boolean(modelDownload)}
+      progress={shownModelDownload?.progress ?? null}
+      operationLabel={shownModelDownload?.label}
+      statusMessage={shownModelDownload?.statusMessage}
+    />
     <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-sm sm:shadow-none" data-app-ttsbar>
       {/* Top Edge Scrubber bar */}
       <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:-top-[5px] sm:h-2.5">
@@ -287,5 +300,6 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         </div>
       </div>
     </div>
+    </>
   );
 }

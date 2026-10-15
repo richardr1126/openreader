@@ -18,12 +18,15 @@ export function createModelDownloadProgressReporter(input: {
 }): ModelDownloadProgressHandler {
   let lastPublishedAt = 0;
   let lastPublishedBytes = -1;
+  let lastComponentStates = '';
   const now = input.now ?? Date.now;
 
   return async (progress: ModelDownloadProgress) => {
     input.onObserved?.();
     const observedAt = now();
+    const componentStates = progress.components?.map((component) => component.state).join(',') ?? '';
     const shouldPublish = lastPublishedBytes < 0
+      || componentStates !== lastComponentStates
       || (progress.totalBytes > 0 && progress.downloadedBytes >= progress.totalBytes)
       || progress.downloadedBytes - lastPublishedBytes >= MODEL_DOWNLOAD_PROGRESS_MIN_BYTES
       || observedAt - lastPublishedAt >= MODEL_DOWNLOAD_PROGRESS_MAX_INTERVAL_MS;
@@ -31,6 +34,7 @@ export function createModelDownloadProgressReporter(input: {
 
     lastPublishedAt = observedAt;
     lastPublishedBytes = progress.downloadedBytes;
+    lastComponentStates = componentStates;
     await input.publish(progress);
   };
 }

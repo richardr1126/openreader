@@ -4,6 +4,8 @@ import type {
   AccountExportJobResult,
   EmailDeliveryJobRequest,
   EmailDeliveryJobResult,
+  ModelDownloadJobRequest,
+  ModelDownloadJobResult,
   DocumentPreviewJobRequest,
   DocumentPreviewJobResult,
   DocumentConversionJobRequest,
@@ -141,6 +143,7 @@ export function createWorkerLoopController(input: {
   documentConversionCodec?: JsonCodec<QueuedJob<DocumentConversionJobRequest>>;
   accountExportCodec?: JsonCodec<QueuedJob<AccountExportJobRequest>>;
   emailDeliveryCodec?: JsonCodec<QueuedJob<EmailDeliveryJobRequest>>;
+  modelDownloadCodec?: JsonCodec<QueuedJob<ModelDownloadJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
@@ -469,6 +472,7 @@ export function createWorkerLoopController(input: {
       documentConversion?: Consumer;
       accountExport?: Consumer;
       emailDelivery?: Consumer;
+      modelDownload?: Consumer;
     }): void {
       stopRequested = false;
       loops = [];
@@ -537,6 +541,10 @@ export function createWorkerLoopController(input: {
         input.emailDeliveryCodec && consumers.emailDelivery && input.handlers.runEmailDelivery
           ? { codec: input.emailDeliveryCodec, run: input.handlers.runEmailDelivery }
           : null;
+      const modelDownloadWork: WorkDefinition<ModelDownloadJobRequest, ModelDownloadJobResult> | null =
+        input.modelDownloadCodec && consumers.modelDownload && input.handlers.runModelDownload
+          ? { codec: input.modelDownloadCodec, run: input.handlers.runModelDownload }
+          : null;
       let loopSlots = 0;
       const addLoopSlot = (i: number): void => {
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
@@ -592,6 +600,15 @@ export function createWorkerLoopController(input: {
           consumer: consumers.emailDelivery,
           ...emailDeliveryWork,
           workerLabel: 'email-delivery-1',
+        }));
+      }
+      // One download at a time is enough: a model is shared by every job.
+      if (modelDownloadWork && consumers.modelDownload) {
+        loops.push(runLoop({
+          owner,
+          consumer: consumers.modelDownload,
+          ...modelDownloadWork,
+          workerLabel: 'model-download-1',
         }));
       }
       growLoops();

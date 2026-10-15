@@ -79,7 +79,7 @@ export function useLibraryImport(folderId?: string) {
       }
 
       if (!controller.signal.aborted) {
-        if (importedCount === 0) throw new Error('No server-library documents could be copied');
+        if (importedCount === 0) throw new Error('No library documents could be copied');
         setStatusMessage('Import complete');
       }
     } catch (error) {

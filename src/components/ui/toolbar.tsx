@@ -4,7 +4,7 @@ import { variants } from './variants';
 import { motionColors } from './tokens';
 
 export const toolbarButtonStyles = variants({
-  base: cn('inline-flex items-center rounded-md border px-2 py-1 text-xs', motionColors),
+  base: cn('inline-flex items-center rounded-md border px-2 py-1 text-xs disabled:pointer-events-none disabled:opacity-50', motionColors),
   variants: {
     active: {
       true: 'border-accent-line bg-surface-sunken text-accent',
@@ -22,7 +22,7 @@ export function Toolbar({
   ...props
 }: HTMLAttributes<HTMLDivElement> & { children: ReactNode }) {
   return (
-    <div className={cn('sticky top-0 z-40 w-full border-b border-line-soft bg-surface', className)} {...props}>
+    <div className={cn('titlebar sticky top-0 z-40 w-full border-b border-line-soft bg-surface', className)} {...props}>
       <div className="px-2 sm:px-3 py-1 min-h-10 flex items-center gap-1.5 sm:gap-2">{children}</div>
     </div>
   );

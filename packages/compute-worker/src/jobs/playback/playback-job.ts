@@ -137,6 +137,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       });
       const cacheEpoch = await readCurrentCacheEpoch();
       const completedOrdinals = new Set<number>();
+      const alignedOrdinals = new Set<number>();
       const erroredOrdinals = new Set<number>();
       const plannedOrdinals = new Set(plannedSegments.map((segment) => segment.ordinal));
       const verificationStartedAt = Date.now();
@@ -221,13 +222,20 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         });
       };
       let lastCompletedThrough = completedOrdinals.size > 0 ? Math.max(...completedOrdinals) : -1;
+      // A model download (Kokoro before synthesis, Whisper while segments
+      // align) runs alongside generation. The operation keeps one progress
+      // record, so every snapshot carries the download until it completes;
+      // otherwise segment progress would hide it between checkpoints.
+      let modelDownload: Pick<TtsPlaybackProgress, 'downloadedBytes' | 'totalBytes' | 'modelComponents'> | null = null;
       const emitProgress = async (): Promise<void> => {
         await hooks?.onProgress?.({
           completedThroughOrdinal: lastCompletedThrough,
           completedCount: completedOrdinals.size,
           skippedCount: erroredOrdinals.size,
           plannedCount: plannedSegments.length,
-          phase: 'generating',
+          alignedCount: alignedOrdinals.size,
+          phase: modelDownload ? 'downloading_model' : 'generating',
+          ...modelDownload,
           ...(usageLimited ? { stopReason: 'usage_limit' as const } : {}),
         });
       };
@@ -291,6 +299,10 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
         await emitProgress();
       };
+      const onSegmentAligned = async (planOrdinal: number): Promise<void> => {
+        alignedOrdinals.add(planOrdinal);
+        await emitProgress();
+      };
       const generationFloor = generationFloorForCursor(isContinuationRun ? sessionCursorOrdinal : startOrdinal);
       const requiredPlaybackOrdinal = isContinuationRun ? sessionCursorOrdinal : startOrdinal;
       const generationSegments = forceDocumentExtent
@@ -326,6 +338,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           onBeforeSegment,
           onSynthesisSettled: persistSatisfiedWindowIfCurrent,
           onSegmentCompleted,
+          onSegmentAligned,
           onSegmentErrored: async (planOrdinal) => {
             erroredOrdinals.add(planOrdinal);
             await emitProgress();
@@ -340,16 +353,21 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           getProviderMaxConcurrent: input.getProviderMaxConcurrent,
           coolDownProviderCapacity: input.coolDownProviderCapacity,
           onModelDownloadProgress: createModelDownloadProgressReporter({
-            publish: async ({ downloadedBytes, totalBytes }) => hooks?.onProgress?.({
-              completedThroughOrdinal: lastCompletedThrough,
-              completedCount: completedOrdinals.size,
-              skippedCount: erroredOrdinals.size,
-              plannedCount: plannedSegments.length,
-              phase: 'downloading_model',
-              downloadedBytes,
-              totalBytes,
-            }),
+            publish: async ({ downloadedBytes, totalBytes, components }) => {
+              const complete = totalBytes > 0 && downloadedBytes >= totalBytes;
+              modelDownload = complete ? null : {
+                downloadedBytes,
+                totalBytes,
+                ...(components ? { modelComponents: components } : {}),
+              };
+              await emitProgress();
+            },
           }),
+          onAlignmentFailed: async () => {
+            if (!modelDownload) return;
+            modelDownload = null;
+            await emitProgress();
+          },
         });
       } finally {
         stopWatchingGeneration();
