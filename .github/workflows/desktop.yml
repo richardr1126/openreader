@@ -104,7 +104,8 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
           export APPLE_API_KEY="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
-          printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY"
+          printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"
+          grep -q 'BEGIN PRIVATE KEY' "$APPLE_API_KEY" || { echo "::error::APPLE_API_KEY_P8 is not a base64 .p8 key"; exit 1; }
           trap 'rm -f "$APPLE_API_KEY"' EXIT
           pnpm --dir desktop package
           app=$(echo desktop/dist/mac*/OpenReader.app)
