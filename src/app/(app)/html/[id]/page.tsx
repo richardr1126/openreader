@@ -1,14 +1,14 @@
 'use client';
 
-import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from 'react';
 import { HTMLViewer } from '@/components/views/HTMLViewer';
 import {
   ReaderShell,
   type ReaderRendererProps,
 } from '@/components/reader/ReaderShell';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
-import { Header } from '@/components/Header';
+import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
@@ -16,7 +16,6 @@ import { ZoomControl } from '@/components/documents/ZoomControl';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
-import { ButtonLink } from '@/components/ui';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
@@ -41,13 +40,12 @@ function HtmlReader({
   document: sourceDocument,
   bootstrap,
   rendererReady,
+  onBackToDocuments,
   onReady,
   onError,
 }: ReaderRendererProps<'html'>) {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
-  const router = useRouter();
-  const { disableProgressPersistence } = bootstrap;
   const htmlState = useHtmlDocument(sourceDocument);
   const {
     currDocData,
@@ -58,7 +56,6 @@ function HtmlReader({
   } = htmlState;
   const {
     sentences,
-    stop,
   } = useTTS();
   const documentSettings = mergeDocumentSettings(
     DEFAULT_DOCUMENT_SETTINGS,
@@ -110,25 +107,10 @@ function HtmlReader({
     };
   }, [rendererReady, activeSidebar]);
 
-  const handleBackToDocuments = useCallback((event: MouseEvent) => {
-    event.preventDefault();
-    disableProgressPersistence();
-    stop();
-    setActiveSidebar(null);
-    router.push('/app');
-  }, [disableProgressPersistence, router, stop]);
-
   return (
     <>
-      <Header
-        left={
-          <ButtonLink href="/app" variant="secondary" size="sm" className="gap-2" aria-label="Back to documents" onClick={handleBackToDocuments}>
-            <svg className="w-3 h-3" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Documents
-          </ButtonLink>
-        }
+      <ReaderHeader
+        onBackToDocuments={onBackToDocuments}
         title={currDocName || payload.document.name}
         right={rendererReady ? (
           <div className="flex items-center gap-3">

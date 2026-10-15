@@ -6,8 +6,12 @@ import {
   useEffect,
   useRef,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from 'react';
+import { useRouter } from 'next/navigation';
+import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
+import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { useReaderBootstrap } from '@/hooks/useReaderBootstrap';
 import { useReaderSurfaceAdoption } from '@/hooks/useReaderSurfaceAdoption';
@@ -20,6 +24,7 @@ import type {
 } from '@/types/reader-bootstrap';
 import type { ReaderDocument } from '@/types/documents';
 import type { ReaderType } from '@/types/user-state';
+import { ReaderHeader } from './ReaderHeader';
 import { ReaderError, ReaderLoader, ReaderReplanStatus } from './ReaderLoader';
 
 export type ReaderRendererProps<T extends ReaderType> = {
@@ -28,6 +33,7 @@ export type ReaderRendererProps<T extends ReaderType> = {
   bootstrap: ReturnType<typeof useReaderBootstrap>;
   rendererReady: boolean;
   restartBootstrap: (command: ReaderBootstrapRestart) => void;
+  onBackToDocuments: (event: MouseEvent) => void;
   onReady: () => void;
   onError: (error: Error) => void;
 };
@@ -49,7 +55,10 @@ export function ReaderShell<T extends ReaderType>({
     playbackPlanKey,
     currentSentenceOrdinal,
     playbackSegments,
+    stop,
   } = useTTS();
+  const router = useRouter();
+  const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const {
     disableProgressPersistence,
     enableProgressPersistence,
@@ -167,77 +176,84 @@ export function ReaderShell<T extends ReaderType>({
     advanceRendererAttempt();
   }, [advanceRendererAttempt, disableProgressPersistence]);
 
+  const navigatingBackRef = useRef(false);
+  const backToDocuments = useCallback((event: MouseEvent) => {
+    event.preventDefault();
+    if (navigatingBackRef.current) return;
+    navigatingBackRef.current = true;
+    disableProgressPersistence();
+    stop();
+    router.push('/app');
+  }, [disableProgressPersistence, router, stop]);
+
+  // Until the reader is usable, the shell draws the header, so the way back to
+  // the library works while a document prepares or after it fails.
+  const statusScreen = (status: ReactNode) => (
+    <main className="flex h-dvh flex-col">
+      <ReaderHeader
+        title={result.status === 'ready' ? result.payload.document.name : undefined}
+        right={<DocumentHeaderMenu showAudiobookExport={canExportAudiobook} />}
+        onBackToDocuments={backToDocuments}
+      />
+      <div className="grid min-h-0 flex-1">{status}</div>
+    </main>
+  );
+
   if (result.status === 'pending') {
-    return (
-      <main className="min-h-screen">
-        <ReaderLoader progress={result.progress} />
-      </main>
+    return statusScreen(
+      <ReaderLoader progress={result.progress} />,
     );
   }
 
   if (result.status === 'error') {
-    return (
-      <main className="min-h-screen">
-        <ReaderError
-          error={new Error(result.message)}
-          onRetry={result.retryable ? () => void bootstrap.retry() : undefined}
-        />
-      </main>
+    return statusScreen(
+      <ReaderError
+        error={new Error(result.message)}
+        onRetry={result.retryable ? () => void bootstrap.retry() : undefined}
+      />,
     );
   }
 
   if (result.payload.readerType !== readerType) {
-    return (
-      <main className="min-h-screen">
-        <ReaderError
-          error={new Error(`Expected a ${readerType.toUpperCase()} document, received ${result.payload.readerType}.`)}
-        />
-      </main>
+    return statusScreen(
+      <ReaderError
+        error={new Error(`Expected a ${readerType.toUpperCase()} document, received ${result.payload.readerType}.`)}
+      />,
     );
   }
 
   if (bootstrap.documentSource.status === 'error') {
-    return (
-      <main className="min-h-screen">
-        <ReaderError
-          error={bootstrap.documentSource.error}
-          onRetry={() => void bootstrap.retryDocumentSource()}
-        />
-      </main>
+    return statusScreen(
+      <ReaderError
+        error={bootstrap.documentSource.error}
+        onRetry={() => void bootstrap.retryDocumentSource()}
+      />,
     );
   }
 
   if (bootstrap.documentSource.status !== 'ready') {
-    return (
-      <main className="min-h-screen">
-        <ReaderLoader />
-      </main>
+    return statusScreen(
+      <ReaderLoader />,
     );
   }
 
   if (!sourceDocument) {
-    return (
-      <main className="min-h-screen">
-        <ReaderError
-          error={new Error(`Expected ${readerType.toUpperCase()} source data, received ${bootstrap.documentSource.document.type}.`)}
-        />
-      </main>
+    return statusScreen(
+      <ReaderError
+        error={new Error(`Expected ${readerType.toUpperCase()} source data, received ${bootstrap.documentSource.document.type}.`)}
+      />,
     );
   }
 
   if (initializationError) {
-    return (
-      <main className="min-h-screen">
-        <ReaderError error={initializationError} onRetry={retryRenderer} />
-      </main>
+    return statusScreen(
+      <ReaderError error={initializationError} onRetry={retryRenderer} />,
     );
   }
 
   if (!payload || adoption.adoptedAttemptKey !== attemptKey) {
-    return (
-      <main className="min-h-screen">
-        <ReaderLoader />
-      </main>
+    return statusScreen(
+      <ReaderLoader />,
     );
   }
 
@@ -260,16 +276,17 @@ export function ReaderShell<T extends ReaderType>({
             bootstrap,
             rendererReady,
             restartBootstrap,
+            onBackToDocuments: backToDocuments,
             onReady: handleReady,
             onError: handleError,
           })}
         </Fragment>
       </div>
       {!rendererReady || rendererError ? (
-        <div className="fixed inset-0 z-50 min-h-screen">
-          {rendererError
+        <div className="fixed inset-0 z-50">
+          {statusScreen(rendererError
             ? <ReaderError error={rendererError} onRetry={retryRenderer} />
-            : <ReaderLoader />}
+            : <ReaderLoader />)}
         </div>
       ) : null}
     </>

@@ -1,6 +1,6 @@
 # Stage 1: extract seaweedfs weed binary (for optional embedded weed mini)
-# Keep in step with desktop/runtime-binaries.json. Bootstrap carries a 4.18 data
-# directory's encryption key forward on its first start (see embedded-seaweedfs.mjs).
+# Keep in step with desktop/runtime-binaries.json. Bootstrap keeps an upgraded data
+# directory on the encryption key it already had (see embedded-seaweedfs.mjs).
 FROM chrislusf/seaweedfs:4.48 AS seaweedfs-builder
 RUN cp "$(command -v weed)" /tmp/weed && \
     (wget -qO /tmp/SeaweedFS-LICENSE.txt "https://raw.githubusercontent.com/seaweedfs/seaweedfs/master/LICENSE" || \

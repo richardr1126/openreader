@@ -4,7 +4,7 @@ import { variants } from './variants';
 import { motionColors } from './tokens';
 
 export const toolbarButtonStyles = variants({
-  base: cn('inline-flex items-center rounded-md border px-2 py-1 text-xs', motionColors),
+  base: cn('inline-flex items-center rounded-md border px-2 py-1 text-xs disabled:pointer-events-none disabled:opacity-50', motionColors),
   variants: {
     active: {
       true: 'border-accent-line bg-surface-sunken text-accent',

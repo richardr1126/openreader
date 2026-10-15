@@ -125,3 +125,22 @@ test('a PDF can be read as flowing text and tapped to seek', async ({ page }) =>
     .toContainText('This is chapter one text');
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
 });
+
+test('a reader that cannot prepare keeps the way back to the library', async ({ page }) => {
+  test.setTimeout(45_000);
+  await enterAnonymousLibrary(page);
+  await uploadLibraryFiles(page, resolve('tests/files/sample.md'));
+  await page.route('**/api/documents/*/reader-bootstrap', (route) => route.fulfill({
+    status: 500,
+    contentType: 'application/json',
+    body: JSON.stringify({ error: 'We encountered an internal error, please try again.' }),
+  }));
+
+  await page.getByRole('link', { name: 'sample.md', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'This document is not ready yet' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open settings', exact: true })).toBeDisabled();
+
+  await page.getByRole('link', { name: 'Back to documents', exact: true }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(page.getByRole('link', { name: 'sample.md', exact: true })).toBeVisible();
+});

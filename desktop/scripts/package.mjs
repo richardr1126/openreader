@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import builder from 'electron-builder';
+import { sourceTreeId } from './source-tree.mjs';
 
 const { Arch, Platform, build } = builder;
 
@@ -17,6 +18,16 @@ const { version } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json
 
 if (!fs.existsSync(path.join(desktopDir, 'stage', 'runtime', 'app', 'server.js'))) {
   console.error('[package] desktop/stage/runtime is missing: run `pnpm stage` first.');
+  process.exit(1);
+}
+// The runtime carries the bootstrap and worker as they were when staged, so a
+// package must not pair this shell with older source.
+const stagedTree = fs.existsSync(path.join(desktopDir, 'stage', 'source-tree'))
+  ? fs.readFileSync(path.join(desktopDir, 'stage', 'source-tree'), 'utf8').trim()
+  : null;
+const currentTree = sourceTreeId(repoRoot);
+if (currentTree && stagedTree !== currentTree) {
+  console.error('[package] desktop/stage/runtime was staged from different source: run `pnpm build` and `pnpm stage` again.');
   process.exit(1);
 }
 

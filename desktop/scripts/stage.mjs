@@ -26,10 +26,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { downloadVerified, extractArchive } from '../../packaging/download.mjs';
+import { sourceTreeId } from './source-tree.mjs';
 
 const desktopDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(desktopDir, '..');
 const runtimeDir = path.join(desktopDir, 'stage', 'runtime');
+const sourceStampFile = path.join(desktopDir, 'stage', 'source-tree');
 const target = `${process.platform}-${process.arch}`;
 const exe = (name) => (process.platform === 'win32' ? `${name}.exe` : name);
 const pins = JSON.parse(fs.readFileSync(path.join(desktopDir, 'runtime-binaries.json'), 'utf8'));
@@ -172,7 +174,9 @@ async function main() {
   const { ffmpegDir } = parseArgs(process.argv.slice(2));
   console.log(`[stage] ${target}, Node.js ${process.version}`);
   fs.rmSync(runtimeDir, { recursive: true, force: true });
+  fs.rmSync(sourceStampFile, { force: true });
   fs.mkdirSync(runtimeDir, { recursive: true });
+  const sourceTree = sourceTreeId(repoRoot);
 
   await stageNode();
   stageApp();
@@ -181,6 +185,7 @@ async function main() {
   await stageBinary('nats', 'nats-server');
   await stageBinary('weed', 'weed');
   stageFfmpeg(ffmpegDir);
+  if (sourceTree) fs.writeFileSync(sourceStampFile, `${sourceTree}\n`);
 
   for (const part of fs.readdirSync(runtimeDir)) {
     console.log(`[stage] ${part.padEnd(24)} ${(directorySize(path.join(runtimeDir, part)) / 1e6).toFixed(1)} MB`);

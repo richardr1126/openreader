@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
@@ -195,53 +196,83 @@ export function readWeedMiniOptions(dir) {
   return options;
 }
 
-// OpenReader stores every object with SSE-S3. SeaweedFS before 4.26 keeps that
-// key (the KEK) only on the filer, at /etc/s3/sse_kek. Since seaweedfs#9524,
-// weed mini creates a random key in this file on its first start, never looks
-// at the filer's, and then refuses to decrypt anything the old key wrapped.
+// OpenReader stores every object with SSE-S3. SeaweedFS keeps the key that
+// wraps each object key (the KEK) on the filer at /etc/s3/sse_kek. Since
+// seaweedfs#9524 (4.26), weed mini also writes a random KEK to .mini_sse_kek on
+// its first start and refuses to serve SSE-S3 when the two differ. A data
+// directory from an older weed already has a filer KEK, so its objects become
+// unreadable. Mini leaves the filer's key in place (wrapped with
+// .mini_kek_passphrase), so it can still be read back and made the one in
+// .mini_sse_kek.
 const WEED_MINI_KEK_FILE = '.mini_sse_kek';
+const WEED_MINI_KEK_PASSPHRASE_FILE = '.mini_kek_passphrase';
 const FILER_KEK_PATH = '/etc/s3/sse_kek';
+const WRAPPED_KEK_MAGIC = Buffer.from('SWv2');
+const WRAPPED_KEK_SALT_BYTES = 32;
+const WRAPPED_KEK_NONCE_BYTES = 12;
+const GCM_TAG_BYTES = 16;
+const HEX_KEK = /^[0-9a-f]{64}$/i;
 
-/**
- * Whether this data directory was last run by a weed mini that kept its SSE-S3
- * key only on the filer, so that key has to be carried into `.mini_sse_kek`
- * before a newer weed mini starts S3 here. An operator-supplied key wins.
- */
-export function needsWeedMiniKekAdoption(dir, env = {}) {
-  if (env.WEED_S3_SSE_KEK || env.WEED_S3_SSE_KEY) return false;
-  return fs.existsSync(path.join(dir, 'mini.options'))
-    && !fs.existsSync(path.join(dir, WEED_MINI_KEK_FILE));
+function readTrimmed(file) {
+  try {
+    return fs.readFileSync(file, 'utf8').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** Unwraps a KEK that weed stored as base64(`SWv2` || salt || nonce || ciphertext+tag). */
+export function unwrapWeedFilerKek(wrapped, passphrase) {
+  const raw = Buffer.from(wrapped, 'base64');
+  const header = WRAPPED_KEK_MAGIC.length + WRAPPED_KEK_SALT_BYTES;
+  if (raw.length <= header + WRAPPED_KEK_NONCE_BYTES + GCM_TAG_BYTES
+    || !raw.subarray(0, WRAPPED_KEK_MAGIC.length).equals(WRAPPED_KEK_MAGIC)) {
+    throw new Error('the filer key is in an unknown format');
+  }
+  const salt = raw.subarray(WRAPPED_KEK_MAGIC.length, header);
+  const nonce = raw.subarray(header, header + WRAPPED_KEK_NONCE_BYTES);
+  const sealed = raw.subarray(header + WRAPPED_KEK_NONCE_BYTES);
+  const key = Buffer.from(crypto.hkdfSync('sha256', Buffer.from(passphrase), salt, Buffer.from('kek-wrapping'), 32));
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, nonce);
+  decipher.setAuthTag(sealed.subarray(sealed.length - GCM_TAG_BYTES));
+  return Buffer.concat([
+    decipher.update(sealed.subarray(0, sealed.length - GCM_TAG_BYTES)),
+    decipher.final(),
+  ]).toString('hex');
 }
 
 /**
- * Copies the filer's SSE-S3 key into `.mini_sse_kek`, read from a weed mini
- * the caller started with S3 off (S3 startup would rewrap the key and lock out
- * the data). Without a filer key nothing was ever encrypted, so mini's own key
- * is kept.
+ * Makes `.mini_sse_kek` hold the KEK the filer already has, read from the
+ * running filer. Returns true when the file changed, in which case weed must be
+ * restarted to load it. An operator-supplied key or passphrase is left alone.
  *
  * @param {string} dir
  * @param {string} filerUrl
- * @param {{ waitTimeout?: number, fetchImpl?: typeof fetch }} [options]
- * @returns {Promise<boolean>} whether a filer key was adopted
+ * @param {Record<string, string | undefined>} [env]
+ * @param {typeof fetch} [fetchImpl]
+ * @returns {Promise<boolean>}
  */
-export async function adoptWeedMiniFilerKek(dir, filerUrl, { waitTimeout = 20, fetchImpl = fetch } = {}) {
+export async function reconcileWeedMiniKek(dir, filerUrl, env = {}, fetchImpl = fetch) {
+  if (env.WEED_S3_SSE_KEK || env.WEED_S3_SSE_KEY || env.WEED_S3_SSE_KEK_PASSPHRASE) return false;
   const keyFile = path.join(dir, WEED_MINI_KEK_FILE);
+  const current = readTrimmed(keyFile);
+  if (!current) return false;
+
   try {
-    await waitForEndpoint(filerUrl, waitTimeout, 'Embedded SeaweedFS filer', fetchImpl);
     const response = await fetchImpl(`${filerUrl}${FILER_KEK_PATH}`);
     if (response.status === 404) return false;
     if (!response.ok) throw new Error(`the filer answered ${response.status}`);
-    const kek = (await response.text()).trim();
-    if (!/^[0-9a-f]{64}$/i.test(kek)) throw new Error('the filer key is not a plaintext 32-byte hex key');
-    fs.writeFileSync(keyFile, kek, { mode: 0o600 });
+    const stored = (await response.text()).trim();
+    const filerKek = HEX_KEK.test(stored)
+      ? stored
+      : unwrapWeedFilerKek(stored, readTrimmed(path.join(dir, WEED_MINI_KEK_PASSPHRASE_FILE)));
+    if (filerKek.toLowerCase() === current.toLowerCase()) return false;
+    fs.writeFileSync(keyFile, filerKek, { mode: 0o600 });
     fs.chmodSync(keyFile, 0o600);
     return true;
   } catch (error) {
-    // Mini wrote a random key while it ran; left in place it would hide the
-    // filer's key from the next start.
-    fs.rmSync(keyFile, { force: true });
     throw new Error(
-      `Could not carry the SeaweedFS encryption key from ${FILER_KEK_PATH} into ${keyFile}: `
+      `Could not check the SeaweedFS encryption key in ${keyFile} against ${FILER_KEK_PATH}: `
       + `${error instanceof Error ? error.message : String(error)}. No stored data was changed.`,
     );
   }

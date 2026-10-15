@@ -157,8 +157,11 @@ since 1.24, so `stage` stops there. Desktop and Docker bundle SeaweedFS 4.48.
 It must stay at 4.25 or later: older `weed mini` routes its internal gRPC
 through `/tmp` Unix sockets, which do not exist on Windows (seaweedfs#9430).
 Newer `weed mini` keeps its SSE-S3 key in `.mini_sse_kek` and ignores the key
-4.18 stored on the filer, so bootstrap copies that key across once, from a
-filer-only start, before S3 first runs on an upgraded data directory.
+an older version stored on the filer, so an upgraded data directory's objects
+would stop decrypting. After weed starts, bootstrap reads the filer's key
+(unwrapping it with `.mini_kek_passphrase` when weed has wrapped it), writes it
+to `.mini_sse_kek` when the two differ, and restarts weed once. This also
+repairs a directory a newer weed already opened without that step.
 
 ## CI
 

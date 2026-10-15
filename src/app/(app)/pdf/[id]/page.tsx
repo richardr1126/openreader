@@ -1,14 +1,14 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
 import { ZoomControl } from '@/components/documents/ZoomControl';
-import { Header } from '@/components/Header';
+import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -18,7 +18,6 @@ import {
   ReaderShell,
   type ReaderRendererProps,
 } from '@/components/reader/ReaderShell';
-import { ButtonLink } from '@/components/ui';
 import {
   FORCE_REPARSE_CONFIRM_MESSAGE,
   FORCE_REPARSE_CONFIRM_TEXT,
@@ -60,13 +59,12 @@ function PdfReader({
   bootstrap,
   rendererReady,
   restartBootstrap,
+  onBackToDocuments,
   onReady,
   onError,
 }: ReaderRendererProps<'pdf'>) {
   const canExportAudiobook = useFeatureFlag('enableAudiobookExport');
   const routeDocumentId = payload.documentId;
-  const router = useRouter();
-  const { disableProgressPersistence } = bootstrap;
   const pdfState = usePdfDocument(
     sourceDocument,
     payload.settings,
@@ -87,7 +85,6 @@ function PdfReader({
   const { readerShowsLayout } = useConfig();
   const outline = usePdfOutline(pdfDocument);
   const {
-    stop,
     skipToLocation,
     setPdfSkipBlockKinds,
   } = useTTS();
@@ -100,7 +97,6 @@ function PdfReader({
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
-  const [isNavigatingBack, setIsNavigatingBack] = useState(false);
   useEffect(() => {
     setPdfSkipBlockKinds(documentSettings.pdf?.skipBlockKinds ?? []);
   }, [documentSettings.pdf?.skipBlockKinds, setPdfSkipBlockKinds]);
@@ -136,16 +132,6 @@ function PdfReader({
 
   const sidePaddingPx = Math.round(maxPadPx * ((100 - padPct) / 100));
 
-  const handleBackToDocuments = useCallback((event?: MouseEvent) => {
-    event?.preventDefault();
-    if (isNavigatingBack) return;
-    setIsNavigatingBack(true);
-    disableProgressPersistence();
-    stop();
-    setActiveSidebar(null);
-    router.push('/app');
-  }, [disableProgressPersistence, isNavigatingBack, stop, router]);
-
   const requestForceReparse = useCallback(() => {
     setShowForceReparseConfirm(true);
   }, []);
@@ -170,15 +156,8 @@ function PdfReader({
 
   return (
     <>
-      <Header
-        left={
-          <ButtonLink href="/app" onClick={handleBackToDocuments} variant="secondary" size="sm" className="gap-2" aria-label="Back to documents">
-            <svg className="w-3 h-3" fill="currentColor" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Documents
-          </ButtonLink>
-        }
+      <ReaderHeader
+        onBackToDocuments={onBackToDocuments}
         title={currDocName || payload.document.name}
         right={
           <div className="flex items-center gap-2">
