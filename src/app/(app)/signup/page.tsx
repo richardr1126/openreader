@@ -274,6 +274,7 @@ export default function SignUpPage() {
                         {key === 'lowercase' && 'Lowercase letter'}
                         {key === 'number' && 'Number'}
                         {key === 'special' && 'Special character'}
+                        <span className="sr-only">{passed ? ' (met)' : ' (not met)'}</span>
                       </span>
                     </div>
                   ))}

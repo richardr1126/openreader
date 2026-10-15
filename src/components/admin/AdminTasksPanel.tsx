@@ -242,7 +242,8 @@ function TaskRow({
       <div className="ml-10 flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 text-xs text-soft">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="inline-flex items-center gap-1" title={`Ran in ${formatDuration(task.lastDurationMs)}`}>
-            <ClockIcon className="size-3 text-faint" />
+            <ClockIcon className="size-3 text-faint" aria-hidden />
+            <span className="sr-only">Last run </span>
             {formatRelative(task.lastRunAt)}
           </span>
           {task.enabled && (schedulerMode === 'vercel-cron' || task.nextRunAt != null) && (

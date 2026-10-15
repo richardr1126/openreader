@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, type MutableRefObject } from 'react';
+import toast from 'react-hot-toast';
 
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { AppConfigValues } from '@/types/config';
@@ -132,10 +133,19 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         voiceSpeed: pick(change.nativeSpeed, matching?.voiceSpeed, defaultVoiceSpeed),
       },
     });
+    const previous = readerSettings;
     void restartAfterConfigUpdate(
       () => setReaderSettings(next),
       async () => {
-        await putDocumentSettings(documentId, next);
+        // A failed save rolls back here instead of throwing, so the restart
+        // still reacquires the plan and clears processing.
+        try {
+          await putDocumentSettings(documentId, next);
+        } catch (error) {
+          console.error('Could not save book voice:', error);
+          setReaderSettings(previous);
+          toast.error('Could not save this book\'s voice');
+        }
       },
       { resetPlan: true },
     );
