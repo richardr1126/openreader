@@ -501,14 +501,17 @@ export function AdminProvidersPanel() {
             </div>
           ))
         )}
-        <button
-          type="button"
-          onClick={startCreate}
-          className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2.5 text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
-        >
-          <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
-          Add provider
-        </button>
+        {/* Shown once the list settles, so it never moves under the pointer. */}
+        {isLoading ? null : (
+          <button
+            type="button"
+            onClick={startCreate}
+            className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2.5 text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+          >
+            <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+            Add provider
+          </button>
+        )}
       </div>
 
       <ModalFrame open={editingId !== null} onClose={cancelEdit} size="lg">
