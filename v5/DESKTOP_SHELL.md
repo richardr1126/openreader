@@ -166,9 +166,6 @@ the admin owner, `/app` loads without a redirect, the runtime runs until
 stopped, and the token never reaches the log. It needs no TTS provider and does
 not open a window.
 
-Staging fetches the pinned ffmpeg, so the workflow cannot pass until
-`packaging/ffmpeg/manifest.json` has SHAs.
-
 ## Building
 
 ```bash
@@ -180,9 +177,9 @@ pnpm --dir desktop start
 pnpm --dir desktop package
 ```
 
-`stage` fetches the pinned ffmpeg. Until `packaging/ffmpeg/manifest.json` has
-SHAs, pass `--ffmpeg-dir <dir>` with a local build laid out like `fetch.mjs`
-output.
+`stage` fetches the pinned ffmpeg and checks it against the SHA-256 values in
+`packaging/ffmpeg/manifest.json`. To use a local build instead, pass
+`--ffmpeg-dir <dir>` laid out like `fetch.mjs` output.
 
 ## Not done yet
 
