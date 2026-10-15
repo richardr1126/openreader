@@ -137,6 +137,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       });
       const cacheEpoch = await readCurrentCacheEpoch();
       const completedOrdinals = new Set<number>();
+      const alignedOrdinals = new Set<number>();
       const erroredOrdinals = new Set<number>();
       const plannedOrdinals = new Set(plannedSegments.map((segment) => segment.ordinal));
       const verificationStartedAt = Date.now();
@@ -232,6 +233,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           completedCount: completedOrdinals.size,
           skippedCount: erroredOrdinals.size,
           plannedCount: plannedSegments.length,
+          alignedCount: alignedOrdinals.size,
           phase: modelDownload ? 'downloading_model' : 'generating',
           ...modelDownload,
           ...(usageLimited ? { stopReason: 'usage_limit' as const } : {}),
@@ -297,6 +299,10 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
         await emitProgress();
       };
+      const onSegmentAligned = async (planOrdinal: number): Promise<void> => {
+        alignedOrdinals.add(planOrdinal);
+        await emitProgress();
+      };
       const generationFloor = generationFloorForCursor(isContinuationRun ? sessionCursorOrdinal : startOrdinal);
       const requiredPlaybackOrdinal = isContinuationRun ? sessionCursorOrdinal : startOrdinal;
       const generationSegments = forceDocumentExtent
@@ -332,6 +338,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           onBeforeSegment,
           onSynthesisSettled: persistSatisfiedWindowIfCurrent,
           onSegmentCompleted,
+          onSegmentAligned,
           onSegmentErrored: async (planOrdinal) => {
             erroredOrdinals.add(planOrdinal);
             await emitProgress();

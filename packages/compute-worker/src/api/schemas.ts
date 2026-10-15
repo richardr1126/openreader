@@ -363,6 +363,7 @@ export const ttsPlaybackProgressSchema = z.object({
   completedCount: z.number(),
   skippedCount: z.number().optional(),
   plannedCount: z.number(),
+  alignedCount: z.number().optional(),
   phase: z.enum(['downloading_model', 'generating', 'checking_cache']).optional(),
   stopReason: z.literal('usage_limit').optional(),
   downloadedBytes: z.number().optional(),

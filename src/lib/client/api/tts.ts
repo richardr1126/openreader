@@ -241,6 +241,7 @@ export type TtsPlaybackEventSnapshot = {
   completedCount: number | null;
   skippedCount: number | null;
   plannedCount: number | null;
+  alignedCount: number | null;
   phase: 'downloading_model' | 'generating' | 'checking_cache' | null;
   stopReason: 'usage_limit' | null;
   downloadedBytes: number | null;
@@ -291,6 +292,7 @@ export function parseTtsPlaybackSnapshotFrame(data: string): TtsPlaybackEventSna
     completedCount: finiteOrNull(progress?.completedCount),
     skippedCount: finiteOrNull(progress?.skippedCount),
     plannedCount: finiteOrNull(progress?.plannedCount),
+    alignedCount: finiteOrNull(progress?.alignedCount),
     phase: phase === 'downloading_model' || phase === 'generating' || phase === 'checking_cache' ? phase : null,
     stopReason: progress?.stopReason === 'usage_limit' ? 'usage_limit' : null,
     downloadedBytes: finiteOrNull(progress?.downloadedBytes),

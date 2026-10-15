@@ -165,6 +165,8 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
   onSynthesisSettled?: () => Promise<void>;
   onSegmentCompleted?: (planOrdinal: number) => Promise<void>;
+  /** Exact word timing was persisted for an already completed segment. */
+  onSegmentAligned?: (planOrdinal: number) => Promise<void>;
   onSegmentErrored?: (planOrdinal: number) => Promise<void>;
   onUsageDenied?: () => Promise<void>;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
@@ -403,7 +405,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }).catch(() => undefined);
       // Emit another snapshot so a live client replaces provisional timing
       // without waiting for a new playback session.
-      await input.onSegmentCompleted?.(planOrdinal);
+      await input.onSegmentAligned?.(planOrdinal);
     });
   };
 

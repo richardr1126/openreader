@@ -12,6 +12,7 @@ function snapshot(overrides: Partial<TtsPlaybackEventSnapshot>): TtsPlaybackEven
     completedCount: 4,
     skippedCount: 0,
     plannedCount: 40,
+    alignedCount: 0,
     phase: 'downloading_model',
     stopReason: null,
     downloadedBytes: 50 * MB,

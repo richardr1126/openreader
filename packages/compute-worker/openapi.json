@@ -1106,6 +1106,9 @@
                   "plannedCount": {
                     "type": "number"
                   },
+                  "alignedCount": {
+                    "type": "number"
+                  },
                   "phase": {
                     "type": "string",
                     "enum": [
@@ -1666,6 +1669,9 @@
                         "type": "number"
                       },
                       "plannedCount": {
+                        "type": "number"
+                      },
+                      "alignedCount": {
                         "type": "number"
                       },
                       "phase": {
@@ -2253,6 +2259,9 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "alignedCount": {
                             "type": "number"
                           },
                           "phase": {
@@ -2944,6 +2953,9 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "alignedCount": {
                             "type": "number"
                           },
                           "phase": {
@@ -3639,6 +3651,9 @@
                           "plannedCount": {
                             "type": "number"
                           },
+                          "alignedCount": {
+                            "type": "number"
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
@@ -4310,6 +4325,9 @@
                           "plannedCount": {
                             "type": "number"
                           },
+                          "alignedCount": {
+                            "type": "number"
+                          },
                           "phase": {
                             "type": "string",
                             "enum": [
@@ -4968,6 +4986,9 @@
                             "type": "number"
                           },
                           "plannedCount": {
+                            "type": "number"
+                          },
+                          "alignedCount": {
                             "type": "number"
                           },
                           "phase": {
@@ -6119,6 +6140,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -6332,6 +6356,9 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
                               "type": "number"
                             },
                             "phase": {
@@ -8513,6 +8540,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -9170,6 +9200,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -9823,6 +9856,9 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
                               "type": "number"
                             },
                             "phase": {
@@ -10578,6 +10614,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -11285,6 +11324,9 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
                               "type": "number"
                             },
                             "phase": {
@@ -12135,6 +12177,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -12864,6 +12909,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -13512,6 +13560,9 @@
                             "plannedCount": {
                               "type": "number"
                             },
+                            "alignedCount": {
+                              "type": "number"
+                            },
                             "phase": {
                               "type": "string",
                               "enum": [
@@ -14148,6 +14199,9 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "alignedCount": {
                                       "type": "number"
                                     },
                                     "phase": {
@@ -14821,6 +14875,9 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
                               "type": "number"
                             },
                             "phase": {
@@ -15557,6 +15614,9 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
                               "type": "number"
                             },
                             "phase": {
@@ -16327,6 +16387,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -16987,6 +17050,9 @@
                                       "type": "number"
                                     },
                                     "plannedCount": {
+                                      "type": "number"
+                                    },
+                                    "alignedCount": {
                                       "type": "number"
                                     },
                                     "phase": {
@@ -17778,6 +17844,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -18548,6 +18617,9 @@
                                     "plannedCount": {
                                       "type": "number"
                                     },
+                                    "alignedCount": {
+                                      "type": "number"
+                                    },
                                     "phase": {
                                       "type": "string",
                                       "enum": [
@@ -19157,6 +19229,9 @@
                               "type": "number"
                             },
                             "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
                               "type": "number"
                             },
                             "phase": {

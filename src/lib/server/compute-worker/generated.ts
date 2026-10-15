@@ -408,6 +408,7 @@ export interface paths {
                                     completedCount: number;
                                     skippedCount?: number;
                                     plannedCount: number;
+                                    alignedCount?: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating" | "checking_cache";
                                     /** @enum {string} */
@@ -452,6 +453,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -1645,6 +1647,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -1827,6 +1830,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -2006,6 +2010,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -2209,6 +2214,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -2402,6 +2408,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -2709,6 +2716,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -2906,6 +2914,7 @@ export interface paths {
                                     completedCount: number;
                                     skippedCount?: number;
                                     plannedCount: number;
+                                    alignedCount?: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating" | "checking_cache";
                                     /** @enum {string} */
@@ -3086,6 +3095,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -3262,6 +3272,7 @@ export interface paths {
                                     completedCount: number;
                                     skippedCount?: number;
                                     plannedCount: number;
+                                    alignedCount?: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating" | "checking_cache";
                                     /** @enum {string} */
@@ -3479,6 +3490,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -3718,6 +3730,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -3928,6 +3941,7 @@ export interface paths {
                                     completedCount: number;
                                     skippedCount?: number;
                                     plannedCount: number;
+                                    alignedCount?: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating" | "checking_cache";
                                     /** @enum {string} */
@@ -4108,6 +4122,7 @@ export interface paths {
                                     completedCount: number;
                                     skippedCount?: number;
                                     plannedCount: number;
+                                    alignedCount?: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating" | "checking_cache";
                                     /** @enum {string} */
@@ -4315,6 +4330,7 @@ export interface paths {
                                     completedCount: number;
                                     skippedCount?: number;
                                     plannedCount: number;
+                                    alignedCount?: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating" | "checking_cache";
                                     /** @enum {string} */
@@ -4516,6 +4532,7 @@ export interface paths {
                                     completedCount: number;
                                     skippedCount?: number;
                                     plannedCount: number;
+                                    alignedCount?: number;
                                     /** @enum {string} */
                                     phase?: "downloading_model" | "generating" | "checking_cache";
                                     /** @enum {string} */
@@ -4684,6 +4701,7 @@ export interface paths {
                                 completedCount: number;
                                 skippedCount?: number;
                                 plannedCount: number;
+                                alignedCount?: number;
                                 /** @enum {string} */
                                 phase?: "downloading_model" | "generating" | "checking_cache";
                                 /** @enum {string} */
@@ -5083,6 +5101,7 @@ export interface components {
                 completedCount: number;
                 skippedCount?: number;
                 plannedCount: number;
+                alignedCount?: number;
                 /** @enum {string} */
                 phase?: "downloading_model" | "generating" | "checking_cache";
                 /** @enum {string} */
@@ -5205,6 +5224,7 @@ export interface components {
                     completedCount: number;
                     skippedCount?: number;
                     plannedCount: number;
+                    alignedCount?: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating" | "checking_cache";
                     /** @enum {string} */
@@ -5330,6 +5350,7 @@ export interface components {
                     completedCount: number;
                     skippedCount?: number;
                     plannedCount: number;
+                    alignedCount?: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating" | "checking_cache";
                     /** @enum {string} */
@@ -5481,6 +5502,7 @@ export interface components {
                     completedCount: number;
                     skippedCount?: number;
                     plannedCount: number;
+                    alignedCount?: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating" | "checking_cache";
                     /** @enum {string} */
@@ -5627,6 +5649,7 @@ export interface components {
                     completedCount: number;
                     skippedCount?: number;
                     plannedCount: number;
+                    alignedCount?: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating" | "checking_cache";
                     /** @enum {string} */
@@ -5769,6 +5792,7 @@ export interface components {
                     completedCount: number;
                     skippedCount?: number;
                     plannedCount: number;
+                    alignedCount?: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating" | "checking_cache";
                     /** @enum {string} */
@@ -5910,6 +5934,7 @@ export interface components {
                     completedCount: number;
                     skippedCount?: number;
                     plannedCount: number;
+                    alignedCount?: number;
                     /** @enum {string} */
                     phase?: "downloading_model" | "generating" | "checking_cache";
                     /** @enum {string} */

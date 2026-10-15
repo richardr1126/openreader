@@ -202,6 +202,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           snapshot.completedThroughOrdinal ?? '',
           snapshot.completedCount ?? '',
           snapshot.plannedCount ?? '',
+          snapshot.alignedCount ?? '',
           snapshot.stopReason ?? '',
         ].join(':');
         if (refreshSnapshotKey === lastRefreshSnapshotKey) return;

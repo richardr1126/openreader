@@ -350,6 +350,8 @@ export interface TtsPlaybackProgress {
   /** Terminal error sidecars intentionally omitted from playback/export audio. */
   skippedCount?: number;
   plannedCount: number;
+  /** Segments whose exact word timing landed after their audio completed. */
+  alignedCount?: number;
   phase?: 'downloading_model' | 'generating' | 'checking_cache';
   stopReason?: 'usage_limit';
   downloadedBytes?: number;

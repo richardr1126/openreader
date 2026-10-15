@@ -112,6 +112,7 @@ describe('playback audio-first segment generation', () => {
     let sidecar: TtsPlaybackSegmentMetadata | null = null;
     const writes: TtsPlaybackSegmentMetadata[] = [];
     const onSegmentCompleted = vi.fn(async () => undefined);
+    const onSegmentAligned = vi.fn(async () => undefined);
     const onSynthesisSettled = vi.fn(async () => undefined);
     const playbackStorage = {
       artifacts: {
@@ -162,6 +163,7 @@ describe('playback audio-first segment generation', () => {
       synthesisTimeoutMs: 30_000,
       onSynthesisSettled,
       onSegmentCompleted,
+      onSegmentAligned,
     }).finally(() => {
       finished = true;
     });
@@ -189,7 +191,8 @@ describe('playback audio-first segment generation', () => {
     });
     await run;
 
-    expect(onSegmentCompleted).toHaveBeenCalledTimes(2);
+    expect(onSegmentCompleted).toHaveBeenCalledTimes(1);
+    expect(onSegmentAligned).toHaveBeenCalledTimes(1);
     expect(writes.at(-1)?.alignment?.words[0]?.text).toBe('Audio');
     expect(writes.at(-1)?.durationMs).toBe(12_000);
   });
@@ -219,6 +222,7 @@ describe('playback audio-first segment generation', () => {
 
     const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
     const onSegmentCompleted = vi.fn(async () => undefined);
+    const onSegmentAligned = vi.fn(async () => undefined);
     const playbackStorage = {
       artifacts: {
         readSegmentMetadata: vi.fn(async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null),
@@ -273,6 +277,7 @@ describe('playback audio-first segment generation', () => {
       playbackStorage,
       synthesisTimeoutMs: 30_000,
       onSegmentCompleted,
+      onSegmentAligned,
     });
 
     await vi.waitFor(() => {
@@ -288,7 +293,8 @@ describe('playback audio-first segment generation', () => {
     await run;
 
     expect(sidecars.get(1)?.status).toBe('completed');
-    expect(onSegmentCompleted).toHaveBeenCalledTimes(4);
+    expect(onSegmentCompleted).toHaveBeenCalledTimes(2);
+    expect(onSegmentAligned).toHaveBeenCalledTimes(2);
   });
 
   test('pipelines three ordered provider requests and starts the next as capacity frees', async () => {
