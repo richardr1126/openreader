@@ -4,6 +4,7 @@
   "private": true,
   "description": "OpenReader desktop app: the slim runtime in an Electron shell",
   "author": "Richard R <me@richardr.dev>",
+  "homepage": "https://github.com/richardr1126/openreader",
   "license": "MIT",
   "type": "module",
   "main": "src/main.mjs",

@@ -32,7 +32,8 @@ const externalNpmPackages = {
   name: 'external-npm-packages',
   setup(pluginBuild) {
     pluginBuild.onResolve({ filter: /^[^./]/ }, (args) => {
-      if (isBuiltin(args.path) || args.path.startsWith('@openreader/')) return undefined;
+      // A Windows absolute path (the D:\ entry point) also starts with a letter.
+      if (path.isAbsolute(args.path) || isBuiltin(args.path) || args.path.startsWith('@openreader/')) return undefined;
       externalImports.push({ importer: args.importer, name: packageName(args.path) });
       return { path: args.path, external: true };
     });
