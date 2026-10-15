@@ -30,6 +30,7 @@ import { queryKeys } from '@/lib/client/query-keys';
 import type { ProviderCheckItem, ProviderCheckStatus } from '@/lib/shared/provider-check';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { computeLocationPhrase } from '@/lib/shared/install-profile';
 import { LocalVoicesCard } from './LocalVoicesCard';
 
 type ProviderType = TtsProviderId;
@@ -54,13 +55,8 @@ const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'deepinfra', label: 'Deepinfra' },
   { value: 'replicate', label: 'Replicate' },
   { value: 'speech-sdk', label: 'Speech SDK' },
-  { value: 'kokoro-local', label: 'Kokoro (on the compute worker)' },
+  { value: 'kokoro-local', label: 'Kokoro' },
 ];
-
-/** On desktop the compute worker is this machine. */
-const DESKTOP_PROVIDER_TYPE_OPTIONS = PROVIDER_TYPE_OPTIONS.map((option) => (
-  option.value === 'kokoro-local' ? { ...option, label: 'Kokoro (on this device)' } : option
-));
 
 interface FormState {
   slug: string;
@@ -215,8 +211,12 @@ async function deleteAdminProvider(id: string): Promise<void> {
 }
 
 export function AdminProvidersPanel() {
-  const onDevice = useRuntimeConfig().installProfile === 'desktop';
-  const providerTypeOptions = onDevice ? DESKTOP_PROVIDER_TYPE_OPTIONS : PROVIDER_TYPE_OPTIONS;
+  const { installProfile, computeLocation } = useRuntimeConfig();
+  const where = computeLocationPhrase(computeLocation);
+  // Kokoro runs wherever the compute worker does.
+  const providerTypeOptions = useMemo(() => PROVIDER_TYPE_OPTIONS.map((option) => (
+    option.value === 'kokoro-local' ? { ...option, label: `Kokoro (${where})` } : option
+  )), [where]);
   const { data: session } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
   const adminProvidersQueryKey = queryKeys.admin(sessionId, 'providers');
@@ -444,7 +444,7 @@ export function AdminProvidersPanel() {
 
   return (
     <div className="space-y-3">
-      {(onDevice || providers.some((p) => p.providerType === 'kokoro-local')) && <LocalVoicesCard />}
+      {(installProfile === 'desktop' || providers.some((p) => p.providerType === 'kokoro-local')) && <LocalVoicesCard />}
       <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid">
         {isLoading ? (
           <ProvidersListSkeleton />
@@ -460,7 +460,7 @@ export function AdminProvidersPanel() {
                   {!p.enabled && <Badge tone="muted">Disabled</Badge>}
                 </div>
                 <div className="mt-0.5 truncate font-mono text-[11px] text-soft" title={p.defaultModel ?? undefined}>
-                  {p.slug} · {p.defaultModel ? truncateModelLabel(p.defaultModel) : 'no default model'}
+                  {p.slug} · {truncateModelLabel(p.defaultModel ?? defaultModelForProviderType(p.providerType))}
                   {p.baseUrl ? ` · ${baseUrlHost(p.baseUrl)}` : ''}
                 </div>
               </div>
@@ -634,9 +634,7 @@ export function AdminProvidersPanel() {
             )}
             {form.providerType === 'kokoro-local' ? (
               <p className="text-sm text-muted sm:col-span-2">
-                {onDevice
-                  ? 'Runs Kokoro-82M on this device. No key is needed; OpenReader downloads about 336 MB of model, voice and pronunciation data the first time it speaks.'
-                  : 'Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 336 MB of model, voice and pronunciation data the first time it speaks.'}
+                {`Runs Kokoro-82M ${where}. No key is needed; about 336 MB of model, voice and pronunciation data downloads the first time it speaks.`}
               </p>
             ) : (
               <Field label="API key" className="sm:col-span-2">

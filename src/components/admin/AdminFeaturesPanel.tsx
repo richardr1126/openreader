@@ -225,7 +225,7 @@ export function AdminFeaturesPanel({
 
   if (!data) {
     return (
-      <AdminFeaturesSkeleton />
+      <AdminFeaturesSkeleton multiUser={multiUser} />
     );
   }
 
@@ -297,8 +297,8 @@ export function AdminFeaturesPanel({
         />
       </Section> : null}
 
-      {showInstanceSettings ? <Section title="Site features" variant="group">
-        <SettingRow
+      {showInstanceSettings ? <Section title={multiUser ? 'Site features' : 'Features'} variant="group">
+        {multiUser ? <SettingRow
           label="Changelog feed URL"
           description="Public URL used by the standalone changelog page."
           meta={renderSource('changelogFeedUrl')}
@@ -311,7 +311,7 @@ export function AdminFeaturesPanel({
             onChange={(event) => updateDraft('changelogFeedUrl', event.target.value)}
             placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
           />
-        </SettingRow>
+        </SettingRow> : null}
         {multiUser ? <>
         <SettingRow
           label="New account sign-ups"
@@ -433,10 +433,10 @@ export function AdminFeaturesPanel({
   );
 }
 
-function AdminFeaturesSkeleton() {
+function AdminFeaturesSkeleton({ multiUser }: { multiUser: boolean }) {
   return (
     <div className="space-y-5 animate-pulse" aria-label="Loading feature settings" aria-busy="true">
-      {['TTS defaults', 'Site features'].map((title) => (
+      {['TTS defaults', multiUser ? 'Site features' : 'Features'].map((title) => (
         <Section key={title} title={title} variant="group">
           {[0, 1, 2].map((row) => (
             <div key={row} className="flex items-center justify-between gap-3">

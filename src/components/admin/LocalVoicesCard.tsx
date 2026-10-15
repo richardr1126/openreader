@@ -5,6 +5,7 @@ import { Badge, Button } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { formatBytes } from '@/lib/shared/format-bytes';
+import { computeLocationPhrase } from '@/lib/shared/install-profile';
 import { useLocalVoices } from './useLocalVoices';
 
 /**
@@ -13,7 +14,8 @@ import { useLocalVoices } from './useLocalVoices';
  * the download live, and removes it again.
  */
 export function LocalVoicesCard() {
-  const onDevice = useRuntimeConfig().installProfile === 'desktop';
+  const { installProfile, computeLocation } = useRuntimeConfig();
+  const onDevice = installProfile === 'desktop';
   const {
     error,
     isPending,
@@ -33,7 +35,7 @@ export function LocalVoicesCard() {
     setConfirmRemove(false);
     await removeModel();
   };
-  const where = onDevice ? 'on this device' : 'on the compute worker';
+  const where = computeLocationPhrase(computeLocation);
 
   let state: string;
   if (isPending) state = 'Checking…';

@@ -88,7 +88,7 @@ const SPEECH_SDK_MODELS: TtsModelDefinition[] = [
  * first use. One model, so no custom-model entry.
  */
 export const KOKORO_LOCAL_MODEL = 'kokoro-82m' as const;
-const KOKORO_LOCAL_MODELS: TtsModelDefinition[] = [{ id: KOKORO_LOCAL_MODEL, name: 'Kokoro-82M (on worker)' }];
+const KOKORO_LOCAL_MODELS: TtsModelDefinition[] = [{ id: KOKORO_LOCAL_MODEL, name: 'Kokoro-82M' }];
 
 const DEEPINFRA_API_VOICE_MODELS = new Set([
   'ResembleAI/chatterbox',
