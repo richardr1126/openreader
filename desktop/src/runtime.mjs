@@ -22,6 +22,15 @@ const INHERITED_ENV = [
   'SystemRoot', 'windir', 'ComSpec', 'PATHEXT', 'LANG', 'LC_ALL', 'TZ',
 ];
 
+// A voice provider from the first launch: Kokoro on this device, which becomes
+// the default as the only enabled provider. The seed inserts it only when its
+// slug is absent, so a deleted provider returns on the next launch; disabling
+// it is the way to turn it off.
+export const RUNTIME_SEED = JSON.stringify({
+  version: 1,
+  providers: [{ slug: 'kokoro', displayName: 'Kokoro', providerType: 'kokoro-local' }],
+});
+
 function exe(name) {
   return process.platform === 'win32' ? `${name}.exe` : name;
 }
@@ -147,6 +156,7 @@ export async function startRuntime({ root, dataDir, logDir, onExit }) {
     // The standalone server runs from the read-only bundle, so point the local
     // library at userData instead of its default beside server.js.
     IMPORT_LIBRARY_DIRS: library,
+    RUNTIME_SEED_JSON: RUNTIME_SEED,
   });
 
   const child = spawn(

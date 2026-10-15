@@ -1,141 +1,39 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { useState } from 'react';
 import { Badge, Button } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import { queryKeys } from '@/lib/client/query-keys';
 import { formatBytes } from '@/lib/shared/format-bytes';
-
-type ComponentProgress = { name: string; totalBytes: number; downloadedBytes: number; state: string };
-type DownloadProgress = { downloadedBytes: number; totalBytes: number; components?: ComponentProgress[] };
-type Operation = {
-  opId: string;
-  status: 'queued' | 'running' | 'succeeded' | 'failed';
-  error?: { message: string };
-  progress?: DownloadProgress;
-};
-type ModelStatus = {
-  components: { name: string; totalBytes: number; installedBytes: number }[];
-  downloading: boolean;
-  operation: Operation | null;
-};
-
-const isActive = (operation: Operation | null | undefined) =>
-  operation?.status === 'queued' || operation?.status === 'running';
-
-async function fetchStatus(): Promise<ModelStatus> {
-  const res = await fetch('/api/admin/local-voices', { cache: 'no-store' });
-  const data = await res.json().catch(() => ({})) as ModelStatus & { error?: string };
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
-
-async function send(method: 'POST' | 'DELETE', path = ''): Promise<{ operation?: Operation }> {
-  const res = await fetch(`/api/admin/local-voices${path}`, { method });
-  if (res.status === 204) return {};
-  const data = await res.json().catch(() => ({})) as { operation?: Operation; error?: string };
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
-}
+import { useLocalVoices } from './useLocalVoices';
 
 /**
  * Kokoro, the voice model the compute worker runs itself (on desktop, this
  * device). It downloads on first use; this card fetches it ahead of time, shows
- * the download live over the operation's SSE stream, and removes it again.
+ * the download live, and removes it again.
  */
 export function LocalVoicesCard() {
   const onDevice = useRuntimeConfig().installProfile === 'desktop';
-  const { data: session } = useAuthSession();
-  const queryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'local-voices');
-  const queryClient = useQueryClient();
-  const { data: status, error, isPending } = useQuery({ queryKey, queryFn: fetchStatus });
-  const [operation, setOperation] = useState<Operation | null>(null);
-  const [busy, setBusy] = useState(false);
+  const {
+    error,
+    isPending,
+    busy,
+    totalBytes,
+    installedBytes,
+    installed,
+    downloading,
+    progress,
+    failure: failed,
+    start,
+    cancel,
+    remove: removeModel,
+  } = useLocalVoices();
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const sourceRef = useRef<EventSource | null>(null);
-
-  const refresh = useCallback(() => queryClient.invalidateQueries({ queryKey }), [queryClient, queryKey]);
-
-  const follow = useCallback((next: Operation) => {
-    setOperation(next);
-    sourceRef.current?.close();
-    sourceRef.current = null;
-    if (!isActive(next)) return;
-    const source = new EventSource(`/api/admin/local-voices/events?opId=${encodeURIComponent(next.opId)}`);
-    sourceRef.current = source;
-    source.addEventListener('snapshot', (event) => {
-      const snapshot = (JSON.parse((event as MessageEvent<string>).data) as { snapshot?: Operation }).snapshot;
-      if (!snapshot) return;
-      setOperation(snapshot);
-      if (isActive(snapshot)) return;
-      source.close();
-      if (sourceRef.current === source) sourceRef.current = null;
-      void refresh();
-    });
-    // EventSource reconnects on its own with Last-Event-ID.
-  }, [refresh]);
-
-  useEffect(() => () => sourceRef.current?.close(), []);
-
-  const start = useCallback(async () => {
-    setBusy(true);
-    try {
-      const { operation: started } = await send('POST');
-      if (started) follow(started);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not start the download');
-    } finally {
-      setBusy(false);
-    }
-  }, [follow]);
-
-  // Pick up a download already under way: the last one this card started, or
-  // one playback started (joining it gives it a progress stream).
-  useEffect(() => {
-    if (!status || sourceRef.current) return;
-    if (isActive(status.operation)) follow(status.operation!);
-    else if (status.downloading) void start();
-    else if (status.operation && !operation) setOperation(status.operation);
-  }, [status, operation, follow, start]);
-
-  const cancel = async () => {
-    setBusy(true);
-    try {
-      await send('POST', '/cancel');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not cancel the download');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const remove = async () => {
     setConfirmRemove(false);
-    setBusy(true);
-    try {
-      await send('DELETE');
-      setOperation(null);
-      toast.success('Kokoro removed');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not remove Kokoro');
-    } finally {
-      setBusy(false);
-      void refresh();
-    }
+    await removeModel();
   };
-
   const where = onDevice ? 'on this device' : 'on the compute worker';
-  const components = status?.components ?? [];
-  const totalBytes = components.reduce((sum, c) => sum + c.totalBytes, 0);
-  const installedBytes = components.reduce((sum, c) => sum + Math.min(c.installedBytes, c.totalBytes), 0);
-  const installed = components.length > 0 && installedBytes === totalBytes;
-  const downloading = isActive(operation);
-  const progress = downloading ? operation?.progress : undefined;
-  const failed = !downloading && !installed && operation?.status === 'failed' ? operation.error?.message : undefined;
 
   let state: string;
   if (isPending) state = 'Checking…';

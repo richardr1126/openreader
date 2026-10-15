@@ -62,7 +62,9 @@ import, so the smoke test runs the shell's own startup and sign-in code.
   LibreOffice's install folder at the end when present (see DOCX below). On top: `AUTH_SECRET`,
   `DESKTOP_LAUNCH_TOKEN`, `BASE_URL`, `HOSTNAME=127.0.0.1`, `PORT`, the embedded
   service ports, `USE_EMBEDDED_WEED_MINI=true`, `FFMPEG_BIN`, `LOG_FORMAT=json`,
-  and `IMPORT_LIBRARY_DIRS`. No new variables.
+  `IMPORT_LIBRARY_DIRS`, and `RUNTIME_SEED_JSON` with one provider, `kokoro`
+  (`kokoro-local`), so a fresh install has a voice (see "Local voices" in
+  `v5/DESKTOP_SINGLE_OWNER.md`). No new variables.
 - **Ports.** The app, worker, NATS, NATS monitor and SeaweedFS S3 ports are
   chosen free on 127.0.0.1 at each launch.
 - **Data.** The working directory and `PWD` are the userData directory, so the

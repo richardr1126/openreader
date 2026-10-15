@@ -2,8 +2,8 @@
 
 Status: web-app side implemented 2026-10-14 (see "Implementation status" at the
 end). The Electron shell is a prototype (`v5/DESKTOP_SHELL.md`), with the preload
-bridge, menu and file associations. The Local voices card is implemented; its
-voice picker and the first-run banner are not.
+bridge, menu and file associations. Local voices (the card, the desktop seed and
+the first-run banner) are implemented.
 
 ## Decision
 
@@ -228,8 +228,25 @@ Card: **Kokoro on this device** (server: **Kokoro on the compute worker**).
   `DOCSTORE_DIR/model/kokoro-82m`. With several replicas the card describes and
   changes only the replica that answers; the others download on first use.
 
-Not implemented: a voice picker with preview inside the card, and the desktop
-first-run banner ("Download a voice to start listening") that links to it.
+### Desktop first run
+
+A fresh desktop install must have a voice without an account or key, and must
+not make reading wait on a 336 MB download.
+
+- **Seed.** The shell passes `RUNTIME_SEED_JSON` with one provider, `kokoro`
+  (`kokoro-local`). As the only enabled provider it is the implicit default. The
+  seed inserts a provider only when its slug is absent, so a deleted `kokoro`
+  returns on the next launch; the owner disables it instead. Its voices download
+  on first playback like any `kokoro-local` provider.
+- **Banner.** `LocalVoicesBanner` in the library, desktop and admin only, while
+  Kokoro is not downloaded: *Download voices to start listening*, with
+  **Download** (progress inline, **Cancel**), *Use a voice service instead*
+  (Settings → Providers) and a dismiss that stores `voicesBannerDismissed` in the
+  document-list preferences. It disappears once the download finishes, and the
+  iOS beta strip waits while it shows. It shares `useLocalVoices` with the card,
+  so both follow one operation.
+
+Voice choice stays in the reader's existing voice menu; the card has no picker.
 
 ## Open questions
 
@@ -291,5 +308,7 @@ Prototype: the shell (`desktop/`, `v5/DESKTOP_SHELL.md`).
 - **Local voices.** `LocalVoicesCard` at the top of Admin → Providers (see
   "Local voices" above).
 
-Not implemented: the Voices section's merged layout, the card's voice picker
-and the first-run banner.
+- **First run.** The shell's `kokoro` provider seed and the library's
+  `LocalVoicesBanner` (see "Desktop first run" above).
+
+Not implemented: the Voices section's merged layout.
