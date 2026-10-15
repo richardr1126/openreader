@@ -54,7 +54,9 @@ jobs:
         # desktop stages its own ffmpeg (packaging/ffmpeg) and never uses it.
         if: matrix.os == 'windows-11-arm'
         shell: bash
-        run: sed -i 's/^  ffmpeg-static: true$/  ffmpeg-static: false/' pnpm-workspace.yaml
+        run: |
+          sed -i 's/^  ffmpeg-static: true$/  ffmpeg-static: false/' pnpm-workspace.yaml
+          grep -q '^  ffmpeg-static: false$' pnpm-workspace.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
