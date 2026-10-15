@@ -1,10 +1,12 @@
-export type OnboardingStep = 'privacy' | 'claim' | 'changelog' | 'done';
+export type OnboardingStep = 'privacy' | 'claim' | 'voices' | 'changelog' | 'done';
 
 export type OnboardingStepSnapshot = {
   privacyRequired: boolean;
   privacyAccepted: boolean;
   claimEligible: boolean;
   claimHasData: boolean;
+  /** Desktop with no usable voice yet: Kokoro not downloaded and no voice service. */
+  voicesPending: boolean;
   changelogPending: boolean;
 };
 
@@ -24,6 +26,10 @@ export function resolveNextOnboardingStep(snapshot: OnboardingStepSnapshot): Onb
 
   if (snapshot.claimEligible && snapshot.claimHasData) {
     return 'claim';
+  }
+
+  if (snapshot.voicesPending) {
+    return 'voices';
   }
 
   if (snapshot.changelogPending) {

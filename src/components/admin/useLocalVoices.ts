@@ -42,7 +42,7 @@ async function send(method: 'POST' | 'DELETE', path = ''): Promise<{ operation?:
  * Kokoro, the voice model the compute worker runs itself (on desktop, this
  * device): its installed state, and a download followed live over the
  * operation's SSE stream. Admin only. Shared by the Providers card and the
- * desktop library banner, which may both be mounted; each follows the same
+ * desktop onboarding step, which may both be mounted; each follows the same
  * worker operation.
  */
 export function useLocalVoices({ enabled = true }: { enabled?: boolean } = {}) {

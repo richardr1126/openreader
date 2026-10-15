@@ -81,7 +81,6 @@ export function getAppConfigDefaults(): AppConfigValues {
       sortBy: 'name',
       sortDirection: 'asc',
       iosBannerDismissed: false,
-      voicesBannerDismissed: false,
       viewMode: 'grid',
     },
   };

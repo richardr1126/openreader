@@ -75,7 +75,6 @@ export interface DocumentListState {
   sortBy: SortBy;
   sortDirection: SortDirection;
   iosBannerDismissed?: boolean;
-  voicesBannerDismissed?: boolean;
   viewMode?: ViewMode | 'grid';
   iconSize?: IconSize;
   sidebarWidth?: number;

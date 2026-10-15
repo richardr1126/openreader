@@ -5,15 +5,11 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { CreateFolderDialog } from '@/components/doclist/CreateFolderDialog';
 import { DocumentListSkeleton } from '@/components/doclist/DocumentListSkeleton';
 import { DocumentUploader } from '@/components/documents/DocumentUploader';
-import { useLocalVoices } from '@/components/admin/useLocalVoices';
-import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import { useAuthSession } from '@/hooks/useAuthSession';
 import { UploadMenuDialog } from '@/components/documents/UploadMenuDialog';
 import { QueryError, RefreshIndicator } from '@/components/ui/query-states';
 import { DocumentDndProvider } from './dnd/DocumentDndProvider';
 import { DocumentSelectionProvider } from './dnd/DocumentSelectionContext';
 import { IosBetaBanner } from './IosBetaBanner';
-import { LocalVoicesBanner } from './LocalVoicesBanner';
 import { SelectionActionBar } from './SelectionActionBar';
 import type { DocumentActions } from './document-actions';
 import { SidebarUploadStatus } from './SidebarUploadStatus';
@@ -41,23 +37,12 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
     sortBy,
     sortDirection,
     iosBannerDismissed,
-    voicesBannerDismissed,
     viewMode,
     iconSize,
     sidebarWidth,
     sidebarFilter,
   } = listState;
   const { initialLoading, error: queryError } = documentsQueryState;
-  const listReady = !initialLoading && !queryError && controller.preferencesLoaded;
-
-  // Desktop first run: offer the on-device voices until they are downloaded.
-  const { installProfile } = useRuntimeConfig();
-  const { data: session } = useAuthSession();
-  const isAdmin = Boolean((session?.user as { isAdmin?: boolean } | undefined)?.isAdmin);
-  const offerVoices = installProfile === 'desktop' && isAdmin && controller.preferencesLoaded && !voicesBannerDismissed;
-  const voices = useLocalVoices({ enabled: offerVoices });
-  const showVoicesBanner = offerVoices && listReady && Boolean(voices.status) && !voices.error
-    && (!voices.installed || voices.downloading);
 
   const actions: DocumentActions = {
     folders: model.folders,
@@ -106,17 +91,10 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
         />
       }
       banner={(
-        <>
-          <LocalVoicesBanner
-            show={showVoicesBanner}
-            voices={voices}
-            onDismiss={() => controller.updateListState({ voicesBannerDismissed: true }, true)}
-          />
-          <IosBetaBanner
-            show={listReady && !showVoicesBanner && !iosBannerDismissed}
-            onDismiss={() => controller.updateListState({ iosBannerDismissed: true }, true)}
-          />
-        </>
+        <IosBetaBanner
+          show={!initialLoading && !queryError && controller.preferencesLoaded && !iosBannerDismissed}
+          onDismiss={() => controller.updateListState({ iosBannerDismissed: true }, true)}
+        />
       )}
       sidebar={
         <FinderSidebar

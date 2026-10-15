@@ -19,6 +19,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: false,
       claimEligible: true,
       claimHasData: true,
+      voicesPending: false,
       changelogPending: true,
     });
 
@@ -31,10 +32,24 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: true,
+      voicesPending: false,
       changelogPending: true,
     });
 
     expect(step).toBe('claim');
+  });
+
+  test('resolves voices after claim and before the changelog', () => {
+    const step = resolveNextOnboardingStep({
+      privacyRequired: false,
+      privacyAccepted: true,
+      claimEligible: true,
+      claimHasData: false,
+      voicesPending: true,
+      changelogPending: true,
+    });
+
+    expect(step).toBe('voices');
   });
 
   test('resolves changelog when prior steps are clear', () => {
@@ -43,6 +58,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: false,
+      voicesPending: false,
       changelogPending: true,
     });
 
@@ -55,6 +71,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: false,
+      voicesPending: false,
       changelogPending: false,
     });
     const minimalStep = resolveNextOnboardingStep({
@@ -62,6 +79,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: false,
       claimEligible: false,
       claimHasData: false,
+      voicesPending: false,
       changelogPending: false,
     });
 
