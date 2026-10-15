@@ -10,13 +10,14 @@ import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 import { isGutenbergCatalogEnabled } from '@/lib/server/admin/gutendex-settings';
 import { configuredDesktopLaunchToken } from '@/lib/server/auth/desktop-launch-token';
-import type { InstallProfile } from '@/lib/shared/install-profile';
+import type { ComputeLocation, InstallProfile } from '@/lib/shared/install-profile';
 
 export type ResolvedRuntimeConfig = RuntimeConfig & {
   computeAvailable: boolean;
   accountEmailsEnabled: boolean;
   gutenbergCatalogEnabled: boolean;
   installProfile: InstallProfile;
+  computeLocation: ComputeLocation;
 };
 
 /**
@@ -25,6 +26,12 @@ export type ResolvedRuntimeConfig = RuntimeConfig & {
  */
 export function resolveInstallProfile(): InstallProfile {
   return configuredDesktopLaunchToken() ? 'desktop' : 'server';
+}
+
+/** Vercel sets `VERCEL` itself; there it reaches a hosted worker. */
+export function resolveComputeLocation(profile: InstallProfile = resolveInstallProfile()): ComputeLocation {
+  if (profile === 'desktop') return 'device';
+  return process.env.VERCEL ? 'cloud' : 'server';
 }
 
 export type PublicRuntimeConfig = Omit<ResolvedRuntimeConfig, 'computeLimitPolicies'>;
@@ -60,6 +67,7 @@ export async function getResolvedRuntimeConfig(): Promise<ResolvedRuntimeConfig>
     accountEmailsEnabled,
     gutenbergCatalogEnabled,
     installProfile: resolveInstallProfile(),
+    computeLocation: resolveComputeLocation(),
   };
 }
 

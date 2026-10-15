@@ -15,6 +15,8 @@ import type { PlaybackSessionState } from '@/hooks/audio/usePlaybackProjection';
 import { createCoalescedPlaybackRefresh, createPlaybackOperationSubscription } from '@/lib/client/tts/playback-refresh';
 import type { TtsPlaybackGrid } from '@/lib/client/tts/playback-grid';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { computeLocationPhrase } from '@/lib/shared/install-profile';
 
 type UsePlaybackForegroundSyncInput = {
   audioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -36,6 +38,7 @@ const MODEL_DOWNLOAD_TOAST_ID = 'tts-model-download';
 
 export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput) {
   const { refresh: refreshComputeUsage } = useAuthRateLimit();
+  const modelLocation = computeLocationPhrase(useRuntimeConfig().computeLocation);
   const {
     audioRef,
     playbackCursorOrdinalRef,
@@ -200,7 +203,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           const activePart = snapshot.modelComponents?.find((component) => component.state !== 'ready');
           const label = snapshot.modelComponents
             ? `Downloading the voice model${activePart ? ` (${activePart.name.toLowerCase()})` : ''}…`
-            : 'Preparing word-timing model in the cloud…';
+            : `Preparing word-timing model ${modelLocation}…`;
           toast.loading(percent === null ? label : `${label} ${percent}%`, { id: MODEL_DOWNLOAD_TOAST_ID });
           // Audio is already available without exact word timing. Download-only
           // progress does not change either playback read model, so avoid two
@@ -227,6 +230,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     }, TTS_PLAYBACK_CURSOR_HEARTBEAT_MS);
   }, [
     audioRef,
+    modelLocation,
     playbackCursorOrdinalRef,
     playbackRunIdRef,
     playbackSessionRef,

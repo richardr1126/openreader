@@ -7,6 +7,7 @@ import { Badge, ButtonAnchor, SearchField, Section } from '@/components/ui';
 import { QueryError } from '@/components/ui/query-states';
 import { requestJson } from '@/lib/client/api/http';
 import { queryKeys } from '@/lib/client/query-keys';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import {
   ACKNOWLEDGEMENTS_URL,
   filterAcknowledgements,
@@ -22,6 +23,13 @@ const GROUPS: { kind: AcknowledgementKind; title: string; subtitle: string }[] =
   { kind: 'model', title: 'Models', subtitle: 'Downloaded by the compute worker when first needed.' },
   { kind: 'npm', title: 'Packages', subtitle: 'npm production dependencies of the app, compute worker and startup.' },
 ];
+
+/** The desktop app bundles the programs and runs the worker itself. */
+const DESKTOP_GROUPS = GROUPS.map((group) => (
+  group.kind === 'binary' ? { ...group, subtitle: 'Bundled with the app.' }
+    : group.kind === 'model' ? { ...group, subtitle: 'Downloaded when first needed.' }
+      : group
+));
 
 function ExternalLink({ href, children }: { href: string; children: string }) {
   return (
@@ -103,10 +111,11 @@ function AcknowledgementsSections({ data }: { data: AcknowledgementsData }) {
   const [query, setQuery] = useState('');
   const packages = useMemo(() => data.components.filter((component) => component.kind === 'npm'), [data]);
   const filteredPackages = useMemo(() => filterAcknowledgements(packages, query), [packages, query]);
+  const groups = useRuntimeConfig().installProfile === 'desktop' ? DESKTOP_GROUPS : GROUPS;
 
   return (
     <>
-      {GROUPS.map((group) => {
+      {groups.map((group) => {
         const components = group.kind === 'npm'
           ? filteredPackages
           : data.components.filter((component) => component.kind === group.kind);

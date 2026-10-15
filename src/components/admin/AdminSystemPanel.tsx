@@ -7,6 +7,7 @@ import { Badge, Button, Section, type BadgeTone } from '@/components/ui';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useDesktopBridge } from '@/hooks/useDesktopBridge';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import {
   evaluateBrowserChecks,
   type SystemCheckItem,
@@ -71,6 +72,7 @@ export function AdminSystemPanel() {
   }, [error]);
 
   const openLogsFolder = useDesktopBridge()?.openLogsFolder;
+  const onDevice = useRuntimeConfig().installProfile === 'desktop';
   const problems = data?.filter((item) => item.status !== 'ok').length ?? 0;
 
   return (
@@ -80,7 +82,9 @@ export function AdminSystemPanel() {
       subtitle={
         data
           ? (problems === 0 ? 'Everything checked is working.' : `${problems} item${problems === 1 ? '' : 's'} need attention.`)
-          : 'Checks the worker, storage, providers, and the addresses this browser uses.'
+          : onDevice
+            ? 'Checks the background services, storage, voice sources, and the addresses this window uses.'
+            : 'Checks the worker, storage, providers, and the addresses this browser uses.'
       }
       action={(
         <div className="flex items-center gap-2">

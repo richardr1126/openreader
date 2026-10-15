@@ -45,6 +45,23 @@ describe('installProfile derivation', () => {
   test('is not an admin-editable runtime setting', async () => {
     const { RUNTIME_CONFIG_SCHEMA } = await import('@/lib/server/admin/settings');
     expect(Object.keys(RUNTIME_CONFIG_SCHEMA)).not.toContain('installProfile');
+    expect(Object.keys(RUNTIME_CONFIG_SCHEMA)).not.toContain('computeLocation');
+  });
+});
+
+describe('computeLocation derivation', () => {
+  test('says cloud only on Vercel, this device on desktop, and the server otherwise', async () => {
+    const { resolveComputeLocation } = await import('@/lib/server/runtime-config');
+    const { computeLocationPhrase } = await import('@/lib/shared/install-profile');
+    vi.stubEnv('VERCEL', '');
+    expect(resolveComputeLocation('server')).toBe('server');
+    expect(computeLocationPhrase(resolveComputeLocation('server'))).toBe('on the server');
+    vi.stubEnv('VERCEL', '1');
+    expect(resolveComputeLocation('server')).toBe('cloud');
+    expect(computeLocationPhrase('cloud')).toBe('in the cloud');
+    // The desktop app is never "the cloud", whatever the environment says.
+    expect(resolveComputeLocation('desktop')).toBe('device');
+    expect(computeLocationPhrase('device')).toBe('on this device');
   });
 });
 

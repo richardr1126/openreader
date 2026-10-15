@@ -1,10 +1,13 @@
 'use client';
 
 import { Button } from '@/components/ui';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { computeLocationPhrase } from '@/lib/shared/install-profile';
 import type { ReaderBootstrapProgress } from '@/types/reader-bootstrap';
 import styles from './ReaderLoader.module.css';
 
 export function ReaderLoader({ progress }: { progress?: ReaderBootstrapProgress }) {
+  const { computeLocation } = useRuntimeConfig();
   const totalPages = progress?.totalPages ?? 0;
   const pagesParsed = Math.min(totalPages, Math.max(0, progress?.pagesParsed ?? 0));
   const percent = totalPages > 0 ? Math.round((pagesParsed / totalPages) * 100) : null;
@@ -20,7 +23,7 @@ export function ReaderLoader({ progress }: { progress?: ReaderBootstrapProgress 
       ? 'Understanding document structure'
       : 'Opening document';
   const detail = progress?.phase === 'downloading-model'
-    ? 'Preparing PDF reading order in the cloud'
+    ? `Preparing PDF reading order ${computeLocationPhrase(computeLocation)}`
     : progress
     ? 'Finding the reading order across each page'
     : 'Preparing your reader and saved position';

@@ -188,7 +188,7 @@ async function checkSpeech(
   }
   if (result.status === 429) return item('warn', 'The provider is busy or rate limited. Try again shortly.');
   if (result.status === 504 && draft.providerType === 'kokoro-local') {
-    return item('warn', 'The sample timed out. The worker may still be downloading the Kokoro model; check again in a few minutes.');
+    return item('warn', 'The sample timed out. Kokoro may still be downloading its model; check again in a few minutes.');
   }
   if (result.status === 504) return item('error', 'The speech sample timed out.');
   if (result.status === 503) return item('error', 'The worker could not load this provider\'s credentials.');

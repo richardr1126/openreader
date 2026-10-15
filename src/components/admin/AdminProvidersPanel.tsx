@@ -29,6 +29,7 @@ import {
 import { queryKeys } from '@/lib/client/query-keys';
 import type { ProviderCheckItem, ProviderCheckStatus } from '@/lib/shared/provider-check';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 
 type ProviderType = TtsProviderId;
 
@@ -54,6 +55,11 @@ const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'speech-sdk', label: 'Speech SDK' },
   { value: 'kokoro-local', label: 'Kokoro (on the compute worker)' },
 ];
+
+/** On desktop the compute worker is this machine. */
+const DESKTOP_PROVIDER_TYPE_OPTIONS = PROVIDER_TYPE_OPTIONS.map((option) => (
+  option.value === 'kokoro-local' ? { ...option, label: 'Kokoro (on this device)' } : option
+));
 
 interface FormState {
   slug: string;
@@ -208,6 +214,8 @@ async function deleteAdminProvider(id: string): Promise<void> {
 }
 
 export function AdminProvidersPanel() {
+  const onDevice = useRuntimeConfig().installProfile === 'desktop';
+  const providerTypeOptions = onDevice ? DESKTOP_PROVIDER_TYPE_OPTIONS : PROVIDER_TYPE_OPTIONS;
   const { data: session } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
   const adminProvidersQueryKey = queryKeys.admin(sessionId, 'providers');
@@ -385,8 +393,8 @@ export function AdminProvidersPanel() {
     !form.displayName.trim();
 
   const selectedProviderType =
-    PROVIDER_TYPE_OPTIONS.find((opt) => opt.value === form.providerType)
-    ?? PROVIDER_TYPE_OPTIONS[0];
+    providerTypeOptions.find((opt) => opt.value === form.providerType)
+    ?? providerTypeOptions[0];
   const modelDefinitions: TtsModelDefinition[] = useMemo(
     () => resolveProviderModels(form.providerType, {
       apiKey: form.apiKey,
@@ -525,7 +533,7 @@ export function AdminProvidersPanel() {
             <Field label="Provider type">
               <Select
                 value={selectedProviderType}
-                options={PROVIDER_TYPE_OPTIONS}
+                options={providerTypeOptions}
                 getOptionKey={(option) => option.value}
                 renderValue={(option) => option.label}
                 renderOption={(option, { selected }) => (
@@ -624,8 +632,9 @@ export function AdminProvidersPanel() {
             )}
             {form.providerType === 'kokoro-local' ? (
               <p className="text-sm text-muted sm:col-span-2">
-                Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 353 MB of
-                model, voice and pronunciation data the first time it speaks.
+                {onDevice
+                  ? 'Runs Kokoro-82M on this device. No key is needed; OpenReader downloads about 353 MB of model, voice and pronunciation data the first time it speaks.'
+                  : 'Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 353 MB of model, voice and pronunciation data the first time it speaks.'}
               </p>
             ) : (
               <Field label="API key" className="sm:col-span-2">
