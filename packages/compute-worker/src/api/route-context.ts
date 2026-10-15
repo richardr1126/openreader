@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type {
   AccountExportJobResult,
   EmailDeliveryJobResult,
+  ModelDownloadJobResult,
   DocumentConversionJobResult,
   DocumentPreviewJobResult,
   PdfLayoutJobResult,
@@ -30,7 +31,8 @@ export type WorkerRouteResult =
   | DocumentPreviewJobResult
   | DocumentConversionJobResult
   | AccountExportJobResult
-  | EmailDeliveryJobResult;
+  | EmailDeliveryJobResult
+  | ModelDownloadJobResult;
 
 export interface OperationEventStreamLike {
   subscribe(input: {

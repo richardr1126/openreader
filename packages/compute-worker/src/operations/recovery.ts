@@ -2,6 +2,7 @@ import type {
   PdfLayoutJobResult,
   AccountExportJobResult,
   EmailDeliveryJobResult,
+  ModelDownloadJobResult,
   DocumentPreviewJobResult,
   DocumentConversionJobResult,
   TtsPlaybackExportArtifactResult,
@@ -13,7 +14,7 @@ import type {
 } from '../operations/contracts';
 
 export type StreamedOperationState = WorkerOperationState<
-  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult
+  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult
 >;
 
 export interface OrphanRecoveryStateStore {
@@ -58,6 +59,7 @@ export function getOrphanRecoveryThresholdMs(input: {
       || input.state.kind === 'document_conversion'
       || input.state.kind === 'account_export'
       || input.state.kind === 'email_delivery'
+      || input.state.kind === 'model_download'
       ? input.pdfTimeoutMs
       : input.whisperTimeoutMs;
   }
@@ -67,6 +69,7 @@ export function getOrphanRecoveryThresholdMs(input: {
     || input.state.kind === 'document_conversion'
     || input.state.kind === 'account_export'
     || input.state.kind === 'email_delivery'
+    || input.state.kind === 'model_download'
     ? input.opStaleMs
     : null;
 }

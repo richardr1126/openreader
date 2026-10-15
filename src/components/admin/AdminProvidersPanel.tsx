@@ -30,6 +30,7 @@ import { queryKeys } from '@/lib/client/query-keys';
 import type { ProviderCheckItem, ProviderCheckStatus } from '@/lib/shared/provider-check';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { LocalVoicesCard } from './LocalVoicesCard';
 
 type ProviderType = TtsProviderId;
 
@@ -443,6 +444,7 @@ export function AdminProvidersPanel() {
 
   return (
     <div className="space-y-3">
+      {(onDevice || providers.some((p) => p.providerType === 'kokoro-local')) && <LocalVoicesCard />}
       <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid">
         {isLoading ? (
           <ProvidersListSkeleton />
@@ -633,8 +635,8 @@ export function AdminProvidersPanel() {
             {form.providerType === 'kokoro-local' ? (
               <p className="text-sm text-muted sm:col-span-2">
                 {onDevice
-                  ? 'Runs Kokoro-82M on this device. No key is needed; OpenReader downloads about 353 MB of model, voice and pronunciation data the first time it speaks.'
-                  : 'Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 353 MB of model, voice and pronunciation data the first time it speaks.'}
+                  ? 'Runs Kokoro-82M on this device. No key is needed; OpenReader downloads about 336 MB of model, voice and pronunciation data the first time it speaks.'
+                  : 'Runs Kokoro-82M on the compute worker itself. No key is needed; the worker downloads about 336 MB of model, voice and pronunciation data the first time it speaks.'}
               </p>
             ) : (
               <Field label="API key" className="sm:col-span-2">

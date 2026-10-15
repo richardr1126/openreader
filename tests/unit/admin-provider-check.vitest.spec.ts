@@ -108,7 +108,7 @@ describe('admin provider check', () => {
       synthesizePreview: vi.fn(async () => ({ ok: false as const, status: 504, code: 'UPSTREAM_TIMEOUT', retryAfterMs: null })),
     }), signal);
     expect(downloading.at(-1)).toMatchObject({ id: 'speech', status: 'warn' });
-    expect(downloading.at(-1)?.detail).toMatch(/downloading the Kokoro model/);
+    expect(downloading.at(-1)?.detail).toMatch(/Kokoro may still be downloading its model/);
   });
 
   test('explains a provider rejection from the worker', async () => {

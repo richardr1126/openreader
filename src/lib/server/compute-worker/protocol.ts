@@ -74,6 +74,10 @@ export type AccountExportResolution =
   paths['/v1/account-exports/resolve']['post']['responses'][200]['content']['application/json'];
 export type AccountExportArtifactMetadata =
   NonNullable<AccountExportResolution['artifact']>;
+export type DownloadableModel =
+  paths['/v1/models/{model}']['get']['parameters']['path']['model'];
+export type ModelStatus =
+  paths['/v1/models/{model}']['get']['responses'][200]['content']['application/json'];
 
 export type PdfLayoutResult = {
   parsedObjectKey: string;

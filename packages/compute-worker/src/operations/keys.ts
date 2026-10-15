@@ -4,7 +4,7 @@ import {
   buildTtsPlaybackCanonicalScopeKey,
   buildTtsPlaybackExportArtifactId,
 } from '@openreader/tts/playback-scope';
-import { DOCX_CONVERTER_VERSION, DOCUMENT_PREVIEW_RENDERER_VERSION, PDF_PARSER_VERSION } from './contracts';
+import { DOCX_CONVERTER_VERSION, DOCUMENT_PREVIEW_RENDERER_VERSION, PDF_PARSER_VERSION, type DownloadableModel } from './contracts';
 
 export function buildPdfOperationKey(input: {
   documentId: string;
@@ -113,6 +113,19 @@ export function emailDeliverySubjectFromOperationKey(opKey: string): {
   const [kind, version, deliveryId] = opKey.split('|');
   if (kind !== 'email_delivery' || version !== 'v1' || !deliveryId) return null;
   return { kind: 'email_delivery', deliveryId };
+}
+
+export function buildModelDownloadOperationKey(model: DownloadableModel): string {
+  return ['model_download', 'v1', model].join('|');
+}
+
+export function modelDownloadSubjectFromOperationKey(opKey: string): {
+  kind: 'model_download';
+  model: DownloadableModel;
+} | null {
+  const [kind, version, model] = opKey.split('|');
+  if (kind !== 'model_download' || version !== 'v1' || model !== 'kokoro-82m') return null;
+  return { kind: 'model_download', model };
 }
 
 export function accountExportSubjectFromOperationKey(opKey: string): {

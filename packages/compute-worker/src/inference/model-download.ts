@@ -28,8 +28,10 @@ export async function downloadModelArtifact(input: {
   expectedBytes?: number;
   fetchImpl?: ModelFetch;
   onProgress?: ModelDownloadProgressHandler;
+  /** Stops the transfer; the partial file is left for the caller to remove. */
+  signal?: AbortSignal;
 }): Promise<number> {
-  const response = await (input.fetchImpl ?? fetch)(input.url);
+  const response = await (input.fetchImpl ?? fetch)(input.url, { signal: input.signal });
   if (!response.ok) {
     throw new Error(`Download failed for ${input.url}: ${response.status} ${response.statusText}`);
   }
@@ -51,6 +53,7 @@ export async function downloadModelArtifact(input: {
   try {
     await input.onProgress?.({ downloadedBytes, totalBytes });
     for (;;) {
+      input.signal?.throwIfAborted();
       const { done, value } = await reader.read();
       if (done) break;
       if (!value?.byteLength) continue;

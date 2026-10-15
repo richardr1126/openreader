@@ -5,6 +5,7 @@ import { connect, type ConnectionOptions, type NatsConnection } from '@nats-io/t
 import {
   ACCOUNT_EXPORT_CONSUMER_NAME,
   EMAIL_DELIVERY_CONSUMER_NAME,
+  MODEL_DOWNLOAD_CONSUMER_NAME,
   COMPUTE_STATE_BUCKET,
   COMPUTE_STATE_TTL_MS,
   DOCUMENT_CONVERSION_CONSUMER_NAME,
@@ -39,6 +40,7 @@ export interface NatsSession {
   documentConversionConsumer: Consumer;
   accountExportConsumer: Consumer;
   emailDeliveryConsumer: Consumer;
+  modelDownloadConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -177,6 +179,7 @@ export function createNatsSessionManager(input: {
         documentConversionConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_CONVERSION_CONSUMER_NAME),
         accountExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, ACCOUNT_EXPORT_CONSUMER_NAME),
         emailDeliveryConsumer: await js.consumers.get(JOBS_STREAM_NAME, EMAIL_DELIVERY_CONSUMER_NAME),
+        modelDownloadConsumer: await js.consumers.get(JOBS_STREAM_NAME, MODEL_DOWNLOAD_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

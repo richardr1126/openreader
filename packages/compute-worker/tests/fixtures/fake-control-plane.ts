@@ -1,6 +1,7 @@
 import type {
   AccountExportJobResult,
   EmailDeliveryJobResult,
+  ModelDownloadJobResult,
   DocumentPreviewJobResult,
   DocumentConversionJobResult,
   PdfLayoutJobResult,
@@ -21,7 +22,8 @@ type ComputeResult =
   | DocumentPreviewJobResult
   | DocumentConversionJobResult
   | AccountExportJobResult
-  | EmailDeliveryJobResult;
+  | EmailDeliveryJobResult
+  | ModelDownloadJobResult;
 type ComputeState = WorkerOperationState<ComputeResult>;
 type ComputeEvent = WorkerOperationEvent<ComputeResult>;
 

@@ -208,8 +208,10 @@ describe('server-state architecture', () => {
       .sort();
 
     expect(routes).toEqual([
+      'DELETE /v1/models/:model',
       'GET /health/live',
       'GET /health/ready',
+      'GET /v1/models/:model',
       'GET /v1/operations/:opId',
       'GET /v1/operations/:opId/events',
       'GET /v1/tts-playback/exports/:artifactId',
@@ -225,6 +227,8 @@ describe('server-state architecture', () => {
       'POST /v1/document-previews/jobs',
       'POST /v1/document-previews/resolve',
       'POST /v1/email-deliveries/jobs',
+      'POST /v1/models/:model/cancel',
+      'POST /v1/models/:model/download',
       'POST /v1/pdf-layout/clear',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
@@ -267,6 +271,9 @@ describe('server-state architecture', () => {
       '/api/admin/email/test',
       '/api/admin/email/test/events',
       '/api/admin/gutendex',
+      '/api/admin/local-voices',
+      '/api/admin/local-voices/cancel',
+      '/api/admin/local-voices/events',
       '/api/admin/providers',
       '/api/admin/providers/[id]',
       '/api/admin/providers/check',

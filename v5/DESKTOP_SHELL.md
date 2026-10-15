@@ -206,6 +206,5 @@ output.
   repository (`desktop/stage` or `desktop/dist`) keeps models in
   `desktop/docstore/` (ignored), next to `desktop/pnpm-workspace.yaml`.
   Installed apps are unaffected.
-- **Local voices card** (`v5/DESKTOP_SINGLE_OWNER.md`).
 - **Associations on Linux.** The `.deb` registers the MIME types. The AppImage
   registers nothing unless the user integrates it.

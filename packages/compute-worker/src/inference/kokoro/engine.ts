@@ -21,6 +21,7 @@ import {
   KOKORO_SAMPLE_RATE,
   KOKORO_VOICE_SHA256,
   kokoroAssetPath,
+  removeKokoroAssetFiles,
 } from './model-files';
 import { G2P } from './misaki/g2p';
 import { LetterToSound } from './misaki/letter-to-sound';
@@ -247,6 +248,19 @@ export async function prepareKokoro(onModelDownloadProgress?: ModelDownloadProgr
 }
 
 let queueTail: Promise<unknown> = Promise.resolve();
+
+/**
+ * Unloads the model and deletes its files, between ONNX runs. A request still
+ * mid-segment fails at its next chunk; the next request downloads again.
+ */
+export async function removeKokoro(): Promise<void> {
+  await runExclusive(async () => {
+    await removeKokoroAssetFiles();
+    const loaded = runtime;
+    runtime = null;
+    await loaded?.then((kokoro) => kokoro.session.release(), () => undefined);
+  });
+}
 
 /** One ONNX run at a time; a cancelled waiter leaves the queue at once. */
 function runExclusive<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {

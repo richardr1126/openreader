@@ -13,7 +13,13 @@ import {
   KOKORO_MAX_PHONEMES,
   parseVoiceBlend,
 } from '../../src/inference/kokoro/engine';
-import { ensureKokoroAssetFiles, KOKORO_COMPONENTS, KOKORO_LETTER_TO_SOUND_PATH } from '../../src/inference/kokoro/model-files';
+import {
+  ensureKokoroAssetFiles,
+  KOKORO_COMPONENTS,
+  KOKORO_LETTER_TO_SOUND_PATH,
+  kokoroAssetStatus,
+  removeKokoroAssetFiles,
+} from '../../src/inference/kokoro/model-files';
 import { createToken } from '../../src/inference/kokoro/misaki/token';
 
 const cleanupDirs: string[] = [];
@@ -157,6 +163,34 @@ describe('local Kokoro model files', () => {
     expect(progress.at(-1)?.components?.[0]?.state).toBe('failed');
     await expect(stat(path.join(dir, 'weights.onnx'))).rejects.toThrow();
     await expect(stat(path.join(dir, 'weights.onnx.tmp'))).rejects.toThrow();
+  });
+
+  test('stops a cancelled download and leaves no partial file', async () => {
+    const dir = await modelDir();
+    const components = [{ name: 'Model weights' as const, files: [file('weights.onnx', 'x'.repeat(200_000))] }];
+    const controller = new AbortController();
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => new Response(new ReadableStream({
+      pull(stream) {
+        if (init?.signal?.aborted) return;
+        stream.enqueue(new Uint8Array(65_536));
+        controller.abort();
+      },
+    })));
+
+    await expect(ensureKokoroAssetFiles({ modelDir: dir, components, fetchImpl, signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    await expect(stat(path.join(dir, 'weights.onnx.tmp'))).rejects.toThrow();
+    await expect(stat(path.join(dir, 'weights.onnx'))).rejects.toThrow();
+  });
+
+  test('reports installed sizes and removes the model folder', async () => {
+    const dir = await modelDir();
+    const before = await kokoroAssetStatus(dir);
+    expect(before.map((component) => component.installedBytes)).toEqual([0, 0, 0]);
+    expect(before.every((component) => component.totalBytes > 0)).toBe(true);
+
+    await removeKokoroAssetFiles(dir);
+    await expect(stat(dir)).rejects.toThrow();
   });
 
   test('ships the letter-to-sound rules with the worker', async () => {

@@ -4,6 +4,8 @@ import type {
   AccountExportProgress,
   EmailDeliveryJobRequest,
   EmailDeliveryJobResult,
+  ModelDownloadJobRequest,
+  ModelDownloadJobResult,
   DocumentConversionJobRequest,
   DocumentConversionJobResult,
   DocumentConversionProgress,
@@ -30,6 +32,8 @@ import { createTtsPlaybackExportHandler } from './playback/export-job';
 import { createTtsPlaybackHandler } from './playback/playback-job';
 import { createTtsPlaybackPlanHandler } from './playback/plan-job';
 import { deliverEmail } from './email-delivery';
+import { runModelDownload } from './model-download';
+import type { ModelDownloadProgress } from '../inference/model-download';
 
 export interface JobHandlers {
   runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> }): Promise<PdfLayoutJobResult>;
@@ -40,6 +44,7 @@ export interface JobHandlers {
   runDocumentConversion(payload: DocumentConversionJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: DocumentConversionProgress) => Promise<void> }): Promise<DocumentConversionJobResult>;
   runAccountExport(payload: AccountExportJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: AccountExportProgress) => Promise<void> }): Promise<AccountExportJobResult>;
   runEmailDelivery?(payload: EmailDeliveryJobRequest): Promise<EmailDeliveryJobResult>;
+  runModelDownload?(payload: ModelDownloadJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: ModelDownloadProgress) => Promise<void> }): Promise<ModelDownloadJobResult>;
 }
 
 export function createJobHandlers(input: JobHandlerContext): JobHandlers {
@@ -52,5 +57,6 @@ export function createJobHandlers(input: JobHandlerContext): JobHandlers {
     runDocumentConversion: createDocumentConversionHandler(input),
     runAccountExport: createAccountExportHandler(input),
     runEmailDelivery: deliverEmail,
+    runModelDownload,
   };
 }

@@ -25,6 +25,7 @@ describe('worker job composition', () => {
       'runDocumentConversion',
       'runAccountExport',
       'runEmailDelivery',
+      'runModelDownload',
     ]);
     expect(Object.values(handlers).every((handler) => typeof handler === 'function')).toBe(true);
   });

@@ -2,7 +2,8 @@
 
 Status: web-app side implemented 2026-10-14 (see "Implementation status" at the
 end). The Electron shell is a prototype (`v5/DESKTOP_SHELL.md`), with the preload
-bridge, menu and file associations; the Local voices card is not implemented.
+bridge, menu and file associations. The Local voices card is implemented; its
+voice picker and the first-run banner are not.
 
 ## Decision
 
@@ -199,26 +200,36 @@ offers no way in. That is intended.
 
 ## Local voices (model download UX)
 
-Shared by both profiles. On server it lives in Admin → Providers; on desktop it
-is the top of Voices.
+Shared by both profiles. It is the top of Admin → Providers (on desktop, the
+Voices group), shown on desktop always and on a server once a `kokoro-local`
+provider exists.
 
-Card: **Kokoro — on this device**
+Card: **Kokoro on this device** (server: **Kokoro on the compute worker**).
 
-- State line: *Not installed*, *Downloading 41% (128 of 310 MB)*, *Verifying*,
-  *Ready*, *Failed: checksum mismatch — Retry*, or *Update available*.
-- Components listed with size and status: model weights, voice pack, English
-  pronunciation data.
-- Primary action: **Download** (shows the total size before starting), then
-  **Cancel** while running, then **Remove** with the reclaimable size.
-- Voice picker with a preview button, enabled when every component is verified.
-- Progress comes from the worker's existing model-download progress path and
-  arrives over existing SSE. No new polling loop.
-- Desktop first run: if no voice source is ready, the library shows one
-  dismissible banner, "Download a voice to start listening (about N MB)", which
-  links to this card.
+- State line: *Not downloaded · about 336 MB*, *Downloading · 128 MB of 336.4 MB*,
+  *Partly downloaded*, *Downloaded · 336 MB* (with a Ready badge), or the failure
+  reason (a cancel reads *The Kokoro download was canceled.*).
+- Components listed with progress while downloading: Model weights, Voice pack,
+  English pronunciation data. Each file is checked against a pinned size and
+  SHA-256 before it is renamed into place.
+- Actions: **Download** (or **Resume download**), **Cancel** while running, then
+  **Remove** behind a confirmation that names the reclaimable size.
+- The download is a `model_download` worker operation (`jobs.model_download`,
+  one consumer loop, outside compute limits). It joins the download playback
+  would start, so the two never fetch twice; opening the card while playback
+  downloads joins that download to show its progress.
+- Progress arrives over the operation's SSE stream
+  (`/api/admin/local-voices/events`, proxied like every other operation), at
+  most every 8 MB or second. No polling loop.
+- Routes: `GET/POST/DELETE /api/admin/local-voices` and `POST …/cancel`, admin
+  only, over the worker's `/v1/models/kokoro-82m` routes. Removing refuses (409)
+  while a download runs.
+- Each compute worker replica keeps its own copy under
+  `DOCSTORE_DIR/model/kokoro-82m`. With several replicas the card describes and
+  changes only the replica that answers; the others download on first use.
 
-Sizes above are placeholders until the in-worker Kokoro provider spike reports
-measured values.
+Not implemented: a voice picker with preview inside the card, and the desktop
+first-run banner ("Download a voice to start listening") that links to it.
 
 ## Open questions
 
@@ -277,4 +288,8 @@ Prototype: the shell (`desktop/`, `v5/DESKTOP_SHELL.md`).
   documents the shell opens (menu, file associations) through `uploadDocuments`.
   The shell side is in `v5/DESKTOP_SHELL.md`.
 
-Not implemented: the Voices section and the Local voices card.
+- **Local voices.** `LocalVoicesCard` at the top of Admin → Providers (see
+  "Local voices" above).
+
+Not implemented: the Voices section's merged layout, the card's voice picker
+and the first-run banner.

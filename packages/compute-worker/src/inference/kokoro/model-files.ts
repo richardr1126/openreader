@@ -19,7 +19,7 @@
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, rename, stat, unlink } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
 import { resolveWorkerPath } from '../../worker-paths';
@@ -160,6 +160,7 @@ export async function ensureKokoroAssetFiles(options: {
   components?: readonly KokoroComponent[];
   fetchImpl?: ModelFetch;
   onProgress?: ModelDownloadProgressHandler;
+  signal?: AbortSignal;
 } = {}): Promise<void> {
   const modelDir = options.modelDir ?? KOKORO_MODEL_DIR;
   const components = options.components ?? KOKORO_COMPONENTS;
@@ -209,10 +210,14 @@ export async function ensureKokoroAssetFiles(options: {
           outPath: tmp,
           expectedBytes: file.size,
           fetchImpl: options.fetchImpl,
+          signal: options.signal,
           onProgress: async ({ downloadedBytes }) => {
             state.downloadedBytes = before + Math.min(file.size, downloadedBytes);
             await report();
           },
+        }).catch(async (error: unknown) => {
+          await unlink(tmp).catch(() => undefined);
+          throw error;
         });
         state.state = 'verifying';
         await report();
@@ -234,22 +239,80 @@ export async function ensureKokoroAssetFiles(options: {
 }
 
 let ready: Promise<void> | null = null;
+let download: AbortController | null = null;
 const listeners = new Set<ModelDownloadProgressHandler>();
 
 /** Shared by every caller: one download, progress fanned out to all waiting. */
 export async function ensureKokoroAssets(onProgress?: ModelDownloadProgressHandler): Promise<void> {
   if (onProgress) listeners.add(onProgress);
   try {
-    ready ??= ensureKokoroAssetFiles({
-      onProgress: async (progress) => {
-        await Promise.all([...listeners].map((listener) => listener(progress)));
-      },
-    }).catch((error: unknown) => {
-      ready = null;
-      throw error;
-    });
+    if (!ready) {
+      const controller = new AbortController();
+      download = controller;
+      ready = ensureKokoroAssetFiles({
+        signal: controller.signal,
+        onProgress: async (progress) => {
+          await Promise.all([...listeners].map((listener) => listener(progress)));
+        },
+      }).catch((error: unknown) => {
+        ready = null;
+        throw error;
+      }).finally(() => {
+        if (download === controller) download = null;
+      });
+    }
     await ready;
   } finally {
     if (onProgress) listeners.delete(onProgress);
+  }
+}
+
+/** Stops the download in progress in this process, failing everyone waiting on it. */
+export function cancelKokoroDownload(): boolean {
+  if (!download) return false;
+  download.abort(new Error('The Kokoro download was canceled.'));
+  return true;
+}
+
+export function isKokoroDownloading(): boolean {
+  return download !== null;
+}
+
+export interface KokoroComponentStatus {
+  name: KokoroComponent['name'];
+  totalBytes: number;
+  installedBytes: number;
+}
+
+/**
+ * What is on disk, by size alone: hashing 330 MB on every look would be slow,
+ * and a file only reaches its final path after its checksum matched.
+ */
+export async function kokoroAssetStatus(modelDir = KOKORO_MODEL_DIR): Promise<KokoroComponentStatus[]> {
+  return Promise.all(KOKORO_COMPONENTS.map(async (component) => {
+    let installedBytes = 0;
+    for (const file of component.files) {
+      const info = await stat(kokoroAssetPath(file.path, modelDir)).catch(() => null);
+      if (info?.size === file.size) installedBytes += file.size;
+    }
+    return {
+      name: component.name,
+      totalBytes: component.files.reduce((sum, file) => sum + file.size, 0),
+      installedBytes,
+    };
+  }));
+}
+
+/** Deletes the downloaded files. The caller makes sure nothing is reading them. */
+export async function removeKokoroAssetFiles(modelDir = KOKORO_MODEL_DIR): Promise<void> {
+  if (download) throw new KokoroDownloadInProgressError();
+  ready = null;
+  await rm(modelDir, { recursive: true, force: true });
+}
+
+export class KokoroDownloadInProgressError extends Error {
+  constructor() {
+    super('Kokoro is downloading. Cancel the download before removing it.');
+    this.name = 'KokoroDownloadInProgressError';
   }
 }
