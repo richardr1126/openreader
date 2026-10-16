@@ -1,6 +1,6 @@
 {
   "name": "openreader-desktop",
-  "productName": "OpenReader",
+  "productName": "OpenReader Desktop",
   "private": true,
   "description": "OpenReader desktop app: the slim runtime in an Electron shell",
   "author": "Richard R <me@richardr.dev>",

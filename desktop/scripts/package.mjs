@@ -15,6 +15,7 @@ const { Arch, Platform, build } = builder;
 const desktopDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(desktopDir, '..');
 const { version } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+const { productName } = JSON.parse(fs.readFileSync(path.join(desktopDir, 'package.json'), 'utf8'));
 
 if (!fs.existsSync(path.join(desktopDir, 'stage', 'runtime', 'app', 'server.js'))) {
   console.error('[package] desktop/stage/runtime is missing: run `pnpm stage` first.');
@@ -33,12 +34,12 @@ if (currentTree && stagedTree !== currentTree) {
 
 const config = {
   appId: 'dev.richardr.openreader',
-  productName: 'OpenReader',
+  productName,
   copyright: 'Copyright © Richard R',
   extraMetadata: { version },
   directories: { output: 'dist' },
   // One name shape for every platform, so a release holds each arch side by side.
-  artifactName: 'OpenReader-${version}-${arch}.${ext}',
+  artifactName: 'OpenReader-Desktop-${version}-${arch}.${ext}',
   files: ['src/**/*', 'package.json'],
   // The runtime runs as separate Node.js processes, so it stays outside the asar.
   extraResources: [{ from: 'stage/runtime', to: 'runtime' }],

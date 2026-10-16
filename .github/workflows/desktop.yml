@@ -116,7 +116,8 @@ jobs:
           pnpm --dir desktop package
           # electron-builder stops on a failed notarization or staple; this checks
           # Gatekeeper's verdict on the result without another ticket lookup.
-          app=$(echo desktop/dist/mac*/OpenReader.app)
+          apps=(desktop/dist/mac*/"OpenReader Desktop.app")
+          app="${apps[0]}"
           spctl --assess --type execute -vv "$app" 2>&1 | tee "$RUNNER_TEMP/spctl.txt"
           grep -q 'source=Notarized Developer ID' "$RUNNER_TEMP/spctl.txt"
       - uses: actions/upload-artifact@v7

@@ -13,6 +13,11 @@ supervisor, the embedded worker, nats-server, SeaweedFS and SQLite. There is no
 Docker and no separate install step. The shell adds no server code: it starts
 the runtime, signs the owner in, and shows one window.
 
+Its installed name is **OpenReader Desktop**, distinct from the OpenReader iOS
+app available on macOS. The bundle identifier stays `dev.richardr.openreader`,
+and the shell pins its userData directory to `<appData>/OpenReader` so the
+rename preserves existing libraries, secrets and browser sessions.
+
 `desktop/` is its own pnpm project (like `docs-site/`), outside the root
 workspace, so Electron and electron-builder never enter the app's dependency
 graph or lockfile.
@@ -170,7 +175,7 @@ repairs a directory a newer weed already opened without that step.
 published. Each of macos-15, windows-2025, windows-11-arm, ubuntu-24.04 and
 ubuntu-24.04-arm builds the app with Node.js 24.21.0, stages, runs
 `pnpm --dir desktop smoke`, packages and uploads the installers for seven days.
-Installers are named `OpenReader-<version>-<arch>.<ext>` on every platform.
+Installers are named `OpenReader-Desktop-<version>-<arch>.<ext>` on every platform.
 
 Pull requests package unsigned. A published release builds its tag, which must
 be `v` plus the root package version. Its macOS job runs in the `Release`

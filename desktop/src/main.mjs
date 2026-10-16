@@ -4,6 +4,7 @@
 // browser. The preload bridge (preload.cjs) is the page's only way into the
 // shell, and every bridge call must come from the app's own origin.
 
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell } from 'electron';
@@ -12,6 +13,12 @@ import { DOCUMENT_EXTENSIONS, DocumentInbox, documentPathsInArgv } from './open-
 import { exchangeLaunchToken, startRuntime } from './runtime.mjs';
 
 const srcDir = path.dirname(fileURLToPath(import.meta.url));
+
+// Keep existing libraries, secrets and browser sessions when the product name
+// changes. Electron otherwise derives userData from the new product name.
+const dataDir = path.join(app.getPath('appData'), 'OpenReader');
+mkdirSync(dataDir, { recursive: true });
+app.setPath('userData', dataDir);
 
 let runtime = null;
 let mainWindow = null;
@@ -58,7 +65,7 @@ async function chooseDocuments() {
 
 function openDocuments(paths) {
   inbox.open(paths).catch((error) => {
-    dialog.showErrorBox('OpenReader could not open the document.', error instanceof Error ? error.message : String(error));
+    dialog.showErrorBox('OpenReader Desktop could not open the document.', error instanceof Error ? error.message : String(error));
   });
 }
 
@@ -126,7 +133,7 @@ let reauthenticating = null;
 function reauthenticate() {
   reauthenticating ??= signInOwner()
     .then(() => mainWindow?.loadURL(`${runtime.baseUrl}/app`))
-    .catch((error) => fail('OpenReader could not sign in.', error))
+    .catch((error) => fail('OpenReader Desktop could not sign in.', error))
     .finally(() => {
       reauthenticating = null;
     });
@@ -178,7 +185,7 @@ function createWindow() {
     minWidth: 480,
     minHeight: 480,
     show: false,
-    title: 'OpenReader',
+    title: app.getName(),
     backgroundColor: dark ? '#141413' : '#f8f8f6',
     titleBarStyle: 'hidden',
     titleBarOverlay: titleBarOverlay(dark ? '#141413' : '#f8f8f6', dark ? '#ececea' : '#1c1c1a'),
@@ -218,12 +225,12 @@ async function launch() {
       dataDir: app.getPath('userData'),
       logDir: app.getPath('logs'),
       onExit: ({ code, signal, logFile }) => {
-        fail('OpenReader stopped unexpectedly.', Object.assign(new Error(`Exit code ${code ?? signal}.`), { logFile }));
+        fail('OpenReader Desktop stopped unexpectedly.', Object.assign(new Error(`Exit code ${code ?? signal}.`), { logFile }));
       },
     });
     await signInOwner();
   } catch (error) {
-    fail('OpenReader could not start.', error);
+    fail('OpenReader Desktop could not start.', error);
     return;
   }
   if (mainWindow) await mainWindow.loadURL(`${runtime.baseUrl}/app`);
