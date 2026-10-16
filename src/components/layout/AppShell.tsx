@@ -4,6 +4,7 @@ import { cn } from '@/components/ui/cn';
 export function AppShell({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cn('app-shell h-dvh flex flex-col bg-background overflow-hidden', className)}>
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       {children}
     </div>
   );

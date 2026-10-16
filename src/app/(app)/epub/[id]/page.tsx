@@ -174,6 +174,8 @@ function EpubReader({
         />
         {epubState.currDocData && containerHeight !== null ? (
           <div
+            id="main-content"
+            tabIndex={-1}
             className={rendererReady ? 'min-h-0 w-full flex-1' : 'min-h-0 w-full flex-1 opacity-0 pointer-events-none'}
             aria-hidden={!rendererReady}
             style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}

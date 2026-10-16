@@ -5,8 +5,8 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useCallback, useEffect, useState } from 'react';
 import { PopoverRoot, PopoverSurface, PopoverTrigger, RangeInput } from '@/components/ui';
 
-const MIN_SPEED = 0.5;
-const MAX_SPEED = 3;
+export const MIN_SPEED = 0.5;
+export const MAX_SPEED = 3;
 
 function formatSpeed(speed: number): string {
   return `${Number(speed.toFixed(2))}x`;

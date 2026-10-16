@@ -165,14 +165,14 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
             </div>
           </nav>
 
-          <main className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+          <section id="main-content" tabIndex={-1} aria-label={currentSection?.label ?? 'Settings'} className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
             {currentSection ? (
               <div className={`mx-auto w-full p-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-5 lg:p-8 ${currentSection.group === 'admin' ? 'max-w-6xl' : 'max-w-4xl'}`}>
                 <h2 className="mb-4 text-lg font-semibold tracking-tight text-foreground sm:mb-5">
                   {currentSection.label}
                 </h2>
 
-                <div role="tabpanel" aria-label={currentSection.label}>
+                <div>
                   {runtimeConfig.enableTtsProvidersTab && activeSection === 'api' ? <ProviderSettingsPanel active /> : null}
                   {activeSection === 'theme' ? (
                     <div className="rounded-lg border border-line bg-surface p-4 sm:p-5">
@@ -201,7 +201,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                 </div>
               </div>
             ) : null}
-          </main>
+          </section>
         </div>
       </div>
     </div>

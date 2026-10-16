@@ -278,6 +278,21 @@ export function FinderSidebar({
         role="separator"
         aria-orientation="vertical"
         aria-label="Resize sidebar"
+        tabIndex={0}
+        aria-valuemin={MIN_WIDTH}
+        aria-valuemax={MAX_WIDTH}
+        aria-valuenow={width}
+        aria-valuetext={`${width} pixels`}
+        onKeyDown={(event) => {
+          let next = width;
+          if (event.key === 'ArrowLeft') next -= 10;
+          else if (event.key === 'ArrowRight') next += 10;
+          else if (event.key === 'Home') next = MIN_WIDTH;
+          else if (event.key === 'End') next = MAX_WIDTH;
+          else return;
+          event.preventDefault();
+          onWidthChange(Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, next)));
+        }}
         onPointerDown={onResizeStart}
         onPointerMove={onResizeMove}
         onPointerUp={onResizeEnd}

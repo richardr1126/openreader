@@ -3,6 +3,28 @@
 @tailwind utilities;
 @plugin "@tailwindcss/typography";
 
+/* Cover native links and controls as well as the shared UI components. */
+:focus-visible {
+  outline: 2px solid var(--foreground) !important;
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: 0.5rem;
+  z-index: 100;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--background);
+  color: var(--foreground);
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
 :root,
 html.light {
   --background: #ffffff;

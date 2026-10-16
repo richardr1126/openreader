@@ -45,7 +45,7 @@ export function LibraryFrame({
       {banner}
       <div className="flex flex-1 min-h-0">
         {!isNarrow && sidebarOpen && <div className="h-full">{sidebar}</div>}
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">{children}</div>
+        <div id="main-content" tabIndex={-1} className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">{children}</div>
       </div>
       {isNarrow && (
         <LibrarySidebarDrawer open={sidebarOpen} onClose={onRequestSidebarClose}>

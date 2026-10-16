@@ -13,7 +13,7 @@ import {
 import { LoadingSpinner } from '@/components/Spinner';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { VoicesControl } from '@/components/player/VoicesControl';
-import { SpeedControl } from '@/components/player/SpeedControl';
+import { MAX_SPEED, MIN_SPEED, SpeedControl } from '@/components/player/SpeedControl';
 import { IconButton } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
@@ -24,6 +24,8 @@ import {
   timelineFraction,
 } from '@/lib/client/tts/playback-timeline-track';
 import { useDocumentArtworkUrl, useMediaSession } from '@/hooks/audio/useMediaSession';
+import { usePlaybackKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
+import { KeyboardHelp } from './KeyboardHelp';
 
 /** How long the Undo chip stays after a committed scrub. */
 const SCRUB_UNDO_MS = 10_000;
@@ -53,6 +55,17 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
   // A re-plan (voice, speed, language) keeps the reader mounted; playback waits
   // until the replacement plan is adopted.
   const playbackReady = rendererPlaybackReady && playbackPlanReady;
+  const [helpOpen, setHelpOpen] = useState(false);
+  const openHelp = useCallback(() => setHelpOpen(true), []);
+  const changeSpeed = useCallback((direction: number) => {
+    setAudioPlayerSpeedAndRestart(Math.min(MAX_SPEED, Math.max(MIN_SPEED, Math.round((audioSpeed + direction * 0.1) * 10) / 10)));
+  }, [audioSpeed, setAudioPlayerSpeedAndRestart]);
+  usePlaybackKeyboardControls({
+    togglePlay, skipForward, skipBackward, changeSpeed, openHelp,
+    canToggle: isPlaying || (playbackReady && hasReadableContent),
+    canSkip: !isProcessing && playbackReady && hasReadableContent,
+    canChangeSpeed: !isProcessing,
+  });
   const {
     playbackTimeSec,
     playbackDurationSec,
@@ -134,13 +147,14 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
 
   return (
     <>
+    <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     <ProgressPopup
       isOpen={Boolean(modelDownload)}
       progress={shownModelDownload?.progress ?? null}
       operationLabel={shownModelDownload?.label}
       statusMessage={shownModelDownload?.statusMessage}
     />
-    <div className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-sm sm:shadow-none" data-app-ttsbar>
+    <section aria-label="Playback controls" className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-sm sm:shadow-none" data-app-ttsbar>
       {/* Top Edge Scrubber bar */}
       <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:-top-[5px] sm:h-2.5">
         {/* Rail: the whole document. Foreground-mixed so it stays visible in dark themes. */}
@@ -165,6 +179,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         {/* Hidden active range slider overlay */}
         <input
           aria-label="Playback position"
+          aria-valuetext={`${formatPlaybackTime(shownSec)} of ${formatPlaybackTime(playbackDurationSec)}`}
           type="range"
           min={0}
           max={Math.max(0, Math.round(playbackDurationSec))}
@@ -180,8 +195,17 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             commitScrub(Number((event.currentTarget as HTMLInputElement).value));
           }}
           onKeyUp={(event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
+            // Arrow/Home/End/Page keys begin a scrub through onChange; commit it once.
+            if (scrubOriginSecRef.current === null) return;
+            if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Enter', ' '].includes(event.key)) return;
             commitScrub(Number((event.currentTarget as HTMLInputElement).value));
+          }}
+          onBlur={(event) => {
+            if (scrubOriginSecRef.current !== null) commitScrub(Number(event.currentTarget.value));
+          }}
+          onPointerCancel={() => {
+            scrubOriginSecRef.current = null;
+            setPreviewSec(null);
           }}
           className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40
             [&::-webkit-slider-runnable-track]:h-[2px] [&::-webkit-slider-runnable-track]:bg-transparent
@@ -243,6 +267,8 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <IconButton
             onClick={skipBackward}
             aria-label="Skip backward"
+            aria-keyshortcuts="Alt+Shift+ArrowLeft"
+            title="Skip backward (Alt+Shift+Left Arrow)"
             disabled={isProcessing || !playbackReady || !hasReadableContent}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
@@ -255,6 +281,8 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <IconButton
             onClick={togglePlay}
             aria-label={playbackControl.ariaLabel}
+            aria-keyshortcuts="Alt+Shift+Space"
+            title={`${playbackControl.ariaLabel} (Alt+Shift+Space)`}
             aria-busy={playbackControl.isPending}
             disabled={!isPlaying && (!playbackReady || !hasReadableContent)}
             className="relative h-11 w-11 rounded-full bg-transparent text-soft hover:bg-accent-wash hover:text-accent sm:h-8 sm:w-8 sm:rounded-md"
@@ -271,6 +299,8 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <IconButton
             onClick={skipForward}
             aria-label="Skip forward"
+            aria-keyshortcuts="Alt+Shift+ArrowRight"
+            title="Skip forward (Alt+Shift+Right Arrow)"
             disabled={isProcessing || !playbackReady || !hasReadableContent}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
@@ -280,6 +310,10 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
 
         {/* Right side: timer and buffer display */}
         <div className="contents sm:flex sm:flex-1 sm:items-center sm:justify-end sm:gap-3">
+          {/* Announces state changes made from shortcuts; the visible line owns the detail. */}
+          <span role="status" className="sr-only">
+            {hasReadableContent ? (isPlaying ? 'Playing' : playbackControl.isPending ? 'Loading' : 'Paused') : null}
+          </span>
           <div className="col-span-2 col-start-1 row-start-1 justify-self-start whitespace-nowrap font-mono text-[11px] tabular-nums text-soft select-none">
             {hasReadableContent
               ? playbackControl.statusText
@@ -289,7 +323,6 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           {aheadBuffer && (isPlaying || playbackPhase === 'buffering') && (
             <div
               className="col-start-3 row-start-1 justify-self-end whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-accent"
-              aria-live="polite"
               aria-label={`${Math.floor(aheadBuffer.wallMs / 1000)} seconds ready ahead`}
             >
               {playbackPhase === 'buffering'
@@ -297,9 +330,18 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
                 : `${Math.floor(aheadBuffer.wallMs / 1000)}s ahead`}
             </div>
           )}
+          <IconButton
+            onClick={openHelp}
+            aria-label="Keyboard shortcuts"
+            aria-keyshortcuts="Alt+Shift+K"
+            title="Keyboard shortcuts (Alt+Shift+K)"
+            className="col-start-2 row-start-1 justify-self-center h-6 w-6 text-xs"
+          >
+            <span aria-hidden="true">⌨</span>
+          </IconButton>
         </div>
       </div>
-    </div>
+    </section>
     </>
   );
 }

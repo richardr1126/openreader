@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon } from '@/components/icons/Icons';
 import { useReaderSidebarBounds } from '@/hooks/useReaderSidebarBounds';
@@ -32,6 +32,22 @@ export function ReaderSidebarShell({
   panelClassName = '',
 }: ReaderSidebarShellProps) {
   const bounds = useReaderSidebarBounds(isOpen);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    // The panel mounts through a transition, possibly after this effect runs.
+    const frame = requestAnimationFrame(() => closeRef.current?.focus());
+    return () => {
+      cancelAnimationFrame(frame);
+      // Return focus from a closing panel, but not from a control the user chose.
+      const active = document.activeElement;
+      if (active === document.body || active?.closest('[data-reader-sidebar-panel]')) {
+        if (previous?.isConnected) previous.focus();
+      }
+    };
+  }, [isOpen]);
 
   return (
     <Transition show={isOpen} as={Fragment}>
@@ -50,6 +66,7 @@ export function ReaderSidebarShell({
         >
           <button
             type="button"
+            tabIndex={-1}
             aria-label="Close"
             onClick={onClose}
             className="sm:hidden absolute inset-0 overlay-dim backdrop-blur-sm pointer-events-auto"
@@ -66,8 +83,15 @@ export function ReaderSidebarShell({
           leaveTo="translate-x-full"
         >
           <aside
+            data-reader-sidebar-panel
             role="dialog"
             aria-label={ariaLabel}
+            onKeyDown={(event) => {
+              if (event.key !== 'Escape' || event.defaultPrevented) return;
+              event.preventDefault();
+              event.stopPropagation();
+              onClose();
+            }}
             className={`reader-sidebar-panel absolute inset-y-0 right-0 sm:right-3 sm:top-3 sm:bottom-3 pointer-events-auto bg-surface border-l sm:border border-line shadow-elev-3 sm:rounded-lg flex flex-col ${panelClassName}`}
           >
             <div className="border-b border-line-soft px-4 py-2.5 flex items-center justify-between gap-3">
@@ -78,6 +102,7 @@ export function ReaderSidebarShell({
               <div className="flex items-center gap-1 shrink-0">
                 {headerActions}
                 <IconButton
+                  ref={closeRef}
                   onClick={onClose}
                   aria-label="Close"
                   title="Close"
