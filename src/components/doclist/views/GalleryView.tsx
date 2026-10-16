@@ -201,7 +201,7 @@ export function GalleryView({
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       if (document.querySelector('[role="dialog"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
       const target = e.target as HTMLElement;
-      if (target?.closest('input, textarea, select, button, a, [contenteditable], [role="slider"], [role="radio"]')) return;
+      if (target?.closest('input, textarea, select, button, a, [contenteditable], [role="slider"], [role="radio"], [role="separator"]')) return;
       if (e.key === 'ArrowRight') {
         setActiveDocumentKey((current) => {
           const index = current ? documentKeys.indexOf(current) : 0;

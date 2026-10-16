@@ -58,7 +58,9 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
   const [helpOpen, setHelpOpen] = useState(false);
   const openHelp = useCallback(() => setHelpOpen(true), []);
   const changeSpeed = useCallback((direction: number) => {
-    setAudioPlayerSpeedAndRestart(Math.min(MAX_SPEED, Math.max(MIN_SPEED, Math.round((audioSpeed + direction * 0.1) * 10) / 10)));
+    const next = Math.min(MAX_SPEED, Math.max(MIN_SPEED, Math.round((audioSpeed + direction * 0.1) * 10) / 10));
+    // At a bound the speed is unchanged; do not restart playback for nothing.
+    if (next !== audioSpeed) setAudioPlayerSpeedAndRestart(next);
   }, [audioSpeed, setAudioPlayerSpeedAndRestart]);
   usePlaybackKeyboardControls({
     togglePlay, skipForward, skipBackward, changeSpeed, openHelp,
