@@ -153,6 +153,7 @@ export function SidebarNavItem({
   return (
     <button
       type={type}
+      aria-current={active ? 'true' : undefined}
       className={sidebarNavItemClass({ active, compact, isDropTarget, className })}
       {...props}
     >
@@ -198,6 +199,7 @@ export const SidebarNavLink = forwardRef<HTMLAnchorElement, SidebarNavLinkProps>
   return (
     <Link
       ref={ref}
+      aria-current={active ? 'page' : undefined}
       className={sidebarNavItemClass({ active, compact, isDropTarget, className })}
       {...props}
     >

@@ -23,14 +23,12 @@ export function SelectionActionBar({ actions }: { actions: DocumentActions }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
+      if (event.defaultPrevented || isTypingTarget(event.target)) return;
+      if (document.querySelector('[role="dialog"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a' && visibleCount > 0) {
         event.preventDefault();
         selectAll();
       } else if (event.key === 'Escape' && selectionSize > 0) {
-        // Leave Escape to an open menu or dialog; only clear when nothing else owns it.
-        // A dialog still fading out no longer owns it.
-        if (document.querySelector('[role="dialog"]:not([data-closing]), [role="menu"]')) return;
         clear();
       }
     };

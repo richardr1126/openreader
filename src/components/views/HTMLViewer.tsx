@@ -219,7 +219,7 @@ export function HTMLViewer({
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      <div ref={scrollRef} className="flex-1 overflow-auto" data-testid="text-reader">
+      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Document text" className="flex-1 overflow-auto" data-testid="text-reader">
         <div
           ref={contentRef}
           className="html-container prose prose-base min-w-full px-4 py-4"

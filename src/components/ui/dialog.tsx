@@ -47,7 +47,6 @@ export function ModalFrame({
     <Transition appear show={open} as={Fragment} afterLeave={afterLeave}>
       <Dialog
         as="div"
-        role={undefined}
         className={cn('relative z-50', !open && 'pointer-events-none', className)}
         // Headless UI keeps a leaving dialog mounted and marked open until its
         // transition ends; this lets callers tell it apart from a live one.

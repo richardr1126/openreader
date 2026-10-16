@@ -211,7 +211,7 @@ function PdfReader({
             />
           )}
         />
-        <div className={rendererReady ? 'min-h-0 flex-1' : 'min-h-0 flex-1 opacity-0 pointer-events-none'}>
+        <div id="main-content" tabIndex={-1} className={rendererReady ? 'min-h-0 flex-1' : 'min-h-0 flex-1 opacity-0 pointer-events-none'}>
           {readerShowsLayout ? (
             <PDFViewer
               zoomLevel={zoomLevel}

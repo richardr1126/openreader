@@ -8,6 +8,7 @@ import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
 import { hardenEpubSection } from '@/lib/client/epub/epub-section-hardening';
+import { relayEpubKeyDown } from '@/hooks/audio/usePlaybackKeyboardControls';
 
 interface EPUBViewerProps {
   className?: string;
@@ -67,6 +68,7 @@ function EpubRenditionHost({
           height: '100%',
           allowScriptedContent: true,
         });
+        rendition.on('keydown', relayEpubKeyDown);
         callbacksRef.current.onRendition(rendition);
         // Deliberately do not call display here. The document controller waits
         // for the authoritative plan, resolves its stable locator to one CFI,
