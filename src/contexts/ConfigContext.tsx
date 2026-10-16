@@ -5,7 +5,7 @@ import { APP_CONFIG_DEFAULTS, type ViewType, type SavedVoices, type AppConfigVal
 import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import { applyConfigUpdate } from '@/lib/client/config/updates';
+import { applyConfigPatch } from '@/lib/client/config/updates';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import type { SyncedPreferencesPatch } from '@/types/user-state';
@@ -30,6 +30,8 @@ interface ConfigContextType {
   ttsInstructions: string;
   savedVoices: SavedVoices;
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
+  /** Saves several keys in one request, applied in the patch's key order. */
+  updateConfig: (patch: Partial<AppConfigValues>) => Promise<void>;
   isLoading: boolean;
   preferencesReady: boolean;
   preferencesError: Error | null;
@@ -66,19 +68,19 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   const effectiveTtsModel = config.ttsModel || effectiveProvider.defaultModel;
   const effectiveTtsInstructions = config.ttsInstructions || effectiveProvider.defaultInstructions;
 
-  const updatePatch = async (patch: Partial<AppConfigValues>) => {
-    await mutation.mutateAsync(patch as SyncedPreferencesPatch);
-  };
-
-  const updateConfigKey = async <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => {
-    const { syncPatch } = applyConfigUpdate({
+  const updateConfig = async (patch: Partial<AppConfigValues>) => {
+    const syncPatch = applyConfigPatch({
       providerRef: effectiveProviderRef,
       providerType: effectiveProvider.providerType,
       ttsModel: effectiveTtsModel,
       savedVoices: config.savedVoices,
-    }, key, value);
-    await updatePatch(syncPatch);
+    }, patch);
+    await mutation.mutateAsync(syncPatch as SyncedPreferencesPatch);
   };
+
+  const updateConfigKey = <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => (
+    updateConfig({ [key]: value } as Partial<AppConfigValues>)
+  );
 
   const isLoading = isSessionPending || query.isPending || sharedProvidersLoading;
 
@@ -101,6 +103,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       ttsInstructions: effectiveTtsInstructions,
       savedVoices: config.savedVoices,
       updateConfigKey,
+      updateConfig,
       isLoading,
       preferencesReady: !isSessionPending && query.isSuccess,
       preferencesError: query.error,

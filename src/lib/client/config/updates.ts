@@ -66,3 +66,26 @@ export function applyConfigUpdate<K extends keyof AppConfigValues>(
     } as Partial<AppConfigValues>,
   };
 }
+
+/**
+ * Applies several keys as one write, in the patch's key order, so a voice set
+ * after a provider or model change is remembered under the new provider/model.
+ */
+export function applyConfigPatch(
+  currentConfig: Pick<AppConfigValues, 'providerRef' | 'providerType' | 'ttsModel' | 'savedVoices'>,
+  patch: Partial<AppConfigValues>,
+): Partial<AppConfigValues> {
+  let current = currentConfig;
+  let merged: Partial<AppConfigValues> = {};
+  for (const key of Object.keys(patch) as Array<keyof AppConfigValues>) {
+    const { syncPatch } = applyConfigUpdate(current, key, patch[key] as AppConfigValues[typeof key]);
+    merged = { ...merged, ...syncPatch };
+    current = {
+      providerRef: merged.providerRef ?? current.providerRef,
+      providerType: merged.providerType ?? current.providerType,
+      ttsModel: merged.ttsModel ?? current.ttsModel,
+      savedVoices: merged.savedVoices ?? current.savedVoices,
+    };
+  }
+  return merged;
+}

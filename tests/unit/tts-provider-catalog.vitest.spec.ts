@@ -16,7 +16,7 @@ import {
   resolveReplicateVoiceInputKey,
   resolveVoices,
 } from '@openreader/tts/voice-resolution';
-import { applyConfigUpdate, getVoicePreferenceKey } from '../../src/lib/client/config/updates';
+import { applyConfigPatch, applyConfigUpdate, getVoicePreferenceKey } from '../../src/lib/client/config/updates';
 
 describe('tts provider catalog', () => {
   test('resolves provider models with fixed Deepinfra catalog', () => {
@@ -565,6 +565,28 @@ describe('config helpers', () => {
     expect(providerUpdate.storagePatch).toEqual({
       providerRef: 'deepinfra',
       voice: '',
+    });
+  });
+
+  test('a batched save remembers the voice under the new provider and model', () => {
+    expect(applyConfigPatch({
+      providerRef: 'openai',
+      providerType: 'openai',
+      ttsModel: 'tts-1',
+      savedVoices: { 'openai:tts-1': 'alloy' },
+    }, {
+      providerRef: 'deepinfra',
+      providerType: 'deepinfra',
+      ttsModel: 'hexgrad/Kokoro-82M',
+      voice: 'af_sarah',
+      voiceSpeed: 1.2,
+    })).toEqual({
+      providerRef: 'deepinfra',
+      providerType: 'deepinfra',
+      ttsModel: 'hexgrad/Kokoro-82M',
+      voice: 'af_sarah',
+      savedVoices: { 'openai:tts-1': 'alloy', 'deepinfra:hexgrad/Kokoro-82M': 'af_sarah' },
+      voiceSpeed: 1.2,
     });
   });
 
