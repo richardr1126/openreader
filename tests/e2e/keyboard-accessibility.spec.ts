@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
-test('keyboard user opens shortcuts and reader panels and returns focus', async ({ page }) => {
+test('keyboard user controls reader panels and playback shortcuts', async ({ page }) => {
   test.setTimeout(45_000);
   await enterAnonymousLibrary(page);
   await uploadLibraryFiles(page, [resolve('tests/files/sample.md')]);
@@ -13,15 +13,8 @@ test('keyboard user opens shortcuts and reader panels and returns focus', async 
   await expect(page.getByRole('heading', { name: 'Sample Markdown', level: 1 })).toBeVisible({
     timeout: 30_000,
   });
-
-  // Playback shortcuts belong to the player bar.
-  await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
-  await page.keyboard.press('Alt+Shift+KeyK');
-  const shortcuts = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
-  const shortcutsHeading = shortcuts.getByRole('heading', { name: 'Keyboard shortcuts' });
-  await expect(shortcutsHeading).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(shortcutsHeading).toBeHidden();
+  const playButton = page.getByRole('button', { name: 'Play', exact: true });
+  await expect(playButton).toHaveAttribute('aria-keyshortcuts', 'Space');
 
   const openContents = page
     .getByRole('toolbar', { name: 'Reader' })
@@ -33,4 +26,15 @@ test('keyboard user opens shortcuts and reader panels and returns focus', async 
   await page.keyboard.press('Escape');
   await expect(contents).toBeHidden();
   await expect(openContents).toBeFocused();
+
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Document settings' });
+  const shortcuts = settings.getByRole('switch', { name: 'Keyboard shortcuts' });
+  const keys = settings.getByLabel('Playback keys');
+  await expect(shortcuts).toBeChecked();
+  await expect(keys).toContainText('Play or pause');
+  await shortcuts.click();
+  await expect(shortcuts).not.toBeChecked();
+  await expect(keys).toBeHidden();
+  await expect(playButton).not.toHaveAttribute('aria-keyshortcuts', /.+/);
 });

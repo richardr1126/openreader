@@ -251,6 +251,16 @@ test('anonymous user controls playback across every accepted document journey', 
   await startAndCancelPlayback(page);
 
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
+  // Space plays and pauses from the document as well as from the button.
+  await page.getByRole('region', { name: 'Document text', exact: true }).focus();
+  await page.keyboard.press('Space');
+  await expect(
+    page.getByRole('button', { name: 'Cancel playback loading', exact: true })
+      .or(page.getByRole('button', { name: 'Pause', exact: true })),
+  ).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press('Space');
+  await expect(playButton).toBeVisible();
+
   const voiceButton = page.getByRole('button', { name: /^Voice: / }).first();
   const initialVoiceLabel = await voiceButton.getAttribute('aria-label');
   expect(initialVoiceLabel).toBeTruthy();

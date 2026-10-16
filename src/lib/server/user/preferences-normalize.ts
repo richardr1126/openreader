@@ -119,6 +119,7 @@ export function sanitizePreferencesPatch(
         if (Number.isFinite(value)) out[key] = Number(value);
         break;
       case 'epubTheme':
+      case 'playbackShortcuts':
       case 'readerShowsLayout':
       case 'pdfHighlightEnabled':
       case 'pdfWordHighlightEnabled':

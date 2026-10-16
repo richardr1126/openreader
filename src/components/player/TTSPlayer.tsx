@@ -25,7 +25,7 @@ import {
 } from '@/lib/client/tts/playback-timeline-track';
 import { useDocumentArtworkUrl, useMediaSession } from '@/hooks/audio/useMediaSession';
 import { usePlaybackKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
-import { KeyboardHelp } from './KeyboardHelp';
+import { useConfig } from '@/contexts/ConfigContext';
 
 /** How long the Undo chip stays after a committed scrub. */
 const SCRUB_UNDO_MS = 10_000;
@@ -55,15 +55,14 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
   // A re-plan (voice, speed, language) keeps the reader mounted; playback waits
   // until the replacement plan is adopted.
   const playbackReady = rendererPlaybackReady && playbackPlanReady;
-  const [helpOpen, setHelpOpen] = useState(false);
-  const openHelp = useCallback(() => setHelpOpen(true), []);
+  const { playbackShortcuts } = useConfig();
   const changeSpeed = useCallback((direction: number) => {
     const next = Math.min(MAX_SPEED, Math.max(MIN_SPEED, Math.round((audioSpeed + direction * 0.1) * 10) / 10));
     // At a bound the speed is unchanged; do not restart playback for nothing.
     if (next !== audioSpeed) setAudioPlayerSpeedAndRestart(next);
   }, [audioSpeed, setAudioPlayerSpeedAndRestart]);
   usePlaybackKeyboardControls({
-    togglePlay, skipForward, skipBackward, changeSpeed, openHelp,
+    enabled: playbackShortcuts, togglePlay, skipForward, skipBackward, changeSpeed,
     canToggle: isPlaying || (playbackReady && hasReadableContent),
     canSkip: !isProcessing && playbackReady && hasReadableContent,
     canChangeSpeed: !isProcessing,
@@ -149,7 +148,6 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
 
   return (
     <>
-    <KeyboardHelp open={helpOpen} onClose={() => setHelpOpen(false)} />
     <ProgressPopup
       isOpen={Boolean(modelDownload)}
       progress={shownModelDownload?.progress ?? null}
@@ -269,8 +267,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <IconButton
             onClick={skipBackward}
             aria-label="Skip backward"
-            aria-keyshortcuts="Alt+Shift+ArrowLeft"
-            title="Skip backward (Alt+Shift+Left Arrow)"
+            aria-keyshortcuts={playbackShortcuts ? 'ArrowLeft' : undefined}
             disabled={isProcessing || !playbackReady || !hasReadableContent}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
@@ -283,8 +280,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <IconButton
             onClick={togglePlay}
             aria-label={playbackControl.ariaLabel}
-            aria-keyshortcuts="Alt+Shift+Space"
-            title={`${playbackControl.ariaLabel} (Alt+Shift+Space)`}
+            aria-keyshortcuts={playbackShortcuts ? 'Space' : undefined}
             aria-busy={playbackControl.isPending}
             disabled={!isPlaying && (!playbackReady || !hasReadableContent)}
             className="relative h-11 w-11 rounded-full bg-transparent text-soft hover:bg-accent-wash hover:text-accent sm:h-8 sm:w-8 sm:rounded-md"
@@ -301,8 +297,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <IconButton
             onClick={skipForward}
             aria-label="Skip forward"
-            aria-keyshortcuts="Alt+Shift+ArrowRight"
-            title="Skip forward (Alt+Shift+Right Arrow)"
+            aria-keyshortcuts={playbackShortcuts ? 'ArrowRight' : undefined}
             disabled={isProcessing || !playbackReady || !hasReadableContent}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
@@ -332,15 +327,6 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
                 : `${Math.floor(aheadBuffer.wallMs / 1000)}s ahead`}
             </div>
           )}
-          <IconButton
-            onClick={openHelp}
-            aria-label="Keyboard shortcuts"
-            aria-keyshortcuts="Alt+Shift+K"
-            title="Keyboard shortcuts (Alt+Shift+K)"
-            className="col-start-2 row-start-1 justify-self-center h-6 w-6 text-xs"
-          >
-            <span aria-hidden="true">⌨</span>
-          </IconButton>
         </div>
       </div>
     </section>

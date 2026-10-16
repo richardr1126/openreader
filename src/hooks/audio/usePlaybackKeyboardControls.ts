@@ -10,37 +10,55 @@ export function relayEpubKeyDown(event: KeyboardEvent) {
   window.dispatchEvent(new CustomEvent(EPUB_KEY_EVENT, { detail: event }));
 }
 
+/** Keys typed here belong to the field. */
+const EDITING = 'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="searchbox"], [role="combobox"], [role="spinbutton"]';
+/** Controls whose own arrow keys move a value or selection. */
+const ARROW_OWNERS = '[role="slider"], [role="radiogroup"], [role="radio"], [role="tablist"], [role="separator"]';
+/** Controls that Space activates. */
+const SPACE_OWNERS = 'button, a[href], summary, [role="button"], [role="checkbox"], [role="switch"], [role="link"], [role="tab"], [role="radio"]';
+
 export function usePlaybackKeyboardControls({
-  togglePlay, skipBackward, skipForward, changeSpeed, openHelp,
+  enabled, togglePlay, skipBackward, skipForward, changeSpeed,
   canToggle, canSkip, canChangeSpeed,
 }: {
+  enabled: boolean;
   togglePlay: () => void;
   skipBackward: () => void;
   skipForward: () => void;
   changeSpeed: (direction: number) => void;
-  openHelp: () => void;
   canToggle: boolean;
   canSkip: boolean;
   canChangeSpeed: boolean;
 }) {
   useEffect(() => {
+    if (!enabled) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || event.repeat || event.isComposing
-        || !event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey) return;
+        || event.altKey || event.ctrlKey || event.metaKey) return;
       const target = event.target as Element | null;
-      // Structural check works for elements belonging to an EPUB frame too.
-      if (typeof target?.closest === 'function'
-        && target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"], [role="combobox"], [role="slider"]')) return;
-      // Non-modal reader panels keep shortcuts; a modal, menu or listbox owns the keyboard.
+      // Structural checks work for elements belonging to an EPUB frame too.
+      const within = (selector: string) => typeof target?.closest === 'function' && target.closest(selector) !== null;
+      if (within(EDITING)) return;
       if (document.querySelector('[aria-modal="true"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
 
       let action: (() => void) | undefined;
-      if (event.code === 'Space' && canToggle) action = togglePlay;
-      if (event.key === 'ArrowLeft' && canSkip) action = skipBackward;
-      if (event.key === 'ArrowRight' && canSkip) action = skipForward;
-      if (event.key === 'ArrowUp' && canChangeSpeed) action = () => changeSpeed(1);
-      if (event.key === 'ArrowDown' && canChangeSpeed) action = () => changeSpeed(-1);
-      if (event.code === 'KeyK') action = openHelp;
+      switch (event.key) {
+        case ' ':
+          if (canToggle && !within(SPACE_OWNERS)) action = togglePlay;
+          break;
+        case 'ArrowLeft':
+          if (canSkip && !event.shiftKey && !within(ARROW_OWNERS)) action = skipBackward;
+          break;
+        case 'ArrowRight':
+          if (canSkip && !event.shiftKey && !within(ARROW_OWNERS)) action = skipForward;
+          break;
+        case '<':
+          if (canChangeSpeed) action = () => changeSpeed(-1);
+          break;
+        case '>':
+          if (canChangeSpeed) action = () => changeSpeed(1);
+          break;
+      }
       if (!action) return;
       event.preventDefault();
       action();
@@ -52,5 +70,5 @@ export function usePlaybackKeyboardControls({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener(EPUB_KEY_EVENT, onEpubKeyDown);
     };
-  }, [togglePlay, skipBackward, skipForward, changeSpeed, openHelp, canToggle, canSkip, canChangeSpeed]);
+  }, [enabled, togglePlay, skipBackward, skipForward, changeSpeed, canToggle, canSkip, canChangeSpeed]);
 }

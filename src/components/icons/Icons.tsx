@@ -956,6 +956,14 @@ export function HighlighterIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function KeyboardIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M4.5 6.5h15a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16V8a1.5 1.5 0 0 1 1.5-1.5zM7 10h.01M10.5 10h.01M14 10h.01M17.5 10h.01M8.5 14h7" />
+    </OutlineIcon>
+  );
+}
+
 export function LanguageIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <OutlineIcon {...props}>
