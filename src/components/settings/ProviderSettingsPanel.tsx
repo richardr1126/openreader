@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ChatBubbleIcon, CubeIcon, MicrophoneIcon, ServerStackIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { Button, Input, RangeInput, RowIcon, Section, Select, SelectOptionDetail, SettingRow, Textarea } from '@/components/ui';
+import { LoadingSpinner } from '@/components/Spinner';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
@@ -34,9 +35,10 @@ export function ProviderSettingsPanel({
     ttsInstructions,
     voice,
     voiceSpeed,
-    updateConfigKey,
+    updateConfig,
     isLoading: configLoading,
   } = useConfig();
+  const [saving, setSaving] = useState(false);
   const { providers: sharedProviders, isLoading: sharedProvidersLoading } = useSharedProviders();
   const [localProviderRef, setLocalProviderRef] = useState(providerRef);
   const [localProviderType, setLocalProviderType] = useState<TtsProviderType>(providerType);
@@ -152,20 +154,26 @@ export function ProviderSettingsPanel({
       providerType: viewModel.selectedProviderType,
       sharedProviders,
     });
+    const finalModel = runtimeConfig.showAllProviderModels
+      ? (viewModel.selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
+      : defaults.defaultModel;
+    setSaving(true);
     try {
-      await updateConfigKey('providerRef', viewModel.selectedProviderRef);
-      await updateConfigKey('providerType', viewModel.selectedProviderType);
-      const finalModel = runtimeConfig.showAllProviderModels
-        ? (viewModel.selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
-        : defaults.defaultModel;
-      await updateConfigKey('ttsModel', finalModel);
-      await updateConfigKey('ttsInstructions', localInstructions);
-      if (shownVoice) await updateConfigKey('voice', shownVoice);
-      if (providerModelPolicy.supportsNativeModelSpeed) await updateConfigKey('voiceSpeed', localSpeed);
+      // One request; key order matters, so the voice lands under the new provider and model.
+      await updateConfig({
+        providerRef: viewModel.selectedProviderRef,
+        providerType: viewModel.selectedProviderType,
+        ttsModel: finalModel,
+        ttsInstructions: localInstructions,
+        ...(shownVoice ? { voice: shownVoice } : {}),
+        ...(providerModelPolicy.supportsNativeModelSpeed ? { voiceSpeed: localSpeed } : {}),
+      });
     } catch (error) {
       console.error('Failed to save TTS settings:', error);
       toast.error('Could not save TTS settings. Please try again.');
       return;
+    } finally {
+      setSaving(false);
     }
     toast.success('Voice settings saved');
     onSaved?.();
@@ -328,7 +336,7 @@ export function ProviderSettingsPanel({
       )}
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" size="md" onClick={reset}>
+        <Button type="button" variant="secondary" size="md" onClick={reset} disabled={saving}>
           Reset
         </Button>
         <Button
@@ -336,10 +344,20 @@ export function ProviderSettingsPanel({
           type="button"
           variant="primary"
           size="md"
-          disabled={!viewModel.canSubmit || sharedProvidersLoading}
-          onClick={save}
+          // While saving the button stays at full strength (not the faded
+          // disabled look) and ignores clicks, so it reads as busy.
+          disabled={!saving && (!viewModel.canSubmit || sharedProvidersLoading)}
+          aria-disabled={saving || undefined}
+          aria-busy={saving}
+          onClick={saving ? undefined : save}
+          className={saving ? 'min-w-[6.5rem] cursor-progress' : 'min-w-[6.5rem]'}
         >
-          Save
+          {saving ? (
+            <span className="inline-flex items-center gap-2">
+              <LoadingSpinner className="h-3.5 w-3.5" />
+              Saving…
+            </span>
+          ) : 'Save'}
         </Button>
       </div>
     </div>
