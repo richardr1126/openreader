@@ -20,6 +20,8 @@ export interface AppConfigValues {
   audioPlayerSpeed: number;
   voice: string;
   epubTheme: boolean;
+  /** Space, arrow and speed keys control playback in readers. */
+  playbackShortcuts: boolean;
   /** PDF/EPUB show their laid-out pages; off reads the plan as flowing text. */
   readerShowsLayout: boolean;
   headerMargin: number;
@@ -60,6 +62,7 @@ export function getAppConfigDefaults(): AppConfigValues {
     audioPlayerSpeed: 1,
     voice: '',
     epubTheme: false,
+    playbackShortcuts: true,
     readerShowsLayout: true,
     headerMargin: 0,
     footerMargin: 0,

@@ -20,7 +20,7 @@ import {
   Select,
 } from '@/components/ui';
 import {
-  BookIcon, DocumentIcon, EyeIcon, HighlighterIcon, PaletteIcon, RefreshIcon, TextCursorIcon,
+  BookIcon, DocumentIcon, EyeIcon, HighlighterIcon, KeyboardIcon, PaletteIcon, RefreshIcon, TextCursorIcon,
 } from '@/components/icons/Icons';
 import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
 import { DocumentStorageSection } from '@/components/documents/DocumentStorageSection';
@@ -72,6 +72,12 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'th', label: 'Thai' },
 ];
 
+const PLAYBACK_KEYS: [string[], string][] = [
+  [['Space'], 'Play or pause'],
+  [['←', '→'], 'Skip back or forward'],
+  [['<', '>'], 'Slower or faster'],
+];
+
 export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, language, detectedLanguage, onLanguageChange, pdf }: {
   isOpen: boolean,
   setIsOpen: (isOpen: boolean) => void,
@@ -93,6 +99,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
   const {
     viewType,
     epubTheme,
+    playbackShortcuts,
     readerShowsLayout,
     ttsSegmentMaxBlockLength,
     updateConfigKey,
@@ -243,6 +250,27 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
             onPointerUp={commitMaxBlockLength}
             onKeyUp={commitMaxBlockLength}
           />
+          <ToggleRow
+            label="Keyboard shortcuts"
+            icon={<KeyboardIcon />}
+            checked={playbackShortcuts}
+            onChange={(checked) => updateConfigKey('playbackShortcuts', checked)}
+            variant="plain"
+          />
+          {playbackShortcuts ? (
+            <dl aria-label="Playback keys" className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs text-soft">
+              {PLAYBACK_KEYS.map(([keys, action]) => (
+                <div key={action} className="contents">
+                  <dt className="flex gap-1">
+                    {keys.map((key) => (
+                      <kbd key={key} className="min-w-6 rounded border border-line-soft bg-surface px-1.5 py-0.5 text-center font-mono text-[11px] text-foreground">{key}</kbd>
+                    ))}
+                  </dt>
+                  <dd>{action}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </Section>
 
         {documentId ? <DocumentStorageSection documentId={documentId} /> : null}

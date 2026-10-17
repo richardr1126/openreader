@@ -23,7 +23,9 @@ export function SelectionActionBar({ actions }: { actions: DocumentActions }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isTypingTarget(event.target)) return;
+      if (isTypingTarget(event.target)) return;
+      // Leave keys to an open menu or dialog. A dialog still fading out no longer
+      // owns them, though it may already have marked Escape as handled.
       if (document.querySelector('[role="dialog"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a' && visibleCount > 0) {
         event.preventDefault();
