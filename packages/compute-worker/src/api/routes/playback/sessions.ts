@@ -12,9 +12,12 @@ import type { PlaybackSessionController } from '../../playback/session-controlle
 import type { PlaybackSessionReadModel } from '../../playback/session-read-model';
 import type { ComputeWorkerRouteContext } from '../../route-context';
 import { toErrorMessage } from '../../route-context';
+import { ttsPlaybackPlanArtifactPrefix } from '../../../storage/artifact-addressing';
 import {
   apiErrorResponseSchema,
   computeOperationSchema,
+  ttsPlaybackCompletedSegmentsSchema,
+  ttsPlaybackExportProgressRequestSchema,
   jsonSchema,
   ttsPlaybackCursorResponseSchema,
   ttsPlaybackCursorUpdateSchema,
@@ -161,6 +164,42 @@ export function registerPlaybackSessionRoutes(
       sessionId,
       segments: rows,
     };
+  });
+
+  // Before Play there is no session, but the scrubber still shows the audio a
+  // previous session cached for this plan's scope, at its exact durations.
+  app.post('/v1/tts-playback/segments/completed', {
+    schema: {
+      body: jsonSchema(ttsPlaybackExportProgressRequestSchema),
+      response: {
+        200: jsonSchema(ttsPlaybackCompletedSegmentsSchema),
+        400: errorResponseSchema,
+        404: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackExportProgressRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    const { planObjectKey, ...scope } = parsed.data;
+    const planPrefix = ttsPlaybackPlanArtifactPrefix({ documentId: scope.documentId, prefix: context.s3Prefix });
+    if (!planObjectKey.startsWith(planPrefix) || planObjectKey.split('/').includes('..')) {
+      reply.code(400);
+      return { error: 'Plan does not belong to this document' };
+    }
+    const planSegments = await readModel.readPlanSegments(planObjectKey);
+    if (!planSegments) {
+      reply.code(404);
+      return { error: 'Playback plan not found' };
+    }
+    const states = await readModel.listSegmentStates(scope, planSegments.length);
+    const segments: Array<{ ordinal: number; durationMs: number }> = [];
+    for (const [ordinal, state] of states) {
+      if (state.status === 'completed') segments.push({ ordinal, durationMs: state.durationMs });
+    }
+    return { segments: segments.sort((left, right) => left.ordinal - right.ordinal) };
   });
 
   app.put('/v1/tts-playback/sessions/:sessionId/cursor', {

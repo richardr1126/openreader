@@ -44,7 +44,7 @@ import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
 import type { TtsPlaybackPlanPayload, TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
-import { isPlaybackPhaseProcessing } from '@/lib/client/tts/playback-control';
+import { canSkipInPlaybackPhase, isPlaybackPhaseProcessing } from '@/lib/client/tts/playback-control';
 import {
   pdfLocatorPage,
   resolveDocumentAnchorSelectionOrdinal,
@@ -439,6 +439,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     isPlayingRef,
     playbackSegmentsRef,
     playbackSeekLayout,
+    selectedOrdinal,
     selectedOrdinalRef,
     playbackRunIdRef,
     setIsPlaying,
@@ -572,11 +573,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     plan: TtsPlaybackPlan;
   }) => {
     abortAudio();
+    // The aborted session's layout would otherwise block the new plan's
+    // before-Play layout, which never replaces a session-owned one.
+    setPlaybackSeekLayout(null);
     setIsPlaying(false);
     resetBootstrapPlanAdoption();
     setReaderSettings(input.settings);
     acceptBootstrapPlaybackPlan(input.plan);
-  }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption]);
+  }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption, setPlaybackSeekLayout]);
 
   const reacquirePlaybackPlan = useCallback(async () => {
     if (!documentId) return;
@@ -614,6 +618,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const isProcessing = isInteractionProcessing
     || isPlaybackPhaseProcessing(isPlaying, playbackPhase);
+  const canSkip = !isInteractionProcessing && canSkipInPlaybackPhase(isPlaying, playbackPhase);
 
   /**
    * Provides the TTS context value to child components
@@ -621,6 +626,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const value = useMemo(() => ({
     isPlaying,
     isProcessing,
+    canSkip,
     sentences,
     currentSentenceOrdinal: selectedOrdinal,
     playbackPhase,
@@ -667,6 +673,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }), [
     isPlaying,
     isProcessing,
+    canSkip,
     sentences,
     playbackPlan,
     resolveDocumentAudioExport,

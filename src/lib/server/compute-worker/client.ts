@@ -18,6 +18,7 @@ import type {
   TtsPlaybackCursorUpdateRequest,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResolution,
+  TtsPlaybackCompletedSegments,
   TtsPlaybackExportProgressRequest,
   TtsPlaybackExportProgressSummary,
   TtsPlaybackPlanRequest,
@@ -251,6 +252,12 @@ export class ComputeWorkerClient {
       if (error instanceof WorkerHttpError && error.status === 404) return null;
       throw error;
     }
+  }
+
+  listTtsPlaybackScopeCompletedSegments(
+    input: TtsPlaybackExportProgressRequest,
+  ): Promise<TtsPlaybackCompletedSegments> {
+    return this.requestJson('POST', '/v1/tts-playback/segments/completed', input);
   }
 
   cancelTtsPlaybackSession(

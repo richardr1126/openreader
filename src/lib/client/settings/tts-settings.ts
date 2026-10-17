@@ -8,7 +8,6 @@ import {
   type TtsProviderType,
 } from '@openreader/tts/provider-catalog';
 import {
-  normalizeLegacyProviderRef,
   resolveEffectiveProviderType,
   resolveProviderDefaults,
   resolveTtsModelForProvider,
@@ -62,7 +61,7 @@ export function resolveTtsSettingsViewModel({
     providerType: entry.providerType,
   }));
   const providers = sharedOptions;
-  const normalizedInputProviderRef = normalizeLegacyProviderRef(providerRef);
+  const normalizedInputProviderRef = providerRef.trim();
   const selectedProviderRef = providers.some((opt) => opt.id === normalizedInputProviderRef)
     ? normalizedInputProviderRef
     : providers[0]?.id ?? '';

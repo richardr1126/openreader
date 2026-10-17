@@ -242,6 +242,7 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/plans/jobs',
       'POST /v1/tts-playback/sessions/jobs',
       'POST /v1/tts-playback/sessions/prepare',
+      'POST /v1/tts-playback/segments/completed',
       'POST /v1/tts-playback/sessions/resolve',
       'POST /v1/tts-playback/voice-previews',
       'POST /v1/user-storage/cleanup',
@@ -448,7 +449,7 @@ describe('server-state architecture', () => {
     expect(planController).not.toContain('createTtsPlaybackPlan');
     expect(planController).toContain('getPlaybackPlan');
     expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
-    expect(planController).toContain('requestedSeekLayoutPlanIdRef.current !== plan.planId');
+    expect(planController).toContain('if (requestedSeekLayoutKeyRef.current === key) return;');
     expect(planController).toContain('resetBootstrapPlanAdoption');
     expect(context).toContain('resetBootstrapPlanAdoption();');
     expect(planController).not.toContain('attempt < 20');
@@ -616,7 +617,7 @@ describe('server-state architecture', () => {
     expect(workerRoutes).toContain('session.generationStartOrdinal');
     expect(workerRoutes).toContain('query.fromOrdinal');
     expect(streamTimelineRoute).toContain('startOrdinal: 0');
-    expect(seekLayoutRoute).toContain('const startOrdinal = 0;');
+    expect(seekLayoutRoute).toContain('const START_ORDINAL = 0;');
     expect(workerHandlers).not.toContain('startOrdinal, cursorOrdinal: startOrdinal');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("typeof rec.nativeSpeed !== 'number'");
     expect(source('src/lib/server/tts/playback-request.ts')).toContain("readOptionalInt(startRec, 'page', 1)");
@@ -741,7 +742,7 @@ describe('server-state architecture', () => {
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('proxyOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
     expect(seekLayoutRoute).toContain('buildPlaybackGrid');
-    expect(seekLayoutRoute).toContain('planObjectKey = session.planObjectKey');
+    expect(seekLayoutRoute).toContain('readTtsPlaybackPlanArtifact(session.planObjectKey)');
     expect(seekLayoutRoute.indexOf('resolveTtsPlaybackSession(request, sessionId)'))
       .toBeLessThan(seekLayoutRoute.indexOf('resolveTtsPlaybackPlanOperation(planId)'));
     expect(seekLayoutRoute).toContain('listCompletedTtsPlaybackSegments(session)');

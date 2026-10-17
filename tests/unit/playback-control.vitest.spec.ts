@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  canSkipInPlaybackPhase,
+  PLAYBACK_START_BUFFER_WALL_MS,
+  playbackStartProgress,
   isPlaybackAbortError,
   isPlaybackPhaseProcessing,
   isPlaybackStartBufferReady,
@@ -225,5 +228,23 @@ describe('playback start buffer', () => {
       playbackRate: 1,
       pollMs: 0,
     })).rejects.toThrow('TTS playback generation failed before audio became ready');
+  });
+});
+
+describe('playback loading controls', () => {
+  test('skips retarget while buffering but wait for session startup', () => {
+    expect(canSkipInPlaybackPhase(false, 'ready')).toBe(true);
+    expect(canSkipInPlaybackPhase(true, 'playing')).toBe(true);
+    expect(canSkipInPlaybackPhase(true, 'buffering')).toBe(true);
+    expect(canSkipInPlaybackPhase(true, 'seeking')).toBe(true);
+    expect(canSkipInPlaybackPhase(true, 'planning')).toBe(false);
+    expect(canSkipInPlaybackPhase(true, 'ready')).toBe(false);
+  });
+
+  test('fills the loading ring from the ready start buffer', () => {
+    expect(playbackStartProgress(null)).toBe(0);
+    expect(playbackStartProgress({ wallMs: PLAYBACK_START_BUFFER_WALL_MS / 2, reachedDocumentEnd: false })).toBe(0.5);
+    expect(playbackStartProgress({ wallMs: PLAYBACK_START_BUFFER_WALL_MS * 3, reachedDocumentEnd: false })).toBe(1);
+    expect(playbackStartProgress({ wallMs: 100, reachedDocumentEnd: true })).toBe(1);
   });
 });

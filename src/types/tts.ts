@@ -36,6 +36,8 @@ export type TtsPlaybackPhase =
 export interface TTSPlaybackState {
   isPlaying: boolean;
   isProcessing: boolean;
+  /** Previous/next sentence may run now; true while a seek or refill buffers. */
+  canSkip: boolean;
   currentSentence: string;
   currentSegment?: CanonicalTtsSegment | null;
   currDocPage: TTSLocation;

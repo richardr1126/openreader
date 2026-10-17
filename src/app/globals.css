@@ -3,8 +3,10 @@
 @tailwind utilities;
 @plugin "@tailwindcss/typography";
 
-/* Cover native links and controls as well as the shared UI components. */
-:focus-visible {
+/* Cover native links and controls as well as the shared UI components. Text
+   entry is exempt: it matches :focus-visible on every focus, and the shared
+   Input/Textarea/SearchField already draw their own focus ring. */
+:focus-visible:not(textarea, input:not([type="checkbox"], [type="radio"], [type="range"], [type="button"], [type="submit"], [type="reset"], [type="color"], [type="file"])) {
   outline: 2px solid var(--foreground) !important;
   outline-offset: 2px;
 }
