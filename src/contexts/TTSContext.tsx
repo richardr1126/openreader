@@ -573,11 +573,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     plan: TtsPlaybackPlan;
   }) => {
     abortAudio();
+    // The aborted session's layout would otherwise block the new plan's
+    // before-Play layout, which never replaces a session-owned one.
+    setPlaybackSeekLayout(null);
     setIsPlaying(false);
     resetBootstrapPlanAdoption();
     setReaderSettings(input.settings);
     acceptBootstrapPlaybackPlan(input.plan);
-  }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption]);
+  }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption, setPlaybackSeekLayout]);
 
   const reacquirePlaybackPlan = useCallback(async () => {
     if (!documentId) return;

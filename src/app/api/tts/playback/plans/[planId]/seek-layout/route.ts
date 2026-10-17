@@ -123,6 +123,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!parsed) {
       return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
     }
+    // Authenticate and check document ownership before revealing anything
+    // about the plan id.
+    const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
+    if (scope instanceof Response) return scope;
     const operation = await resolveTtsPlaybackPlanOperation(planId);
     if (!operation || operation.subject.kind !== 'tts_playback_plan') {
       return NextResponse.json({ error: 'Playback plan not found' }, { status: 404 });
@@ -135,8 +139,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
     const planObjectKey = operation.result.planObjectKey;
 
-    const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
-    if (scope instanceof Response) return scope;
     const { artifact } = await readTtsPlaybackPlanArtifact(planObjectKey);
     if (artifact.storageUserId && artifact.storageUserId !== scope.storageUserId) {
       return NextResponse.json({ error: 'Playback plan scope mismatch' }, { status: 403 });

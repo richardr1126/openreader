@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { GET, POST } from '@/app/api/tts/playback/plans/[planId]/seek-layout/route';
 import { resolveSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import {
@@ -177,6 +177,15 @@ describe('TTS playback seek-layout route', () => {
 
       expect(response.status).toBe(200);
       expect(buildPlaybackGrid).toHaveBeenCalledWith(expect.objectContaining({ completedDurations: new Map() }));
+    });
+
+    test('authenticates before looking up the plan', async () => {
+      vi.mocked(resolveSegmentDocumentScope).mockResolvedValue(
+        NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) as never,
+      );
+
+      expect((await post(payload)).status).toBe(401);
+      expect(resolveTtsPlaybackPlanOperation).not.toHaveBeenCalled();
     });
 
     test('rejects a plan from another document and an invalid request', async () => {
