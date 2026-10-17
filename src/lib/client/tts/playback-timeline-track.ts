@@ -52,6 +52,11 @@ export function timelineBandsGradient(bands: readonly TimelineBand[], color: str
   return `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
+/** True while any part of the document length is still a text estimate. */
+export function isTimelineEstimated(layout: Pick<TtsPlaybackSeekLayout, 'segments'> | null): boolean {
+  return Boolean(layout?.segments.some((segment) => !segment.generated));
+}
+
 export function timelineFraction(positionSec: number, durationSec: number): number {
   if (!(durationSec > 0)) return 0;
   return clampFraction(positionSec / durationSec);
@@ -79,4 +84,23 @@ export function scrubUndoTargetSec(
   const committed = segmentAt(layout, committedSec);
   if (!origin || !committed || origin.ordinal === committed.ordinal) return null;
   return Math.max(0, origin.startMs / 1000);
+}
+
+/**
+ * Where the playhead rests while nothing plays: on the selected sentence, so a
+ * reopened document or a page turn shows its real place on the timeline. A
+ * position already inside that sentence (a pause mid-sentence) is kept; null
+ * means leave the playhead where it is.
+ */
+export function restingPlayheadSec(
+  layout: TimelineLayout | null,
+  selectedOrdinal: number | null,
+  currentSec: number,
+): number | null {
+  if (!layout || selectedOrdinal === null) return null;
+  const slot = layout.segments.find((segment) => segment.ordinal === selectedOrdinal);
+  if (!slot) return null;
+  const currentMs = currentSec * 1000;
+  if (currentMs >= slot.startMs && currentMs <= slot.endMs) return null;
+  return slot.startMs / 1000;
 }

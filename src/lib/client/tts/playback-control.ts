@@ -142,6 +142,24 @@ export function isPlaybackPhaseProcessing(
   );
 }
 
+/**
+ * Skips retarget playback through the seek path, so they stay available while
+ * a seek or refill buffers. Only session startup (planning, or ready while
+ * playback intent is set) has no session to seek within yet.
+ */
+export function canSkipInPlaybackPhase(isPlaying: boolean, phase: TtsPlaybackPhase): boolean {
+  return !isPlaying || phase === 'playing' || phase === 'buffering' || phase === 'seeking';
+}
+
+/** How much of the start buffer is ready, 0..1, for the play control's ring. */
+export function playbackStartProgress(
+  buffer: { wallMs: number; reachedDocumentEnd: boolean } | null,
+): number {
+  if (!buffer) return 0;
+  if (buffer.reachedDocumentEnd) return 1;
+  return Math.min(1, Math.max(0, buffer.wallMs / PLAYBACK_START_BUFFER_WALL_MS));
+}
+
 export function resolvePlaybackControlPresentation(
   isPlaying: boolean,
   phase: TtsPlaybackPhase,

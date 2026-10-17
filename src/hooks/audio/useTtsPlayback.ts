@@ -26,6 +26,7 @@ import { usePlaybackSeek } from '@/hooks/audio/usePlaybackSeek';
 import { createPlaybackRecovery, createTtsMediaRecovery } from '@/lib/client/tts/playback-recovery';
 import { installPlaybackMediaEvents } from '@/lib/client/tts/playback-media-events';
 import { usePlaybackForegroundSync } from '@/hooks/audio/usePlaybackForegroundSync';
+import { restingPlayheadSec } from '@/lib/client/tts/playback-timeline-track';
 import {
   usePlaybackProjection,
   type PlaybackSessionState,
@@ -54,6 +55,7 @@ type UseTtsPlaybackInput = {
   isPlayingRef: MutableRefObject<boolean>;
   playbackSegmentsRef: MutableRefObject<CanonicalTtsSegment[]>;
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
+  selectedOrdinal: number | null;
   selectedOrdinalRef: MutableRefObject<number | null>;
   playbackRunIdRef: MutableRefObject<number>;
   setIsPlaying: (isPlaying: boolean) => void;
@@ -76,6 +78,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     isPlayingRef,
     playbackSegmentsRef,
     playbackSeekLayout,
+    selectedOrdinal,
     selectedOrdinalRef,
     playbackRunIdRef,
     setIsPlaying,
@@ -137,6 +140,11 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     setSelectedOrdinal,
     syncPlaybackLocator,
   });
+  useEffect(() => {
+    if (isPlaying) return;
+    const restingSec = restingPlayheadSec(playbackSeekLayout, selectedOrdinal, playbackTimeSec);
+    if (restingSec !== null) publishPlaybackTimeSec(restingSec, { force: true });
+  }, [isPlaying, playbackSeekLayout, playbackTimeSec, publishPlaybackTimeSec, selectedOrdinal]);
   const {
     modelDownload,
     setWorkerPlaybackActive,

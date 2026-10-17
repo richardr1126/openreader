@@ -154,11 +154,19 @@ export type TtsPlaybackSeekLayout = {
   segments: TtsPlaybackSeekLayoutSegment[];
 };
 
+/**
+ * Plan-only seek layout before Play. `request` is the playback request the
+ * session will start with, so the server reads that exact audio cache scope.
+ */
 export const getTtsPlaybackSeekLayout = async (
-  seekLayoutUrl: string,
+  planId: string,
+  request: { headers: TTSRequestHeaders; payload: TtsPlaybackPlanPayload },
   signal?: AbortSignal,
 ): Promise<TtsPlaybackSeekLayout> => {
-  const response = await fetch(seekLayoutUrl, {
+  const response = await fetch(`/api/tts/playback/plans/${encodeURIComponent(planId)}/seek-layout`, {
+    method: 'POST',
+    headers: request.headers,
+    body: JSON.stringify(request.payload),
     cache: 'no-store',
     signal,
   });

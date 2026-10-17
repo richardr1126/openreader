@@ -81,28 +81,21 @@ export function defaultVoiceForProviderType(providerType: TtsProviderId): string
   return 'af_sarah';
 }
 
-export function normalizeLegacyProviderRef(
-  providerRef: string | null | undefined,
-  fallbackProviderRef?: string | null | undefined,
-): string {
-  const raw = typeof providerRef === 'string' ? providerRef.trim() : '';
-  if (!raw) return '';
-  if (raw !== 'default-openai') return raw;
-  const fallback = typeof fallbackProviderRef === 'string' ? fallbackProviderRef.trim() : '';
-  if (fallback && fallback !== 'default-openai') return fallback;
-  return raw;
-}
-
 export function resolveProviderDefaults(input: {
   providerRef: string | null | undefined;
   providerType?: TtsProviderType | null | undefined;
   sharedProviders?: readonly ProviderDefaultResolverEntry[];
   fallbackProviderRef?: string | null | undefined;
 }): ResolvedProviderDefaults {
-  const normalizedProviderRef = normalizeLegacyProviderRef(input.providerRef, input.fallbackProviderRef);
-  const fallbackRef = typeof input.fallbackProviderRef === 'string' ? input.fallbackProviderRef.trim() : '';
-  const providerRef = normalizedProviderRef || fallbackRef;
   const sharedProviders = input.sharedProviders ?? [];
+  const rawProviderRef = typeof input.providerRef === 'string' ? input.providerRef.trim() : '';
+  // The legacy 'default-openai' sentinel meant "use the default" only when no
+  // real shared provider has that slug (the env-seeded provider does), matching
+  // the server's preference sanitizer.
+  const isStaleSentinel = rawProviderRef === 'default-openai'
+    && !sharedProviders.some((entry) => entry.slug === rawProviderRef);
+  const fallbackRef = typeof input.fallbackProviderRef === 'string' ? input.fallbackProviderRef.trim() : '';
+  const providerRef = (isStaleSentinel && fallbackRef ? '' : rawProviderRef) || fallbackRef;
   const providerType = resolveEffectiveProviderType({
     providerRef,
     providerType: input.providerType,

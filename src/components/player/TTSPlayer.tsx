@@ -10,14 +10,14 @@ import {
   SkipForwardIcon,
   SkipBackwardIcon,
 } from '@/components/icons/Icons';
-import { LoadingSpinner } from '@/components/Spinner';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { VoicesControl } from '@/components/player/VoicesControl';
 import { MAX_SPEED, MIN_SPEED, SpeedControl } from '@/components/player/SpeedControl';
 import { IconButton } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
-import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
+import { playbackStartProgress, resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 import {
+  isTimelineEstimated,
   readyTimelineBands,
   scrubUndoTargetSec,
   timelineBandsGradient,
@@ -30,6 +30,38 @@ import { useConfig } from '@/contexts/ConfigContext';
 /** How long the Undo chip stays after a committed scrub. */
 const SCRUB_UNDO_MS = 10_000;
 const SCRUB_READY_COLOR = 'color-mix(in srgb, var(--accent) 34%, transparent)';
+const RING_RADIUS = 15;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
+
+/**
+ * The play control's loading ring: filled by how much start buffer is ready,
+ * or a spinning arc while there is nothing to measure yet.
+ */
+function PlaybackLoadingRing({ progress }: { progress: number | null }) {
+  const filled = progress === null ? 0.25 : Math.max(0.04, progress);
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 36 36"
+      className={`pointer-events-none absolute inset-0 h-full w-full ${progress === null ? 'motion-safe:animate-spin' : ''}`}
+    >
+      {/* The 12 o'clock start lives in the geometry: a CSS rotate here would
+          fight animate-spin's transform and snap back 90° every turn. */}
+      <circle cx="18" cy="18" r={RING_RADIUS} fill="none" strokeWidth="2" className="stroke-[color-mix(in_srgb,var(--foreground)_14%,transparent)]" />
+      <circle
+        cx="18"
+        cy="18"
+        r={RING_RADIUS}
+        fill="none"
+        strokeWidth="2"
+        strokeLinecap="round"
+        className="stroke-accent transition-[stroke-dasharray] duration-300"
+        transform="rotate(-90 18 18)"
+        strokeDasharray={`${filled * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+      />
+    </svg>
+  );
+}
 
 export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel }: {
   /** Opens the reader's voice panel; the reader page owns which sidebar is open. */
@@ -47,6 +79,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
     skipForward,
     skipBackward,
     isProcessing,
+    canSkip: canSkipNow,
     setAudioPlayerSpeedAndRestart,
     seekPlaybackTo,
     playbackPlanReady,
@@ -61,10 +94,11 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
     // At a bound the speed is unchanged; do not restart playback for nothing.
     if (next !== audioSpeed) setAudioPlayerSpeedAndRestart(next);
   }, [audioSpeed, setAudioPlayerSpeedAndRestart]);
+  const canSkip = canSkipNow && playbackReady && hasReadableContent;
   usePlaybackKeyboardControls({
     enabled: playbackShortcuts, togglePlay, skipForward, skipBackward, changeSpeed,
     canToggle: isPlaying || (playbackReady && hasReadableContent),
-    canSkip: !isProcessing && playbackReady && hasReadableContent,
+    canSkip,
     canChangeSpeed: !isProcessing,
   });
   const {
@@ -101,6 +135,19 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
     [playbackSeekLayout],
   );
   const heardPercent = timelineFraction(shownSec, playbackDurationSec) * 100;
+  // Until every sentence has audio, part of the length is a text estimate.
+  const durationLabel = `${isTimelineEstimated(playbackSeekLayout) ? '~' : ''}${formatPlaybackTime(playbackDurationSec)}`;
+  // Measurable progress exists once a session is buffering; startup and
+  // plan replacement have nothing to measure and spin instead.
+  const loadingRingProgress = !hasReadableContent
+    ? undefined
+    : !isPlaying && !playbackReady
+    ? null
+    : !playbackControl.isPending
+    ? undefined
+    : playbackPhase === 'buffering' || playbackPhase === 'seeking'
+    ? playbackStartProgress(aheadBuffer)
+    : null;
 
   // Undo after scrub: the origin is the playhead when the scrub began, so
   // playback advancing under a held thumb does not move it.
@@ -179,7 +226,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         {/* Hidden active range slider overlay */}
         <input
           aria-label="Playback position"
-          aria-valuetext={`${formatPlaybackTime(shownSec)} of ${formatPlaybackTime(playbackDurationSec)}`}
+          aria-valuetext={`${formatPlaybackTime(shownSec)} of ${isTimelineEstimated(playbackSeekLayout) ? 'about ' : ''}${formatPlaybackTime(playbackDurationSec)}`}
           type="range"
           min={0}
           max={Math.max(0, Math.round(playbackDurationSec))}
@@ -268,10 +315,10 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             onClick={skipBackward}
             aria-label="Skip backward"
             aria-keyshortcuts={playbackShortcuts ? 'ArrowLeft' : undefined}
-            disabled={isProcessing || !playbackReady || !hasReadableContent}
+            disabled={!canSkip}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
-            {isProcessing ? <LoadingSpinner /> : <SkipBackwardIcon className="w-5 h-5" />}
+            <SkipBackwardIcon className="w-5 h-5" />
           </IconButton>
 
           {/* Loading is cancelable through this same control. Keep it focusable
@@ -285,23 +332,20 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             disabled={!isPlaying && (!playbackReady || !hasReadableContent)}
             className="relative h-11 w-11 rounded-full bg-transparent text-soft hover:bg-accent-wash hover:text-accent sm:h-8 sm:w-8 sm:rounded-md"
           >
-            {!hasReadableContent
-              ? <PlayIcon className="w-5 h-5" />
-              : !isPlaying && !playbackReady
-              ? <LoadingSpinner />
-              : playbackControl.isPending
-              ? <LoadingSpinner />
-              : (isPlaying ? <PauseIcon className="w-5 h-5" /> : <PlayIcon className="w-5 h-5" />)}
+            {loadingRingProgress !== undefined && <PlaybackLoadingRing progress={loadingRingProgress} />}
+            {isPlaying
+              ? <PauseIcon className={loadingRingProgress === undefined ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
+              : <PlayIcon className={loadingRingProgress === undefined ? 'w-5 h-5' : 'w-3.5 h-3.5'} />}
           </IconButton>
 
           <IconButton
             onClick={skipForward}
             aria-label="Skip forward"
             aria-keyshortcuts={playbackShortcuts ? 'ArrowRight' : undefined}
-            disabled={isProcessing || !playbackReady || !hasReadableContent}
+            disabled={!canSkip}
             className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
           >
-            {isProcessing ? <LoadingSpinner /> : <SkipForwardIcon className="w-5 h-5" />}
+            <SkipForwardIcon className="w-5 h-5" />
           </IconButton>
         </div>
 
@@ -313,18 +357,19 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           </span>
           <div className="col-span-2 col-start-1 row-start-1 justify-self-start whitespace-nowrap font-mono text-[11px] tabular-nums text-soft select-none">
             {hasReadableContent
-              ? playbackControl.statusText
-                ?? `${formatPlaybackTime(shownSec)} / ${formatPlaybackTime(playbackDurationSec)}`
+              ? `${formatPlaybackTime(shownSec)} / ${durationLabel}`
               : 'No readable text'}
           </div>
-          {aheadBuffer && (isPlaying || playbackPhase === 'buffering') && (
+          {hasReadableContent && playbackControl.statusText ? (
+            <div className="col-start-3 row-start-1 justify-self-end whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium text-accent">
+              {playbackControl.statusText}
+            </div>
+          ) : aheadBuffer && isPlaying && (
             <div
               className="col-start-3 row-start-1 justify-self-end whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-accent"
               aria-label={`${Math.floor(aheadBuffer.wallMs / 1000)} seconds ready ahead`}
             >
-              {playbackPhase === 'buffering'
-                ? `Loading ahead · ${Math.floor(aheadBuffer.wallMs / 1000)}s ready`
-                : `${Math.floor(aheadBuffer.wallMs / 1000)}s ahead`}
+              {`${Math.floor(aheadBuffer.wallMs / 1000)}s ahead`}
             </div>
           )}
         </div>

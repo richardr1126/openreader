@@ -9,7 +9,7 @@ import {
   supportsNativeModelSpeed,
   supportsTtsInstructions,
 } from '@openreader/tts/provider-catalog';
-import { normalizeLegacyProviderRef, resolveProviderDefaults, resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
+import { resolveProviderDefaults, resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import {
   resolveReplicateLanguageInput,
   resolveReplicateLanguageInputKey,
@@ -76,11 +76,23 @@ describe('tts provider catalog', () => {
     expect(supportsNativeModelSpeed('replicate', 'qwen/qwen3-tts')).toBe(false);
   });
 
-  test('preserves default-openai unless explicit non-default fallback is provided', () => {
-    expect(normalizeLegacyProviderRef('default-openai', 'shared-replicate')).toBe('shared-replicate');
-    expect(normalizeLegacyProviderRef('default-openai', '')).toBe('default-openai');
-    expect(normalizeLegacyProviderRef('default-openai', 'default-openai')).toBe('default-openai');
-    expect(normalizeLegacyProviderRef('default-openai')).toBe('default-openai');
+  test('keeps a real default-openai provider over the admin default', () => {
+    const sharedProviders = [
+      { slug: 'gemini-31-flash-tts', providerType: 'speech-sdk' as const, defaultModel: 'google/gemini-3.1-flash-tts', defaultInstructions: null },
+      { slug: 'default-openai', providerType: 'custom-openai' as const, defaultModel: 'supertonic-3', defaultInstructions: null },
+    ];
+    // The env-seeded provider is selectable; choosing it must not read back as the admin default.
+    expect(resolveProviderDefaults({
+      providerRef: 'default-openai',
+      sharedProviders,
+      fallbackProviderRef: 'gemini-31-flash-tts',
+    })).toMatchObject({ providerRef: 'default-openai', defaultModel: 'supertonic-3' });
+    // Without such a provider, the legacy sentinel still means "use the default".
+    expect(resolveProviderDefaults({
+      providerRef: 'default-openai',
+      sharedProviders: sharedProviders.slice(0, 1),
+      fallbackProviderRef: 'gemini-31-flash-tts',
+    }).providerRef).toBe('gemini-31-flash-tts');
   });
 
   test('resolveProviderDefaults keeps runtime/admin default provider ref when valid', () => {

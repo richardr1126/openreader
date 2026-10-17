@@ -2,6 +2,8 @@ import Fastify from 'fastify';
 import { afterEach, describe, expect, test } from 'vitest';
 import { registerHealthRoutes } from '../../src/api/routes/health';
 import { registerPlaybackExportSessionRoutes } from '../../src/api/routes/playback/exports';
+import { registerPlaybackSessionRoutes } from '../../src/api/routes/playback/sessions';
+import type { PlaybackSessionController } from '../../src/api/playback/session-controller';
 import type { PlaybackSessionReadModel } from '../../src/api/playback/session-read-model';
 import type { ComputeWorkerRouteContext } from '../../src/api/route-context';
 
@@ -125,5 +127,48 @@ describe('compute worker domain route registrars', () => {
         { index: 1, title: 'Page 2', page: 2, plannedSegments: 1, completedSegments: 0, generatingSegments: 1 },
       ],
     });
+  });
+
+  test('lists completed audio for a plan scope before any playback session exists', async () => {
+    const app = Fastify();
+    apps.push(app);
+    const documentId = 'a'.repeat(64);
+    const planObjectKey = `openreader/tts_playback_plan_v1/${documentId}/3/pdf/sig.json`;
+    const scopes: unknown[] = [];
+    registerPlaybackSessionRoutes({
+      app,
+      s3Prefix: 'openreader',
+      getOpState: async () => null,
+    } as unknown as ComputeWorkerRouteContext, {
+      readPlanSegments: async (key: string) => (key === planObjectKey
+        ? [{ ordinal: 0, text: 'One.' }, { ordinal: 1, text: 'Two.' }, { ordinal: 2, text: 'Three.' }]
+        : null),
+      listSegmentStates: async (scope: unknown, planLength: number) => {
+        scopes.push({ scope, planLength });
+        return new Map([
+          [2, { status: 'completed', durationMs: 900 }],
+          [0, { status: 'completed', durationMs: 1_500 }],
+          [1, { status: 'generating' }],
+        ]);
+      },
+    } as unknown as PlaybackSessionReadModel, {} as PlaybackSessionController);
+    const scope = { storageUserId: 'user-1', documentId, documentVersion: 3, settingsHash: 'settings-1' };
+
+    const foreignPlan = await app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/segments/completed',
+      payload: { ...scope, planObjectKey: `openreader/tts_playback_plan_v1/${'b'.repeat(64)}/3/pdf/sig.json` },
+    });
+    expect(foreignPlan.statusCode).toBe(400);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/tts-playback/segments/completed',
+      payload: { ...scope, planObjectKey },
+    });
+    expect(response.json()).toEqual({
+      segments: [{ ordinal: 0, durationMs: 1_500 }, { ordinal: 2, durationMs: 900 }],
+    });
+    expect(scopes).toEqual([{ scope, planLength: 3 }]);
   });
 });

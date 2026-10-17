@@ -178,6 +178,14 @@ async function verifyEpubPlayback(page: Page) {
   expect(await readGeneratedSegmentCount(page, session.seekLayoutUrl))
     .toBe(settledGeneratedCount);
 
+  // Reopened before Play, the scrubber already shows the cached audio and
+  // rests on the paused sentence instead of 0:00.
+  await page.reload();
+  await expect(playButton).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByTestId('scrubber-ready-bands')).toBeAttached();
+  await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  expect(await readPlaybackPosition(page)).toBeLessThanOrEqual(Math.ceil(pausedAt));
+
   await page.getByRole('button', { name: 'Next section', exact: true }).click();
   await expect(initialViewportHeading).not.toBeInViewport({ timeout: 15_000 });
   await expect.poll(async () => Number(await position.getAttribute('max')))

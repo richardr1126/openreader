@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  isTimelineEstimated,
   readyTimelineBands,
+  restingPlayheadSec,
   scrubUndoTargetSec,
   timelineBandsGradient,
   timelineFraction,
@@ -97,5 +99,36 @@ describe('media session position', () => {
     expect(mediaSeekOffsetTarget(50, 120, -1)).toBe(50 - MEDIA_SESSION_DEFAULT_SEEK_OFFSET_SEC);
     expect(mediaSeekOffsetTarget(115, 120, 1)).toBe(120);
     expect(mediaSeekOffsetTarget(3, 120, -1, null)).toBe(0);
+  });
+});
+
+describe('playhead before playback', () => {
+  const restored = layout(6_000, [
+    segment(0, 0, 2_000, true),
+    segment(1, 2_000, 4_000, false),
+    segment(2, 4_000, 6_000, false),
+  ]);
+
+  test('rests on the start of the restored sentence', () => {
+    expect(restingPlayheadSec(restored, 2, 0)).toBe(4);
+  });
+
+  test('keeps a paused position inside the selected sentence', () => {
+    expect(restingPlayheadSec(restored, 1, 3.2)).toBeNull();
+  });
+
+  test('follows a page turn to a different sentence', () => {
+    expect(restingPlayheadSec(restored, 0, 3.2)).toBe(0);
+  });
+
+  test('waits for a layout and a selection', () => {
+    expect(restingPlayheadSec(null, 1, 0)).toBeNull();
+    expect(restingPlayheadSec(restored, null, 0)).toBeNull();
+  });
+
+  test('marks the length as estimated until every sentence has audio', () => {
+    expect(isTimelineEstimated(restored)).toBe(true);
+    expect(isTimelineEstimated(layout(2_000, [segment(0, 0, 2_000, true)]))).toBe(false);
+    expect(isTimelineEstimated(null)).toBe(false);
   });
 });

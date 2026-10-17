@@ -586,6 +586,14 @@ export const ttsPlaybackExportProgressRequestSchema = z.object({
   planObjectKey: z.string().trim().min(1).max(2048),
 }).strict();
 
+/** Completed audio for one cache scope, read without a playback session. */
+export const ttsPlaybackCompletedSegmentsSchema = z.object({
+  segments: z.array(z.object({
+    ordinal: z.number().int().nonnegative(),
+    durationMs: z.number().positive(),
+  })),
+});
+
 export const ttsPlaybackExportProgressSummarySchema = z.object({
   plannedSegments: z.number(),
   completedSegments: z.number(),
