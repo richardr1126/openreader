@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, type MutableRefObject } from 'react';
 
 import {
-  getTtsPlaybackSeekLayout,
   type TtsPlaybackSeekLayout,
 } from '@/lib/client/api/tts';
 import {
@@ -49,14 +48,6 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     setPlaybackSeekLayout,
     setSelectedOrdinal,
   } = input;
-  // The plan whose idle seek layout is wanted. A fresh object per adoption lets
-  // re-adopting the same plan id fetch again after a reset.
-  const [idleLayoutPlan, setIdleLayoutPlan] = useState<{ planId: string } | null>(null);
-  const requestedSeekLayoutKeyRef = useRef<string | null>(null);
-  const resetBootstrapPlanAdoption = useCallback(() => {
-    requestedSeekLayoutKeyRef.current = null;
-    setIdleLayoutPlan(null);
-  }, []);
   const buildPlaybackPlanRequest = useCallback(
     (): TtsPlaybackPlanRequest | null => request,
     [request],
@@ -124,43 +115,24 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
 
   const acceptBootstrapPlaybackPlan = useCallback((
     value: TtsPlaybackPlan,
+    seekLayout: TtsPlaybackSeekLayout,
   ): TtsPlaybackPlan => {
     const plan = assertAuthoritativePlaybackPlan(value, {
       documentId: request?.payload.documentId ?? value.documentId,
       readerType: activeReaderType,
     });
+    if (seekLayout.planId !== plan.planId || seekLayout.segments.length !== plan.segments.length) {
+      throw new Error('The initial audio timeline does not match the reading plan');
+    }
     const applied = applyPlaybackPlan(plan);
-    if (plan.planId && plan.segments.length > 0) setIdleLayoutPlan({ planId: plan.planId });
+    setPlaybackSeekLayout(seekLayout);
     return applied;
   }, [
     activeReaderType,
     applyPlaybackPlan,
     request,
+    setPlaybackSeekLayout,
   ]);
-
-  // A plan-only seek layout is immutable for one plan and playback request, so
-  // it is fetched once per pair for the idle scrubber; session-owned layout
-  // updates begin only after playback creates a session. It waits for the
-  // request because the audio cache is keyed by the settings the session will
-  // send, including a voice only the client resolves. Retrying could never
-  // change the result and previously multiplied into a request storm.
-  useEffect(() => {
-    if (!idleLayoutPlan || !request) return;
-    const { planId } = idleLayoutPlan;
-    const key = `${planId}\0${JSON.stringify(request.payload)}`;
-    if (requestedSeekLayoutKeyRef.current === key) return;
-    requestedSeekLayoutKeyRef.current = key;
-    void getTtsPlaybackSeekLayout(planId, request).then((layout) => {
-      if (
-        layout.durationMs > 0
-        && layout.segments.length > 0
-        && playbackPlanRef.current?.planId === planId
-        && requestedSeekLayoutKeyRef.current === key
-      ) {
-        setPlaybackSeekLayout(layout);
-      }
-    }).catch(() => undefined);
-  }, [idleLayoutPlan, playbackPlanRef, request, setPlaybackSeekLayout]);
 
   return {
     acceptBootstrapPlaybackPlan,
@@ -168,6 +140,5 @@ export function useTtsPlanController(input: UseTtsPlanControllerInput) {
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
     getPlaybackPlan,
-    resetBootstrapPlanAdoption,
   };
 }

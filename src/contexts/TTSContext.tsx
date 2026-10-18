@@ -31,7 +31,7 @@ import { useConfig } from '@/contexts/ConfigContext';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useDefaultVoice } from '@/hooks/audio/useDefaultVoice';
 import { useAudioContext } from '@/hooks/audio/useAudioContext';
-import { useTtsPlayback } from '@/hooks/audio/useTtsPlayback';
+import { useTtsPlayback, type TtsPlaybackPlanRequest } from '@/hooks/audio/useTtsPlayback';
 import {
   useTtsDocumentNavigation,
   type EpubRenderedAnchorInput,
@@ -44,14 +44,13 @@ import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
 import type { TtsPlaybackPlanPayload, TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
-import { canSkipInPlaybackPhase, isPlaybackPhaseProcessing } from '@/lib/client/tts/playback-control';
+import { isPlaybackPhaseProcessing } from '@/lib/client/tts/playback-control';
 import {
   pdfLocatorPage,
   resolveDocumentAnchorSelectionOrdinal,
   type PlaybackAnchor,
 } from '@/lib/client/tts/playback-selection';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
-import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { resolveTtsLanguage } from '@openreader/tts/language';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import type {
@@ -60,9 +59,9 @@ import type {
   TTSSentenceAlignment,
   TtsPlaybackPhase,
 } from '@/types/tts';
-import type { TTSRequestHeaders, TTSSegmentLocator } from '@/types/client';
-import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import type { TTSSegmentLocator } from '@/types/client';
 import type { DocumentSettings } from '@/types/document-settings';
+import type { ReaderPlaybackPreparation } from '@/types/reader-bootstrap';
 import { resolveBookVoice } from '@/lib/shared/document-settings';
 
 import type { ReaderType } from '@/types/user-state';
@@ -116,17 +115,17 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
     readerType: ReaderType;
     settings: DocumentSettings;
     plan: TtsPlaybackPlan;
+    playback: ReaderPlaybackPreparation;
     initialPosition: ReadingPosition | null;
   }) => void;
   /**
    * Swap in a plan the server re-planned for the open reader (voice, speed,
    * language, segmentation) without resetting the reading position.
    */
-  adoptReplannedPlaybackPlan: (input: { settings: DocumentSettings; plan: TtsPlaybackPlan }) => void;
+  adoptReplannedPlaybackPlan: (input: { settings: DocumentSettings; plan: TtsPlaybackPlan; playback: ReaderPlaybackPreparation }) => void;
   playbackPlanReady: boolean;
   /** Identity of the adopted plan, or null while none is adopted. */
   playbackPlanKey: string | null;
-  setPdfSkipBlockKinds: (kinds: ParsedPdfBlockKind[] | null) => void;
   documentLanguage: string;
   resolvedLanguage: string;
   clearSegmentCaches: () => void;
@@ -180,14 +179,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     providerRef: configProviderRef,
     providerType: configProviderType,
     ttsModel: configTTSModel,
-    ttsInstructions: configTTSInstructions,
     updateConfigKey,
-    ttsSegmentMaxBlockLength,
   } = useConfig();
 
   // Audio and voice management hooks
   const audioContext = useAudioContext();
-  const { availableVoices, voicesPending } = useVoiceManagement(
+  const { availableVoices } = useVoiceManagement(
     configProviderRef,
     configProviderType,
     configTTSModel,
@@ -268,8 +265,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     ttsModel: configTTSModel,
   });
   const [audioSpeed, setAudioSpeed] = useState(audioPlayerSpeed);
-  const [ttsModel, setTTSModel] = useState(configTTSModel);
-  const [ttsInstructions, setTTSInstructions] = useState(configTTSInstructions);
+  const ttsModel = configTTSModel;
+  const [playbackPlanRequest, setPlaybackPlanRequest] = useState<TtsPlaybackPlanRequest | null>(null);
   const [readerSettings, setReaderSettings] = useState<DocumentSettings | null>(null);
   const documentLanguage = readerSettings?.language ?? 'auto';
   const bookVoice = resolveBookVoice({
@@ -279,22 +276,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     defaultVoice: voice,
     defaultVoiceSpeed: speed,
   });
-  const [pdfSkipBlockKinds, setPdfSkipBlockKinds] = useState<ParsedPdfBlockKind[] | null>(null);
   const resolvedLanguage = useMemo(
     () => resolveTtsLanguage({ configuredLanguage: documentLanguage, voice: bookVoice.voice }),
     [documentLanguage, bookVoice.voice],
-  );
-  const providerModelPolicy = useMemo(
-    () => resolveTtsProviderModelPolicy({
-      providerRef: configProviderRef,
-      providerType: configProviderType,
-      model: ttsModel,
-    }),
-    [configProviderRef, configProviderType, ttsModel],
-  );
-  const effectiveNativeSpeed = useMemo(
-    () => (providerModelPolicy.supportsNativeModelSpeed ? bookVoice.voiceSpeed : 1),
-    [providerModelPolicy.supportsNativeModelSpeed, bookVoice.voiceSpeed],
   );
 
   const playbackRunIdRef = useRef(0);
@@ -338,59 +322,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [setSelectedOrdinal]);
 
   const advanceRef = useRef<((backwards?: boolean) => void | Promise<void>) | null>(null);
-  const playbackPlanRequest = useMemo(() => {
-    if (!documentId) return null;
-    // Settings identify the plan and audio cache. Wait for voice resolution
-    // (including a failed lookup's fallback) instead of publishing a
-    // voice-less placeholder that is replaced moments later.
-    if (!bookVoice.voice && (voicesPending || availableVoices.length > 0)) return null;
-    const headers: TTSRequestHeaders = {
-      'Content-Type': 'application/json',
-      'x-tts-provider': configProviderRef,
-    };
-    return {
-      headers,
-      payload: {
-        documentId,
-        settings: {
-          providerRef: configProviderRef,
-          providerType: configProviderType,
-          ttsModel,
-          voice: bookVoice.voice,
-          nativeSpeed: effectiveNativeSpeed,
-          ...(providerModelPolicy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
-          language: resolvedLanguage,
-        },
-        planning: {
-          maxBlockLength: ttsSegmentMaxBlockLength,
-          language: resolvedLanguage,
-          ...(activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds } : {}),
-        },
-      },
-    };
-  }, [
-    activeReaderType,
-    availableVoices.length,
-    configProviderRef,
-    configProviderType,
-    documentId,
-    effectiveNativeSpeed,
-    pdfSkipBlockKinds,
-    providerModelPolicy.supportsInstructions,
-    resolvedLanguage,
-    ttsInstructions,
-    ttsModel,
-    ttsSegmentMaxBlockLength,
-    bookVoice.voice,
-    voicesPending,
-  ]);
   const {
     acceptBootstrapPlaybackPlan,
     applyPlaybackPlan,
     buildPlaybackPlanRequest,
     buildPlaybackSessionRequest,
     getPlaybackPlan,
-    resetBootstrapPlanAdoption,
   } = useTtsPlanController({
     activeReaderType,
     currentLocation: currDocPage,
@@ -425,7 +362,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackTimeSec, modelDownload,
     abortAudio: controllerAbortAudio,
     cancelPendingSeek: controllerCancelPendingSeek,
-    invalidatePlaybackRun: controllerInvalidatePlaybackRun,
     pauseActivePlayback: controllerPauseActivePlayback,
     seekPlaybackTo: controllerSeekPlaybackTo,
     seekPlaybackToOrdinal: controllerSeekPlaybackToOrdinal,
@@ -455,7 +391,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const abortAudio = controllerAbortAudio;
   const cancelPendingSeek = controllerCancelPendingSeek;
-  const invalidatePlaybackRun = controllerInvalidatePlaybackRun;
   const pauseActivePlayback = controllerPauseActivePlayback;
   const seekPlaybackTo = controllerSeekPlaybackTo;
   const seekPlaybackToOrdinal = controllerSeekPlaybackToOrdinal;
@@ -471,7 +406,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     skipToLocation, skipToOrdinal,
   } = useTtsDocumentNavigation({
     activeReaderType,
-    currentIndex,
     isPlaying,
     sentences,
     advanceRef,
@@ -484,9 +418,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     selectedOrdinalRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
-    abortAudio,
     cancelPendingSeek,
-    invalidatePlaybackRun,
     pauseActivePlayback,
     seekPlaybackToOrdinal,
     syncActivePlaybackToOrdinal,
@@ -502,9 +434,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   useEffect(() => {
     if (configIsLoading) return;
     setAudioSpeed(audioPlayerSpeed);
-    setTTSModel(configTTSModel);
-    setTTSInstructions(configTTSInstructions);
-  }, [configIsLoading, audioPlayerSpeed, configTTSModel, configTTSInstructions]);
+  }, [configIsLoading, audioPlayerSpeed]);
 
   /**
    * Stops the current audio playback and resets all state
@@ -513,6 +443,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     abortAudio();
     setIsPlaying(false);
     resetPlaybackPlan();
+    setPlaybackPlanRequest(null);
     playbackAnchorRef.current = null;
     setPlaybackAnchor(null);
     setCurrDocPage(1);
@@ -528,13 +459,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     readerType: ReaderType;
     settings: DocumentSettings;
     plan: TtsPlaybackPlan;
+    playback: ReaderPlaybackPreparation;
     initialPosition: ReadingPosition | null;
   }) => {
     stop();
-    resetBootstrapPlanAdoption();
     setReaderSettings(input.settings);
     setIsEPUB(input.readerType === 'epub');
-    acceptBootstrapPlaybackPlan(input.plan);
+    setPlaybackPlanRequest({
+      headers: { 'Content-Type': 'application/json', 'x-tts-provider': input.playback.request.settings.providerRef },
+      payload: input.playback.request,
+    });
+    acceptBootstrapPlaybackPlan(input.plan, input.playback.seekLayout);
 
     if (input.readerType === 'epub') {
       // EPUB establishes its cursor only after the saved segment's location
@@ -563,7 +498,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [
     acceptBootstrapPlaybackPlan,
     playbackSegmentsRef,
-    resetBootstrapPlanAdoption,
     setSelectedOrdinal,
     stop,
   ]);
@@ -571,16 +505,17 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const adoptReplannedPlaybackPlan = useCallback((input: {
     settings: DocumentSettings;
     plan: TtsPlaybackPlan;
+    playback: ReaderPlaybackPreparation;
   }) => {
     abortAudio();
-    // The aborted session's layout would otherwise block the new plan's
-    // before-Play layout, which never replaces a session-owned one.
-    setPlaybackSeekLayout(null);
     setIsPlaying(false);
-    resetBootstrapPlanAdoption();
     setReaderSettings(input.settings);
-    acceptBootstrapPlaybackPlan(input.plan);
-  }, [abortAudio, acceptBootstrapPlaybackPlan, resetBootstrapPlanAdoption, setPlaybackSeekLayout]);
+    setPlaybackPlanRequest({
+      headers: { 'Content-Type': 'application/json', 'x-tts-provider': input.playback.request.settings.providerRef },
+      payload: input.playback.request,
+    });
+    acceptBootstrapPlaybackPlan(input.plan, input.playback.seekLayout);
+  }, [abortAudio, acceptBootstrapPlaybackPlan]);
 
   const reacquirePlaybackPlan = useCallback(async () => {
     if (!documentId) return;
@@ -618,7 +553,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const isProcessing = isInteractionProcessing
     || isPlaybackPhaseProcessing(isPlaying, playbackPhase);
-  const canSkip = !isInteractionProcessing && canSkipInPlaybackPhase(isPlaying, playbackPhase);
+  const canSkip = !isInteractionProcessing && Boolean(playbackPlan?.planObjectKey);
 
   /**
    * Provides the TTS context value to child components
@@ -660,7 +595,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanKey: playbackPlan?.planObjectKey
       ? playbackPlanIdentity(playbackPlan)
       : null,
-    setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
     clearSegmentCaches,
@@ -703,7 +637,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
-    setPdfSkipBlockKinds,
     documentLanguage,
     resolvedLanguage,
     clearSegmentCaches,

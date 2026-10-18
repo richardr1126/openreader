@@ -86,7 +86,6 @@ function PdfReader({
   const outline = usePdfOutline(pdfDocument);
   const {
     skipToLocation,
-    setPdfSkipBlockKinds,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   // Plain-text mode reflows like EPUB, so its control sets side padding instead of page scale.
@@ -97,9 +96,6 @@ function PdfReader({
   const [showForceReparseConfirm, setShowForceReparseConfirm] = useState(false);
   const [isForceReparseStarting, setIsForceReparseStarting] = useState(false);
   const [containerHeight, setContainerHeight] = useState<string>('auto');
-  useEffect(() => {
-    setPdfSkipBlockKinds(documentSettings.pdf?.skipBlockKinds ?? []);
-  }, [documentSettings.pdf?.skipBlockKinds, setPdfSkipBlockKinds]);
 
   // Compute available height = viewport - (header height + tts bar height)
   useEffect(() => {

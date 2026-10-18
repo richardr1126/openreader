@@ -43,6 +43,8 @@ export function usePlaybackAudioElement(input: UsePlaybackAudioElementInput) {
     const audio = audioRef.current;
     if (!audio) return;
     try {
+      audio.onplay = audio.onpause = audio.onended = audio.onerror = null;
+      audio.ontimeupdate = audio.onwaiting = audio.onstalled = audio.onplaying = null;
       audio.pause();
       audio.removeAttribute('src');
       audio.load();

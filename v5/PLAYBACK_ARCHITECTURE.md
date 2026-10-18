@@ -411,7 +411,9 @@ failure feedback rather than leaving the client indefinitely buffering.
 `usePlaybackForegroundSync` is the only client owner of worker cursor writes. It
 coalesces rapid updates to the newest ordinal, retargets the operation SSE from
 the cursor response, and uses the same writer for the foreground heartbeat and
-explicit seeks. Distinct SSE progress snapshots request one whole-timeline read,
+explicit seeks. Activity changes share its command queue and resolve the cursor
+at dispatch, so a delayed activation cannot restore an obsolete seek target.
+Distinct SSE progress snapshots request one whole-timeline read,
 which supplies both projection timing and seek-layout state. Reads run at a
 bounded four-per-second cadence with one trailing refresh, so cached-segment
 bursts cannot monopolize browser JSON parsing or React delivery.
@@ -425,14 +427,15 @@ route `seekto`/`seekforward`/`seekbackward` through the same seek path and keep
 `setPositionState` in sync on whole-second, rate, duration, and play/pause
 changes. None of these add a session, cursor writer, or polling loop.
 
-The scrubber is meaningful before Play. The plan-only seek layout
-(`POST /api/tts/playback/plans/[planId]/seek-layout`) carries the playback
-request the session will start with and reads that cache scope through the
-worker's `POST /v1/tts-playback/segments/completed`, so a reopened document
-shows its cached ranges and exact durations, not a pure estimate. The plan
-artifact's own `settingsHash` cannot name that scope: plans are shared across
-voices, and only the client resolves a provider's default voice. `GET` with a
-`sessionId` remains the session-owned layout. While nothing plays, the media controller rests the playhead on the
+The scrubber is meaningful before Play. Shared reader bootstrap resolves the
+effective playback request, including an unsaved provider-default voice, and
+reads that cache scope through the worker's
+`POST /v1/tts-playback/segments/completed`. It returns the initial seek layout
+with the plan and request. The shell adopts them together before revealing the
+reader; a failed cache read reaches shared Retry. Plans can be shared across
+voices, so their artifact settings hash cannot name the audio cache scope.
+There is no detached plan-only client layout request. `GET` with a `sessionId`
+remains the session-owned layout. While nothing plays, the media controller rests the playhead on the
 selected sentence (`restingPlayheadSec`): the restored position on open, or the
 sentence a page turn selects. A pause inside that sentence keeps its exact
 time; `usePlaybackProjection` remains the only writer of the playback clock.
@@ -442,9 +445,16 @@ Loading is shown by the play control alone. It becomes a ring filled by the
 ready start buffer (`playbackStartProgress`, the same measurement as the
 "ahead" chip) while a session buffers or seeks, and spins only while there is
 nothing to measure (session startup, plan replacement). Previous/next keep
-their icons and stay enabled while buffering (`canSkipInPlaybackPhase`): a skip
+their icons and stay enabled during preparation and buffering: a skip
 is a superseding seek, so it retargets generation instead of waiting behind it.
 The time label stays visible; loading status moves to the right-hand chip.
+
+Startup retains the visible grid and waits for the latest selected ordinal and
+in-segment offset, rechecking after asynchronous reads. Browser media positioning
+waits for metadata, accepted time, and playable data before completing. One
+abort owner cancels superseded positioning; old clock/end events cannot complete
+a pending seek. Idle scrubbing only selects, without starting generation.
+Recovery also expires when no ready target appears, rather than waiting forever.
 
 Text-only duration estimates use a fixed per-character rate for the native
 speed. Calibrating that rate from completed audio is deliberately deferred:

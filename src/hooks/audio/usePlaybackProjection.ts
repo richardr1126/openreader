@@ -15,6 +15,8 @@ import {
 import { isPdfLocator, type TTSSegmentLocator } from '@/types/client';
 import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
 import { createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh';
+import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
+import { positionPlaybackMedia } from '@/lib/client/tts/playback-control';
 
 export type PlaybackSessionState = {
   sessionId: string;
@@ -52,6 +54,7 @@ type UsePlaybackProjectionInput = {
   setCurrentWordIndex: (wordIndex: number | null) => void;
   setSelectedOrdinal: (ordinal: number | null) => void;
   syncPlaybackLocator?: (locator: TTSSegmentLocator | null) => void;
+  shouldProject?: () => boolean;
 };
 
 export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
@@ -64,8 +67,14 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     setCurrentWordIndex,
     setSelectedOrdinal,
     syncPlaybackLocator,
+    shouldProject,
   } = input;
   const playbackProjectionRafRef = useRef<number | null>(null);
+  const mediaPositionAbortRef = useRef<AbortController | null>(null);
+  const cancelMediaPosition = useCallback(() => {
+    mediaPositionAbortRef.current?.abort();
+    mediaPositionAbortRef.current = null;
+  }, []);
   const playbackStreamBaseSecRef = useRef(0);
   const playbackStreamStartOrdinalRef = useRef<number | null>(null);
   const playbackTimelineRef = useRef<TtsPlaybackGrid | null>(null);
@@ -116,13 +125,16 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     mediaTimeToDocumentTime(audio.currentTime, playbackStreamBaseSecRef.current)
   ), []);
 
-  const setAudioDocumentTime = useCallback((
+  const setAudioDocumentTime = useCallback(async (
     audio: HTMLAudioElement,
     documentTimeSec: number,
     targetOrdinal: number,
     targetStartSec: number,
     options?: { reopenStream?: boolean },
   ) => {
+    cancelMediaPosition();
+    const controller = new AbortController();
+    mediaPositionAbortRef.current = controller;
     const target = Math.max(0, documentTimeSec);
     let base = playbackStreamBaseSecRef.current;
     if (options?.reopenStream || targetOrdinal !== playbackStreamStartOrdinalRef.current
@@ -138,8 +150,12 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
         audio.load();
       }
     }
-    audio.currentTime = documentTimeToMediaTime(target, base);
-  }, [playbackSessionRef]);
+    try {
+      return await positionPlaybackMedia(audio, documentTimeToMediaTime(target, base), controller.signal);
+    } finally {
+      if (mediaPositionAbortRef.current === controller) mediaPositionAbortRef.current = null;
+    }
+  }, [cancelMediaPosition, playbackSessionRef]);
 
   const refreshPlaybackTimeline = useCallback(async (
     timelineUrl: string, signal?: AbortSignal,
@@ -227,7 +243,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
   const startPlaybackProjectionLoop = useCallback((audio: HTMLAudioElement, runId: number) => {
     stopPlaybackProjectionLoop();
     const tick = () => {
-      if (runId !== playbackRunIdRef.current || audio.paused || audio.ended) {
+      if (runId !== playbackRunIdRef.current || audio.paused || audio.ended || shouldProject?.() === false) {
         playbackProjectionRafRef.current = null;
         return;
       }
@@ -247,9 +263,15 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     projectPlaybackTime,
     publishPlaybackTimeSec,
     stopPlaybackProjectionLoop,
+    shouldProject,
   ]);
 
-  const resetPlaybackProjection = useCallback(() => {
+  const seedPlaybackTimeline = useCallback((layout: TtsPlaybackSeekLayout, sessionId: string) => {
+    playbackTimelineRef.current = normalizePlaybackGrid({ ...layout, sessionId, status: 'queued' });
+  }, []);
+
+  const resetPlaybackProjection = useCallback((options?: { preservePosition?: boolean }) => {
+    cancelMediaPosition();
     stopPlaybackProjectionLoop();
     timelineLoaderRef.current?.reset();
     playbackTimelineRef.current = null;
@@ -257,8 +279,8 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     playbackStreamStartOrdinalRef.current = null;
     lastProjectionRef.current = null;
     playbackCursorOrdinalRef.current = null;
-    publishPlaybackTimeSec(0, { force: true });
-  }, [publishPlaybackTimeSec, stopPlaybackProjectionLoop]);
+    if (!options?.preservePosition) publishPlaybackTimeSec(0, { force: true });
+  }, [cancelMediaPosition, publishPlaybackTimeSec, stopPlaybackProjectionLoop]);
 
   return {
     playbackCursorOrdinalRef,
@@ -268,6 +290,8 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     publishPlaybackTimeSec,
     refreshPlaybackTimeline,
     resetPlaybackProjection,
+    seedPlaybackTimeline,
+    cancelMediaPosition,
     setAudioDocumentTime,
     setPlaybackStreamAnchor,
     startPlaybackProjectionLoop,

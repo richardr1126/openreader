@@ -36,6 +36,7 @@ async function startAndCancelPlayback(page: Page) {
 }
 
 type PlaybackSessionResponse = {
+  sessionId: string;
   seekLayoutUrl: string;
 };
 
@@ -115,10 +116,8 @@ async function verifyEpubPlayback(page: Page) {
   const position = page.getByRole('slider', { name: 'Playback position', exact: true });
   const initialViewportHeading = page.frameLocator('iframe').getByRole('heading').first();
   await expect(initialViewportHeading).toBeInViewport();
-  // The EPUB rendition and its asynchronous duration projection become ready
-  // independently. Wait for the same required value instead of sampling once.
-  await expect.poll(async () => Number(await position.getAttribute('max')))
-    .toBeGreaterThan(0);
+  // Readiness includes the timeline; the visible reader must already have it.
+  expect(Number(await position.getAttribute('max'))).toBeGreaterThan(0);
   const documentDuration = Number(await position.getAttribute('max'));
 
   const sessionResponsePromise = page.waitForResponse((response) => (
@@ -186,6 +185,57 @@ async function verifyEpubPlayback(page: Page) {
   await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 }).toBeGreaterThan(0);
   expect(await readPlaybackPosition(page)).toBeLessThanOrEqual(Math.ceil(pausedAt));
 
+  // Hold preparation after the server has answered. Every loading interaction
+  // must replace the target before activation, without losing the timeline.
+  let releasePreparation!: () => void;
+  const preparationGate = new Promise<void>((resolve) => { releasePreparation = resolve; });
+  let preparationHeld = false;
+  let preparedOrdinal = -1;
+  let preparations = 0;
+  let resumedSessionId = '';
+  let activationOrdinal = -1;
+  let mediaOrdinal = -1;
+  await page.route('**/api/tts/stream/sessions', async (route) => {
+    preparations += 1;
+    if (preparationHeld) return route.continue();
+    preparedOrdinal = route.request().postDataJSON().startIntent.selectedOrdinal;
+    const response = await route.fetch();
+    resumedSessionId = (await response.json() as PlaybackSessionResponse).sessionId;
+    preparationHeld = true;
+    await preparationGate;
+    await route.fulfill({ response });
+  });
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (preparationHeld && mediaOrdinal < 0 && /\/tts-playback\/sessions\/[^/]+\/audio$/.test(url.pathname)) {
+      mediaOrdinal = Number(url.searchParams.get('fromOrdinal'));
+    }
+    if (request.method() === 'POST' && /\/api\/tts\/stream\/[^/]+\/cursor$/.test(url.pathname)) {
+      const body = request.postDataJSON();
+      if (body.playbackActive === true && activationOrdinal < 0) activationOrdinal = body.ordinal;
+    }
+  });
+  await playButton.click();
+  await expect.poll(() => preparationHeld).toBe(true);
+  await expect(loadingButton).toBeVisible();
+  expect(Number(await position.getAttribute('max'))).toBeGreaterThan(0);
+  await position.focus();
+  await page.keyboard.press('PageUp');
+  const scrubbedAt = await readPlaybackPosition(page);
+  await page.getByRole('button', { name: 'Skip forward', exact: true }).click();
+  await page.getByRole('button', { name: 'Skip forward', exact: true }).click();
+  expect(await readPlaybackPosition(page)).toBeGreaterThan(scrubbedAt);
+  releasePreparation();
+  await expect(pauseButton).toBeVisible({ timeout: 60_000 });
+  expect(activationOrdinal).toBeGreaterThan(preparedOrdinal + 1);
+  expect(mediaOrdinal).toBe(activationOrdinal);
+  expect(resumedSessionId).toBe(session.sessionId);
+  const retargetedAt = await readPlaybackPosition(page);
+  await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 }).toBeGreaterThan(retargetedAt + 1);
+  await pauseButton.click();
+  await expect(playButton).toBeVisible();
+  expect(preparations).toBe(1);
+
   await page.getByRole('button', { name: 'Next section', exact: true }).click();
   await expect(initialViewportHeading).not.toBeInViewport({ timeout: 15_000 });
   await expect.poll(async () => Number(await position.getAttribute('max')))
@@ -206,7 +256,11 @@ async function verifyEpubPlayback(page: Page) {
   await pauseButton.click();
   await expect(playButton).toBeVisible();
 
-  await page.getByRole('button', { name: 'Previous section', exact: true }).click();
+  // The retarget case visits a later chapter. Return through the scrubber so
+  // the following responsive-reader checks have their original title page.
+  await position.focus();
+  await page.keyboard.press('Home');
+  await expect(initialViewportHeading).toBeInViewport({ timeout: 15_000 });
 }
 
 async function returnToLibrary(page: Page) {
@@ -215,7 +269,7 @@ async function returnToLibrary(page: Page) {
 }
 
 test('anonymous user controls playback across every accepted document journey', async ({ page }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   await enterAnonymousLibrary(page);
 
   await uploadLibraryFiles(page, [

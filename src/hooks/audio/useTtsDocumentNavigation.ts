@@ -40,7 +40,6 @@ export type EpubPlanLocatorResult =
 
 type UseTtsDocumentNavigationInput = {
   activeReaderType: ReaderType;
-  currentIndex: number;
   isPlaying: boolean;
   sentences: string[];
   advanceRef: MutableRefObject<((backwards?: boolean) => void | Promise<void>) | null>;
@@ -53,9 +52,7 @@ type UseTtsDocumentNavigationInput = {
   selectedOrdinalRef: MutableRefObject<number | null>;
   playbackSyncNavigationRef: MutableRefObject<boolean>;
   resumeAfterLocationChangeRef: MutableRefObject<boolean>;
-  abortAudio: () => void;
   cancelPendingSeek: () => void;
-  invalidatePlaybackRun: () => void;
   pauseActivePlayback: () => void;
   seekPlaybackToOrdinal: (ordinal: number) => boolean;
   syncActivePlaybackToOrdinal: (ordinal: number) => boolean;
@@ -71,7 +68,6 @@ type UseTtsDocumentNavigationInput = {
 export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
   const {
     activeReaderType,
-    currentIndex,
     isPlaying,
     sentences,
     advanceRef,
@@ -84,9 +80,7 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     selectedOrdinalRef,
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
-    abortAudio,
     cancelPendingSeek,
-    invalidatePlaybackRun,
     pauseActivePlayback,
     seekPlaybackToOrdinal,
     syncActivePlaybackToOrdinal,
@@ -142,7 +136,10 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
         activeReaderType,
         location,
       );
-      if (planIndex >= 0) selectPlaybackSegment(playbackSegmentsRef.current[planIndex]);
+      const segment = playbackSegmentsRef.current[planIndex];
+      if (segment) {
+        if (!seekPlaybackToOrdinal(segment.ordinal)) selectPlaybackSegment(segment);
+      }
     }
   }, [
     activeReaderType,
@@ -152,11 +149,13 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     playbackSyncNavigationRef,
     resumeAfterLocationChangeRef,
     selectPlaybackSegment,
+    seekPlaybackToOrdinal,
     setCurrDocPage,
     setIsPlaying,
   ]);
 
   const advance = useCallback(async (backwards = false) => {
+    const currentIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === selectedOrdinalRef.current);
     const nextIndex = currentIndex + (backwards ? -1 : 1);
     if (nextIndex < sentences.length && nextIndex >= 0) {
       selectPlaybackSegment(playbackSegmentsRef.current[nextIndex]);
@@ -164,8 +163,8 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     }
     setIsPlaying(false);
   }, [
-    currentIndex,
     playbackSegmentsRef,
+    selectedOrdinalRef,
     selectPlaybackSegment,
     sentences.length,
     setIsPlaying,
@@ -347,23 +346,21 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
   ]);
 
   const skipForward = useCallback(async () => {
+    const currentIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === selectedOrdinalRef.current);
     const nextSegment = playbackSegmentsRef.current[currentIndex + 1];
-    if (nextSegment && seekPlaybackToOrdinal(nextSegment.ordinal)) return;
-    if (isPlaying) setIsProcessing(true);
-    invalidatePlaybackRun();
-    abortAudio();
-    await advance();
-  }, [abortAudio, advance, currentIndex, invalidatePlaybackRun, isPlaying, playbackSegmentsRef, seekPlaybackToOrdinal, setIsProcessing]);
+    if (!nextSegment || seekPlaybackToOrdinal(nextSegment.ordinal)) return;
+    selectPlaybackSegment(nextSegment);
+    syncPlaybackLocator(nextSegment.ownerLocator);
+  }, [playbackSegmentsRef, selectedOrdinalRef, seekPlaybackToOrdinal, selectPlaybackSegment, syncPlaybackLocator]);
 
   const skipBackward = useCallback(async () => {
+    const currentIndex = playbackSegmentsRef.current.findIndex((segment) => segment.ordinal === selectedOrdinalRef.current);
     const nextIndex = currentIndex - 1;
     const nextSegment = playbackSegmentsRef.current[nextIndex];
-    if (nextIndex >= 0 && nextSegment && seekPlaybackToOrdinal(nextSegment.ordinal)) return;
-    if (isPlaying) setIsProcessing(true);
-    invalidatePlaybackRun();
-    abortAudio();
-    await advance(true);
-  }, [abortAudio, advance, currentIndex, invalidatePlaybackRun, isPlaying, playbackSegmentsRef, seekPlaybackToOrdinal, setIsProcessing]);
+    if (!nextSegment || seekPlaybackToOrdinal(nextSegment.ordinal)) return;
+    selectPlaybackSegment(nextSegment);
+    syncPlaybackLocator(nextSegment.ownerLocator);
+  }, [playbackSegmentsRef, selectedOrdinalRef, seekPlaybackToOrdinal, selectPlaybackSegment, syncPlaybackLocator]);
 
   /**
    * Move playback to one worker-plan ordinal: a tapped sentence, a search hit,
@@ -376,20 +373,13 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     const segment = playbackSegmentsRef.current.find((entry) => entry.ordinal === ordinal);
     if (!segment) return false;
     if (seekPlaybackToOrdinal(segment.ordinal)) return true;
-    if (isPlaying) setIsProcessing(true);
-    invalidatePlaybackRun();
-    abortAudio();
     selectPlaybackSegment(segment);
     syncPlaybackLocator(segment.ownerLocator);
     return true;
   }, [
-    abortAudio,
-    invalidatePlaybackRun,
-    isPlaying,
     playbackSegmentsRef,
     seekPlaybackToOrdinal,
     selectPlaybackSegment,
-    setIsProcessing,
     syncPlaybackLocator,
   ]);
 

@@ -87,7 +87,7 @@ describe('reader server-state ownership', () => {
     // content identity remounts the renderer.
     expect(surfaceKey).not.toContain('payload.plan');
     expect(surfaceKey).toContain('payload.document.contentVersion');
-    expect(shell).toContain('adoptReplannedPlaybackPlan({ settings: replannedSettings, plan: replannedPlan })');
+    expect(shell).toContain('playback: replannedPlayback');
     expect(shell).toContain('const attemptKey = `${surfaceKey}:${rendererAttempt}`');
     expect(shell).toContain('restartBootstrap,');
     expect(shell).toContain('enabled: Boolean(payload && sourceDocument)');
@@ -182,7 +182,7 @@ describe('reader server-state ownership', () => {
     expect(planController).not.toContain('resolveTtsPlaybackPlan');
     expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
     expect(planController).not.toContain('setTimeout(resolve, 300)');
-    expect(planController).toContain('resetBootstrapPlanAdoption');
+    expect(planController).not.toContain('getTtsPlaybackSeekLayout');
     expect(playbackModel).toContain('currentPlan.planId === plan.planId');
 
     const epubViewer = source('src/components/views/EPUBViewer.tsx');

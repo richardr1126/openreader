@@ -7,13 +7,7 @@ import {
   userDocumentProgress,
   userPreferences,
 } from '@openreader/database/schema';
-import { resolveTtsLanguage } from '@openreader/tts/language';
-import {
-  resolveProviderDefaults,
-  resolveTtsProviderModelPolicy,
-} from '@openreader/tts/provider-policy';
 import type { NextRequest } from 'next/server';
-import { APP_CONFIG_DEFAULTS, type AppConfigValues } from '@/types/config';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import type { BaseDocument } from '@/types/documents';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
@@ -21,20 +15,8 @@ import type {
   ReaderBootstrapResult,
   ReaderPayload,
 } from '@/types/reader-bootstrap';
-import { mergeDocumentSettings, resolveBookVoice } from '@/lib/shared/document-settings';
+import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import type { ReadingPosition } from '@/lib/shared/reading-position';
-import {
-  assertAuthoritativePlaybackPlan,
-  normalizePlaybackPlan,
-} from '@/lib/shared/playback-plan';
-import { listAdminProviders } from '@/lib/server/admin/providers';
-import {
-  ComputeWorkerClient,
-  isComputeWorkerAvailable,
-} from '@/lib/server/compute-worker/client';
-import type {
-  TtsPlaybackPlanResult,
-} from '@/lib/server/compute-worker/protocol';
 import {
   createOrReuseCurrentPdfParseOperation,
   fetchPdfParseOperation,
@@ -52,22 +34,13 @@ import {
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 import {
-  buildTtsPlaybackPlanningInput,
-  toTtsPlaybackPlanRequest,
-  type ParsedTtsPlaybackRequestBody,
-} from '@/lib/server/tts/playback-request';
-import { readTtsPlaybackPlanArtifact } from '@/lib/server/tts/playback-plans';
-import {
   resolveSegmentDocumentScope,
   type ResolvedSegmentDocumentScope,
 } from '@/lib/server/tts/segments-auth';
-import {
-  sanitizePreferencesPatch,
-  type PreferenceNormalizationContext,
-} from '@/lib/server/user/preferences-normalize';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { toBaseDocument, type StoredDocumentRow } from '@/lib/server/documents/document-row';
 import { resolvePdfOperationReadiness } from './bootstrap-progress';
+import { resolveReaderPlayback } from './playback';
 
 type DocumentRow = StoredDocumentRow & { userId: string };
 
@@ -199,165 +172,6 @@ async function ensurePdfReady(
   };
 }
 
-function preferenceContext(
-  runtimeConfig: Awaited<ReturnType<typeof getResolvedRuntimeConfig>>,
-  providers: Awaited<ReturnType<typeof listAdminProviders>>,
-): PreferenceNormalizationContext {
-  return {
-    showAllProviderModels: runtimeConfig.showAllProviderModels,
-    sharedProviders: providers.filter((provider) => provider.enabled).map((provider) => ({
-      slug: provider.slug,
-      providerType: provider.providerType,
-      defaultModel: provider.defaultModel,
-      defaultInstructions: provider.defaultInstructions,
-    })),
-  };
-}
-
-async function resolvePlan(
-  request: NextRequest,
-  documentId: string,
-  scope: ResolvedSegmentDocumentScope,
-  settings: ReturnType<typeof mergeDocumentSettings>,
-  storedPreferences: unknown,
-): Promise<ReaderBootstrapResolution | { plan: ReaderPayload['plan'] }> {
-  if (!isComputeWorkerAvailable()) {
-    return {
-      result: {
-        status: 'error',
-        message: 'The compute worker required for reader playback is unavailable.',
-        retryable: true,
-      },
-    };
-  }
-  const [runtimeConfig, providers] = await Promise.all([
-    getResolvedRuntimeConfig(),
-    listAdminProviders(),
-  ]);
-  const normalization = preferenceContext(runtimeConfig, providers);
-  const patch = sanitizePreferencesPatch(
-    storedRecord(storedPreferences),
-    normalization,
-    { fillMissingProvider: true },
-  ).patch;
-  const preferences: AppConfigValues = { ...APP_CONFIG_DEFAULTS, ...patch };
-  const provider = resolveProviderDefaults({
-    providerRef: preferences.providerRef,
-    providerType: preferences.providerType,
-    sharedProviders: normalization.sharedProviders,
-    fallbackProviderRef: runtimeConfig.defaultTtsProvider,
-  });
-  const model = preferences.ttsModel || provider.defaultModel;
-  const policy = resolveTtsProviderModelPolicy({
-    providerRef: provider.providerRef,
-    providerType: provider.providerType,
-    model,
-  });
-  const { voice, voiceSpeed } = resolveBookVoice({
-    override: settings.voiceOverride,
-    providerRef: provider.providerRef,
-    ttsModel: model,
-    defaultVoice: preferences.voice,
-    defaultVoiceSpeed: preferences.voiceSpeed,
-  });
-  const language = resolveTtsLanguage({
-    configuredLanguage: settings.language || 'auto',
-    voice,
-  });
-  const parsed: ParsedTtsPlaybackRequestBody = {
-    documentId,
-    settings: {
-      providerRef: provider.providerRef,
-      providerType: provider.providerType,
-      ttsModel: model,
-      voice,
-      nativeSpeed: policy.supportsNativeModelSpeed ? voiceSpeed : 1,
-      ...(policy.supportsInstructions && (preferences.ttsInstructions || provider.defaultInstructions)
-        ? { ttsInstructions: preferences.ttsInstructions || provider.defaultInstructions }
-        : {}),
-      language,
-    },
-    startLocation: {},
-    maxBlockLength: preferences.ttsSegmentMaxBlockLength,
-    language,
-    ...(scope.readerType === 'pdf'
-      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? [] }
-      : {}),
-  };
-  const planningInput = await buildTtsPlaybackPlanningInput(parsed, scope);
-  let operation;
-  try {
-    operation = await createAdmittedComputeOperation({
-      policy: runtimeConfig.computeLimitPolicies,
-      action: 'tts_playback_plan',
-      requestKey: `${documentId}:${scope.documentVersion}:${planningInput.settingsHash}`,
-      subject: {
-        userId: scope.userId,
-        isAnonymous: scope.isAnonymousUser,
-        ip: getClientIp(request),
-      },
-      create: () => new ComputeWorkerClient().createTtsPlaybackPlanOperation(
-        toTtsPlaybackPlanRequest({
-          parsed,
-          scope,
-          ...planningInput,
-          planning: planningInput.planning,
-        }),
-      ),
-    });
-  } catch (error) {
-    if (!(error instanceof ComputeAdmissionLimitedError)) throw error;
-    return {
-      result: {
-        status: 'error',
-        message: error.message,
-        retryable: true,
-      },
-    };
-  }
-  if (operation.status === 'queued' || operation.status === 'running') {
-    return { result: { status: 'pending' }, operationId: operation.opId };
-  }
-  if (operation.status === 'failed') {
-    return {
-      result: {
-        status: 'error',
-        message: operation.error?.message || 'The reading plan could not be prepared.',
-        retryable: true,
-      },
-    };
-  }
-  const result = operation.result as TtsPlaybackPlanResult | undefined;
-  if (!result?.planObjectKey) {
-    return {
-      result: {
-        status: 'error',
-        message: 'The reading plan completed without an artifact.',
-        retryable: true,
-      },
-    };
-  }
-  const { artifact, body } = await readTtsPlaybackPlanArtifact(result.planObjectKey);
-  if (artifact.storageUserId && artifact.storageUserId !== scope.storageUserId) {
-    return {
-      result: {
-        status: 'error',
-        message: 'Reading plan scope mismatch.',
-        retryable: false,
-      },
-    };
-  }
-  return {
-    plan: assertAuthoritativePlaybackPlan(normalizePlaybackPlan({
-      ...JSON.parse(body) as Record<string, unknown>,
-      planId: operation.opId,
-      planObjectKey: result.planObjectKey,
-      planSignature: result.planSignature,
-      startOrdinal: result.startOrdinal,
-      plannedCount: result.plannedCount,
-    }), { documentId, readerType: scope.readerType }),
-  };
-}
 
 export async function resolveReaderBootstrapState(
   request: NextRequest,
@@ -417,7 +231,7 @@ export async function resolveReaderBootstrapState(
     storedRecord(settingsRows[0]?.dataJson),
   );
   const initialPosition = toReadingPosition(progressRows[0]);
-  const planResult = await resolvePlan(request, documentId, scope, settings, preferenceRows[0]?.dataJson);
+  const planResult = await resolveReaderPlayback(request, documentId, scope, settings, storedRecord(preferenceRows[0]?.dataJson));
   if ('result' in planResult) return planResult;
 
   const document: BaseDocument = toBaseDocument(row);
@@ -442,6 +256,7 @@ export async function resolveReaderBootstrapState(
       document: { ...document, type: 'pdf' },
       settings,
       plan: planResult.plan,
+      playback: planResult.playback,
       initialPosition,
       parsedDocument: parsedPdfDocument,
     };
@@ -452,6 +267,7 @@ export async function resolveReaderBootstrapState(
       document: { ...document, type: 'epub' },
       settings,
       plan: planResult.plan,
+      playback: planResult.playback,
       initialPosition,
     };
   } else {
@@ -461,6 +277,7 @@ export async function resolveReaderBootstrapState(
       document: { ...document, type: 'html' },
       settings,
       plan: planResult.plan,
+      playback: planResult.playback,
       initialPosition,
     };
   }

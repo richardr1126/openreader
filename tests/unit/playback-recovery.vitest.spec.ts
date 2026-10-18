@@ -40,6 +40,17 @@ describe('same-session media recovery', () => {
     vi.advanceTimersByTime(5_000);
     expect(f.reconnect).toHaveBeenCalledTimes(3);
   });
+  test('settles a stall even when a fresh ready target never arrives', () => {
+    const f = fixture();
+    f.readyTarget.mockReturnValue(null);
+    vi.advanceTimersByTime(59_000);
+    expect(f.onExhausted).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1_000);
+    expect(f.onExhausted).toHaveBeenCalledTimes(1);
+    expect(f.reconnect).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(60_000);
+    expect(f.onExhausted).toHaveBeenCalledTimes(1);
+  });
   test('pause and teardown prevent recovery; real progress resets its budget', () => {
     const f = fixture();
     vi.advanceTimersByTime(5_000);

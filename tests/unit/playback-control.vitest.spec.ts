@@ -1,7 +1,6 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 
 import {
-  canSkipInPlaybackPhase,
   PLAYBACK_START_BUFFER_WALL_MS,
   playbackStartProgress,
   isPlaybackAbortError,
@@ -9,6 +8,7 @@ import {
   isPlaybackStartBufferReady,
   measurePlaybackStartBuffer,
   resumePlaybackMedia,
+  positionPlaybackMedia,
   resolvePlaybackControlPresentation,
   waitForPlaybackStartBuffer,
 } from '../../src/lib/client/tts/playback-control';
@@ -38,6 +38,44 @@ describe('playback media resume', () => {
       () => Promise.resolve(),
       () => true,
     )).resolves.toEqual({ status: 'resumed' });
+  });
+});
+
+describe('browser media positioning', () => {
+  function audio() {
+    return Object.assign(new EventTarget(), { currentTime: 0, readyState: 0, seeking: false }) as unknown as HTMLAudioElement;
+  }
+  test('waits for metadata and data before accepting the requested media time', async () => {
+    const media = audio();
+    let settled = false;
+    const positioned = positionPlaybackMedia(media, 8, new AbortController().signal).then((result) => { settled = true; return result; });
+    expect(media.currentTime).toBe(0);
+    Object.defineProperty(media, 'readyState', { value: 1, writable: true });
+    media.dispatchEvent(new Event('loadedmetadata'));
+    expect(media.currentTime).toBe(8);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    Object.defineProperty(media, 'readyState', { value: 2 });
+    media.dispatchEvent(new Event('loadeddata'));
+    await expect(positioned).resolves.toBe(true);
+  });
+  test('cancels a superseded source before late metadata can restore its position', async () => {
+    const media = audio();
+    const controller = new AbortController();
+    const old = positionPlaybackMedia(media, 8, controller.signal);
+    controller.abort();
+    const current = positionPlaybackMedia(media, 2, new AbortController().signal);
+    Object.defineProperty(media, 'readyState', { value: 2 });
+    media.dispatchEvent(new Event('loadedmetadata'));
+    await expect(old).resolves.toBe(false);
+    await expect(current).resolves.toBe(true);
+    expect(media.currentTime).toBe(2);
+  });
+  test('exposes browser positioning failure', async () => {
+    const media = audio();
+    Object.defineProperty(media, 'readyState', { value: 2 });
+    Object.defineProperty(media, 'currentTime', { set() { throw new Error('rejected'); } });
+    await expect(positionPlaybackMedia(media, 8, new AbortController().signal)).rejects.toThrow('rejected');
   });
 });
 
@@ -229,18 +267,51 @@ describe('playback start buffer', () => {
       pollMs: 0,
     })).rejects.toThrow('TTS playback generation failed before audio became ready');
   });
+
+  test('ignores the obsolete startup buffer after a seek redirects generation', async () => {
+    vi.useFakeTimers();
+    let target = 0;
+    let release!: (layout: typeof oldLayout) => void;
+    const oldLayout = {
+      sessionId: 'session', status: 'running', generationStartOrdinal: 0,
+      segments: [segment(0, 12_000), segment(1, 12_000, false), segment(2, 12_000, false)],
+    };
+    const loadLayout = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }))
+      .mockResolvedValue(oldLayout);
+    try {
+      let finished = false;
+      const waiting = waitForPlaybackStartBuffer({
+        sessionId: 'session', loadLayout, isCurrent: () => true, playbackRate: 1,
+        getStartOrdinal: () => target,
+      }).then((layout) => { finished = true; return layout; });
+      target = 2;
+      release(oldLayout);
+      await vi.advanceTimersByTimeAsync(250);
+      expect(finished).toBe(false);
+      const newLayout = { ...oldLayout, segments: [segment(0, 12_000), segment(1, 12_000, false), segment(2, 12_000)] };
+      loadLayout.mockResolvedValue(newLayout);
+      await vi.advanceTimersByTimeAsync(250);
+      await expect(waiting).resolves.toEqual(newLayout);
+    } finally {
+      vi.clearAllTimers();
+      vi.useRealTimers();
+    }
+  });
+
+  test('does not accept a layout whose request completed after cancellation', async () => {
+    let current = true;
+    let release!: (layout: { sessionId: string; status: string; generationStartOrdinal: number; segments: ReturnType<typeof segment>[] }) => void;
+    const waiting = waitForPlaybackStartBuffer({
+      sessionId: 'session', isCurrent: () => current, playbackRate: 1,
+      loadLayout: () => new Promise<Parameters<typeof release>[0]>((resolve) => { release = resolve; }),
+    });
+    current = false;
+    release({ sessionId: 'session', status: 'running', generationStartOrdinal: 0, segments: [segment(0, 12_000)] });
+    await expect(waiting).resolves.toBeNull();
+  });
 });
 
 describe('playback loading controls', () => {
-  test('skips retarget while buffering but wait for session startup', () => {
-    expect(canSkipInPlaybackPhase(false, 'ready')).toBe(true);
-    expect(canSkipInPlaybackPhase(true, 'playing')).toBe(true);
-    expect(canSkipInPlaybackPhase(true, 'buffering')).toBe(true);
-    expect(canSkipInPlaybackPhase(true, 'seeking')).toBe(true);
-    expect(canSkipInPlaybackPhase(true, 'planning')).toBe(false);
-    expect(canSkipInPlaybackPhase(true, 'ready')).toBe(false);
-  });
-
   test('fills the loading ring from the ready start buffer', () => {
     expect(playbackStartProgress(null)).toBe(0);
     expect(playbackStartProgress({ wallMs: PLAYBACK_START_BUFFER_WALL_MS / 2, reachedDocumentEnd: false })).toBe(0.5);

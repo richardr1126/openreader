@@ -58,6 +58,10 @@ function payload(readerType: ReaderType): ReaderPayload {
       segments: [],
     },
     initialPosition: null,
+    playback: {
+      request: { documentId: document.id, settings: { providerRef: 'openai', providerType: 'openai' as const, ttsModel: 'tts-1', voice: 'alloy', nativeSpeed: 1 } },
+      seekLayout: { planId: 'plan-v1', startOrdinal: 0, generationStartOrdinal: 0, status: null, durationMs: 0, segments: [] },
+    },
   };
   if (readerType === 'pdf') {
     return {

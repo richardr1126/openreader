@@ -97,13 +97,24 @@ type ReaderPayloadBase = {
   readerType: ReaderType;
   settings: DocumentSettings;
   plan: PlaybackPlan;
+  playback: {
+    request: TtsPlaybackPlanPayload;
+    seekLayout: TtsPlaybackSeekLayout;
+  };
   initialPosition: ReaderPosition;
 };
 ```
 
 Each reader payload adds only its source and renderer-specific immutable data.
-The plan and initial position are authoritative parts of the payload. TTS
-consumes them; it does not launch another plan-preparation lifecycle.
+The plan, effective playback request, initial cached/estimated timeline, and
+initial position are authoritative parts of the payload. TTS adopts them
+together; it does not launch another plan or idle-timeline preparation
+lifecycle. Bootstrap resolves the provider's default voice before reading the
+matching cache scope. Cache-read failure reaches shared Retry, while absent
+audio yields estimated durations. Readiness never generates audio.
+Static voice catalogues require no credentials. With no shared provider
+configured, reading still prepares an estimated timeline; provider configuration
+is required for generation rather than for revealing readable content.
 
 ## Ownership
 
@@ -643,7 +654,8 @@ The branch is complete when:
 
 1. All reader routes use the same bootstrap hook, shell, and loader.
 2. PDF is the only reader with optional parse progress.
-3. A ready payload already contains the playback plan and initial position.
+3. A ready payload already contains the playback plan, effective playback
+   request, initial timeline, and initial position.
 4. Each renderer exposes one initial `onReady` callback, reports pre-ready
    failures through `onError`, and keeps its internal lifecycle private.
 5. Initial open and plan-affecting settings changes consume a bootstrap-supplied

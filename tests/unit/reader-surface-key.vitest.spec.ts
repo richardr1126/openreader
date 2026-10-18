@@ -27,6 +27,10 @@ function htmlPayload(contentVersion: string, planId: string, planSignature: stri
       segments: [],
     },
     initialPosition: null,
+    playback: {
+      request: { documentId: 'doc-html', settings: { providerRef: 'openai', providerType: 'openai', ttsModel: 'tts-1', voice: 'alloy', nativeSpeed: 1 } },
+      seekLayout: { planId, startOrdinal: 0, generationStartOrdinal: 0, status: null, durationMs: 0, segments: [] },
+    },
   };
 }
 

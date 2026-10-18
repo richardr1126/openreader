@@ -449,11 +449,11 @@ describe('server-state architecture', () => {
     expect(planController).not.toContain('createTtsPlaybackPlan');
     expect(planController).toContain('getPlaybackPlan');
     expect(planController).not.toContain('fetchPlaybackSeekLayoutUntilReady');
-    expect(planController).toContain('if (requestedSeekLayoutKeyRef.current === key) return;');
-    expect(planController).toContain('resetBootstrapPlanAdoption');
-    expect(context).toContain('resetBootstrapPlanAdoption();');
+    expect(planController).not.toContain('requestedSeekLayoutKeyRef');
+    expect(planController).not.toContain('resetBootstrapPlanAdoption');
+    expect(context).toContain('input.playback.seekLayout');
     expect(planController).not.toContain('attempt < 20');
-    expect(planController.match(/getTtsPlaybackSeekLayout\(/g) ?? []).toHaveLength(1);
+    expect(planController).not.toContain('getTtsPlaybackSeekLayout');
     expect(playbackHook).not.toContain('getTtsPlaybackSeekLayout(session.seekLayoutUrl');
     expect(playbackHook).toContain('startPlaybackForegroundSync(runId)');
     expect(planController).toContain('applyPlaybackPlan(plan)');
@@ -479,11 +479,11 @@ describe('server-state architecture', () => {
     expect(playbackHook).toContain("'buffering'");
     expect(playbackProjection).toContain('normalizePlaybackGrid');
     expect(playbackProjection).toContain('projectPlaybackGridAtTime');
-    expect(playbackHook).toContain('audio.src = session.audioUrl');
+    expect(playbackHook).toContain('await setAudioDocumentTime(audio');
     expect(context).toContain('canStartPlayback: isPlaying &&');
     expect(context).not.toContain("activeReaderType === 'epub' && sentence.trim()");
     expect(context).not.toContain("activeReaderType !== 'epub' && playbackSegment?.key");
-    expect(context).toContain("activeReaderType === 'pdf' && pdfSkipBlockKinds ? { skipBlockKinds: pdfSkipBlockKinds }");
+    expect(source('src/lib/server/reader/playback.ts')).toContain('skipBlockKinds: settings.pdf?.skipBlockKinds ?? []');
     expect(clientTts).toContain('skipBlockKinds?: ParsedPdfBlockKind[]');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('readOptionalSkipBlockKinds(planningRec)');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds');
@@ -682,7 +682,7 @@ describe('server-state architecture', () => {
     expect(playbackProjection).not.toContain("normalizePdfPage((locator as { page?: unknown }).page)");
     expect(playbackPlan).toContain('normalizeLocator(row.locator as TTSSegmentLocator)');
     expect(playbackGrid).toContain('normalizeLocator(row.locator as TTSSegmentLocator)');
-    expect(ttsApi).toContain('normalizeLocator(row.locator as TTSSegmentLocator)');
+    expect(ttsApi).not.toContain('getTtsPlaybackSeekLayout');
     expect(ttsApi).toContain('locator: TTSSegmentLocator | null');
     expect(ttsApi).not.toContain('locator: unknown');
     const abortAudioBody = playbackHook.slice(
@@ -694,8 +694,7 @@ describe('server-state architecture', () => {
     expect(documentNavigation).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html')");
     expect(documentNavigation).toContain('resolveFirstPlanIndexForDocumentAnchor(');
     expect(playbackHook).toContain('seekPlaybackTo');
-    expect(playbackSeek).toContain('const applyReadyMediaPosition = useCallback');
-    expect(playbackSeek).toContain('setAudioDocumentTime(audio, documentTimeSec');
+    expect(playbackSeek).toContain('await setAudioDocumentTime(audio, targetSec, pendingSeek.ordinal, startSec');
     expect(playbackProjection).toContain('const targetOrdinal = projection.segment.ordinal;');
     expect(playbackProjection).toContain('setSelectedOrdinal(targetOrdinal)');
     expect(playbackProjection).toContain('shouldSyncPlaybackLocator(previous?.locatorKey, locatorKey)');
@@ -717,8 +716,6 @@ describe('server-state architecture', () => {
     expect(context).toContain('currentSentenceOrdinal');
     expect(playbackHook).toContain('waitForPlaybackStartBuffer({');
     expect(playbackControl).toContain("layout.status === 'running' || layout.status === 'succeeded'");
-    expect(playbackHook).toContain('initialSeekLayout.generationStartOrdinal');
-    expect(playbackHook).toContain('setPlaybackStreamAnchor(initialSeekLayout.generationStartOrdinal, initialStartSec)');
     expect(playbackProjection).toContain('mediaTimeToDocumentTime');
     expect(playbackHook).not.toContain('waitForAudioSeekReady');
     expect(context).not.toContain('return last');
@@ -738,13 +735,12 @@ describe('server-state architecture', () => {
     expect(source('src/lib/client/api/tts.ts')).not.toContain('startOrdinal?: number');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain('startOrdinal?: number');
     expect(source('src/lib/server/tts/playback-request.ts')).not.toContain("readOptionalInt(rec, 'startOrdinal'");
-    expect(ttsApi).toContain("throw new Error('TTS playback seek layout response was missing required numeric fields')");
+    expect(seekLayoutRoute).not.toContain('export async function POST');
     expect(source('src/app/api/tts/stream/[sessionId]/events/route.ts')).toContain('proxyOperationEvents');
     expect(source('src/app/api/tts/stream/[sessionId]/cursor/route.ts')).toContain('cursorOrdinal');
     expect(seekLayoutRoute).toContain('buildPlaybackGrid');
     expect(seekLayoutRoute).toContain('readTtsPlaybackPlanArtifact(session.planObjectKey)');
-    expect(seekLayoutRoute.indexOf('resolveTtsPlaybackSession(request, sessionId)'))
-      .toBeLessThan(seekLayoutRoute.indexOf('resolveTtsPlaybackPlanOperation(planId)'));
+    expect(seekLayoutRoute).not.toContain('resolveTtsPlaybackPlanOperation');
     expect(seekLayoutRoute).toContain('listCompletedTtsPlaybackSegments(session)');
     expect(seekLayoutRoute).not.toContain('minOrdinal');
     expect(streamTimelineRoute).toContain('buildPlaybackGrid');

@@ -12,6 +12,7 @@ export function createPlaybackRecovery<T>(input: {
   onExhausted: () => void;
   onTerminalFailure?: () => void;
   now?: () => number;
+  noProgressTimeoutMs?: number;
 }) {
   const now = input.now ?? Date.now;
   let lastTime = input.currentTime();
@@ -35,7 +36,16 @@ export function createPlaybackRecovery<T>(input: {
     }
     if (now() - lastAdvance < 5_000) return;
     const target = input.readyTarget();
-    if (target === null) return; // Still generating: reloading cannot help.
+    if (target === null) {
+      // Missing/stale readiness cannot leave the player waiting forever. A
+      // reconnect still requires proven cached audio; exhaustion exposes Retry.
+      if (now() - lastAdvance >= (input.noProgressTimeoutMs ?? 60_000)) {
+        lastAdvance = now();
+        attempts = 0;
+        input.onExhausted();
+      }
+      return;
+    }
     lastAdvance = now();
     if (attempts >= 2) {
       attempts = 0;
@@ -65,7 +75,7 @@ export function createTtsMediaRecovery(input: {
 }) {
   return createPlaybackRecovery({
     isCurrent: input.isCurrent,
-    currentTime: input.getDocumentTime,
+    currentTime: () => input.audio.currentTime,
     hasTerminalFailure: () => input.getLayout()?.status === 'failed',
     readyTarget: () => {
       const layout = input.getLayout();
