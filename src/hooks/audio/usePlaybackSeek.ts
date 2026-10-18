@@ -10,6 +10,8 @@ import type { TtsPlaybackPhase } from '@/types/tts';
 
 type PendingSeek = {
   ordinal: number;
+  offsetSec: number;
+  reopenStream: boolean;
   runId: number;
   expiresAt: number;
 };
@@ -23,6 +25,7 @@ type UsePlaybackSeekInput = {
   playbackRunIdRef: MutableRefObject<number>;
   playbackSeekLayout: TtsPlaybackSeekLayout | null;
   playbackSessionRef: MutableRefObject<PlaybackSessionState | null>;
+  cancelMediaPosition: () => void;
   projectPlaybackTime: (seconds: number) => void;
   publishPlaybackTimeSec: (seconds: number, options?: { force?: boolean }) => void;
   setAudioDocumentTime: (
@@ -31,7 +34,7 @@ type UsePlaybackSeekInput = {
     targetOrdinal: number,
     targetStartSec: number,
     options?: { reopenStream?: boolean },
-  ) => void;
+  ) => Promise<boolean>;
   setPlaybackPhase: (phase: TtsPlaybackPhase) => void;
   setSelectedOrdinal: (ordinal: number | null) => void;
   syncPlaybackLocator?: (locator: TTSSegmentLocator | null) => void;
@@ -40,65 +43,31 @@ type UsePlaybackSeekInput = {
 
 export function usePlaybackSeek(input: UsePlaybackSeekInput) {
   const {
-    audioRef,
-    audioSpeed,
-    isPlayingRef,
-    onPendingSeekExpired,
-    playbackActiveRef,
-    playbackRunIdRef,
-    playbackSeekLayout,
-    playbackSessionRef,
-    projectPlaybackTime,
-    publishPlaybackTimeSec,
-    setAudioDocumentTime,
-    setPlaybackPhase,
-    setSelectedOrdinal,
-    syncPlaybackLocator,
-    updateWorkerPlaybackCursor,
+    audioRef, audioSpeed, isPlayingRef, onPendingSeekExpired, playbackActiveRef,
+    playbackRunIdRef, playbackSeekLayout, playbackSessionRef, cancelMediaPosition,
+    projectPlaybackTime, publishPlaybackTimeSec, setAudioDocumentTime,
+    setPlaybackPhase, setSelectedOrdinal, syncPlaybackLocator, updateWorkerPlaybackCursor,
   } = input;
   const [pendingSeek, setPendingSeekState] = useState<PendingSeek | null>(null);
   const pendingSeekRef = useRef<PendingSeek | null>(null);
+  const latestLayoutRef = useRef(playbackSeekLayout);
+  latestLayoutRef.current = playbackSeekLayout;
+  const applyingSeekRef = useRef<PendingSeek | null>(null);
+  const seekSequenceRef = useRef(0);
 
   const setPendingSeek = useCallback((next: PendingSeek | null) => {
+    seekSequenceRef.current += 1;
+    cancelMediaPosition();
     pendingSeekRef.current = next;
     setPendingSeekState(next);
-  }, []);
-
+  }, [cancelMediaPosition]);
   const cancelPendingSeek = useCallback(() => setPendingSeek(null), [setPendingSeek]);
 
-  const applyReadyMediaPosition = useCallback((
-    documentTimeSec: number,
-    ordinal: number,
-    segmentStartSec: number,
-    reopenStream = false,
-  ) => {
-    const audio = audioRef.current;
-    if (!audio || !playbackActiveRef.current || !audio.src) return;
-    try {
-      setAudioDocumentTime(audio, documentTimeSec, ordinal, segmentStartSec, { reopenStream });
-    } catch {
-      // Projection still updates even when a browser rejects the media seek.
-    }
-    if (isPlayingRef.current) {
-      setPlaybackPhase('buffering');
-      void audio.play().catch(() => undefined);
-    } else {
-      setPlaybackPhase('ready');
-    }
-  }, [
-    audioRef,
-    isPlayingRef,
-    playbackActiveRef,
-    setAudioDocumentTime,
-    setPlaybackPhase,
-  ]);
-
-  const startPendingSeek = useCallback((ordinal: number) => {
+  const startPendingSeek = useCallback((ordinal: number, offsetSec = 0, reopenStream = true) => {
     const normalizedOrdinal = Math.max(0, Math.floor(ordinal));
     setPendingSeek({
-      ordinal: normalizedOrdinal,
-      runId: playbackRunIdRef.current,
-      expiresAt: Date.now() + 60_000,
+      ordinal: normalizedOrdinal, offsetSec, reopenStream,
+      runId: playbackRunIdRef.current, expiresAt: Date.now() + 60_000,
     });
     setPlaybackPhase('buffering');
     updateWorkerPlaybackCursor(normalizedOrdinal);
@@ -106,142 +75,122 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
 
   useEffect(() => {
     if (!pendingSeek) return undefined;
-    const delay = Math.max(0, pendingSeek.expiresAt - Date.now());
     const timeout = setTimeout(() => {
       if (pendingSeekRef.current !== pendingSeek) return;
       setPendingSeek(null);
       onPendingSeekExpired();
-    }, delay);
+    }, Math.max(0, pendingSeek.expiresAt - Date.now()));
     return () => clearTimeout(timeout);
   }, [onPendingSeekExpired, pendingSeek, setPendingSeek]);
 
   useEffect(() => {
-    if (!pendingSeek) return undefined;
+    if (!pendingSeek || applyingSeekRef.current === pendingSeek) return;
     if (pendingSeek.runId !== playbackRunIdRef.current) {
       setPendingSeek(null);
-      return undefined;
+      return;
     }
     const layout = playbackSeekLayout;
     const slot = layout?.segments.find((segment) => segment.ordinal === pendingSeek.ordinal);
-    if (!layout || !slot?.generated || !isPlaybackStartBufferReady({
-      segments: layout.segments,
-      startOrdinal: pendingSeek.ordinal,
-      playbackRate: audioSpeed,
-    })) return undefined;
+    if (layout?.status === 'failed' || slot?.audioState === 'error') {
+      setPendingSeek(null);
+      onPendingSeekExpired();
+      return;
+    }
+    const audio = audioRef.current;
+    if (!audio || !playbackActiveRef.current || !playbackSessionRef.current
+      || !layout || !slot?.generated || !isPlaybackStartBufferReady({
+        segments: layout.segments, startOrdinal: pendingSeek.ordinal,
+        playbackRate: audioSpeed, offsetWithinStartSegmentMs: pendingSeek.offsetSec * 1000,
+      })) return;
 
-    const session = playbackSessionRef.current;
-    if (!session) return undefined;
-    const targetSec = Math.max(0, slot.startMs / 1000);
-    setSelectedOrdinal(pendingSeek.ordinal);
-    // The accepted SSE-owned grid already contains target timing. Reopen the
-    // same canonical stream without another whole-document metadata round trip.
-    applyReadyMediaPosition(targetSec, pendingSeek.ordinal, targetSec, true);
-    publishPlaybackTimeSec(targetSec, { force: true });
-    projectPlaybackTime(targetSec);
-    setPendingSeek(null);
-    return undefined;
+    applyingSeekRef.current = pendingSeek;
+    const startSec = slot.startMs / 1000;
+    const targetSec = startSec + pendingSeek.offsetSec;
+    void (async () => {
+      try {
+        const positioned = await setAudioDocumentTime(audio, targetSec, pendingSeek.ordinal, startSec, {
+          reopenStream: pendingSeek.reopenStream || Boolean(audio.error) || !audio.src,
+        });
+        if (!positioned || pendingSeekRef.current !== pendingSeek) return;
+        setPendingSeek(null);
+        const sequence = seekSequenceRef.current;
+        const currentSlot = latestLayoutRef.current?.segments.find((segment) => segment.ordinal === pendingSeek.ordinal);
+        const currentTargetSec = (currentSlot?.startMs ?? slot.startMs) / 1000 + pendingSeek.offsetSec;
+        publishPlaybackTimeSec(currentTargetSec, { force: true });
+        projectPlaybackTime(currentTargetSec);
+        if (!isPlayingRef.current) {
+          setPlaybackPhase('ready');
+          return;
+        }
+        setPlaybackPhase('buffering');
+        // A later seek or pause owns both the position and any play() rejection.
+        void audio.play().catch(() => {
+          if (seekSequenceRef.current === sequence && isPlayingRef.current) onPendingSeekExpired();
+        });
+      } catch {
+        if (pendingSeekRef.current !== pendingSeek) return;
+        setPendingSeek(null);
+        onPendingSeekExpired();
+      } finally {
+        if (applyingSeekRef.current === pendingSeek) applyingSeekRef.current = null;
+      }
+    })();
   }, [
-    applyReadyMediaPosition,
-    audioSpeed,
-    pendingSeek,
-    playbackRunIdRef,
-    playbackSeekLayout,
-    playbackSessionRef,
-    projectPlaybackTime,
-    publishPlaybackTimeSec,
-    setPendingSeek,
-    setSelectedOrdinal,
+    audioRef, audioSpeed, isPlayingRef, onPendingSeekExpired, pendingSeek,
+    playbackActiveRef, playbackRunIdRef, playbackSeekLayout, playbackSessionRef,
+    projectPlaybackTime, publishPlaybackTimeSec, setAudioDocumentTime, setPendingSeek, setPlaybackPhase,
   ]);
 
   const seekPlaybackTo = useCallback((seconds: number) => {
     const layout = playbackSeekLayout;
-    if (!layout || layout.segments.length === 0) return;
-    setPlaybackPhase('seeking');
-    const durationSec = Math.max(0, layout.durationMs / 1000);
-    const targetSec = Math.max(0, Math.min(seconds, durationSec));
+    if (!layout?.segments.length || !Number.isFinite(seconds)) return;
+    const targetSec = Math.max(0, Math.min(seconds, layout.durationMs / 1000));
     const targetMs = targetSec * 1000;
     const target = layout.segments.find((segment) => targetMs >= segment.startMs && targetMs < segment.endMs)
       ?? layout.segments[layout.segments.length - 1];
-    if (!target) return;
-
-    const targetStartSec = Math.max(0, target.startMs / 1000);
-    publishPlaybackTimeSec(target.generated ? targetSec : targetStartSec, { force: true });
+    const startSec = target.startMs / 1000;
+    const offsetSec = target.generated
+      ? Math.max(0, Math.min(targetSec - startSec, (target.durationMs - 1) / 1000)) : 0;
     setSelectedOrdinal(target.ordinal);
-    if (target.locator && typeof target.locator === 'object') {
-      syncPlaybackLocator?.(target.locator as TTSSegmentLocator);
-    }
+    publishPlaybackTimeSec(startSec + offsetSec, { force: true });
+    syncPlaybackLocator?.(target.locator);
 
-    const audio = audioRef.current;
-    const hasReadyBuffer = target.generated && isPlaybackStartBufferReady({
-      segments: layout.segments,
-      startOrdinal: target.ordinal,
-      playbackRate: audioSpeed,
-      offsetWithinStartSegmentMs: Math.max(0, targetMs - target.startMs),
-    });
-
-    if (hasReadyBuffer) {
+    if (!playbackActiveRef.current && !isPlayingRef.current) {
+      // Idle scrubbing selects a sentence; it never starts a media wait or generation.
       cancelPendingSeek();
-      updateWorkerPlaybackCursor(target.ordinal);
-      applyReadyMediaPosition(targetSec, target.ordinal, targetStartSec);
-      projectPlaybackTime(targetSec);
+      setPlaybackPhase('ready');
       return;
     }
-
-    if (isPlayingRef.current && audio) {
-      try {
-        audio.pause();
-      } catch {
-        // Ignore media pause errors while changing the stream range.
-      }
-      setPlaybackPhase('buffering');
-    }
-    // Do not seek the media element into an ungenerated range. WebKit retries
-    // a 409 response aggressively; the pending-seek effect reopens the stream
-    // after the SSE read model proves contiguous target audio is ready.
-    projectPlaybackTime(targetStartSec);
-    startPendingSeek(target.ordinal);
+    if (isPlayingRef.current && playbackActiveRef.current) audioRef.current?.pause();
+    startPendingSeek(target.ordinal, offsetSec, !target.generated);
   }, [
-    audioRef,
-    audioSpeed,
-    applyReadyMediaPosition,
-    cancelPendingSeek,
-    isPlayingRef,
-    playbackSeekLayout,
-    projectPlaybackTime,
-    publishPlaybackTimeSec,
-    setPlaybackPhase,
-    setSelectedOrdinal,
-    startPendingSeek,
-    syncPlaybackLocator,
-    updateWorkerPlaybackCursor,
+    audioRef, cancelPendingSeek, isPlayingRef, playbackActiveRef, playbackSeekLayout,
+    publishPlaybackTimeSec, setPlaybackPhase, setSelectedOrdinal, startPendingSeek, syncPlaybackLocator,
   ]);
 
   const seekPlaybackToOrdinal = useCallback((ordinal: number): boolean => {
-    const layout = playbackSeekLayout;
-    if (!layout || !Number.isFinite(ordinal)) return false;
-    const target = layout.segments.find((entry) => entry.ordinal === Math.max(0, Math.floor(ordinal)));
+    if (!Number.isFinite(ordinal)) return false;
+    const target = playbackSeekLayout?.segments.find((entry) => entry.ordinal === Math.max(0, Math.floor(ordinal)));
     if (!target) return false;
     seekPlaybackTo(target.startMs / 1000);
     return true;
   }, [playbackSeekLayout, seekPlaybackTo]);
 
   const syncActivePlaybackToOrdinal = useCallback((ordinal: number): boolean => {
-    if (!playbackActiveRef.current || !playbackSessionRef.current) return false;
+    if (!playbackActiveRef.current && !isPlayingRef.current) return false;
     return seekPlaybackToOrdinal(ordinal);
-  }, [playbackActiveRef, playbackSessionRef, seekPlaybackToOrdinal]);
-
+  }, [isPlayingRef, playbackActiveRef, seekPlaybackToOrdinal]);
   const getPendingSeekOrdinal = useCallback(() => pendingSeekRef.current?.ordinal ?? null, []);
+  const getPendingSeekOffsetSec = useCallback(() => pendingSeekRef.current?.offsetSec ?? 0, []);
   const hasPendingSeek = useCallback(() => pendingSeekRef.current !== null, []);
 
-  useEffect(() => () => { pendingSeekRef.current = null; }, []);
+  useEffect(() => () => {
+    pendingSeekRef.current = null;
+    cancelMediaPosition();
+  }, [cancelMediaPosition]);
 
   return {
-    cancelPendingSeek,
-    getPendingSeekOrdinal,
-    hasPendingSeek,
-    seekPlaybackTo,
-    seekPlaybackToOrdinal,
-    startPendingSeek,
-    syncActivePlaybackToOrdinal,
+    cancelPendingSeek, getPendingSeekOrdinal, getPendingSeekOffsetSec, hasPendingSeek,
+    seekPlaybackTo, seekPlaybackToOrdinal, startPendingSeek, syncActivePlaybackToOrdinal,
   };
 }

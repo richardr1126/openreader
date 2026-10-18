@@ -45,7 +45,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
   } = input;
   const playbackEventsRef = useRef<PlaybackOperationSubscription | null>(null);
   const playbackCursorIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const playbackActivityWriteRef = useRef<Promise<void>>(Promise.resolve());
+  const playbackCommandWriteRef = useRef<Promise<void>>(Promise.resolve());
   const playbackRefreshRef = useRef<ReturnType<typeof createCoalescedPlaybackRefresh> | null>(null);
   const playbackOverviewRefreshRef = useRef<ReturnType<typeof createCoalescedPlaybackRefresh> | null>(null);
   const playbackCursorWriteRef = useRef(false);
@@ -58,16 +58,20 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
     const headers = playbackRequestHeadersRef.current;
     const ordinal = playbackCursorOrdinalRef.current;
     if (!session || !headers || ordinal == null) return Promise.resolve();
-    // Serialize fast pause/resume writes so stale intent cannot arrive last.
-    const write = playbackActivityWriteRef.current.then(async () => {
-      await postTtsPlaybackCursor(session.sessionId, Math.max(0, ordinal), headers, {
+    // Activity and cursor updates share one queue. Resolve the ordinal when
+    // dispatching so an old queued activity write cannot undo a newer seek.
+    const write = playbackCommandWriteRef.current.then(async () => {
+      if (playbackActive && playbackSessionRef.current !== session) return;
+      const currentOrdinal = playbackSessionRef.current === session
+        ? playbackCursorOrdinalRef.current ?? ordinal : ordinal;
+      await postTtsPlaybackCursor(session.sessionId, Math.max(0, currentOrdinal), headers, {
         playbackActive,
         sessionInstanceId: session.sessionInstanceId,
         requireAcknowledgement,
         keepalive: !playbackActive,
       });
     });
-    playbackActivityWriteRef.current = write.catch(() => undefined);
+    playbackCommandWriteRef.current = write.catch(() => undefined);
     return write;
   }, [playbackCursorOrdinalRef, playbackRequestHeadersRef, playbackSessionRef]);
 
@@ -92,9 +96,14 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           const runId = playbackRunIdRef.current;
           const events = playbackEventsRef.current;
           if (!session || !headers) continue;
-          const updated = await postTtsPlaybackCursor(session.sessionId, nextOrdinal, headers, {
-            sessionInstanceId: session.sessionInstanceId,
-          }).catch(() => null);
+          const write = playbackCommandWriteRef.current.then(() => {
+            if (runId !== playbackRunIdRef.current || playbackSessionRef.current !== session) return null;
+            return postTtsPlaybackCursor(session.sessionId, playbackCursorOrdinalRef.current ?? nextOrdinal, headers, {
+              sessionInstanceId: session.sessionInstanceId,
+            });
+          });
+          playbackCommandWriteRef.current = write.then(() => undefined, () => undefined);
+          const updated = await write.catch(() => null);
           if (updated && runId === playbackRunIdRef.current
             && playbackSessionRef.current === session
             && playbackEventsRef.current === events) {

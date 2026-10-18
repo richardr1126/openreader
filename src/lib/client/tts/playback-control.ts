@@ -59,6 +59,45 @@ export type PlaybackStartBuffer = {
   reachedDocumentEnd: boolean;
 };
 
+/** Await the browser's accepted position; cancellation releases every listener. */
+export function positionPlaybackMedia(
+  audio: HTMLAudioElement,
+  seconds: number,
+  signal: AbortSignal,
+): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise((resolve, reject) => {
+    const events = ['loadedmetadata', 'loadeddata', 'canplay', 'seeked'] as const;
+    let positioned = false;
+    const finish = (error?: Error) => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', aborted);
+      for (const event of events) audio.removeEventListener(event, check);
+      audio.removeEventListener('error', failed);
+      if (error) reject(error); else resolve(!signal.aborted);
+    };
+    const aborted = () => finish();
+    const failed = () => finish(new Error('The audio connection failed while seeking'));
+    const check = () => {
+      if (signal.aborted) { finish(); return; }
+      if (audio.readyState < 1) return;
+      if (!positioned) {
+        positioned = true;
+        try { audio.currentTime = seconds; } catch (error) {
+          finish(error instanceof Error ? error : new Error('The browser rejected the audio position'));
+          return;
+        }
+      }
+      if (!audio.seeking && audio.readyState >= 2 && Math.abs(audio.currentTime - seconds) < 0.25) finish();
+    };
+    const timer = setTimeout(() => finish(new Error('The browser did not accept the audio position in time')), 30_000);
+    signal.addEventListener('abort', aborted, { once: true });
+    for (const event of events) audio.addEventListener(event, check);
+    audio.addEventListener('error', failed, { once: true });
+    check();
+  });
+}
+
 export function measurePlaybackStartBuffer(
   segments: PlaybackBufferSegment[],
   startOrdinal: number,
@@ -95,13 +134,23 @@ export async function waitForPlaybackStartBuffer<T extends PlaybackStartLayout>(
   loadLayout: () => Promise<T | null>;
   isCurrent: () => boolean;
   playbackRate: number;
+  getStartOrdinal?: () => number;
+  getStartOffsetMs?: () => number;
   timeoutMs?: number;
   pollMs?: number;
 }): Promise<T | null> {
-  const deadline = Date.now() + Math.max(1, input.timeoutMs ?? 60_000);
+  const timeoutMs = Math.max(1, input.timeoutMs ?? 60_000);
+  let deadline = Date.now() + timeoutMs;
+  let targetKey: string | null = null;
   for (;;) {
     if (!input.isCurrent()) return null;
     const layout = await input.loadLayout();
+    if (!input.isCurrent()) return null;
+    const startOrdinal = input.getStartOrdinal?.() ?? layout?.generationStartOrdinal;
+    const offsetMs = input.getStartOffsetMs?.() ?? 0;
+    const nextTargetKey = `${startOrdinal}:${offsetMs}`;
+    if (targetKey !== null && targetKey !== nextTargetKey) deadline = Date.now() + timeoutMs;
+    targetKey = nextTargetKey;
     const belongsToSession = layout?.sessionId === input.sessionId;
     if (belongsToSession && layout.status === 'failed') {
       throw new Error('TTS playback generation failed before audio became ready');
@@ -111,8 +160,9 @@ export async function waitForPlaybackStartBuffer<T extends PlaybackStartLayout>(
       && (layout.status === 'running' || layout.status === 'succeeded')
       && isPlaybackStartBufferReady({
         segments: layout.segments,
-        startOrdinal: layout.generationStartOrdinal,
+        startOrdinal: startOrdinal ?? layout.generationStartOrdinal,
         playbackRate: input.playbackRate,
+        offsetWithinStartSegmentMs: offsetMs,
       })
     ) {
       return layout;
@@ -140,15 +190,6 @@ export function isPlaybackPhaseProcessing(
     || phase === 'seeking'
     || phase === 'buffering'
   );
-}
-
-/**
- * Skips retarget playback through the seek path, so they stay available while
- * a seek or refill buffers. Only session startup (planning, or ready while
- * playback intent is set) has no session to seek within yet.
- */
-export function canSkipInPlaybackPhase(isPlaying: boolean, phase: TtsPlaybackPhase): boolean {
-  return !isPlaying || phase === 'playing' || phase === 'buffering' || phase === 'seeking';
 }
 
 /** How much of the start buffer is ready, 0..1, for the play control's ring. */

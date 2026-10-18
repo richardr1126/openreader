@@ -91,9 +91,6 @@ export function useTtsPlaybackModel() {
   const setPlaybackSeekLayout = useCallback((seekLayout: TtsPlaybackSeekLayout | null) => {
     setModel((previous) => (
       previous.seekLayout === seekLayout
-      // A plan-only (pre-Play) layout that lands late never replaces the
-      // layout a playback session already owns; resets pass null.
-      || (seekLayout && !seekLayout.sessionId && previous.seekLayout?.sessionId)
         ? previous
         : { ...previous, seekLayout }
     ));

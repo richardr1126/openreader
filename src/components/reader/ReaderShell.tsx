@@ -53,6 +53,7 @@ export function ReaderShell<T extends ReaderType>({
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
     playbackPlanKey,
+    playbackPlanPayload,
     currentSentenceOrdinal,
     playbackSegments,
     stop,
@@ -102,6 +103,7 @@ export function ReaderShell<T extends ReaderType>({
         readerType,
         settings: payload.settings,
         plan: payload.plan,
+        playback: payload.playback,
         initialPosition: payload.initialPosition,
       });
     },
@@ -114,8 +116,9 @@ export function ReaderShell<T extends ReaderType>({
   const replanning = bootstrap.replanning;
   const replannedPlan = payload?.plan;
   const replannedSettings = payload?.settings;
+  const replannedPlayback = payload?.playback;
   useEffect(() => {
-    if (!adoptedSurface || replanning || !replannedPlan || !replannedSettings) return;
+    if (!adoptedSurface || replanning || !replannedPlan || !replannedSettings || !replannedPlayback) return;
     const adopted = adoptedReadyVersionRef.current;
     if (adopted?.attemptKey !== attemptKey) {
       adoptedReadyVersionRef.current = { attemptKey, version: readyVersion };
@@ -123,16 +126,19 @@ export function ReaderShell<T extends ReaderType>({
     }
     if (adopted.version === readyVersion) return;
     adoptedReadyVersionRef.current = { attemptKey, version: readyVersion };
-    if (playbackPlanKey === playbackPlanIdentity(replannedPlan)) return;
-    adoptReplannedPlaybackPlan({ settings: replannedSettings, plan: replannedPlan });
+    if (playbackPlanKey === playbackPlanIdentity(replannedPlan)
+      && JSON.stringify(playbackPlanPayload) === JSON.stringify(replannedPlayback.request)) return;
+    adoptReplannedPlaybackPlan({ settings: replannedSettings, plan: replannedPlan, playback: replannedPlayback });
   }, [
     adoptReplannedPlaybackPlan,
     adoptedSurface,
     attemptKey,
     playbackPlanKey,
+    playbackPlanPayload,
     readyVersion,
     replannedPlan,
     replannedSettings,
+    replannedPlayback,
     replanning,
   ]);
   const initializationError = adoption.failure?.attemptKey === attemptKey

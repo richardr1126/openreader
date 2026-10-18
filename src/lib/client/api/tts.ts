@@ -8,7 +8,6 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-export';
-import { normalizeLocator } from '@openreader/tts/locator';
 
 export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
   const response = await fetch('/api/tts/voices', {
@@ -152,88 +151,6 @@ export type TtsPlaybackSeekLayout = {
   status: string | null;
   durationMs: number;
   segments: TtsPlaybackSeekLayoutSegment[];
-};
-
-/**
- * Plan-only seek layout before Play. `request` is the playback request the
- * session will start with, so the server reads that exact audio cache scope.
- */
-export const getTtsPlaybackSeekLayout = async (
-  planId: string,
-  request: { headers: TTSRequestHeaders; payload: TtsPlaybackPlanPayload },
-  signal?: AbortSignal,
-): Promise<TtsPlaybackSeekLayout> => {
-  const response = await fetch(`/api/tts/playback/plans/${encodeURIComponent(planId)}/seek-layout`, {
-    method: 'POST',
-    headers: request.headers,
-    body: JSON.stringify(request.payload),
-    cache: 'no-store',
-    signal,
-  });
-  if (!response.ok) {
-    throw new Error(`TTS playback seek layout failed with status ${response.status}`);
-  }
-  const value = await response.json() as unknown;
-  if (!value || typeof value !== 'object') {
-    throw new Error('TTS playback seek layout response was not an object');
-  }
-  const rec = value as Record<string, unknown>;
-  const rawSegments = Array.isArray(rec.segments) ? rec.segments : [];
-  const startOrdinal = Number(rec.startOrdinal);
-  const generationStartOrdinal = Number(rec.generationStartOrdinal);
-  const durationMs = Number(rec.durationMs);
-  if (
-    !Number.isFinite(startOrdinal)
-    || !Number.isFinite(generationStartOrdinal)
-    || !Number.isFinite(durationMs)
-  ) {
-    throw new Error('TTS playback seek layout response was missing required numeric fields');
-  }
-  return {
-    planId: typeof rec.planId === 'string' ? rec.planId : '',
-    sessionId: typeof rec.sessionId === 'string' ? rec.sessionId : undefined,
-    startOrdinal: Math.max(0, Math.floor(startOrdinal)),
-    generationStartOrdinal: Math.max(0, Math.floor(generationStartOrdinal)),
-    status: typeof rec.status === 'string' ? rec.status : null,
-    durationMs: Math.max(0, Math.floor(durationMs)),
-    segments: rawSegments
-      .map((item): TtsPlaybackSeekLayoutSegment | null => {
-        if (!item || typeof item !== 'object') return null;
-        const row = item as Record<string, unknown>;
-        const ordinal = Number(row.ordinal);
-        const startMs = Number(row.startMs);
-        const endMs = Number(row.endMs);
-        const durationMs = Number(row.durationMs);
-        if (!Number.isFinite(ordinal) || !Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
-        if (endMs <= startMs) return null;
-        return {
-          ordinal: Math.max(0, Math.floor(ordinal)),
-          startMs: Math.max(0, Math.floor(startMs)),
-          endMs: Math.max(0, Math.floor(endMs)),
-          durationMs: Number.isFinite(durationMs) && durationMs > 0
-            ? Math.max(1, Math.floor(durationMs))
-            : Math.max(1, Math.floor(endMs - startMs)),
-          audioState: row.audioState === 'ready'
-            || row.audioState === 'generating'
-            || row.audioState === 'error'
-            || row.audioState === 'silent-gap'
-            || row.audioState === 'missing-prefix'
-            ? row.audioState
-            : row.generated === true ? 'ready' : 'pending',
-          durationSource: row.durationSource === 'exact' || row.durationSource === 'estimated'
-            ? row.durationSource
-            : row.generated === true ? 'exact' : 'estimated',
-          generated: row.generated === true || row.audioState === 'ready',
-          estimated: row.estimated === true || row.durationSource === 'estimated',
-          locator: row.locator && typeof row.locator === 'object'
-            ? normalizeLocator(row.locator as TTSSegmentLocator)
-            : null,
-          segmentKey: typeof row.segmentKey === 'string' ? row.segmentKey : null,
-          alignment: row.alignment && typeof row.alignment === 'object' ? row.alignment as TTSSentenceAlignment : null,
-        };
-      })
-      .filter((item): item is TtsPlaybackSeekLayoutSegment => Boolean(item)),
-  };
 };
 
 export type ModelComponentSnapshot = {

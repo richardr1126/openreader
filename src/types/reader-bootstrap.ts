@@ -4,6 +4,13 @@ import type { ReadingPosition } from '@/lib/shared/reading-position';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 import type { ReaderType } from '@/types/user-state';
+import type { TtsPlaybackPlanPayload, TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
+
+/** Non-secret execution settings and their matching durable audio view. */
+export type ReaderPlaybackPreparation = {
+  request: TtsPlaybackPlanPayload;
+  seekLayout: TtsPlaybackSeekLayout;
+};
 
 export type ReaderBootstrapProgress = {
   kind: 'pdf-parse';
@@ -25,6 +32,7 @@ type ReaderPayloadBase<T extends ReaderType> = {
   document: BaseDocument & { type: T };
   settings: DocumentSettings;
   plan: TtsPlaybackPlan;
+  playback: ReaderPlaybackPreparation;
   /** The saved playback cursor, resolved against `plan` by the client. */
   initialPosition: ReadingPosition | null;
 };

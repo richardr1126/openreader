@@ -353,7 +353,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         <div className="contents sm:flex sm:flex-1 sm:items-center sm:justify-end sm:gap-3">
           {/* Announces state changes made from shortcuts; the visible line owns the detail. */}
           <span role="status" className="sr-only">
-            {hasReadableContent ? (isPlaying ? 'Playing' : playbackControl.isPending ? 'Loading' : 'Paused') : null}
+            {hasReadableContent ? (playbackControl.isPending ? 'Loading' : playbackPhase === 'playing' && isPlaying ? 'Playing' : 'Paused') : null}
           </span>
           <div className="col-span-2 col-start-1 row-start-1 justify-self-start whitespace-nowrap font-mono text-[11px] tabular-nums text-soft select-none">
             {hasReadableContent
