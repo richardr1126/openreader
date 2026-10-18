@@ -6,12 +6,12 @@ import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-aut
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 
 const mocks = vi.hoisted(() => ({
-  voices: vi.fn(), credentials: vi.fn(), completed: vi.fn(), enqueue: vi.fn(), readPlan: vi.fn(),
+  providers: vi.fn(), voices: vi.fn(), credentials: vi.fn(), completed: vi.fn(), enqueue: vi.fn(), readPlan: vi.fn(),
 }));
 vi.mock('@openreader/tts/voice-resolution', () => ({ resolveVoices: mocks.voices }));
 vi.mock('@/lib/server/admin/resolve-credentials', () => ({ resolveTtsCredentials: mocks.credentials }));
 vi.mock('@/lib/server/admin/providers', () => ({
-  listAdminProviders: async () => [{ slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true }],
+  listAdminProviders: mocks.providers,
 }));
 vi.mock('@/lib/server/runtime-config', () => ({
   getResolvedRuntimeConfig: async () => ({ defaultTtsProvider: 'kitten', showAllProviderModels: true, computeLimitPolicies: {} }),
@@ -49,6 +49,7 @@ function plan(segments = [0, 1]) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.providers.mockResolvedValue([{ slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true }]);
   mocks.voices.mockResolvedValue(['Bella', 'Jasper']);
   mocks.credentials.mockResolvedValue({ provider: 'custom-openai', apiKey: 'credential-sentinel', baseUrl: 'http://provider.invalid/v1' });
   mocks.enqueue.mockResolvedValue({
@@ -59,6 +60,29 @@ beforeEach(() => {
 });
 
 describe('bootstrap playback preparation', () => {
+  test('an unconfigured installation can read with a complete estimated timeline', async () => {
+    mocks.providers.mockResolvedValueOnce([]);
+    mocks.completed.mockResolvedValueOnce({ segments: [] });
+    const result = await resolveReaderPlayback(request, documentId, scope, DEFAULT_DOCUMENT_SETTINGS, {});
+    expect(result).toMatchObject({ playback: { seekLayout: { segments: [
+      { ordinal: 0, generated: false, estimated: true }, { ordinal: 1, generated: false, estimated: true },
+    ] } } });
+    if (!('playback' in result)) throw new Error('Expected prepared reading timeline');
+    expect(result.playback.seekLayout.durationMs).toBeGreaterThan(0);
+    expect(mocks.credentials).not.toHaveBeenCalled();
+    expect(mocks.voices).not.toHaveBeenCalled();
+  });
+
+  test('a static voice catalogue does not require provider credentials for reading', async () => {
+    mocks.providers.mockResolvedValueOnce([{ slug: 'openai-service', providerType: 'openai', defaultModel: 'tts-1', enabled: true }]);
+    const result = await resolveReaderPlayback(request, documentId, scope, DEFAULT_DOCUMENT_SETTINGS, {
+      providerRef: 'openai-service', providerType: 'openai', ttsModel: 'tts-1', voice: '',
+    });
+    expect(result).toMatchObject({ playback: { request: { settings: { voice: 'alloy' } } } });
+    expect(mocks.credentials).not.toHaveBeenCalled();
+    expect(mocks.voices).not.toHaveBeenCalled();
+  });
+
   test('waits for the matching voice cache before returning a ready timeline', async () => {
     let release!: (value: { segments: Array<{ ordinal: number; durationMs: number }> }) => void;
     mocks.completed.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));

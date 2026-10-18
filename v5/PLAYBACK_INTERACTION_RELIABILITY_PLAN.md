@@ -384,3 +384,19 @@ diff whitespace checks passed. The initial browser launch required macOS
 sandbox permission; the first executing run exposed a title-page test
 precondition after the new deep seek, which was restored through the user-facing
 scrubber before the complete successful rerun. No matrix configuration changed.
+
+### PR review follow-up
+
+CI exposed an unconfigured-install regression: voice resolution required a
+provider credential even for ordinary reading. Bootstrap now skips credential
+resolution for static catalogues and for installations with no enabled shared
+provider. It still returns the full estimated timeline before reader reveal;
+generation retains its existing provider authorization requirements.
+
+The review also identified recovery exhaustion clearing media handlers while
+leaving the local session active. Exhaustion now resets the local playback
+session while preserving position, so Retry prepares the same canonical identity
+and installs fresh media handlers. A mounted controller test uses the real
+audio/projection/seek owners to verify failure, preserved position, fresh startup,
+reinstalled playing events, and an advancing clock. Provider-free and static
+catalogue preparation have dedicated regressions.

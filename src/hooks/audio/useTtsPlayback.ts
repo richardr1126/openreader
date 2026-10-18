@@ -485,10 +485,11 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         },
         onExhausted: () => {
           pauseActivePlayback();
+          resetPlaybackSession({ preservePosition: true });
           clearAudioSource();
           setIsPlaying(false);
           setPlaybackPhase('failed');
-          toast.error('Audio is ready, but playback could not reconnect. Try Play again.', { id: 'tts-playback-error' });
+          toast.error('Playback stopped making progress. Try Play again.', { id: 'tts-playback-error' });
         },
         onTerminalFailure: () => {
           pauseActivePlayback();

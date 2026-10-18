@@ -84,7 +84,10 @@ export async function resolveReaderPlayback(
   // audio cache. Plans may be shared by different voices; the plan's settings
   // hash therefore cannot identify the initial cached-audio view.
   let voice = bookVoice.voice;
-  if (!voice) {
+  // A static catalogue needs no credentials. An unconfigured installation
+  // must still support reading with an estimated timeline; only generation
+  // requires a configured provider.
+  if (!voice && policy.voiceSource !== 'static' && normalization.sharedProviders.length > 0) {
     const credentials = await resolveTtsCredentials({
       providerHeader: provider.providerRef,
       fallbackProvider: runtimeConfig.defaultTtsProvider,
@@ -100,6 +103,7 @@ export async function resolveReaderPlayback(
     });
     voice = voices[0] ?? policy.defaultVoices[0] ?? '';
   }
+  voice ||= policy.defaultVoices[0] ?? '';
   const language = resolveTtsLanguage({
     configuredLanguage: settings.language || 'auto',
     voice,

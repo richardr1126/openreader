@@ -112,6 +112,9 @@ together; it does not launch another plan or idle-timeline preparation
 lifecycle. Bootstrap resolves the provider's default voice before reading the
 matching cache scope. Cache-read failure reaches shared Retry, while absent
 audio yields estimated durations. Readiness never generates audio.
+Static voice catalogues require no credentials. With no shared provider
+configured, reading still prepares an estimated timeline; provider configuration
+is required for generation rather than for revealing readable content.
 
 ## Ownership
 
