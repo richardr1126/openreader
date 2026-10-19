@@ -1,7 +1,9 @@
 import type { TtsPlaybackPhase } from '@/types/tts';
 import {
   isPlaybackBufferReady,
+  isPlaybackSlotPlayable,
   measurePlaybackBuffer,
+  type PlaybackBufferSegment,
   PLAYBACK_START_BUFFER_WALL_MS,
   PLAYBACK_PROGRESS_TIMEOUT_MS,
 } from '@openreader/tts/playback-buffer';
@@ -9,12 +11,6 @@ import {
 export { PLAYBACK_START_BUFFER_WALL_MS } from '@openreader/tts/playback-buffer';
 
 export const PLAYBACK_CURSOR_READ_LIMIT = 64;
-
-type PlaybackBufferSegment = {
-  ordinal: number;
-  durationMs: number;
-  generated: boolean;
-};
 
 type PlaybackStartLayout = {
   sessionId?: string;
@@ -48,7 +44,7 @@ export function createPlaybackReadinessDeadline(options: {
     if (startOrdinal !== undefined) {
       for (const segment of segments) {
         if (segment.ordinal < startOrdinal || segment.ordinal >= startOrdinal + PLAYBACK_CURSOR_READ_LIMIT
-          || !segment.generated || readyOrdinals.has(segment.ordinal)) continue;
+          || !isPlaybackSlotPlayable(segment) || readyOrdinals.has(segment.ordinal)) continue;
         readyOrdinals.add(segment.ordinal);
         lastProgressAt = observedAt;
       }

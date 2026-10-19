@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { createPlaybackReadinessDeadline, isPlaybackStartBufferReady } from '@/lib/client/tts/playback-control';
 import type { PlaybackSessionState } from '@/hooks/audio/usePlaybackProjection';
+import { isPlaybackSlotPlayable } from '@openreader/tts/playback-buffer';
 import type { TTSSegmentLocator } from '@/types/client';
 import type { TtsPlaybackPhase } from '@/types/tts';
 
@@ -101,14 +102,14 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     }
     const layout = playbackSeekLayout;
     const slot = layout?.segments.find((segment) => segment.ordinal === pendingSeek.ordinal);
-    if (layout?.status === 'failed' || slot?.audioState === 'error') {
+    if (layout?.status === 'failed') {
       setPendingSeek(null);
       onPendingSeekExpired();
       return;
     }
     const audio = audioRef.current;
     if (!audio || !playbackActiveRef.current || !playbackSessionRef.current
-      || !layout || !slot?.generated || !isPlaybackStartBufferReady({
+      || !layout || !slot || !isPlaybackSlotPlayable(slot) || !isPlaybackStartBufferReady({
         segments: layout.segments, startOrdinal: pendingSeek.ordinal,
         playbackRate: audioSpeed, offsetWithinStartSegmentMs: pendingSeek.offsetSec * 1000,
       })) return;

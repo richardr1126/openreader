@@ -156,13 +156,14 @@ export function registerPlaybackSessionRoutes(
       return { error: 'Playback session not found' };
     }
     const hasExplicitWindow = query.minOrdinal !== undefined || query.limit !== undefined;
-    const rows = await readModel.readSegmentIndexRows(session, hasExplicitWindow ? {
+    const { rows, erroredOrdinals } = await readModel.readSegmentIndex(session, hasExplicitWindow ? {
       minOrdinal: Math.max(0, Math.floor(Number(query.minOrdinal ?? 0))),
       limit: Math.max(1, Math.min(Math.floor(Number(query.limit ?? 500)), 10000)),
     } : undefined);
     return {
       sessionId,
       segments: rows,
+      erroredOrdinals,
     };
   });
 

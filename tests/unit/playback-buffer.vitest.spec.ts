@@ -32,4 +32,16 @@ describe('playback ahead buffer', () => {
       minimumWallMs: PLAYBACK_RECOVERY_BUFFER_WALL_MS,
     })).toBe(false);
   });
+
+  test('plays through a failed sentence as its silent slot', () => {
+    const withFailure = [
+      segments[0],
+      { ordinal: 5, durationMs: 8_000, generated: false, audioState: 'error' },
+      segments[2],
+    ];
+    expect(measurePlaybackBuffer({ segments: withFailure, startOrdinal: 4 }))
+      .toMatchObject({ durationMs: 11_000, segmentCount: 2 });
+    expect(measurePlaybackBuffer({ segments: withFailure, startOrdinal: 5 }))
+      .toMatchObject({ durationMs: 8_000, segmentCount: 1 });
+  });
 });

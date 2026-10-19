@@ -90,20 +90,19 @@ export function createPlaybackSessionController(
       // starve audible audio generation. A seek that leaves the run's in-flight
       // segment behind supersedes it too: its pending provider requests are
       // aborted instead of holding the provider for audio nobody will hear.
-      const completedThroughOrdinal = Number(
+      const watermark = Number(
         (current?.progress as { completedThroughOrdinal?: unknown } | undefined)?.completedThroughOrdinal,
       );
-      if (
-        current
-        && !isTerminalStatus(current.status)
-        && !hasSatisfiedWindow
-        && !isExplicitReposition
-        && playbackRunServesCursor({
-          completedThroughOrdinal: Number.isFinite(completedThroughOrdinal) ? completedThroughOrdinal : null,
-          cursorOrdinal,
-          aheadWindow,
-        })
-      ) return;
+      const completedThroughOrdinal = Number.isFinite(watermark) ? watermark : null;
+      const servesCursor = playbackRunServesCursor({ completedThroughOrdinal, cursorOrdinal, aheadWindow });
+      // A stream opened at a new position supersedes a run that has not yet
+      // shown it serves that position. The stream a seek opens once its target
+      // is ready lands on the run the seek's cursor update already started;
+      // superseding that run would resynthesize its in-flight segments.
+      const keepsRun = isExplicitReposition
+        ? completedThroughOrdinal !== null && completedThroughOrdinal >= 0 && servesCursor
+        : servesCursor;
+      if (current && !isTerminalStatus(current.status) && !hasSatisfiedWindow && keepsRun) return;
     }
 
     // Collapse concurrent signals for the same predecessor, not every future

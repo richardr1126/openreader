@@ -48,10 +48,35 @@ export async function resolveTtsPlaybackPlanOperation(planId: string): Promise<C
   return op;
 }
 
-export async function readTtsPlaybackPlanArtifact(planObjectKey: string): Promise<{
+type TtsPlaybackPlanArtifactRead = {
   artifact: TtsPlaybackPlanArtifact;
   body: string;
-}> {
+};
+
+// Plan artifacts are immutable per object key, and every timeline read needs
+// one, so a warm instance keeps the few it is serving instead of re-fetching.
+const PLAN_ARTIFACT_CACHE_LIMIT = 8;
+const planArtifactCache = new Map<string, Promise<TtsPlaybackPlanArtifactRead>>();
+
+export function readTtsPlaybackPlanArtifact(planObjectKey: string): Promise<TtsPlaybackPlanArtifactRead> {
+  const cached = planArtifactCache.get(planObjectKey);
+  if (cached) {
+    planArtifactCache.delete(planObjectKey);
+    planArtifactCache.set(planObjectKey, cached);
+    return cached;
+  }
+  const read = fetchTtsPlaybackPlanArtifact(planObjectKey);
+  planArtifactCache.set(planObjectKey, read);
+  read.catch(() => {
+    if (planArtifactCache.get(planObjectKey) === read) planArtifactCache.delete(planObjectKey);
+  });
+  while (planArtifactCache.size > PLAN_ARTIFACT_CACHE_LIMIT) {
+    planArtifactCache.delete(planArtifactCache.keys().next().value!);
+  }
+  return read;
+}
+
+async function fetchTtsPlaybackPlanArtifact(planObjectKey: string): Promise<TtsPlaybackPlanArtifactRead> {
   const cfg = getS3Config();
   const result = await getS3InternalClient().send(new GetObjectCommand({
     Bucket: cfg.bucket,
@@ -98,7 +123,7 @@ export type TtsPlaybackGridSegment = {
   startMs: number;
   endMs: number;
   durationMs: number;
-  audioState: 'pending' | 'ready';
+  audioState: 'pending' | 'ready' | 'error';
   durationSource: 'estimated' | 'exact';
   generated: boolean;
   estimated: boolean;
@@ -118,6 +143,8 @@ export function buildPlaybackGrid(input: {
   settingsJson: unknown;
   completedDurations: Map<number, number>;
   startOrdinal: number;
+  /** Failed sentences: the audio stream plays their estimated slot as silence. */
+  erroredOrdinals?: ReadonlySet<number>;
   completedSegments?: Map<number, {
     alignment: TTSSentenceAlignment | null;
     alignmentSource: 'exact' | null;
@@ -153,7 +180,9 @@ export function buildPlaybackGrid(input: {
         startMs: slot.startMs,
         endMs: slot.endMs,
         durationMs: slot.durationMs,
-        audioState: slot.generated ? 'ready' : 'pending',
+        audioState: slot.generated
+          ? 'ready'
+          : input.erroredOrdinals?.has(slot.ordinal) ? 'error' : 'pending',
         durationSource: slot.generated ? 'exact' : 'estimated',
         generated: slot.generated,
         estimated: slot.estimated,

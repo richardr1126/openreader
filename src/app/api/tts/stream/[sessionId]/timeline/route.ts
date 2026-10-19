@@ -52,9 +52,13 @@ export async function GET(
       }
       readWindow = { minOrdinal, limit };
     }
+    // A client holding this session's grid asks for the window rows alone and
+    // merges them; a whole-grid answer would mark every cached row outside the
+    // window pending. Requests without the flag still receive the whole grid.
+    const windowRowsOnly = Boolean(readWindow) && request.nextUrl.searchParams.get('rows') === 'window';
     // The foreground owner prioritizes this bounded cursor window. Unwindowed
     // reads still discover all cached chapters for the document-wide overview.
-    const [segments, { artifact }] = await Promise.all([
+    const [{ segments, erroredOrdinals }, { artifact }] = await Promise.all([
       listCompletedTtsPlaybackSegments(session, readWindow),
       readTtsPlaybackPlanArtifact(session.planObjectKey),
     ]);
@@ -68,8 +72,13 @@ export async function GET(
       settingsJson: session.settingsJson,
       completedDurations: new Map(segments.map((segment) => [segment.ordinal, segment.durationMs])),
       startOrdinal: 0,
+      erroredOrdinals,
       completedSegments,
     });
+    const windowEnd = readWindow ? readWindow.minOrdinal + readWindow.limit : 0;
+    const responseSegments = windowRowsOnly && readWindow
+      ? layout.segments.filter((segment) => segment.ordinal >= readWindow.minOrdinal && segment.ordinal < windowEnd)
+      : layout.segments;
     logger.info({ event: 'tts.playback.timeline_resolved', durationMs: Date.now() - startedAt, completedSegments: segments.length,
       windowed: Boolean(readWindow), sessionId: session.sessionId,
     }, 'tts.playback.timeline_resolved');
@@ -82,8 +91,8 @@ export async function GET(
       startOrdinal: 0,
       generationStartOrdinal: Math.max(0, Math.floor(session.generationStartOrdinal)),
       durationMs: layout.durationMs,
-      segments: layout.segments,
-      ...(readWindow ? { readWindow } : {}),
+      segments: responseSegments,
+      ...(readWindow ? { readWindow: windowRowsOnly ? { ...readWindow, rowsOnly: true } : readWindow } : {}),
     }, {
       headers: {
         'Cache-Control': 'private, no-store',

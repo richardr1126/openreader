@@ -36,6 +36,11 @@ export interface PlaybackSessionReadModel {
     session: PlaybackSessionRow,
     options?: { minOrdinal?: number; limit?: number },
   ): Promise<PlaybackSegmentManifestRow[]>;
+  /** Completed rows plus ordinals that failed for good, for the timeline. */
+  readSegmentIndex(
+    session: PlaybackSessionRow,
+    options?: { minOrdinal?: number; limit?: number },
+  ): Promise<{ rows: PlaybackSegmentManifestRow[]; erroredOrdinals: number[] }>;
   readSegmentState(session: PlaybackSessionRow, ordinal: number): Promise<PlaybackSegmentState>;
   /** Every stored segment state for export progress, keyed by plan ordinal. */
   /** Settled states for one cache scope; export progress needs no live session. */
@@ -78,6 +83,24 @@ function serializeTimelineAlignment(input: {
     };
   }
   return { alignmentJson: null, alignmentSource: null };
+}
+
+function toManifestRows(
+  sidecars: Map<number, TtsPlaybackSegmentMetadata>,
+): PlaybackSegmentManifestRow[] {
+  return [...sidecars.values()]
+    .filter((sidecar): sidecar is TtsPlaybackSegmentMetadata & { status: 'completed'; audioKey: string } => (
+      sidecar.status === 'completed' && Boolean(sidecar.audioKey)
+    ))
+    .map((sidecar) => ({
+      ordinal: sidecar.ordinal,
+      segmentKey: sidecar.segmentKey,
+      audioKey: sidecar.audioKey,
+      durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
+      ...serializeTimelineAlignment({ sidecar }),
+      updatedAt: sidecar.updatedAt ?? null,
+    }))
+    .sort((left, right) => left.ordinal - right.ordinal);
 }
 
 function scopeCacheKey(session: TtsPlaybackSegmentScope, cacheEpoch: number): string {
@@ -240,71 +263,61 @@ export function createPlaybackSessionReadModel(input: {
     }
   };
 
+  const readIndexSidecars = async (
+    session: PlaybackSessionRow,
+    options?: { minOrdinal?: number; limit?: number },
+  ): Promise<Map<number, TtsPlaybackSegmentMetadata>> => {
+    if (!session.planObjectKey) return new Map();
+    const planSegments = await readPlanSegments(session.planObjectKey);
+    if (!planSegments?.length) return new Map();
+    if (!options) return collectScopeSidecars(session, planSegments.length);
+    const minOrdinal = Math.max(0, Math.floor(Number(options.minOrdinal ?? 0)));
+    const limit = Math.max(1, Math.min(Math.floor(Number(options.limit ?? 500)), 10000));
+    // Sidecars are immutable objects rather than rows in an indexed database.
+    // Bound reads to the requested ordinal window so a timeline refresh does
+    // not issue one object-store miss for every segment in a long document.
+    const requestedSegments = planSegments
+      .filter((segment) => segment.ordinal >= minOrdinal)
+      .slice(0, limit);
+    const requestedOrdinals = new Set(requestedSegments.map((segment) => segment.ordinal));
+    const cacheEpoch = await getScopeEpoch(session);
+    const cache = getSidecarScope(session, cacheEpoch);
+    const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(
+      [...cache].filter(([ordinal]) => requestedOrdinals.has(ordinal)),
+    );
+    const missing = requestedSegments
+      .map((segment) => segment.ordinal)
+      .filter((ordinal) => !isStableCompletedSidecar(cache.get(ordinal)));
+    for (let index = 0; index < missing.length; index += SIDECAR_FETCH_BATCH) {
+      const batch = missing.slice(index, index + SIDECAR_FETCH_BATCH);
+      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
+      batch.forEach((ordinal, batchIndex) => {
+        const sidecar = fetched[batchIndex];
+        if (!sidecar) return;
+        sidecars.set(ordinal, sidecar);
+        if (isCompletedAudioSidecar(sidecar)) cache.set(ordinal, sidecar);
+      });
+    }
+    return sidecars;
+  };
+
   return {
     async readSession(sessionId) {
       return await playbackStorage?.sessions.getSession(sessionId) ?? null;
     },
     readPlanSegments,
     async readSegmentIndexRows(session, options) {
-      if (!session.planObjectKey) return [];
-      const planSegments = await readPlanSegments(session.planObjectKey);
-      if (!planSegments?.length) return [];
-      if (!options) {
-        const sidecars = await collectScopeSidecars(session, planSegments.length);
-        return [...sidecars.values()]
-          .filter((sidecar): sidecar is TtsPlaybackSegmentMetadata & { status: 'completed'; audioKey: string } => (
-            sidecar.status === 'completed' && Boolean(sidecar.audioKey)
-          ))
-          .map((sidecar) => ({
-            ordinal: sidecar.ordinal,
-            segmentKey: sidecar.segmentKey,
-            audioKey: sidecar.audioKey,
-            durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
-            ...serializeTimelineAlignment({ sidecar }),
-            updatedAt: sidecar.updatedAt ?? null,
-          }))
-          .sort((left, right) => left.ordinal - right.ordinal);
-      }
-      const minOrdinal = Math.max(0, Math.floor(Number(options.minOrdinal ?? 0)));
-      const limit = Math.max(1, Math.min(Math.floor(Number(options.limit ?? 500)), 10000));
-      // Sidecars are immutable objects rather than rows in an indexed database.
-      // Bound reads to the requested ordinal window so a timeline refresh does
-      // not issue one object-store miss for every segment in a long document.
-      const requestedSegments = planSegments
-        .filter((segment) => segment.ordinal >= minOrdinal)
-        .slice(0, limit);
-      const requestedOrdinals = new Set(requestedSegments.map((segment) => segment.ordinal));
-      const cacheEpoch = await getScopeEpoch(session);
-      const cache = getSidecarScope(session, cacheEpoch);
-      const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(
-        [...cache].filter(([ordinal]) => requestedOrdinals.has(ordinal)),
-      );
-      const missing = requestedSegments
-        .map((segment) => segment.ordinal)
-        .filter((ordinal) => !isStableCompletedSidecar(cache.get(ordinal)));
-      for (let index = 0; index < missing.length; index += SIDECAR_FETCH_BATCH) {
-        const batch = missing.slice(index, index + SIDECAR_FETCH_BATCH);
-        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
-        batch.forEach((ordinal, batchIndex) => {
-          const sidecar = fetched[batchIndex];
-          if (!sidecar) return;
-          sidecars.set(ordinal, sidecar);
-          if (isCompletedAudioSidecar(sidecar)) cache.set(ordinal, sidecar);
-        });
-      }
-      return [...sidecars.values()]
-        .filter((sidecar): sidecar is TtsPlaybackSegmentMetadata & { status: 'completed'; audioKey: string } => (
-          sidecar.status === 'completed' && Boolean(sidecar.audioKey)
-        ))
-        .map((sidecar) => ({
-          ordinal: sidecar.ordinal,
-          segmentKey: sidecar.segmentKey,
-          audioKey: sidecar.audioKey,
-            durationMs: Math.max(1, Number(sidecar.durationMs ?? 1000)),
-            ...serializeTimelineAlignment({ sidecar }),
-          updatedAt: sidecar.updatedAt ?? null,
-        }))
-        .sort((left, right) => left.ordinal - right.ordinal);
+      return toManifestRows(await readIndexSidecars(session, options));
+    },
+    async readSegmentIndex(session, options) {
+      const sidecars = await readIndexSidecars(session, options);
+      return {
+        rows: toManifestRows(sidecars),
+        erroredOrdinals: [...sidecars.values()]
+          .filter((sidecar) => sidecar.status === 'error')
+          .map((sidecar) => sidecar.ordinal)
+          .sort((left, right) => left - right),
+      };
     },
     async readSegmentState(session, ordinal) {
       const sidecar = await readSidecar(session, ordinal);

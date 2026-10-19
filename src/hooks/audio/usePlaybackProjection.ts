@@ -8,7 +8,6 @@ import {
   mergePlaybackGrid,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
-  shouldRefreshPlaybackSegmentTiming,
   type TtsPlaybackGrid,
   WORD_HIGHLIGHT_LEAD_SEC,
 } from '@/lib/client/tts/playback-grid';
@@ -16,7 +15,7 @@ import { isPdfLocator, type TTSSegmentLocator } from '@/types/client';
 import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
 import { createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh';
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
-import { PLAYBACK_CURSOR_READ_LIMIT, positionPlaybackMedia } from '@/lib/client/tts/playback-control';
+import { positionPlaybackMedia } from '@/lib/client/tts/playback-control';
 import { measurePlaybackBuffer } from '@openreader/tts/playback-buffer';
 
 export type PlaybackSessionState = {
@@ -92,13 +91,14 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     alignment: TTSSentenceAlignment | null | undefined;
     locatorKey: string;
   } | null>(null);
-  const lastTimelineHealAtRef = useRef(0);
   const timelineLoaderRef = useRef<ReturnType<typeof createPlaybackTimelineLoader<TtsPlaybackGrid>> | null>(null);
   if (!timelineLoaderRef.current) {
     timelineLoaderRef.current = createPlaybackTimelineLoader({
       getRunId: () => playbackRunIdRef.current,
       getSession: () => playbackSessionRef.current,
       apply: (timeline) => {
+        // Window rows alone cannot stand in for a grid this tab no longer holds.
+        if (timeline.readWindow?.rowsOnly && playbackTimelineRef.current?.sessionId !== timeline.sessionId) return;
         playbackTimelineRef.current = mergePlaybackGrid(playbackTimelineRef.current, timeline);
         const anchor = playbackTimelineRef.current.segments.find((segment) => (
           segment.ordinal === playbackStreamStartOrdinalRef.current
@@ -185,11 +185,17 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     timelineUrl: string, signal?: AbortSignal,
     readWindow?: { minOrdinal: number; limit: number },
   ): Promise<TtsPlaybackGrid> => {
-    const query = readWindow ? `?minOrdinal=${readWindow.minOrdinal}&limit=${readWindow.limit}` : '';
+    // Holding this session's grid, only the window rows are needed; the merge
+    // keeps every other row as it is.
+    const rowsOnly = Boolean(playbackTimelineRef.current?.sessionId)
+      && playbackTimelineRef.current?.sessionId === playbackSessionRef.current?.sessionId;
+    const query = readWindow
+      ? `?minOrdinal=${readWindow.minOrdinal}&limit=${readWindow.limit}${rowsOnly ? '&rows=window' : ''}`
+      : '';
     await timelineLoaderRef.current!.refresh(timelineUrl + query, signal);
     if (signal?.aborted || !playbackTimelineRef.current) throw new DOMException('Playback timeline replaced', 'AbortError');
     return playbackTimelineRef.current;
-  }, []);
+  }, [playbackSessionRef]);
 
   const setPlaybackStreamAnchor = useCallback((ordinal: number, seconds: number) => {
     playbackStreamStartOrdinalRef.current = ordinal;
@@ -206,17 +212,6 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
       wordLeadSec: WORD_HIGHLIGHT_LEAD_SEC,
     });
     if (!projection.segment) return;
-
-    if (shouldRefreshPlaybackSegmentTiming(projection.segment)) {
-      const session = playbackSessionRef.current;
-      const now = Date.now();
-      if (session?.timelineUrl && now - lastTimelineHealAtRef.current > 1_000) {
-        lastTimelineHealAtRef.current = now;
-        void refreshPlaybackTimeline(session.timelineUrl, undefined, {
-          minOrdinal: projection.segment.ordinal, limit: PLAYBACK_CURSOR_READ_LIMIT,
-        }).catch(() => undefined);
-      }
-    }
 
     const targetOrdinal = projection.segment.ordinal;
     playbackCursorOrdinalRef.current = targetOrdinal;
@@ -250,8 +245,6 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     if (page !== null) setCurrDocPage(page);
     if (locator && shouldSyncLocator) syncPlaybackLocator?.(locator);
   }, [
-    playbackSessionRef,
-    refreshPlaybackTimeline,
     selectedOrdinalRef,
     setCurrDocPage,
     setCurrentSentenceAlignment,

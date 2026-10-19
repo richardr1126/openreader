@@ -296,6 +296,18 @@ describe('playback session continuation controller', () => {
     });
   });
 
+  test('keeps the run a seek already started when its stream opens at the same cursor', async () => {
+    // The seek's cursor update started a continuation at 24; the session's
+    // start ordinal stays 12, so the stream open looks like a reposition.
+    const fixture = createFixture(playbackSession({ cursorOrdinal: 24 }), 'running', {
+      completedThroughOrdinal: 24,
+    });
+
+    await fixture.controller.updateCursor('session-1', 24, { ensureGeneration: true });
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
   test('keeps active synthesis whose in-flight segment the moved cursor still needs', async () => {
     // aheadWindow 8: a cursor at 16 still wants segment 18, the run's next one.
     const fixture = createFixture(playbackSession({ cursorOrdinal: 16 }), 'running', {

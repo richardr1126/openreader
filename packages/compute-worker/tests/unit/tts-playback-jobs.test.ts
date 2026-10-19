@@ -90,6 +90,15 @@ describe('TTS playback requested-segment failures', () => {
       erroredOrdinals: new Set([24]),
     })).toBe(false);
   });
+
+  test('keeps a run whose requested segment failed but later segments completed', () => {
+    expect(requestedPlaybackSegmentFailed({
+      generationRunIsCurrent: true,
+      requiredOrdinal: 24,
+      completedOrdinals: new Set([25, 26]),
+      erroredOrdinals: new Set([24]),
+    })).toBe(false);
+  });
 });
 
 describe('TTS playback generation cancellation', () => {

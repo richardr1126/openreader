@@ -32,9 +32,13 @@ export function requestedPlaybackSegmentFailed(input: {
   completedOrdinals: ReadonlySet<number>;
   erroredOrdinals: ReadonlySet<number>;
 }): boolean {
-  return input.generationRunIsCurrent
-    && input.erroredOrdinals.has(input.requiredOrdinal)
-    && !input.completedOrdinals.has(input.requiredOrdinal);
+  // A failed sentence plays as silence, so the run fails only when the
+  // requested position produced no audio at all: nothing at or after it completed.
+  if (!input.generationRunIsCurrent || !input.erroredOrdinals.has(input.requiredOrdinal)) return false;
+  for (const ordinal of input.completedOrdinals) {
+    if (ordinal >= input.requiredOrdinal) return false;
+  }
+  return true;
 }
 
 export function playbackGenerationCancellationExpected(input: {
