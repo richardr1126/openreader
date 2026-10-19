@@ -13,7 +13,7 @@ export const VoicesControl = ({ disabled = false, onOpen }: {
   onOpen: () => void;
 }) => {
   const { ttsModel, providerRef, providerType } = useConfig();
-  const { voice, voiceSpeed, resolvedLanguage } = useTTS();
+  const { voice, voiceSpeed, documentLanguage, detectedDocumentLanguage } = useTTS();
   const policy = resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel });
   const label = formatVoiceDockLabel({
     voice: voice || '',
@@ -22,8 +22,10 @@ export const VoicesControl = ({ disabled = false, onOpen }: {
   });
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
+    providerType: policy.providerType,
     voice,
-    documentLanguage: resolvedLanguage,
+    configuredLanguage: documentLanguage,
+    documentLanguage: detectedDocumentLanguage,
   });
 
   return (

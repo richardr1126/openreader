@@ -1,4 +1,5 @@
 import { isKokoroModel } from './kokoro';
+import { KOKORO_LOCAL_VOICES, type TtsProviderType } from './provider-catalog';
 
 export const DEFAULT_TTS_LANGUAGE = 'en';
 
@@ -175,34 +176,45 @@ export function getLanguageDisplayName(language: string): string {
   }
 }
 
+/** Compare Kokoro voices with the document, independently of playback inference. */
 export function getTtsLanguageCompatibilityWarnings(input: {
   model?: string | null;
+  providerType?: TtsProviderType | null;
   voice?: string | null;
+  configuredLanguage?: string | null;
   documentLanguage?: string | null;
 }): string[] {
   if (!isKokoroModel(input.model || '')) return [];
 
-  const documentLanguage = normalizeLanguageTag(input.documentLanguage);
+  const configured = input.configuredLanguage?.trim();
+  const documentLanguage = normalizeLanguageTag(
+    configured && configured.toLowerCase() !== 'auto' ? configured : input.documentLanguage,
+    '',
+  );
+  if (!documentLanguage) return [];
   const documentBaseLanguage = toBaseLanguageCode(documentLanguage);
-  const supportedBaseLanguages = new Set(KOKORO_SUPPORTED_LANGUAGES.map((language) => toBaseLanguageCode(language)));
-  const voiceLanguages = getKokoroVoiceLanguages(input.voice);
-  const voiceBaseLanguages = new Set(voiceLanguages.map((language) => toBaseLanguageCode(language)));
-  const warnings: string[] = [];
+  if (!documentBaseLanguage || documentBaseLanguage === 'und') return [];
+  const localKokoro = input.providerType === 'kokoro-local';
+  const supportedLanguages = localKokoro
+    ? KOKORO_LOCAL_VOICES.flatMap(getKokoroVoiceLanguages)
+    : KOKORO_SUPPORTED_LANGUAGES;
+  const supportedBaseLanguages = new Set(supportedLanguages.map((language) => toBaseLanguageCode(language)));
 
   if (!supportedBaseLanguages.has(documentBaseLanguage)) {
-    warnings.push(
-      `Kokoro's built-in voice catalog does not include ${getLanguageDisplayName(documentLanguage)}.`,
-    );
+    const catalog = localKokoro ? "Local Kokoro's voice catalog" : "Kokoro's built-in voice catalog";
+    return [`${catalog} does not include ${getLanguageDisplayName(documentLanguage)}. Choose another model.`];
   }
 
+  const voiceLanguages = getKokoroVoiceLanguages(input.voice);
+  const voiceBaseLanguages = new Set(voiceLanguages.map((language) => toBaseLanguageCode(language)));
   const voiceLanguage = voiceBaseLanguages.size === 1 ? voiceLanguages[0] : undefined;
   if (voiceLanguage && toBaseLanguageCode(voiceLanguage) !== documentBaseLanguage) {
-    warnings.push(
-      `Selected Kokoro voice is ${getLanguageDisplayName(voiceLanguage)}, but the document is ${getLanguageDisplayName(documentLanguage)}.`,
-    );
+    return [
+      `Selected Kokoro voice is ${getLanguageDisplayName(voiceLanguage)}, but the document is ${getLanguageDisplayName(documentLanguage)}. Select a ${getLanguageDisplayName(documentBaseLanguage)} voice.`,
+    ];
   }
 
-  return warnings;
+  return [];
 }
 
 export function normalizeUnicodeToken(text: string): string {

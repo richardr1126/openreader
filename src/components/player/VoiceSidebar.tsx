@@ -69,7 +69,6 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     availableVoices,
     documentLanguage,
     detectedDocumentLanguage,
-    resolvedLanguage,
     isPlaying,
     isProcessing,
     pause,
@@ -122,8 +121,10 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   );
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
+    providerType: policy.providerType,
     voice: draft.voice,
-    documentLanguage: resolvedLanguage,
+    configuredLanguage: documentLanguage,
+    documentLanguage: detectedDocumentLanguage,
   });
   const providerName = providers.find((entry) => entry.slug === providerRef)?.displayName || providerRef;
 

@@ -65,7 +65,7 @@ describe('multilingual language utilities', () => {
       voice: 'af_sarah',
       documentLanguage: 'ja',
     })).toEqual([
-      'Selected Kokoro voice is American English, but the document is Japanese.',
+      'Selected Kokoro voice is American English, but the document is Japanese. Select a Japanese voice.',
     ]);
 
     expect(getTtsLanguageCompatibilityWarnings({
@@ -79,8 +79,7 @@ describe('multilingual language utilities', () => {
       voice: 'af_sarah',
       documentLanguage: 'ar',
     })).toEqual([
-      "Kokoro's built-in voice catalog does not include Arabic.",
-      'Selected Kokoro voice is American English, but the document is Arabic.',
+      "Kokoro's built-in voice catalog does not include Arabic. Choose another model.",
     ]);
 
     expect(getTtsLanguageCompatibilityWarnings({
@@ -94,6 +93,47 @@ describe('multilingual language utilities', () => {
     expect(resolveTtsLanguage({ configuredLanguage: 'pt-BR', voice: 'jf_alpha' })).toBe('pt-BR');
     expect(resolveTtsLanguage({ configuredLanguage: 'auto', voice: 'jf_alpha' })).toBe('ja');
     expect(toBaseLanguageCode('zh-CN')).toBe('zh');
+  });
+
+  test('warns against detected French even when Auto playback follows an English Kokoro voice', () => {
+    const input = { configuredLanguage: 'auto', documentLanguage: 'fr', voice: 'af_heart' };
+    expect(resolveTtsLanguage(input)).toBe('en-US');
+    expect(getTtsLanguageCompatibilityWarnings({ ...input, model: 'kokoro' })).toEqual([
+      'Selected Kokoro voice is American English, but the document is French. Select a French voice.',
+    ]);
+    expect(getTtsLanguageCompatibilityWarnings({ ...input, model: 'kokoro', voice: 'ff_siwis' })).toEqual([]);
+  });
+
+  test('uses the explicit warning language ahead of conflicting detected metadata', () => {
+    expect(getTtsLanguageCompatibilityWarnings({
+      model: 'kokoro', configuredLanguage: 'en', documentLanguage: 'fr', voice: 'af_heart',
+    })).toEqual([]);
+    expect(getTtsLanguageCompatibilityWarnings({
+      model: 'kokoro', configuredLanguage: 'fr', documentLanguage: 'tr', voice: 'af_heart',
+    })).toEqual([
+      'Selected Kokoro voice is American English, but the document is French. Select a French voice.',
+    ]);
+  });
+
+  test('directs unsupported Turkish documents to another model', () => {
+    expect(getTtsLanguageCompatibilityWarnings({
+      model: 'kokoro', configuredLanguage: 'auto', documentLanguage: 'tr', voice: 'af_heart',
+    })).toEqual(["Kokoro's built-in voice catalog does not include Turkish. Choose another model."]);
+  });
+
+  test('uses the narrower local Kokoro voice catalogue for warnings', () => {
+    expect(getTtsLanguageCompatibilityWarnings({
+      model: 'kokoro-82m', providerType: 'kokoro-local', configuredLanguage: 'auto', documentLanguage: 'fr', voice: 'af_heart',
+    })).toEqual(["Local Kokoro's voice catalog does not include French. Choose another model."]);
+    expect(getTtsLanguageCompatibilityWarnings({
+      model: 'kokoro-82m', providerType: 'kokoro-local', configuredLanguage: 'en', documentLanguage: 'fr', voice: 'af_heart',
+    })).toEqual([]);
+  });
+
+  test.each([null, undefined, '', 'auto', 'not_a_language', 'und'])('does not assume English for unknown document language %s', (documentLanguage) => {
+    expect(getTtsLanguageCompatibilityWarnings({
+      model: 'kokoro', configuredLanguage: 'auto', documentLanguage, voice: 'jf_alpha',
+    })).toEqual([]);
   });
 
   test('maps Kokoro voices and normalized language tags to Replicate language codes', () => {

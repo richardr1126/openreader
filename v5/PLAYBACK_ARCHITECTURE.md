@@ -217,6 +217,15 @@ previews use the same precedence with their draft voice. PDFs without language
 metadata sample at most 60k characters of the worker's existing parsed text at
 bootstrap and persist a successful detection with the normal opened-at update.
 
+Voice compatibility warnings compare against the explicit document setting or,
+in Auto, its detected language. They do not use the voice-inferred playback
+language as evidence of the document's language. Unknown document language
+produces no mismatch warning; unsupported Kokoro languages direct the reader to
+another model, while supported languages with a mismatched voice direct them to
+a voice in the document's language.
+The local Kokoro warning uses its narrower published voice catalogue rather
+than assuming every language in the full Kokoro catalogue is available locally.
+
 Audio is already normalized to a single **CBR** MP3 profile before storage —
 `normalizeToMp3` re-encodes every segment to `STREAM_AUDIO_PROFILE` (44.1 kHz mono,
 128 kbps CBR, Xing header stripped) in `packages/tts/src/audio-format.ts`, which is

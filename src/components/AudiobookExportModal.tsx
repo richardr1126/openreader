@@ -153,7 +153,8 @@ export function AudiobookExportModal({
   const {
     voice,
     voiceSpeed,
-    resolvedLanguage,
+    documentLanguage,
+    detectedDocumentLanguage,
     setAudioPlayerSpeedAndRestart,
     resolveDocumentAudioExport,
   } = useTTS();
@@ -202,9 +203,11 @@ export function AudiobookExportModal({
     : displayVoiceName(voice);
   const languageWarnings = useMemo(() => getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
+    providerType: providerModelPolicy.providerType,
     voice,
-    documentLanguage: resolvedLanguage,
-  }), [resolvedLanguage, ttsModel, voice]);
+    configuredLanguage: documentLanguage,
+    documentLanguage: detectedDocumentLanguage,
+  }), [documentLanguage, detectedDocumentLanguage, providerModelPolicy.providerType, ttsModel, voice]);
 
   const generationState = snapshot?.generation.state ?? 'idle';
   const artifactState = snapshot?.artifact.state ?? 'none';
