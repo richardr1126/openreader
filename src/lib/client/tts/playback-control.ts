@@ -228,15 +228,6 @@ export function isPlaybackPhaseProcessing(
   );
 }
 
-/** How much of the start buffer is ready, 0..1, for the play control's ring. */
-export function playbackStartProgress(
-  buffer: { wallMs: number; reachedDocumentEnd: boolean } | null,
-): number {
-  if (!buffer) return 0;
-  if (buffer.reachedDocumentEnd) return 1;
-  return Math.min(1, Math.max(0, buffer.wallMs / PLAYBACK_START_BUFFER_WALL_MS));
-}
-
 export function resolvePlaybackControlPresentation(
   isPlaying: boolean,
   phase: TtsPlaybackPhase,

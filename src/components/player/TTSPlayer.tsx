@@ -15,7 +15,7 @@ import { VoicesControl } from '@/components/player/VoicesControl';
 import { MAX_SPEED, MIN_SPEED, SpeedControl } from '@/components/player/SpeedControl';
 import { IconButton } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
-import { playbackStartProgress, resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
+import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 import {
   isTimelineEstimated,
   readyTimelineBands,
@@ -34,16 +34,14 @@ const RING_RADIUS = 15;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 /**
- * The play control's loading ring: filled by how much start buffer is ready,
- * or a spinning arc while there is nothing to measure yet.
+ * Activity, not a percentage: cached readiness does not measure browser loading.
  */
-function PlaybackLoadingRing({ progress }: { progress: number | null }) {
-  const filled = progress === null ? 0.25 : Math.max(0.04, progress);
+function PlaybackLoadingRing() {
   return (
     <svg
       aria-hidden
       viewBox="0 0 36 36"
-      className={`pointer-events-none absolute inset-0 h-full w-full ${progress === null ? 'motion-safe:animate-spin' : ''}`}
+      className="pointer-events-none absolute inset-0 h-full w-full motion-safe:animate-spin"
     >
       {/* The 12 o'clock start lives in the geometry: a CSS rotate here would
           fight animate-spin's transform and snap back 90° every turn. */}
@@ -55,9 +53,9 @@ function PlaybackLoadingRing({ progress }: { progress: number | null }) {
         fill="none"
         strokeWidth="2"
         strokeLinecap="round"
-        className="stroke-accent transition-[stroke-dasharray] duration-300"
+        className="stroke-accent"
         transform="rotate(-90 18 18)"
-        strokeDasharray={`${filled * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
+        strokeDasharray={`${0.25 * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`}
       />
     </svg>
   );
@@ -137,17 +135,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
   const heardPercent = timelineFraction(shownSec, playbackDurationSec) * 100;
   // Until every sentence has audio, part of the length is a text estimate.
   const durationLabel = `${isTimelineEstimated(playbackSeekLayout) ? '~' : ''}${formatPlaybackTime(playbackDurationSec)}`;
-  // Measurable progress exists once a session is buffering; startup and
-  // plan replacement have nothing to measure and spin instead.
-  const loadingRingProgress = !hasReadableContent
-    ? undefined
-    : !isPlaying && !playbackReady
-    ? null
-    : !playbackControl.isPending
-    ? undefined
-    : playbackPhase === 'buffering' || playbackPhase === 'seeking'
-    ? playbackStartProgress(aheadBuffer)
-    : null;
+  const showLoadingRing = hasReadableContent && (playbackControl.isPending || (!isPlaying && !playbackReady));
 
   // Undo after scrub: the origin is the playhead when the scrub began, so
   // playback advancing under a held thumb does not move it.
@@ -332,10 +320,10 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             disabled={!isPlaying && (!playbackReady || !hasReadableContent)}
             className="relative h-11 w-11 rounded-full bg-transparent text-soft hover:bg-accent-wash hover:text-accent sm:h-8 sm:w-8 sm:rounded-md"
           >
-            {loadingRingProgress !== undefined && <PlaybackLoadingRing progress={loadingRingProgress} />}
+            {showLoadingRing && <PlaybackLoadingRing />}
             {isPlaying
-              ? <PauseIcon className={loadingRingProgress === undefined ? 'w-5 h-5' : 'w-3.5 h-3.5'} />
-              : <PlayIcon className={loadingRingProgress === undefined ? 'w-5 h-5' : 'w-3.5 h-3.5'} />}
+              ? <PauseIcon className={showLoadingRing ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
+              : <PlayIcon className={showLoadingRing ? 'w-3.5 h-3.5' : 'w-5 h-5'} />}
           </IconButton>
 
           <IconButton

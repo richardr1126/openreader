@@ -11,6 +11,46 @@ vi.mock('@openreader/tts/audio-format', async (importOriginal) => ({
   getCbrSilenceFrameLengths: async () => [417, 418],
 }));
 
+test.each([true, false])('cached bytes bypass slow refill; missing audio still waits (cached=%s)', async (cached) => {
+  const app = Fastify();
+  const session = { sessionId: 'slow-refill', userId: 'user', storageUserId: 'user', documentId: 'doc',
+    status: 'running', expiresAt: Date.now() + 60_000, generationStartOrdinal: 1,
+    cursorOrdinal: 1, planObjectKey: 'plan.json', settingsJson: {} };
+  let release!: () => void;
+  let acknowledged = false;
+  const gate = new Promise<void>((resolve) => { release = () => { acknowledged = true; resolve(); }; });
+  const updateCursor = vi.fn(() => gate);
+  const readObject = vi.fn(async () => Uint8Array.from([0xff, 0xfb]).buffer);
+  const markActivity = vi.fn();
+  registerPlaybackAudioRoutes({ app, storage: { readObject }, markActivity } as never, {
+    readSession: async () => session,
+    readPlanSegments: async () => [{ ordinal: 1, text: 'Audio.' }],
+    readSegmentState: async () => cached || acknowledged
+      ? { status: 'completed', audioKey: 'audio.mp3' } : { status: 'pending' },
+  } as unknown as PlaybackSessionReadModel, { updateCursor } as unknown as PlaybackSessionController);
+  const token = createTtsPlaybackToken({ ...session, exp: session.expiresAt }, process.env.TTS_PLAYBACK_TOKEN_SECRET!);
+  const response = app.inject({ method: 'GET',
+    url: `/v1/tts-playback/sessions/${session.sessionId}/audio?token=${token}&fromOrdinal=1`,
+    headers: { range: 'bytes=0-1' },
+  }).then((result) => result);
+  try {
+    await vi.waitFor(() => expect(updateCursor).toHaveBeenCalledWith('slow-refill', 1, { ensureGeneration: true }));
+    if (cached) {
+      await vi.waitFor(() => expect(markActivity).toHaveBeenCalledWith('tts_playback_audio_segment'));
+      expect(readObject).toHaveBeenCalledTimes(1);
+    } else {
+      await vi.waitFor(() => expect(markActivity).toHaveBeenCalledWith('tts_playback_audio_wait'));
+      expect(readObject).not.toHaveBeenCalled();
+    }
+    release();
+    expect((await response).rawPayload).toEqual(Buffer.from([0xff, 0xfb]));
+  } finally {
+    release();
+    await response;
+    await app.close();
+  }
+});
+
 test('answers the WebKit two-byte media probe with a bounded partial response', async () => {
   const app = Fastify();
   const session = {
