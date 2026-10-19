@@ -63,6 +63,7 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English' },
   { value: 'es', label: 'Spanish' },
   { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
   { value: 'hi', label: 'Hindi' },
   { value: 'it', label: 'Italian' },
   { value: 'ja', label: 'Japanese' },
@@ -70,6 +71,7 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'zh-CN', label: 'Chinese (Simplified)' },
   { value: 'ar', label: 'Arabic' },
   { value: 'th', label: 'Thai' },
+  { value: 'tr', label: 'Turkish' },
 ];
 
 const PLAYBACK_KEYS: [string[], string][] = [

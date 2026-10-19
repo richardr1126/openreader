@@ -53,6 +53,7 @@ const CONTAINER = `<?xml version="1.0"?>
 </container>`;
 
 const PARAGRAPHS: Record<string, string> = {
+  tr: readFileSync('tests/files/turkish-sample.txt', 'utf8'),
   en: 'The old house stood at the end of the lane, and in the evening the light from its windows fell across the garden. It was there that she had spent most of her childhood, reading by the fire while the wind moved through the trees. When she returned many years later, the rooms were smaller than she remembered, but the smell of the books was the same.',
   es: 'La casa vieja estaba al final del camino, y por la tarde la luz de sus ventanas caía sobre el jardín. Fue allí donde ella pasó la mayor parte de su infancia, leyendo junto al fuego mientras el viento se movía entre los árboles. Cuando volvió muchos años después, las habitaciones eran más pequeñas de lo que recordaba, pero el olor de los libros era el mismo.',
   pt: 'A casa velha ficava no fim do caminho, e ao entardecer a luz das suas janelas caía sobre o jardim. Foi ali que ela passou a maior parte da sua infância, lendo junto ao fogo enquanto o vento se movia entre as árvores. Quando voltou muitos anos depois, os quartos eram menores do que ela se lembrava, mas o cheiro dos livros era o mesmo.',
@@ -79,6 +80,20 @@ describe('text language detection', () => {
   test('prefers unknown for mixed or too-short text', () => {
     expect(detectTextLanguage(readFileSync('tests/files/multilingual-sample.txt', 'utf8'))).toBeNull();
     expect(detectTextLanguage('Chapter 1')).toBeNull();
+  });
+
+  test('does not confuse Romanian or Azerbaijani with Turkish', () => {
+    expect(detectTextLanguage('Şcolile şi oraşele româneşti păstrează poveşti despre oameni şi locurile lor. '.repeat(5))).toBeNull();
+    expect(detectTextLanguage('Ətrafdakı ağacların yarpaqları işıqda parıldayır, şəhərin küçələri sakitləşirdi. '.repeat(5))).toBeNull();
+  });
+
+  test('does not guess Turkish from ASCII-only or all-caps text', () => {
+    expect(detectTextLanguage(PARAGRAPHS.tr.toLocaleUpperCase('tr'))).toBeNull();
+    expect(detectTextLanguage(PARAGRAPHS.tr.replace(/[ıİğĞşŞçÇöÖüÜ]/g, 'x'))).toBeNull();
+  });
+
+  test('detects Turkish across long-text samples', () => {
+    expect(detectTextLanguage(`${PARAGRAPHS.en} ${PARAGRAPHS.tr.repeat(40)}`)).toBe('tr');
   });
 });
 
@@ -151,6 +166,10 @@ describe('PDF metadata', () => {
 });
 
 describe('extractImportMetadata', () => {
+  test.each(['notes.txt', 'notes.md', 'page.html'])('detects Turkish on import for %s', (name) => {
+    const body = name.endsWith('.html') ? `<html><body><p>${PARAGRAPHS.tr}</p></body></html>` : PARAGRAPHS.tr;
+    expect(extractImportMetadata({ type: 'html', name, body: Buffer.from(body) }).language).toBe('tr');
+  });
   test('prefers explicit hints over embedded metadata', () => {
     expect(extractImportMetadata({
       type: 'epub',

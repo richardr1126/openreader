@@ -206,6 +206,17 @@ segmentation inputs. The deterministic key is the source of deduplication. If tw
 workers synthesize the same segment concurrently, they write the same bytes to the
 same key; that is wasteful but correct.
 
+Playback language is resolved by reader bootstrap: an explicit document setting
+wins, then a single-language Kokoro voice, then the document's imported/detected
+language, then English. Metadata-only English regional tags collapse to `en` to
+preserve existing plan and audio identities; voice-derived and explicit tags keep
+their existing behavior. Correcting non-English fallback changes the language in
+the cache scope, so previously generated wrong-language audio is not reused.
+The client adopts bootstrap's effective language for playback and export; voice
+previews use the same precedence with their draft voice. PDFs without language
+metadata sample at most 60k characters of the worker's existing parsed text at
+bootstrap and persist a successful detection with the normal opened-at update.
+
 Audio is already normalized to a single **CBR** MP3 profile before storage —
 `normalizeToMp3` re-encodes every segment to `STREAM_AUDIO_PROFILE` (44.1 kHz mono,
 128 kbps CBR, Xing header stripped) in `packages/tts/src/audio-format.ts`, which is

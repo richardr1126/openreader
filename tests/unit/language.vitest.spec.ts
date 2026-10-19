@@ -103,6 +103,22 @@ describe('multilingual language utilities', () => {
     expect(resolveReplicateKokoroLanguageCode({ language: 'zh-TW', voice: 'zf_xiaobei' })).toBe('z');
   });
 
+  test.each([
+    [{ configuredLanguage: 'de', documentLanguage: 'tr-TR', voice: 'jf_alpha' }, 'de'],
+    [{ configuredLanguage: 'auto', documentLanguage: 'tr-TR', voice: 'jf_alpha' }, 'ja'],
+    [{ configuredLanguage: 'auto', documentLanguage: 'tr-TR', voice: 'F1' }, 'tr-TR'],
+    [{ configuredLanguage: 'auto', documentLanguage: 'de-DE', voice: 'alloy' }, 'de-DE'],
+    [{ documentLanguage: 'fr', voice: 'custom-voice' }, 'fr'],
+    [{ documentLanguage: 'tr', voice: 'ff_siwis+jf_alpha' }, 'tr'],
+    [{ documentLanguage: 'en-US', voice: 'F1' }, 'en'],
+    [{ documentLanguage: 'en-GB', voice: 'alloy' }, 'en'],
+    [{ documentLanguage: null, voice: 'F1' }, 'en'],
+    [{ documentLanguage: 'not_a_language', voice: 'F1' }, 'en'],
+    [{ documentLanguage: 'auto', voice: 'F1' }, 'en'],
+  ])('resolves configured, voice, metadata, then English: %j', (input, expected) => {
+    expect(resolveTtsLanguage(input)).toBe(expected);
+  });
+
   test('normalizes Unicode tokens without dropping non-Latin scripts', () => {
     expect(normalizeUnicodeToken('École!')).toBe('école');
     expect(normalizeUnicodeToken('日本語。')).toBe('日本語');

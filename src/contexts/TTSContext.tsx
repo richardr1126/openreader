@@ -51,7 +51,7 @@ import {
   type PlaybackAnchor,
 } from '@/lib/client/tts/playback-selection';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
-import { resolveTtsLanguage } from '@openreader/tts/language';
+import { DEFAULT_TTS_LANGUAGE } from '@openreader/tts/language';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import type {
   TTSLocation,
@@ -113,6 +113,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   reacquirePlaybackPlan: () => Promise<void>;
   initializeReaderSession: (input: {
     readerType: ReaderType;
+    documentLanguage: string | null;
     settings: DocumentSettings;
     plan: TtsPlaybackPlan;
     playback: ReaderPlaybackPreparation;
@@ -122,11 +123,12 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
    * Swap in a plan the server re-planned for the open reader (voice, speed,
    * language, segmentation) without resetting the reading position.
    */
-  adoptReplannedPlaybackPlan: (input: { settings: DocumentSettings; plan: TtsPlaybackPlan; playback: ReaderPlaybackPreparation }) => void;
+  adoptReplannedPlaybackPlan: (input: { settings: DocumentSettings; plan: TtsPlaybackPlan; playback: ReaderPlaybackPreparation; documentLanguage: string | null }) => void;
   playbackPlanReady: boolean;
   /** Identity of the adopted plan, or null while none is adopted. */
   playbackPlanKey: string | null;
   documentLanguage: string;
+  detectedDocumentLanguage: string | null;
   resolvedLanguage: string;
   clearSegmentCaches: () => void;
   /** Settings payload that identifies the document's current audio cache. */
@@ -268,6 +270,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const ttsModel = configTTSModel;
   const [playbackPlanRequest, setPlaybackPlanRequest] = useState<TtsPlaybackPlanRequest | null>(null);
   const [readerSettings, setReaderSettings] = useState<DocumentSettings | null>(null);
+  const [detectedDocumentLanguage, setDetectedDocumentLanguage] = useState<string | null>(null);
   const documentLanguage = readerSettings?.language ?? 'auto';
   const bookVoice = resolveBookVoice({
     override: readerSettings?.voiceOverride,
@@ -276,10 +279,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     defaultVoice: voice,
     defaultVoiceSpeed: speed,
   });
-  const resolvedLanguage = useMemo(
-    () => resolveTtsLanguage({ configuredLanguage: documentLanguage, voice: bookVoice.voice }),
-    [documentLanguage, bookVoice.voice],
-  );
+  const resolvedLanguage = playbackPlanRequest?.payload.settings.language ?? DEFAULT_TTS_LANGUAGE;
 
   const playbackRunIdRef = useRef(0);
   // Guard to coalesce rapid restarts and only resume the latest change
@@ -444,6 +444,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsPlaying(false);
     resetPlaybackPlan();
     setPlaybackPlanRequest(null);
+    setDetectedDocumentLanguage(null);
     playbackAnchorRef.current = null;
     setPlaybackAnchor(null);
     setCurrDocPage(1);
@@ -457,6 +458,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const initializeReaderSession = useCallback((input: {
     readerType: ReaderType;
+    documentLanguage: string | null;
     settings: DocumentSettings;
     plan: TtsPlaybackPlan;
     playback: ReaderPlaybackPreparation;
@@ -464,6 +466,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }) => {
     stop();
     setReaderSettings(input.settings);
+    setDetectedDocumentLanguage(input.documentLanguage);
     setIsEPUB(input.readerType === 'epub');
     setPlaybackPlanRequest({
       headers: { 'Content-Type': 'application/json', 'x-tts-provider': input.playback.request.settings.providerRef },
@@ -504,12 +507,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
 
   const adoptReplannedPlaybackPlan = useCallback((input: {
     settings: DocumentSettings;
+    documentLanguage: string | null;
     plan: TtsPlaybackPlan;
     playback: ReaderPlaybackPreparation;
   }) => {
     abortAudio();
     setIsPlaying(false);
     setReaderSettings(input.settings);
+    setDetectedDocumentLanguage(input.documentLanguage);
     setPlaybackPlanRequest({
       headers: { 'Content-Type': 'application/json', 'x-tts-provider': input.playback.request.settings.providerRef },
       payload: input.playback.request,
@@ -596,6 +601,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       ? playbackPlanIdentity(playbackPlan)
       : null,
     documentLanguage,
+    detectedDocumentLanguage,
     resolvedLanguage,
     clearSegmentCaches,
     playbackPlanPayload: playbackPlanRequest?.payload ?? null,
@@ -638,6 +644,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
     documentLanguage,
+    detectedDocumentLanguage,
     resolvedLanguage,
     clearSegmentCaches,
     playbackPlanRequest,

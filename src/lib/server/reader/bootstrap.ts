@@ -39,6 +39,7 @@ import {
 } from '@/lib/server/tts/segments-auth';
 import { nowTimestampMs } from '@/lib/shared/timestamps';
 import { toBaseDocument, type StoredDocumentRow } from '@/lib/server/documents/document-row';
+import { detectTextLanguage } from '@/lib/server/documents/text-language';
 import { resolvePdfOperationReadiness } from './bootstrap-progress';
 import { resolveReaderPlayback } from './playback';
 
@@ -231,11 +232,34 @@ export async function resolveReaderBootstrapState(
     storedRecord(settingsRows[0]?.dataJson),
   );
   const initialPosition = toReadingPosition(progressRows[0]);
-  const planResult = await resolveReaderPlayback(request, documentId, scope, settings, storedRecord(preferenceRows[0]?.dataJson));
+  // Reuse the worker's parsed text; never parse a PDF again in the app. Bound
+  // sampling before joining so large PDFs do not allocate a second full text.
+  let detectedLanguage: string | null = null;
+  if (!row.language && parsedPdfDocument) {
+    const samples: string[] = [];
+    let remaining = 60_000;
+    for (const page of parsedPdfDocument.pages) {
+      for (const block of page.blocks) {
+        if (remaining <= 0) break;
+        const text = block.text.slice(0, remaining);
+        samples.push(text);
+        remaining -= text.length + 1;
+      }
+      if (remaining <= 0) break;
+    }
+    detectedLanguage = detectTextLanguage(samples.join(' '));
+  }
+  const documentLanguage = row.language || detectedLanguage;
+  const planResult = await resolveReaderPlayback(
+    request, documentId, scope, settings, storedRecord(preferenceRows[0]?.dataJson), documentLanguage,
+  );
   if ('result' in planResult) return planResult;
 
-  const document: BaseDocument = toBaseDocument(row);
-  await db.update(documents).set({ recentlyOpenedAt: nowTimestampMs() }).where(and(
+  const document: BaseDocument = toBaseDocument({ ...row, language: documentLanguage });
+  await db.update(documents).set({
+    recentlyOpenedAt: nowTimestampMs(),
+    ...(detectedLanguage ? { language: detectedLanguage } : {}),
+  }).where(and(
     eq(documents.id, documentId),
     eq(documents.userId, scope.storageUserId),
   ));

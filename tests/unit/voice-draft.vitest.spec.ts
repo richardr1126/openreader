@@ -63,6 +63,10 @@ describe('voice draft', () => {
 });
 
 describe('voice preview text', () => {
+  test('has Turkish and German samples when the reader has no current sentence', () => {
+    expect(buildVoicePreviewText({ currentSentence: '', documentLanguage: 'tr-TR', voice: 'F1' })).toContain('hikâye');
+    expect(buildVoicePreviewText({ currentSentence: '', documentLanguage: 'de-DE', voice: 'alloy' })).toContain('Geschichte');
+  });
   test('speaks the current sentence, trimmed to a word boundary', () => {
     const sentence = `${'word '.repeat(60)}end.`;
     const text = buildVoicePreviewText({ currentSentence: sentence, documentLanguage: 'en', voice: 'af_heart' });

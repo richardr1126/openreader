@@ -149,6 +149,7 @@ export function keepKokoroVoicesInOneLanguage(
 
 export function resolveTtsLanguage(input: {
   configuredLanguage?: string | null;
+  documentLanguage?: string | null;
   voice?: string | null;
 }): string {
   const configured = input.configuredLanguage?.trim();
@@ -156,7 +157,14 @@ export function resolveTtsLanguage(input: {
     return normalizeLanguageTag(configured);
   }
 
-  return inferKokoroLanguageFromVoice(input.voice) ?? DEFAULT_TTS_LANGUAGE;
+  const voiceLanguage = inferKokoroLanguageFromVoice(input.voice);
+  if (voiceLanguage) return voiceLanguage;
+
+  const documentLanguage = normalizeLanguageTag(input.documentLanguage);
+  // Metadata must not change the cache identity of existing English documents.
+  return documentLanguage && toBaseLanguageCode(documentLanguage) !== 'en'
+    ? documentLanguage
+    : DEFAULT_TTS_LANGUAGE;
 }
 
 export function getLanguageDisplayName(language: string): string {

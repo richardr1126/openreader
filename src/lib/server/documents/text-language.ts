@@ -58,6 +58,14 @@ function countScripts(sample: string): { counts: Map<Script, number>; letters: n
 }
 
 function guessLatin(sample: string): string | null {
+  const letters = sample.match(/\p{L}/gu) ?? [];
+  const turkishLetters = sample.match(/[ığş]/gu)?.length ?? 0;
+  const dotlessI = sample.match(/ı/gu)?.length ?? 0;
+  // Require dotless ı as well as Turkish diacritics to avoid Romanian ş,
+  // and exclude Azerbaijani's ə. ASCII-only/all-caps text stays unknown.
+  if (!/[əƏ]/u.test(sample) && turkishLetters / letters.length >= 0.015 && dotlessI / letters.length >= 0.005) {
+    return 'tr';
+  }
   const words = sample.toLowerCase().match(/\p{L}+/gu) ?? [];
   if (words.length < 20) return null;
   const scores = Object.keys(STOPWORD_SETS).map((language) => {
