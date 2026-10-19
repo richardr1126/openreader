@@ -2062,10 +2062,12 @@ first request queued behind that unwanted audio, about 21 seconds of a measured
 51-second seek.
 
 A run generates in plan order, so the segment after its progress
-`completedThroughOrdinal` is the one in flight. When that segment falls outside
-the moved cursor's window (below its generation floor or beyond
-`cursor + aheadWindow`), the cursor update supersedes the run
-(`playbackRunServesCursor`). The run-id change aborts its provider requests
+`completedThroughOrdinal` (the highest ordinal it has completed or skipped) is
+the one in flight. When that segment falls outside the moved cursor's window,
+the cursor update supersedes the run (`playbackRunServesCursor`): a forward seek
+past the run's frontier, or a backward jump of more than one ahead window. A
+watermark already at `cursor + aheadWindow` is a run finishing its window and is
+kept. The run-id change aborts its provider requests
 through the existing generation-invalidation watch. A short skip within the
 window, and a run that has completed nothing yet, keep the current run. A model
 call that has already started still finishes on the provider. A queued one is

@@ -153,7 +153,8 @@ describe('playback job cache discovery', () => {
       sessionId: 'session', generationRunId: 'run', planObjectKey: 'plan', generationExtent: 'document',
     }, 0, { onProgress })).resolves.toMatchObject({ sessionId: 'session' });
     expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
-      completedCount: 0, skippedCount: 1, plannedCount: 1,
+      // A skipped segment advances the run's frontier like a completed one.
+      completedThroughOrdinal: 0, completedCount: 0, skippedCount: 1, plannedCount: 1,
     }));
     expect(patchSessionIfGenerationRun).toHaveBeenCalledWith(
       'session', 'run', expect.objectContaining({ status: 'succeeded' }),

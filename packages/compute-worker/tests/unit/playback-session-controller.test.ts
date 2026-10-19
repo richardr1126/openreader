@@ -307,9 +307,21 @@ describe('playback session continuation controller', () => {
     expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
   });
 
+  test('keeps active synthesis finishing the window at an unchanged cursor', async () => {
+    // Segment 17 (cursor 9 + aheadWindow 8) completed before the run published
+    // its satisfied window; the run is ending, not generating past it.
+    const fixture = createFixture(playbackSession({ cursorOrdinal: 9 }), 'running', {
+      completedThroughOrdinal: 17,
+    });
+
+    await fixture.controller.enqueueContinuationIfNeeded(fixture.currentSession(), Date.now(), 'cursor');
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
   test.each([
     ['forward past', 40],
-    ['backward before', 2],
+    ['more than a window before', 2],
   ])('supersedes active synthesis when a seek lands %s its in-flight segment', async (_direction, cursorOrdinal) => {
     const fixture = createFixture(playbackSession({ cursorOrdinal }), 'running', {
       completedThroughOrdinal: 17,

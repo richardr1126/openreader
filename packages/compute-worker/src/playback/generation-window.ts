@@ -34,10 +34,12 @@ export function generationFloorForCursor(cursorOrdinal: number): number {
 
 /**
  * Whether a running window's in-flight synthesis is still wanted at a moved
- * cursor. A run generates in plan order, so the segment after its completion
- * watermark is the one it has in flight. Once that segment falls outside the
- * cursor's window, finishing it only delays the audio the listener is waiting
- * for. An unknown watermark (nothing completed yet) is treated as still wanted.
+ * cursor. A run generates in plan order, so the segment after its settled
+ * watermark (completed or skipped) is the one it has in flight. Once that
+ * segment falls outside the cursor's window, finishing it only delays the audio
+ * the listener is waiting for. A watermark already at the window's end means the
+ * run is finishing that window, not generating past it. An unknown watermark
+ * (nothing settled yet) is treated as still wanted.
  */
 export function playbackRunServesCursor(input: {
   completedThroughOrdinal: number | null;
@@ -45,7 +47,6 @@ export function playbackRunServesCursor(input: {
   aheadWindow: number;
 }): boolean {
   if (input.completedThroughOrdinal == null || input.completedThroughOrdinal < 0) return true;
-  const inFlightOrdinal = input.completedThroughOrdinal + 1;
-  return inFlightOrdinal >= generationFloorForCursor(input.cursorOrdinal)
-    && inFlightOrdinal <= input.cursorOrdinal + input.aheadWindow;
+  return input.completedThroughOrdinal + 1 >= generationFloorForCursor(input.cursorOrdinal)
+    && input.completedThroughOrdinal <= input.cursorOrdinal + input.aheadWindow;
 }
