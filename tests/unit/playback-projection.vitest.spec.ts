@@ -7,7 +7,7 @@ import { shouldSyncPlaybackLocator, usePlaybackProjection } from '@/hooks/audio/
 import { normalizePlaybackGrid } from '@/lib/client/tts/playback-grid';
 
 describe('playback locator projection', () => {
-  test.each(['buffered', 'evicted', 'gap', 'forced', 'error', 'rebased'] as const)(
+  test.each(['buffered', 'evicted', 'gap', 'forced', 'error', 'rebased', 'same-evicted', 'same-loading'] as const)(
     'cached seeks reuse only real, downloaded audio: %s', async (scenario) => {
       const dom = parseHTML('<html><body><div id="root"></div></body></html>');
       Object.defineProperty(dom.window, 'location', { value: { href: 'http://localhost/' }, configurable: true });
@@ -34,9 +34,10 @@ describe('playback locator projection', () => {
         return null;
       }
       const load = vi.fn();
+      const buffered = { length: 1, start: () => 0, end: () => scenario === 'evicted' ? 10 : 60 };
       const audio = Object.assign(new EventTarget(), { src: '', error: null, currentTime: 0,
         readyState: 2, seeking: false, load,
-        buffered: { length: 1, start: () => 0, end: () => scenario === 'evicted' ? 10 : 60 },
+        buffered,
       }) as unknown as HTMLAudioElement;
       try {
         await act(async () => root.render(createElement(Probe)));
@@ -45,12 +46,25 @@ describe('playback locator projection', () => {
         expect(load).toHaveBeenCalledTimes(1);
         await projection.refreshPlaybackTimeline('/timeline');
         if (scenario === 'error') Object.defineProperty(audio, 'error', { value: { code: 2 } });
-        const targetSec = scenario === 'rebased' ? 21 : 25;
-        await projection.setAudioDocumentTime(audio, targetSec, 2, targetSec, { reopenStream: scenario === 'forced' });
-        const reused = scenario === 'buffered' || scenario === 'rebased';
+        if (scenario === 'same-evicted') buffered.start = () => 10;
+        if (scenario === 'same-loading') {
+          buffered.length = 0;
+          Object.defineProperty(audio, 'readyState', { value: 0, writable: true });
+        }
+        const sameOrdinal = scenario === 'same-evicted' || scenario === 'same-loading';
+        const targetOrdinal = sameOrdinal ? 1 : 2;
+        const targetSec = sameOrdinal ? 5 : scenario === 'rebased' ? 21 : 25;
+        const positioning = projection.setAudioDocumentTime(audio, targetSec, targetOrdinal, targetSec, { reopenStream: scenario === 'forced' });
+        if (scenario === 'same-loading') {
+          expect(load).toHaveBeenCalledTimes(1);
+          Object.defineProperty(audio, 'readyState', { value: 2 });
+          audio.dispatchEvent(new Event('loadeddata'));
+        }
+        await positioning;
+        const reused = scenario === 'buffered' || scenario === 'rebased' || scenario === 'same-loading';
         expect(load).toHaveBeenCalledTimes(reused ? 1 : 2);
-        expect(new URL(audio.src).searchParams.get('fromOrdinal')).toBe(reused ? '1' : '2');
-        expect(audio.currentTime).toBe(reused ? 20 : 0);
+        expect(new URL(audio.src).searchParams.get('fromOrdinal')).toBe(reused ? '1' : String(targetOrdinal));
+        expect(audio.currentTime).toBe(reused && !sameOrdinal ? 20 : 0);
         expect(projection.documentTimeForAudio(audio)).toBe(targetSec);
       } finally {
         await act(async () => root.unmount());

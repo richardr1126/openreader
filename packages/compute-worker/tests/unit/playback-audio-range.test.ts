@@ -12,38 +12,48 @@ vi.mock('@openreader/tts/audio-format', async (importOriginal) => ({
 }));
 
 test.each([true, false])('cached bytes bypass slow refill; missing audio still waits (cached=%s)', async (cached) => {
-  const app = Fastify();
+  const app = Fastify({ forceCloseConnections: true });
   const session = { sessionId: 'slow-refill', userId: 'user', storageUserId: 'user', documentId: 'doc',
     status: 'running', expiresAt: Date.now() + 60_000, generationStartOrdinal: 1,
     cursorOrdinal: 1, planObjectKey: 'plan.json', settingsJson: {} };
   let release!: () => void;
-  let acknowledged = false;
-  const gate = new Promise<void>((resolve) => { release = () => { acknowledged = true; resolve(); }; });
+  const gate = new Promise<void>((resolve) => { release = resolve; });
   const updateCursor = vi.fn(() => gate);
   const readObject = vi.fn(async () => Uint8Array.from([0xff, 0xfb]).buffer);
   const markActivity = vi.fn();
+  let audioAvailable = cached;
   registerPlaybackAudioRoutes({ app, storage: { readObject }, markActivity } as never, {
     readSession: async () => session,
     readPlanSegments: async () => [{ ordinal: 1, text: 'Audio.' }],
-    readSegmentState: async () => cached || acknowledged
+    readSegmentState: async () => audioAvailable
       ? { status: 'completed', audioKey: 'audio.mp3' } : { status: 'pending' },
   } as unknown as PlaybackSessionReadModel, { updateCursor } as unknown as PlaybackSessionController);
   const token = createTtsPlaybackToken({ ...session, exp: session.expiresAt }, process.env.TTS_PLAYBACK_TOKEN_SECRET!);
-  const response = app.inject({ method: 'GET',
-    url: `/v1/tts-playback/sessions/${session.sessionId}/audio?token=${token}&fromOrdinal=1`,
+  const address = await app.listen({ host: '127.0.0.1', port: 0 });
+  let received: Buffer | undefined;
+  const response = fetch(`${address}/v1/tts-playback/sessions/${session.sessionId}/audio?token=${token}&fromOrdinal=1`, {
     headers: { range: 'bytes=0-1' },
-  }).then((result) => result);
+  }).then(async (result) => {
+    expect(result.status).toBe(206);
+    received = Buffer.from(await result.arrayBuffer());
+    return received;
+  });
   try {
     await vi.waitFor(() => expect(updateCursor).toHaveBeenCalledWith('slow-refill', 1, { ensureGeneration: true }));
     if (cached) {
-      await vi.waitFor(() => expect(markActivity).toHaveBeenCalledWith('tts_playback_audio_segment'));
+      await vi.waitFor(() => expect(received).toEqual(Buffer.from([0xff, 0xfb])));
       expect(readObject).toHaveBeenCalledTimes(1);
     } else {
       await vi.waitFor(() => expect(markActivity).toHaveBeenCalledWith('tts_playback_audio_wait'));
+      audioAvailable = true;
+      // Audio is now independently ready. A missing-audio request must still
+      // await cursor coordination before the route's 400ms retry can read it.
+      await new Promise((resolve) => setTimeout(resolve, 450));
       expect(readObject).not.toHaveBeenCalled();
+      expect(received).toBeUndefined();
     }
     release();
-    expect((await response).rawPayload).toEqual(Buffer.from([0xff, 0xfb]));
+    expect(await response).toEqual(Buffer.from([0xff, 0xfb]));
   } finally {
     release();
     await response;

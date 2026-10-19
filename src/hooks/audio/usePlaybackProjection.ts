@@ -147,7 +147,12 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
       && mediaTarget >= 0 && mediaTarget < playbackStreamReadyDurationSecRef.current
       && Array.from({ length: audio.buffered?.length ?? 0 }, (_, index) => index)
         .some((index) => mediaTarget >= audio.buffered.start(index) && mediaTarget < audio.buffered.end(index));
+    // A nonempty later range proves the earlier bytes are no longer resident.
+    // An empty range can simply mean this source is still loading metadata.
+    const targetBeforeBuffer = (audio.buffered?.length ?? 0) > 0
+      && mediaTarget >= 0 && mediaTarget + 0.25 < audio.buffered.start(0);
     const reopen = Boolean(options?.reopenStream || target + 0.001 < base
+      || targetBeforeBuffer
       || (targetOrdinal !== playbackStreamStartOrdinalRef.current && !canReuseBuffer));
     if (reopen) {
       const session = playbackSessionRef.current;
