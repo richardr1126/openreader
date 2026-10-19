@@ -57,9 +57,9 @@ function countScripts(sample: string): { counts: Map<Script, number>; letters: n
   return { counts, letters };
 }
 
+/** Prefer clear body-language evidence over diacritics in names or quotations. */
 function guessLatin(sample: string): string | null {
   const words = sample.toLowerCase().match(/\p{L}+/gu) ?? [];
-  if (words.length < 20) return null;
   const scores = Object.keys(STOPWORD_SETS).map((language) => {
     const set = STOPWORD_SETS[language];
     let hits = 0;
@@ -67,9 +67,22 @@ function guessLatin(sample: string): string | null {
     return { language, hits };
   }).sort((a, b) => b.hits - a.hits);
   const [best, runnerUp] = scores;
-  if (!best || best.hits / words.length < 0.12) return null;
-  if (runnerUp && best.hits < runnerUp.hits * 1.3) return null;
-  return best.language;
+  if (best && best.hits / words.length >= 0.12
+    && (!runnerUp || best.hits >= runnerUp.hits * 1.3)) {
+    // Keep the existing minimum for a positive stopword guess, but do not let
+    // a name turn a shorter passage with competing evidence into Turkish.
+    return words.length >= 20 ? best.language : null;
+  }
+
+  const letters = sample.match(/\p{L}/gu) ?? [];
+  const turkishLetters = sample.match(/[ığş]/gu)?.length ?? 0;
+  const dotlessI = sample.match(/ı/gu)?.length ?? 0;
+  // Require dotless ı as well as Turkish diacritics to avoid Romanian ş,
+  // and exclude Azerbaijani's ə. ASCII-only/all-caps text stays unknown.
+  if (!/[əƏ]/u.test(sample) && turkishLetters / letters.length >= 0.015 && dotlessI / letters.length >= 0.005) {
+    return 'tr';
+  }
+  return null;
 }
 
 /** One sample's guess, or null when it is too short or ambiguous. */

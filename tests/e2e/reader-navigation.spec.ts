@@ -29,7 +29,9 @@ test('tapping a sentence, contents and find in book move the Markdown reading po
 
   await page.getByRole('button', { name: 'Find in book', exact: true }).click();
   const find = page.getByRole('dialog', { name: 'Find in book' });
-  await find.getByRole('searchbox', { name: 'Find in book' }).fill('BASIC markdown');
+  const search = find.getByRole('searchbox', { name: 'Find in book' });
+  await expect(search).toBeFocused();
+  await search.fill('BASIC markdown');
   await expect(find.getByText('1 match', { exact: true })).toBeVisible();
   await find.getByRole('list', { name: 'Search results' }).getByRole('button').first().click();
   await expect(sentence).toContainText('basic Markdown elements');

@@ -60,6 +60,33 @@ beforeEach(() => {
 });
 
 describe('bootstrap playback preparation', () => {
+  test.each([
+    ['auto', 'tr-TR', 'F1', 'tr-TR'],
+    ['auto', 'de-DE', 'F1', 'de-DE'],
+    ['auto', 'en-US', 'F1', 'en'],
+    ['auto', 'tr', 'jf_alpha', 'ja'],
+    ['de', 'tr', 'jf_alpha', 'de'],
+  ])('prepares %s / %s / %s consistently for planning, audio, and export', async (configured, metadata, voice, expected) => {
+    const result = await resolveReaderPlayback(request, documentId, scope,
+      { ...DEFAULT_DOCUMENT_SETTINGS, language: configured }, { ...preferences, voice }, metadata);
+    expect(result).toMatchObject({ playback: { request: {
+      settings: { language: expected }, planning: { language: expected },
+    } } });
+    const workerRequest = mocks.enqueue.mock.calls[0]?.[0];
+    expect(workerRequest.planning.language).toBe(expected);
+    expect(JSON.parse(workerRequest.settingsJson).language).toBe(expected);
+  });
+
+  test('preserves English cache scope but separates corrected non-English audio', async () => {
+    const prepare = (language?: string) => resolveReaderPlayback(request, documentId, scope,
+      DEFAULT_DOCUMENT_SETTINGS, { ...preferences, voice: 'F1' }, language);
+    await prepare();
+    const originalHash = mocks.completed.mock.calls.at(-1)?.[0].settingsHash;
+    await prepare('en-GB');
+    expect(mocks.completed.mock.calls.at(-1)?.[0].settingsHash).toBe(originalHash);
+    await prepare('tr-TR');
+    expect(mocks.completed.mock.calls.at(-1)?.[0].settingsHash).not.toBe(originalHash);
+  });
   test('an unconfigured installation can read with a complete estimated timeline', async () => {
     mocks.providers.mockResolvedValueOnce([]);
     mocks.completed.mockResolvedValueOnce({ segments: [] });

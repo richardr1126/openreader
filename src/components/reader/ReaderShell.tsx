@@ -101,6 +101,7 @@ export function ReaderShell<T extends ReaderType>({
       if (!payload) return;
       initializeReaderSession({
         readerType,
+        documentLanguage: payload.document.language ?? null,
         settings: payload.settings,
         plan: payload.plan,
         playback: payload.playback,
@@ -117,6 +118,7 @@ export function ReaderShell<T extends ReaderType>({
   const replannedPlan = payload?.plan;
   const replannedSettings = payload?.settings;
   const replannedPlayback = payload?.playback;
+  const replannedDocumentLanguage = payload?.document.language ?? null;
   useEffect(() => {
     if (!adoptedSurface || replanning || !replannedPlan || !replannedSettings || !replannedPlayback) return;
     const adopted = adoptedReadyVersionRef.current;
@@ -128,7 +130,7 @@ export function ReaderShell<T extends ReaderType>({
     adoptedReadyVersionRef.current = { attemptKey, version: readyVersion };
     if (playbackPlanKey === playbackPlanIdentity(replannedPlan)
       && JSON.stringify(playbackPlanPayload) === JSON.stringify(replannedPlayback.request)) return;
-    adoptReplannedPlaybackPlan({ settings: replannedSettings, plan: replannedPlan, playback: replannedPlayback });
+    adoptReplannedPlaybackPlan({ settings: replannedSettings, plan: replannedPlan, playback: replannedPlayback, documentLanguage: replannedDocumentLanguage });
   }, [
     adoptReplannedPlaybackPlan,
     adoptedSurface,
@@ -138,6 +140,7 @@ export function ReaderShell<T extends ReaderType>({
     readyVersion,
     replannedPlan,
     replannedSettings,
+    replannedDocumentLanguage,
     replannedPlayback,
     replanning,
   ]);

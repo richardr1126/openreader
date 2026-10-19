@@ -63,6 +63,7 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'en', label: 'English' },
   { value: 'es', label: 'Spanish' },
   { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
   { value: 'hi', label: 'Hindi' },
   { value: 'it', label: 'Italian' },
   { value: 'ja', label: 'Japanese' },
@@ -70,6 +71,7 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'zh-CN', label: 'Chinese (Simplified)' },
   { value: 'ar', label: 'Arabic' },
   { value: 'th', label: 'Thai' },
+  { value: 'tr', label: 'Turkish' },
 ];
 
 const PLAYBACK_KEYS: [string[], string][] = [
@@ -110,12 +112,15 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
     htmlHighlightEnabled,
     htmlWordHighlightEnabled,
     ttsModel,
+    providerType,
   } = useConfig();
-  const { voice, resolvedLanguage, reacquirePlaybackPlan } = useTTS();
+  const { voice, reacquirePlaybackPlan } = useTTS();
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
+    providerType,
     voice,
-    documentLanguage: resolvedLanguage,
+    configuredLanguage: language,
+    documentLanguage: detectedLanguage,
   });
   const selectedLanguage = DOCUMENT_LANGUAGE_OPTIONS.find((option) => option.value === language)
     ?? DOCUMENT_LANGUAGE_OPTIONS[0];

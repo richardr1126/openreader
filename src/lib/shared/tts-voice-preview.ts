@@ -12,6 +12,8 @@ const SAMPLE_BY_BASE_LANGUAGE: Record<string, string> = {
   en: 'Every story finds its own voice, and this is how I would read yours.',
   es: 'Cada historia encuentra su propia voz, y así es como leería la tuya.',
   fr: 'Chaque histoire trouve sa propre voix, et voici comment je lirais la vôtre.',
+  de: 'Jede Geschichte findet ihre eigene Stimme, und so würde ich Ihre vorlesen.',
+  tr: 'Her hikâye kendi sesini bulur, ben de sizin hikâyenizi böyle okurdum.',
   hi: 'हर कहानी अपनी आवाज़ ढूँढ लेती है, और मैं आपकी कहानी ऐसे पढ़ूँगा।',
   it: 'Ogni storia trova la propria voce, ed ecco come leggerei la tua.',
   ja: 'どの物語にも自分の声があります。あなたの物語はこんなふうに読みます。',

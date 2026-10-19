@@ -12,7 +12,7 @@ describe('Whisper alignment model selection', () => {
     expect(resolveWhisperModelVariant('EN_gb')).toBe('tiny-english');
   });
 
-  test('uses the English-only tiny model for Auto with a plain English voice', () => {
+  test('uses the English-only tiny model when Auto cannot infer voice or document language', () => {
     const resolvedLanguage = resolveTtsLanguage({
       configuredLanguage: 'auto',
       voice: 'F1',
@@ -22,10 +22,19 @@ describe('Whisper alignment model selection', () => {
     expect(resolveWhisperModelVariant(resolvedLanguage)).toBe('tiny-english');
   });
 
+  test.each(['und', 'UND'])('treats %s document metadata as absent in Auto', (documentLanguage) => {
+    expect(resolveTtsLanguage({ configuredLanguage: 'auto', voice: 'F1', documentLanguage })).toBe('en');
+  });
+
   test('keeps the multilingual base model for other or unknown languages', () => {
     expect(resolveWhisperModelVariant('es')).toBe('base-multilingual');
     expect(resolveWhisperModelVariant('fr-CA')).toBe('base-multilingual');
     expect(resolveWhisperModelVariant()).toBe('base-multilingual');
+  });
+
+  test.each(['tr', 'tr-TR', 'de-DE'])('aligns Auto + F1 + %s metadata with the multilingual model', (documentLanguage) => {
+    const language = resolveTtsLanguage({ configuredLanguage: 'auto', voice: 'F1', documentLanguage });
+    expect(resolveWhisperModelVariant(language)).toBe('base-multilingual');
   });
 
   test('stores each model in its own durable artifact directory', () => {

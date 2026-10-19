@@ -40,6 +40,7 @@ export async function resolveReaderPlayback(
   scope: ResolvedSegmentDocumentScope,
   settings: ReturnType<typeof mergeDocumentSettings>,
   storedPreferences: Record<string, unknown>,
+  documentLanguage?: string | null,
 ): Promise<ReaderBootstrapResolution | { plan: ReaderPayload['plan']; playback: ReaderPlaybackPreparation }> {
   if (!isComputeWorkerAvailable()) {
     return {
@@ -106,6 +107,7 @@ export async function resolveReaderPlayback(
   voice ||= policy.defaultVoices[0] ?? '';
   const language = resolveTtsLanguage({
     configuredLanguage: settings.language || 'auto',
+    documentLanguage,
     voice,
   });
   const parsed: ParsedTtsPlaybackRequestBody = {

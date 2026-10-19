@@ -33,17 +33,22 @@ export function ReaderSidebarShell({
 }: ReaderSidebarShellProps) {
   const bounds = useReaderSidebarBounds(isOpen);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     const previous = document.activeElement as HTMLElement | null;
     // The panel mounts through a transition, possibly after this effect runs.
-    const frame = requestAnimationFrame(() => closeRef.current?.focus());
+    const frame = requestAnimationFrame(() => {
+      // Keep an autofocus field or a control the user has already chosen.
+      if (panelRef.current?.contains(document.activeElement)) return;
+      closeRef.current?.focus();
+    });
     return () => {
       cancelAnimationFrame(frame);
       // Return focus from a closing panel, but not from a control the user chose.
       const active = document.activeElement;
-      if (active === document.body || active?.closest('[data-reader-sidebar-panel]')) {
+      if (active === document.body || panelRef.current?.contains(active)) {
         if (previous?.isConnected) previous.focus();
       }
     };
@@ -83,6 +88,7 @@ export function ReaderSidebarShell({
           leaveTo="translate-x-full"
         >
           <aside
+            ref={panelRef}
             data-reader-sidebar-panel
             role="dialog"
             aria-label={ariaLabel}
