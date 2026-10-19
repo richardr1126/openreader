@@ -91,6 +91,16 @@ describe('document language in reader bootstrap', () => {
     expect(result.result.payload.document.language).toBeUndefined();
   });
 
+  test('persists English rather than Turkish when an untagged PDF mentions Işık', async () => {
+    rows();
+    const english = 'The book was by Işık and it was in the house. He read it to her as they sat by the fire.';
+    mocks.object.mockResolvedValueOnce({ Body: { transformToString: async () => JSON.stringify(parsed([english])) } });
+    const result = await resolveReaderBootstrapState(request, 'book');
+    expect(mocks.playback.mock.calls[0]?.[5]).toBe('en');
+    expect(mocks.set).toHaveBeenCalledWith({ recentlyOpenedAt: expect.any(Number), language: 'en' });
+    expect(result).toMatchObject({ result: { payload: { document: { language: 'en' } } } });
+  });
+
   test('bounds PDF text sampling to the first 60k characters', async () => {
     rows();
     const english = 'The book is in the house and it was there that she had read the story. '.repeat(1_000);

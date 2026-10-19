@@ -87,6 +87,19 @@ describe('text language detection', () => {
     expect(detectTextLanguage('Ətrafdakı ağacların yarpaqları işıqda parıldayır, şəhərin küçələri sakitləşirdi. '.repeat(5))).toBeNull();
   });
 
+  test.each([
+    ['en', 'The book was by Işık and it was in the house. He read it to her as they sat by the fire.'],
+    ['de', 'Das Buch von Işık ist in dem Haus und er hat es mit ihr am Abend gelesen, als sie bei dem Feuer waren.'],
+  ])('keeps clear %s stopword evidence when a Turkish name meets the diacritic ratios', (language, paragraph) => {
+    expect(detectTextLanguage(paragraph)).toBe(language);
+    expect(detectTextLanguage(`${paragraph} `.repeat(150))).toBe(language);
+  });
+
+  test('keeps the stopword minimum for a short English passage mentioning Işık', () => {
+    const text = 'The story by Işık was in the old house and she read it with her family by the fire.';
+    expect(detectTextLanguage(text)).toBeNull();
+  });
+
   test('does not guess Turkish from ASCII-only or all-caps text', () => {
     expect(detectTextLanguage(PARAGRAPHS.tr.toLocaleUpperCase('tr'))).toBeNull();
     expect(detectTextLanguage(PARAGRAPHS.tr.replace(/[ıİğĞşŞçÇöÖüÜ]/g, 'x'))).toBeNull();
