@@ -45,6 +45,17 @@ test('anonymous user opens a PDF and reads its visible page content', async ({ p
   await expect(undoScrub).toBeHidden();
   await expect(position).toHaveValue('0');
 
+  // A pointer click lands mid-sentence and snaps to the sentence start; the
+  // trailing change event must not reopen the scrub and hold the playhead.
+  const track = await position.boundingBox();
+  if (!track) throw new Error('Playback position slider has no layout box');
+  await position.click({ position: { x: track.width * 0.6, y: track.height / 2 } });
+  await expect(undoScrub).toBeVisible();
+  expect(Number(await position.inputValue())).toBeGreaterThan(0);
+  await undoScrub.click();
+  await expect(undoScrub).toBeHidden();
+  await expect(position).toHaveValue('0');
+
   await page.getByRole('link', { name: 'Back to documents', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole('link', { name: 'sample.pdf', exact: true })).toBeVisible();
