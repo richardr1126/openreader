@@ -11,7 +11,29 @@ import {
   positionPlaybackMedia,
   resolvePlaybackControlPresentation,
   waitForPlaybackStartBuffer,
+  createPlaybackReadinessDeadline,
+  PLAYBACK_CURSOR_READ_LIMIT,
 } from '../../src/lib/client/tts/playback-control';
+
+describe('SSE readiness deadlines', () => {
+  test('only new cached slots in the selected window extend idle time, within a hard cap', () => {
+    let now = 0;
+    const remaining = createPlaybackReadinessDeadline({ now: () => now });
+    const slot = (ordinal: number) => ({ ordinal, durationMs: 20_000, generated: true });
+    expect(remaining(10, 0, [])).toBe(60_000);
+    now = 45_000;
+    expect(remaining(10, 0, [slot(11)])).toBe(60_000);
+    now = 70_000;
+    // Repeated snapshots and another window's work are not progress.
+    expect(remaining(10, 0, [slot(11), slot(9), slot(10 + PLAYBACK_CURSOR_READ_LIMIT)])).toBe(35_000);
+    now = 100_000;
+    expect(remaining(10, 0, [slot(11), slot(12)])).toBe(20_000);
+    now = 120_000;
+    expect(remaining(10, 0, [slot(11), slot(12), slot(13)])).toBe(0);
+    // A new user target has its own bounded wait.
+    expect(remaining(90, 0, [])).toBe(60_000);
+  });
+});
 
 describe('playback request cancellation', () => {
   test('recognizes aborts without swallowing ordinary playback failures', () => {
@@ -201,6 +223,26 @@ describe('playback start buffer', () => {
       const failed = expect(waiting).rejects.toThrow('did not buffer enough contiguous audio in time');
       await vi.advanceTimersByTimeAsync(60_500);
       await failed;
+    } finally { vi.useRealTimers(); }
+  });
+
+  test('startup follows SSE generation progress while the target arrives after the original deadline', async () => {
+    vi.useFakeTimers();
+    try {
+      let segments = [segment(0, 20_000, false), segment(1, 20_000, false)];
+      let settled = false;
+      const waiting = waitForPlaybackStartBuffer({
+        sessionId: 'session-current', getStartOrdinal: () => 0,
+        loadLayout: async () => ({ sessionId: 'session-current', status: 'running', generationStartOrdinal: 0, segments }),
+        isCurrent: () => true, playbackRate: 1,
+      }).then((value) => { settled = true; return value; });
+      await vi.advanceTimersByTimeAsync(45_000);
+      segments = [segment(0, 20_000, false), segment(1, 20_000)];
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(settled).toBe(false);
+      segments = [segment(0, 20_000), segment(1, 20_000)];
+      await vi.advanceTimersByTimeAsync(250);
+      await expect(waiting).resolves.toMatchObject({ sessionId: 'session-current' });
     } finally { vi.useRealTimers(); }
   });
 
