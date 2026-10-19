@@ -281,11 +281,14 @@ export function registerPlaybackAudioRoutes(
       // that request must NOT pull generation back to 0 on a deep start, and it
       // relies on scaffolding silence to complete instantly.
       const rangeStartOrdinal = startLoc ? mapLayout.slots[startLoc.slotIndex].ordinal : 0;
-      if (rangeStartOrdinal > 0) {
-        await controller.updateCursor(sessionId, rangeStartOrdinal, { ensureGeneration: true }).catch((error) => {
+      // Cached bytes do not depend on refill acknowledgement. Start the same
+      // cursor command immediately, but await it only before missing audio or
+      // stream cleanup so generation still follows explicit range seeks.
+      const cursorUpdate = rangeStartOrdinal > 0
+        ? controller.updateCursor(sessionId, rangeStartOrdinal, { ensureGeneration: true }).catch((error) => {
           app.log.warn({ sessionId, ordinal: rangeStartOrdinal, error: toErrorMessage(error) }, 'tts.playback.cursor_seed_failed');
-        });
-      }
+        })
+        : Promise.resolve();
 
       const streamSilence = async function* (byteCount: number): AsyncGenerator<Buffer> {
         let written = 0;
@@ -390,6 +393,7 @@ export function registerPlaybackAudioRoutes(
             // client heartbeat refills the bounded window as playback advances;
             // an explicit range start above already handles real seeks.
             markActivity('tts_playback_audio_wait');
+            await cursorUpdate;
             await sleep(400);
           }
           if (!audioKey) {
@@ -464,6 +468,8 @@ export function registerPlaybackAudioRoutes(
           code: errorCode(error),
         }, 'tts.playback.audio.stream_error');
         throw error;
+      } finally {
+        await cursorUpdate;
       }
     };
 

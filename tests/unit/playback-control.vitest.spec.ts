@@ -1,8 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 
 import {
-  PLAYBACK_START_BUFFER_WALL_MS,
-  playbackStartProgress,
   isPlaybackAbortError,
   isPlaybackPhaseProcessing,
   isPlaybackStartBufferReady,
@@ -365,14 +363,5 @@ describe('playback start buffer', () => {
     current = false;
     release({ sessionId: 'session', status: 'running', generationStartOrdinal: 0, segments: [segment(0, 12_000)] });
     await expect(waiting).resolves.toBeNull();
-  });
-});
-
-describe('playback loading controls', () => {
-  test('fills the loading ring from the ready start buffer', () => {
-    expect(playbackStartProgress(null)).toBe(0);
-    expect(playbackStartProgress({ wallMs: PLAYBACK_START_BUFFER_WALL_MS / 2, reachedDocumentEnd: false })).toBe(0.5);
-    expect(playbackStartProgress({ wallMs: PLAYBACK_START_BUFFER_WALL_MS * 3, reachedDocumentEnd: false })).toBe(1);
-    expect(playbackStartProgress({ wallMs: 100, reachedDocumentEnd: true })).toBe(1);
   });
 });

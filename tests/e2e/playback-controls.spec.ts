@@ -131,6 +131,7 @@ async function verifyEpubPlayback(page: Page) {
     exact: true,
   });
   await expect(loadingButton).toBeVisible({ timeout: 5_000 });
+  await expect(loadingButton.locator('svg').first()).toHaveCSS('animation-name', 'spin');
   await expect(page.getByText(/^(Preparing|Loading) audio…$/)).toBeVisible();
 
   const sessionResponse = await sessionResponsePromise;
@@ -225,6 +226,12 @@ async function verifyEpubPlayback(page: Page) {
   await page.getByRole('button', { name: 'Skip forward', exact: true }).click();
   await page.getByRole('button', { name: 'Skip forward', exact: true }).click();
   expect(await readPlaybackPosition(page)).toBeGreaterThan(scrubbedAt);
+  // Readiness can stay at zero or full while the browser is loading. Keep
+  // showing activity through retargeting, with the user's motion preference.
+  await expect(loadingButton.locator('svg').first()).toHaveCSS('animation-name', 'spin');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(loadingButton.locator('svg').first()).toHaveCSS('animation-name', 'none');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   releasePreparation();
   await expect(pauseButton).toBeVisible({ timeout: 60_000 });
   expect(activationOrdinal).toBeGreaterThan(preparedOrdinal + 1);

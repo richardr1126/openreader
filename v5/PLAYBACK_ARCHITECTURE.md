@@ -441,10 +441,11 @@ sentence a page turn selects. A pause inside that sentence keeps its exact
 time; `usePlaybackProjection` remains the only writer of the playback clock.
 The length shows a `~` while any sentence is still a text estimate.
 
-Loading is shown by the play control alone. It becomes a ring filled by the
-ready start buffer (`playbackStartProgress`, the same measurement as the
-"ahead" chip) while a session buffers or seeks, and spins only while there is
-nothing to measure (session startup, plan replacement). Previous/next keep
+Loading is shown by the play control alone. Its activity ring spins throughout
+preparation, buffering, seeking, and browser loading, respecting reduced motion.
+The ring does not claim a percentage: generated audio readiness cannot measure
+the remaining browser or network wait. The "ahead" chip separately measures
+ready listening time. Previous/next keep
 their icons and stay enabled during preparation and buffering: a skip
 is a superseding seek, so it retargets generation instead of waiting behind it.
 The time label stays visible; loading status moves to the right-hand chip.
@@ -1991,7 +1992,13 @@ late overview cannot erase newer cursor data. The stream anchor is an ordinal;
 earlier duration discovery rebases document time without moving the media clock.
 An accepted readiness snapshot starts or seeks audio without a redundant full
 timeline request. Changed cursors supersede pending window reads while retaining
-the independent overview. Cached seeks reopen the same session stream at their ordinal.
+the independent overview. Cached seeks reuse the current media source only when
+the browser has downloaded the target and it lies inside the contiguous generated
+extent recorded when that source opened. Later readiness cannot validate old
+silence padding. Other seeks reopen the same session stream at their ordinal.
+Cached stream bytes do not await refill coordination; the cursor command starts
+immediately and is awaited before waiting for missing audio and during stream
+cleanup.
 
 The read model retains completed audio sidecars even without alignment. Full
 overviews discover newly cached ordinals but do not repeatedly fetch all

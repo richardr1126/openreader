@@ -17,6 +17,7 @@ import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
 import { createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh';
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { PLAYBACK_CURSOR_READ_LIMIT, positionPlaybackMedia } from '@/lib/client/tts/playback-control';
+import { measurePlaybackBuffer } from '@openreader/tts/playback-buffer';
 
 export type PlaybackSessionState = {
   sessionId: string;
@@ -77,6 +78,9 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
   }, []);
   const playbackStreamBaseSecRef = useRef(0);
   const playbackStreamStartOrdinalRef = useRef<number | null>(null);
+  // Only reuse bytes known to be real audio when this source was opened.
+  // A later snapshot can mark audio ready after an old response padded a gap.
+  const playbackStreamReadyDurationSecRef = useRef(0);
   const playbackTimelineRef = useRef<TtsPlaybackGrid | null>(null);
   const playbackCursorOrdinalRef = useRef<number | null>(null);
   const [playbackTimeSec, setPlaybackTimeSec] = useState(0);
@@ -132,13 +136,25 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     targetStartSec: number,
     options?: { reopenStream?: boolean },
   ) => {
+    const startedAt = performance.now();
     cancelMediaPosition();
     const controller = new AbortController();
     mediaPositionAbortRef.current = controller;
     const target = Math.max(0, documentTimeSec);
     let base = playbackStreamBaseSecRef.current;
-    if (options?.reopenStream || targetOrdinal !== playbackStreamStartOrdinalRef.current
-      || target + 0.001 < base) {
+    const mediaTarget = target - base;
+    const canReuseBuffer = !audio.error && Boolean(audio.src)
+      && mediaTarget >= 0 && mediaTarget < playbackStreamReadyDurationSecRef.current
+      && Array.from({ length: audio.buffered?.length ?? 0 }, (_, index) => index)
+        .some((index) => mediaTarget >= audio.buffered.start(index) && mediaTarget < audio.buffered.end(index));
+    // A nonempty later range proves the earlier bytes are no longer resident.
+    // An empty range can simply mean this source is still loading metadata.
+    const targetBeforeBuffer = (audio.buffered?.length ?? 0) > 0
+      && mediaTarget >= 0 && mediaTarget + 0.25 < audio.buffered.start(0);
+    const reopen = Boolean(options?.reopenStream || target + 0.001 < base
+      || targetBeforeBuffer
+      || (targetOrdinal !== playbackStreamStartOrdinalRef.current && !canReuseBuffer));
+    if (reopen) {
       const session = playbackSessionRef.current;
       if (session) {
         const url = new URL(session.audioUrl, window.location.href);
@@ -146,12 +162,20 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
         base = Math.max(0, targetStartSec);
         playbackStreamBaseSecRef.current = base;
         playbackStreamStartOrdinalRef.current = targetOrdinal;
+        playbackStreamReadyDurationSecRef.current = measurePlaybackBuffer({
+          segments: playbackTimelineRef.current?.segments ?? [], startOrdinal: targetOrdinal,
+        }).durationMs / 1000;
         audio.src = url.toString();
         audio.load();
       }
     }
     try {
-      return await positionPlaybackMedia(audio, documentTimeToMediaTime(target, base), controller.signal);
+      const positioned = await positionPlaybackMedia(audio, documentTimeToMediaTime(target, base), controller.signal);
+      if (positioned) console.info('tts.playback.position', JSON.stringify({
+        fromOrdinal: targetOrdinal, transport: reopen ? 'reopened' : 'reused',
+        durationMs: performance.now() - startedAt,
+      }));
+      return positioned;
     } finally {
       if (mediaPositionAbortRef.current === controller) mediaPositionAbortRef.current = null;
     }
@@ -170,6 +194,9 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
   const setPlaybackStreamAnchor = useCallback((ordinal: number, seconds: number) => {
     playbackStreamStartOrdinalRef.current = ordinal;
     playbackStreamBaseSecRef.current = Math.max(0, seconds);
+    playbackStreamReadyDurationSecRef.current = measurePlaybackBuffer({
+      segments: playbackTimelineRef.current?.segments ?? [], startOrdinal: ordinal,
+    }).durationMs / 1000;
   }, []);
 
   const projectPlaybackTime = useCallback((currentTimeSec: number) => {
@@ -277,6 +304,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     playbackTimelineRef.current = null;
     playbackStreamBaseSecRef.current = 0;
     playbackStreamStartOrdinalRef.current = null;
+    playbackStreamReadyDurationSecRef.current = 0;
     lastProjectionRef.current = null;
     playbackCursorOrdinalRef.current = null;
     if (!options?.preservePosition) publishPlaybackTimeSec(0, { force: true });
