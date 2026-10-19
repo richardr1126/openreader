@@ -163,7 +163,8 @@ export function resolveTtsLanguage(input: {
 
   const documentLanguage = normalizeLanguageTag(input.documentLanguage);
   // Metadata must not change the cache identity of existing English documents.
-  return documentLanguage && toBaseLanguageCode(documentLanguage) !== 'en'
+  const documentBaseLanguage = documentLanguage ? toBaseLanguageCode(documentLanguage) : '';
+  return documentBaseLanguage && documentBaseLanguage !== 'en' && documentBaseLanguage !== 'und'
     ? documentLanguage
     : DEFAULT_TTS_LANGUAGE;
 }

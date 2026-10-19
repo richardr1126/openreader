@@ -22,6 +22,10 @@ describe('Whisper alignment model selection', () => {
     expect(resolveWhisperModelVariant(resolvedLanguage)).toBe('tiny-english');
   });
 
+  test.each(['und', 'UND'])('treats %s document metadata as absent in Auto', (documentLanguage) => {
+    expect(resolveTtsLanguage({ configuredLanguage: 'auto', voice: 'F1', documentLanguage })).toBe('en');
+  });
+
   test('keeps the multilingual base model for other or unknown languages', () => {
     expect(resolveWhisperModelVariant('es')).toBe('base-multilingual');
     expect(resolveWhisperModelVariant('fr-CA')).toBe('base-multilingual');
