@@ -51,6 +51,7 @@ test('downloads account data and an already-completed audiobook export', async (
   });
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   const documentSettings = page.getByRole('dialog', { name: 'Document settings', exact: true });
+  await expect(documentSettings).toBeInViewport({ ratio: 1 });
   await expect(documentSettings.getByText('Measuring document storage…', { exact: true })).toBeVisible();
   releaseMeasurement();
   await expect(documentSettings.getByText(/Redeploy the worker to match the web version/)).toBeVisible();
