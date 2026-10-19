@@ -4,6 +4,7 @@ import { buildTtsPlaybackOperationKey } from '../../operations/keys';
 import {
   DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW,
   generationFloorForCursor,
+  playbackRunServesCursor,
 } from '../../playback/generation-window';
 import { resolveTtsPlaybackSessionInstanceId } from '../../playback/storage';
 import { ttsPlaybackOperationCreateSchema } from '../schemas';
@@ -86,12 +87,22 @@ export function createPlaybackSessionController(
       // A nonterminal operation normally owns synthesis. Once it has published
       // a satisfied window, however, it may only be draining best-effort exact
       // alignment. Let low-water refill supersede that run so alignment cannot
-      // starve audible audio generation.
+      // starve audible audio generation. A seek that leaves the run's in-flight
+      // segment behind supersedes it too: its pending provider requests are
+      // aborted instead of holding the provider for audio nobody will hear.
+      const completedThroughOrdinal = Number(
+        (current?.progress as { completedThroughOrdinal?: unknown } | undefined)?.completedThroughOrdinal,
+      );
       if (
         current
         && !isTerminalStatus(current.status)
         && !hasSatisfiedWindow
         && !isExplicitReposition
+        && playbackRunServesCursor({
+          completedThroughOrdinal: Number.isFinite(completedThroughOrdinal) ? completedThroughOrdinal : null,
+          cursorOrdinal,
+          aheadWindow,
+        })
       ) return;
     }
 
