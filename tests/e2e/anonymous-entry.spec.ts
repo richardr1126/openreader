@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { closeChangelog } from './support/onboarding';
+import { closeChangelog, declineOptionalCookies } from './support/onboarding';
 
 test('anonymous visitor completes first-run entry and reaches the library', async ({ page }) => {
   test.setTimeout(45_000);
@@ -93,6 +93,7 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
 
 test('anonymous visitor plays the landing read-along sample', async ({ page }) => {
   await page.goto('/');
+  await declineOptionalCookies(page);
   const sample = page.getByRole('complementary', { name: 'Read-along sample', exact: true });
   await sample.getByRole('button', { name: 'Play sample', exact: true }).click();
 
