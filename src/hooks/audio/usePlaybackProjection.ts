@@ -16,7 +16,7 @@ import { isPdfLocator, type TTSSegmentLocator } from '@/types/client';
 import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
 import { createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh';
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
-import { positionPlaybackMedia } from '@/lib/client/tts/playback-control';
+import { PLAYBACK_CURSOR_READ_LIMIT, positionPlaybackMedia } from '@/lib/client/tts/playback-control';
 
 export type PlaybackSessionState = {
   sessionId: string;
@@ -186,7 +186,7 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
       if (session?.timelineUrl && now - lastTimelineHealAtRef.current > 1_000) {
         lastTimelineHealAtRef.current = now;
         void refreshPlaybackTimeline(session.timelineUrl, undefined, {
-          minOrdinal: projection.segment.ordinal, limit: 64,
+          minOrdinal: projection.segment.ordinal, limit: PLAYBACK_CURSOR_READ_LIMIT,
         }).catch(() => undefined);
       }
     }

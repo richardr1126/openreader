@@ -437,3 +437,35 @@ and advances playback with the fix, using one canonical session. Additional
 coverage preserves active-seek expiry, bounds missing startup readiness, and
 checks timeout cleanup/retry and both preparation abort sources. Repeat
 production verification is still required after this follow-up deploys.
+
+### Progress-aware readiness follow-up
+
+PR #178 merged as `ef5dc3f0d6a02b62f2f65d51ffa319575fc2012a` after all checks,
+1,243 Vitest tests, and 49 local browser cases passed. Docker publishing
+`39180548738` succeeded after retrying a Google Fonts loader failure. Vercel
+production and Railway deployment `5146174d-8287-4632-a093-b731702280b5` succeeded.
+The production uncached startup retarget reached Playing in 30.2 seconds;
+rapid cached forward/forward/back skips recovered, and cached startup after
+worker redeployment took 9.0 seconds. All used the same canonical session.
+
+The final cancel/retry check found a related active-seek boundary. Play at
+00:36:02.980 UTC on October 19 selected ordinal 2075. Its target persisted at
+00:37:00.900, 57.920 seconds later, after several nearby ordinals had become
+ready. The fixed 60-second seek deadline expired before the target's ready SSE
+snapshot arrived. The UI paused instead of hanging, but unnecessarily failed
+playback despite ongoing generation progress. Worker and provider logs showed
+successful generation rather than a service error.
+
+Startup and active seeks now share one readiness deadline policy. Only newly
+cached ordinals inside the selected cursor's existing 64-slot read window count
+as progress. The wait fails after 60 seconds without that progress, with a hard
+120-second cap per target; repeated snapshots and unrelated windows cannot
+extend it. Once the target's runway is ready, browser positioning owns its
+existing 30-second deadline. No additional network polling or remote state was
+added. A user retarget creates a fresh bounded wait and supersedes the old one.
+
+Regressions cover readiness arriving after the original wall-time deadline,
+duplicate/unrelated snapshots, the hard cap, unchanged no-progress expiry, and
+late cached readiness handing ownership to media positioning. Full validation
+and another deployment/production pass remain required before closing this
+report.

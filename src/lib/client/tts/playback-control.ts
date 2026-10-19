@@ -3,9 +3,12 @@ import {
   isPlaybackBufferReady,
   measurePlaybackBuffer,
   PLAYBACK_START_BUFFER_WALL_MS,
+  PLAYBACK_PROGRESS_TIMEOUT_MS,
 } from '@openreader/tts/playback-buffer';
 
 export { PLAYBACK_START_BUFFER_WALL_MS } from '@openreader/tts/playback-buffer';
+
+export const PLAYBACK_CURSOR_READ_LIMIT = 64;
 
 type PlaybackBufferSegment = {
   ordinal: number;
@@ -19,6 +22,40 @@ type PlaybackStartLayout = {
   generationStartOrdinal: number;
   segments: PlaybackBufferSegment[];
 };
+
+/** Bound an SSE readiness wait by both idle time and total time at one target. */
+export function createPlaybackReadinessDeadline(options: {
+  timeoutMs?: number;
+  maxWaitMs?: number;
+  now?: () => number;
+} = {}) {
+  const now = options.now ?? Date.now;
+  const idleMs = Math.max(1, options.timeoutMs ?? 60_000);
+  const maxWaitMs = Math.max(idleMs, options.maxWaitMs ?? PLAYBACK_PROGRESS_TIMEOUT_MS);
+  let targetKey: string | null = null;
+  let startedAt = now();
+  let lastProgressAt = startedAt;
+  const readyOrdinals = new Set<number>();
+  return (startOrdinal: number | undefined, offsetMs: number, segments: PlaybackBufferSegment[]) => {
+    const observedAt = now();
+    const key = `${startOrdinal}:${offsetMs}`;
+    if (key !== targetKey) {
+      targetKey = key;
+      startedAt = observedAt;
+      lastProgressAt = observedAt;
+      readyOrdinals.clear();
+    }
+    if (startOrdinal !== undefined) {
+      for (const segment of segments) {
+        if (segment.ordinal < startOrdinal || segment.ordinal >= startOrdinal + PLAYBACK_CURSOR_READ_LIMIT
+          || !segment.generated || readyOrdinals.has(segment.ordinal)) continue;
+        readyOrdinals.add(segment.ordinal);
+        lastProgressAt = observedAt;
+      }
+    }
+    return Math.max(0, Math.min(lastProgressAt + idleMs, startedAt + maxWaitMs) - observedAt);
+  };
+}
 
 export function isPlaybackAbortError(error: unknown): boolean {
   // Fetch deadlines are failures that must settle loading and allow retry.
@@ -142,19 +179,15 @@ export async function waitForPlaybackStartBuffer<T extends PlaybackStartLayout>(
   timeoutMs?: number;
   pollMs?: number;
 }): Promise<T | null> {
-  const timeoutMs = Math.max(1, input.timeoutMs ?? 60_000);
-  let deadline = Date.now() + timeoutMs;
-  let targetKey: string | null = null;
+  const remainingWait = createPlaybackReadinessDeadline({ timeoutMs: input.timeoutMs });
   for (;;) {
     if (!input.isCurrent()) return null;
     const layout = await input.loadLayout();
     if (!input.isCurrent()) return null;
     const startOrdinal = input.getStartOrdinal?.() ?? layout?.generationStartOrdinal;
     const offsetMs = input.getStartOffsetMs?.() ?? 0;
-    const nextTargetKey = `${startOrdinal}:${offsetMs}`;
-    if (targetKey !== null && targetKey !== nextTargetKey) deadline = Date.now() + timeoutMs;
-    targetKey = nextTargetKey;
     const belongsToSession = layout?.sessionId === input.sessionId;
+    const remainingMs = remainingWait(startOrdinal, offsetMs, belongsToSession ? layout.segments : []);
     if (belongsToSession && layout.status === 'failed') {
       throw new Error('TTS playback generation failed before audio became ready');
     }
@@ -170,7 +203,7 @@ export async function waitForPlaybackStartBuffer<T extends PlaybackStartLayout>(
     ) {
       return layout;
     }
-    if (Date.now() > deadline) {
+    if (remainingMs === 0) {
       throw new Error('TTS playback session did not buffer enough contiguous audio in time');
     }
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, input.pollMs ?? 250)));

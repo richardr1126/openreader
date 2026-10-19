@@ -15,6 +15,7 @@ import { createCoalescedPlaybackRefresh, createPlaybackOperationSubscription } f
 import type { TtsPlaybackGrid } from '@/lib/client/tts/playback-grid';
 import { useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { describeModelDownload, type PlaybackModelDownload } from '@/lib/client/tts/model-download';
+import { PLAYBACK_CURSOR_READ_LIMIT } from '@/lib/client/tts/playback-control';
 
 type UsePlaybackForegroundSyncInput = {
   audioRef: MutableRefObject<HTMLAudioElement | null>;
@@ -179,7 +180,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
       if (!isCurrent()) return;
       const readSignal = AbortSignal.any([signal, AbortSignal.timeout(30_000)]);
       const timeline = await refreshPlaybackTimeline(activeSession.timelineUrl, readSignal, {
-        minOrdinal: Math.max(0, playbackCursorOrdinalRef.current ?? 0), limit: 64,
+        minOrdinal: Math.max(0, playbackCursorOrdinalRef.current ?? 0), limit: PLAYBACK_CURSOR_READ_LIMIT,
       });
       if (readSignal.aborted || !isCurrent()) return;
       publish(timeline);

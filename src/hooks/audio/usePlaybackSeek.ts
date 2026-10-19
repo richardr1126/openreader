@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
-import { isPlaybackStartBufferReady } from '@/lib/client/tts/playback-control';
+import { createPlaybackReadinessDeadline, isPlaybackStartBufferReady } from '@/lib/client/tts/playback-control';
 import type { PlaybackSessionState } from '@/hooks/audio/usePlaybackProjection';
 import type { TTSSegmentLocator } from '@/types/client';
 import type { TtsPlaybackPhase } from '@/types/tts';
@@ -13,7 +13,7 @@ type PendingSeek = {
   offsetSec: number;
   reopenStream: boolean;
   runId: number;
-  expiresAt: number;
+  remainingWait: ReturnType<typeof createPlaybackReadinessDeadline>;
 };
 
 type UsePlaybackSeekInput = {
@@ -67,7 +67,7 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     const normalizedOrdinal = Math.max(0, Math.floor(ordinal));
     setPendingSeek({
       ordinal: normalizedOrdinal, offsetSec, reopenStream,
-      runId: playbackRunIdRef.current, expiresAt: Date.now() + 60_000,
+      runId: playbackRunIdRef.current, remainingWait: createPlaybackReadinessDeadline(),
     });
     setPlaybackPhase('buffering');
     updateWorkerPlaybackCursor(normalizedOrdinal);
@@ -78,13 +78,20 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     // Its target can change before media exists; a second seek deadline must
     // not consume that readiness budget while preparation is still running.
     if (!pendingSeek || !playbackActiveRef.current) return undefined;
+    const segments = playbackSeekLayout?.segments ?? [];
+    // Once cached audio is ready, browser positioning owns its own deadline.
+    if (isPlaybackStartBufferReady({
+      segments, startOrdinal: pendingSeek.ordinal, playbackRate: audioSpeed,
+      offsetWithinStartSegmentMs: pendingSeek.offsetSec * 1000,
+    })) return undefined;
+    const remainingMs = pendingSeek.remainingWait(pendingSeek.ordinal, pendingSeek.offsetSec * 1000, segments);
     const timeout = setTimeout(() => {
       if (pendingSeekRef.current !== pendingSeek) return;
       setPendingSeek(null);
       onPendingSeekExpired();
-    }, Math.max(0, pendingSeek.expiresAt - Date.now()));
+    }, remainingMs);
     return () => clearTimeout(timeout);
-  }, [onPendingSeekExpired, pendingSeek, playbackActiveRef, setPendingSeek]);
+  }, [audioSpeed, onPendingSeekExpired, pendingSeek, playbackActiveRef, playbackSeekLayout, setPendingSeek]);
 
   useEffect(() => {
     if (!pendingSeek || applyingSeekRef.current === pendingSeek) return;

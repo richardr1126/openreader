@@ -48,6 +48,36 @@ async function fixture() {
 }
 
 describe('playback seek ownership', () => {
+  test('generation progress preserves a slow seek and cached readiness hands its deadline to media positioning', async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    let acceptPosition!: (accepted: boolean) => void;
+    vi.mocked(f.input.setAudioDocumentTime).mockImplementation(() => new Promise((resolve) => { acceptPosition = resolve; }));
+    f.input.playbackSeekLayout = layout(false);
+    await f.render();
+    await act(async () => f.controller.seekPlaybackTo(0));
+    await act(async () => vi.advanceTimersByTimeAsync(45_000));
+    const firstProgress = layout(false);
+    firstProgress.segments[1] = layout().segments[1];
+    f.input.playbackSeekLayout = firstProgress;
+    await f.render();
+    await act(async () => vi.advanceTimersByTimeAsync(55_000));
+    expect(f.input.onPendingSeekExpired).not.toHaveBeenCalled();
+    f.input.playbackSeekLayout = { ...firstProgress, segments: [firstProgress.segments[0], ...layout().segments.slice(1)] };
+    await f.render();
+    await act(async () => vi.advanceTimersByTimeAsync(19_000));
+    f.input.playbackSeekLayout = layout();
+    await f.render();
+    expect(f.input.setAudioDocumentTime).toHaveBeenCalledTimes(1);
+    // Audio became ready at 119s. The browser's positioning budget owns this
+    // phase, rather than the readiness hard cap expiring at 120s.
+    await act(async () => vi.advanceTimersByTimeAsync(25_000));
+    expect(f.input.onPendingSeekExpired).not.toHaveBeenCalled();
+    await act(async () => acceptPosition(true));
+    expect(f.controller.hasPendingSeek()).toBe(false);
+    expect(f.play).toHaveBeenCalledTimes(1);
+  });
+
   test('an active seek still expires when SSE never reports its target ready', async () => {
     vi.useFakeTimers();
     const f = await fixture();
