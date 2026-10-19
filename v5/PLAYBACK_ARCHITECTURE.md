@@ -2050,3 +2050,26 @@ Chromium/WebKit cases including real playback with delayed metadata and a held
 overview, application/worker type checks, the production build, and route,
 compute-boundary, and server-bundle guards. Deployed latency measurements remain
 the final production check.
+
+### Seeks supersede stale in-flight synthesis
+
+A cursor update does not supersede a running window that has not yet published
+its satisfied boundary, so ordinary heartbeats never spawn one operation per
+spoken segment. A seek was treated the same way: the old run stopped at its next
+segment boundary, but only after its in-flight provider requests finished. On a
+serial provider (two single-slot KittenTTS pods in production), the new run's
+first request queued behind that unwanted audio, about 21 seconds of a measured
+51-second seek.
+
+A run generates in plan order, so the segment after its progress
+`completedThroughOrdinal` (the highest ordinal it has completed or skipped) is
+the one in flight. When that segment falls outside the moved cursor's window,
+the cursor update supersedes the run (`playbackRunServesCursor`): a forward seek
+past the run's frontier, or a backward jump of more than one ahead window. A
+watermark already at `cursor + aheadWindow` is a run finishing its window and is
+kept. The run-id change aborts its provider requests
+through the existing generation-invalidation watch. A short skip within the
+window, and a run that has completed nothing yet, keep the current run. A model
+call that has already started still finishes on the provider. A queued one is
+dropped only by a provider that stops on client disconnect, as KittenTTS-FastAPI
+does from v0.2.2.

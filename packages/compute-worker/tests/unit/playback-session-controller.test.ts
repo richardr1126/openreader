@@ -45,6 +45,7 @@ function playbackSession(overrides: Partial<PlaybackSessionRow> = {}): PlaybackS
 function createFixture(
   initial: PlaybackSessionRow,
   workerOpStatus: 'queued' | 'running' | 'succeeded' | 'failed' = 'succeeded',
+  workerOpProgress?: { completedThroughOrdinal: number },
 ) {
   let session = initial;
   const enqueueOrReuse = vi.fn(async (request: { opKey: string }) => ({
@@ -112,7 +113,7 @@ function createFixture(
     deps: { orchestrator: { enqueueOrReuse } },
     playbackStorage,
     ensureOrphanedOpRecovery: vi.fn(async () => undefined),
-    getOpState: vi.fn(async () => ({ status: workerOpStatus })),
+    getOpState: vi.fn(async () => ({ status: workerOpStatus, progress: workerOpProgress })),
   } as unknown as ComputeWorkerRouteContext;
   return {
     controller: createPlaybackSessionController(context, readModel),
@@ -292,6 +293,45 @@ describe('playback session continuation controller', () => {
     expect(fixture.currentSession()).toMatchObject({
       cursorOrdinal: 24,
       generationRunId: expect.stringMatching(/^active:24:/),
+    });
+  });
+
+  test('keeps active synthesis whose in-flight segment the moved cursor still needs', async () => {
+    // aheadWindow 8: a cursor at 16 still wants segment 18, the run's next one.
+    const fixture = createFixture(playbackSession({ cursorOrdinal: 16 }), 'running', {
+      completedThroughOrdinal: 17,
+    });
+
+    await fixture.controller.enqueueContinuationIfNeeded(fixture.currentSession(), Date.now(), 'cursor');
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
+  test('keeps active synthesis finishing the window at an unchanged cursor', async () => {
+    // Segment 17 (cursor 9 + aheadWindow 8) completed before the run published
+    // its satisfied window; the run is ending, not generating past it.
+    const fixture = createFixture(playbackSession({ cursorOrdinal: 9 }), 'running', {
+      completedThroughOrdinal: 17,
+    });
+
+    await fixture.controller.enqueueContinuationIfNeeded(fixture.currentSession(), Date.now(), 'cursor');
+
+    expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['forward past', 40],
+    ['more than a window before', 2],
+  ])('supersedes active synthesis when a seek lands %s its in-flight segment', async (_direction, cursorOrdinal) => {
+    const fixture = createFixture(playbackSession({ cursorOrdinal }), 'running', {
+      completedThroughOrdinal: 17,
+    });
+
+    await fixture.controller.enqueueContinuationIfNeeded(fixture.currentSession(), Date.now(), 'cursor');
+
+    expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+    expect(fixture.currentSession()).toMatchObject({
+      generationRunId: expect.stringMatching(new RegExp(`^active:${cursorOrdinal}:`)),
     });
   });
 

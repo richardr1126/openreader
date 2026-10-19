@@ -341,8 +341,9 @@ export interface PdfLayoutProgress {
  * Lightweight progress watermark for a TTS playback job, pushed to the client via
  * the operation-events SSE channel. `completedCount` is the authoritative count
  * of generated sidecars for the plan, including audio that existed before this
- * run. `completedThroughOrdinal` remains a lightweight wake-up watermark for
- * live playback/timeline refreshes.
+ * run. `completedThroughOrdinal` is the highest ordinal this run has settled
+ * (completed or skipped): a lightweight wake-up watermark for live
+ * playback/timeline refreshes and the run's generation frontier.
  */
 export interface TtsPlaybackProgress {
   completedThroughOrdinal: number;

@@ -31,3 +31,22 @@ export function generationFloorForCursor(cursorOrdinal: number): number {
   const cursor = Math.max(0, Math.floor(Number(cursorOrdinal) || 0));
   return Math.max(0, cursor - TTS_PLAYBACK_BACKWARD_PAD);
 }
+
+/**
+ * Whether a running window's in-flight synthesis is still wanted at a moved
+ * cursor. A run generates in plan order, so the segment after its settled
+ * watermark (completed or skipped) is the one it has in flight. Once that
+ * segment falls outside the cursor's window, finishing it only delays the audio
+ * the listener is waiting for. A watermark already at the window's end means the
+ * run is finishing that window, not generating past it. An unknown watermark
+ * (nothing settled yet) is treated as still wanted.
+ */
+export function playbackRunServesCursor(input: {
+  completedThroughOrdinal: number | null;
+  cursorOrdinal: number;
+  aheadWindow: number;
+}): boolean {
+  if (input.completedThroughOrdinal == null || input.completedThroughOrdinal < 0) return true;
+  return input.completedThroughOrdinal + 1 >= generationFloorForCursor(input.cursorOrdinal)
+    && input.completedThroughOrdinal <= input.cursorOrdinal + input.aheadWindow;
+}

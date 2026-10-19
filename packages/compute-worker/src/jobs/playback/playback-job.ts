@@ -341,6 +341,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           onSegmentAligned,
           onSegmentErrored: async (planOrdinal) => {
             erroredOrdinals.add(planOrdinal);
+            if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
             await emitProgress();
           },
           onUsageDenied: async () => {
