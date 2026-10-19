@@ -105,8 +105,12 @@ function createFixture(
       async incrementScopeEpoch() { return 0; },
     },
   } satisfies TtsPlaybackStorage;
+  const settledOrdinals = new Set<number>();
   const readModel = {
     async readSession() { return session; },
+    async readSegmentState(_session: PlaybackSessionRow, ordinal: number) {
+      return { status: settledOrdinals.has(ordinal) ? 'completed' : 'pending' };
+    },
   } as unknown as PlaybackSessionReadModel;
   const context = {
     app: { log: { warn: vi.fn(), info: vi.fn() } },
@@ -117,6 +121,7 @@ function createFixture(
   } as unknown as ComputeWorkerRouteContext;
   return {
     controller: createPlaybackSessionController(context, readModel),
+    settledOrdinals,
     enqueueOrReuse,
     updateCursor,
     currentSession: () => session,
@@ -302,10 +307,22 @@ describe('playback session continuation controller', () => {
     const fixture = createFixture(playbackSession({ cursorOrdinal: 24 }), 'running', {
       completedThroughOrdinal: 24,
     });
+    fixture.settledOrdinals.add(24);
 
     await fixture.controller.updateCursor('session-1', 24, { ensureGeneration: true });
 
     expect(fixture.enqueueOrReuse).not.toHaveBeenCalled();
+  });
+
+  test('supersedes a run already past the unsettled position a stream opens at', async () => {
+    const fixture = createFixture(playbackSession({ cursorOrdinal: 20 }), 'running', {
+      completedThroughOrdinal: 26,
+    });
+
+    await fixture.controller.updateCursor('session-1', 20, { ensureGeneration: true });
+
+    expect(fixture.enqueueOrReuse).toHaveBeenCalledTimes(1);
+    expect(fixture.currentSession().generationRunId).toMatch(/^active:20:/);
   });
 
   test('keeps active synthesis whose in-flight segment the moved cursor still needs', async () => {

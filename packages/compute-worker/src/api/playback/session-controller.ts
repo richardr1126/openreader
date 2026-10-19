@@ -98,9 +98,15 @@ export function createPlaybackSessionController(
       // A stream opened at a new position supersedes a run that has not yet
       // shown it serves that position. The stream a seek opens once its target
       // is ready lands on the run the seek's cursor update already started;
-      // superseding that run would resynthesize its in-flight segments.
+      // superseding that run would resynthesize its in-flight segments. The run
+      // serves the stream only if it will reach the cursor next or the cursor
+      // segment is already settled; a run past an unsettled cursor never
+      // returns to it.
       const keepsRun = isExplicitReposition
         ? completedThroughOrdinal !== null && completedThroughOrdinal >= 0 && servesCursor
+          && (completedThroughOrdinal + 1 <= cursorOrdinal
+            || await readModel.readSegmentState(session, cursorOrdinal)
+              .then((state) => state.status === 'completed' || state.status === 'error', () => false))
         : servesCursor;
       if (current && !isTerminalStatus(current.status) && !hasSatisfiedWindow && keepsRun) return;
     }

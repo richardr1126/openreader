@@ -2106,8 +2106,9 @@ serves that position. But a continuation keeps the session's original
 looked like a reposition. In production that superseded the run the seek's
 cursor update had just started, and the provider resynthesized its in-flight
 segments. A stream reposition now keeps a run whose known watermark serves the
-cursor (`playbackRunServesCursor`). A run that has completed nothing yet is
-still superseded.
+cursor (`playbackRunServesCursor`) and that will either reach the cursor next or
+has already settled the cursor segment. A run that has completed nothing yet, or
+that is past an unsettled cursor it will never return to, is still superseded.
 
 A sentence the provider fails to synthesize has a terminal error sidecar, and
 the audio stream pads its estimated slot with silence. The worker's segments
