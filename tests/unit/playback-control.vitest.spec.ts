@@ -18,6 +18,8 @@ describe('playback request cancellation', () => {
     expect(isPlaybackAbortError(new DOMException('Aborted', 'AbortError'))).toBe(true);
     expect(isPlaybackAbortError({ message: 'request canceled' })).toBe(true);
     expect(isPlaybackAbortError(new Error('provider failed'))).toBe(false);
+    expect(isPlaybackAbortError(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))).toBe(false);
+    expect(isPlaybackAbortError({ name: 'TimeoutError', message: 'The operation was aborted due to timeout' })).toBe(false);
   });
 });
 
@@ -187,6 +189,19 @@ describe('playback start buffer', () => {
       playbackRate: 1,
       offsetWithinStartSegmentMs: 8_000,
     })).toBe(false);
+  });
+
+  test('startup still fails within its own readiness deadline when SSE never supplies audio', async () => {
+    vi.useFakeTimers();
+    try {
+      const waiting = waitForPlaybackStartBuffer({
+        sessionId: 'session-current', loadLayout: async () => null,
+        isCurrent: () => true, playbackRate: 1,
+      });
+      const failed = expect(waiting).rejects.toThrow('did not buffer enough contiguous audio in time');
+      await vi.advanceTimersByTimeAsync(60_500);
+      await failed;
+    } finally { vi.useRealTimers(); }
   });
 
   test('waits through partial layouts and stops when the requested run is replaced', async () => {

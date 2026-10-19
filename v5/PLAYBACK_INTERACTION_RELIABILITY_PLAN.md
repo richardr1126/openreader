@@ -371,8 +371,8 @@ before accepting this fix.
   extra work from range-request cursor seeding need separate measured follow-up;
   neither is established as the cause of the reported permanent cached skip.
 
-Deployment and a repeat production walkthrough remain necessary before closing
-the production report. These changes have not been deployed.
+These changes shipped in PR #177. The production walkthrough below found a
+second deadline interaction, so deployment alone did not close the report.
 
 Validation: all 1,234 Vitest tests and all 49 local Playwright cases passed,
 including the Chromium/WebKit real playback journeys. The latter hold a
@@ -400,3 +400,40 @@ and installs fresh media handlers. A mounted controller test uses the real
 audio/projection/seek owners to verify failure, preserved position, fresh startup,
 reinstalled playing events, and an advancing clock. Provider-free and static
 catalogue preparation have dedicated regressions.
+
+### Production rollout and startup deadline follow-up
+
+PR #177 merged as `b7ec1509576bf9b93d44bd2d37c4a9936270afc5` after 1,237
+Vitest tests, all 49 local Chromium/WebKit cases, and CI/review passed. Docker
+workflow `39159403330` published `main`; Vercel deployed that commit and Railway
+redeployed its `main` worker image successfully (deployment
+`cf079306-7fcc-4aea-ba39-d3e00a7a13e5`). No worker code or database schema changed.
+
+The production anonymous Gutenberg EPUB retained its duration, cached bands,
+and saved cursor before Play and after reload. Cached playback, rapid
+forward/forward/back skips, and cancel/resume advanced the clock using the same
+canonical session. Cached starts still took 12.4 and 20.7 seconds; these samples
+do not establish a latency improvement or percentile.
+
+A fresh uncached retarget exposed another failure. Play at 23:59:56 UTC on
+2026-10-18, followed by a scrub and two forward skips, selected ordinal 1173.
+Worker activation began at 00:00:09 UTC on 2026-10-19. The target persisted at
+00:00:57.335, just after the pending seek's 60-second timer expired, while
+startup's own readiness budget remained valid. The UI paused prematurely;
+retry after caching played the same ordinal. Worker and read-only Raspberry Pi
+KittenTTS logs showed successful generation, including a 27.3-second target
+provider request, rather than a failed generation job.
+
+Startup now owns its preparation, readiness, and initial media wait. Pending
+seek expiry applies only after a media owner is active. Its existing 60-second
+bound remains; startup retains its own readiness deadline and cancelable media
+positioning. Session preparation now has a 30-second request deadline. Native
+`TimeoutError` must reach failure cleanup even though its message contains
+"aborted"; it must not be swallowed as user cancellation.
+
+A mounted regression delays preparation 25 seconds, retargets, and supplies
+ready audio 45 seconds after activation. It fails against the previous timer
+and advances playback with the fix, using one canonical session. Additional
+coverage preserves active-seek expiry, bounds missing startup readiness, and
+checks timeout cleanup/retry and both preparation abort sources. Repeat
+production verification is still required after this follow-up deploys.

@@ -15,7 +15,7 @@ beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   root = createRoot(document.getElementById('root') as unknown as HTMLElement);
 });
-afterEach(async () => { await act(async () => root.unmount()); vi.unstubAllGlobals(); });
+afterEach(async () => { await act(async () => root.unmount()); vi.clearAllTimers(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 function layout(generated = true): TtsPlaybackSeekLayout {
   return {
@@ -48,6 +48,18 @@ async function fixture() {
 }
 
 describe('playback seek ownership', () => {
+  test('an active seek still expires when SSE never reports its target ready', async () => {
+    vi.useFakeTimers();
+    const f = await fixture();
+    f.input.playbackSeekLayout = layout(false);
+    await f.render();
+    await act(async () => f.controller.seekPlaybackTo(45));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+    expect(f.controller.hasPendingSeek()).toBe(false);
+    expect(f.input.onPendingSeekExpired).toHaveBeenCalledTimes(1);
+    expect(f.play).not.toHaveBeenCalled();
+  });
+
   test('rapid sentence skips use the latest target before another render', async () => {
     const segments = planCanonicalTtsSegments([
       { sourceKey: 'one', text: 'First sentence.', locator: { readerType: 'html', location: '1' } },

@@ -1,4 +1,4 @@
-import { act, createElement, useRef, useState } from 'react';
+import { act, createElement, useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { parseHTML } from 'linkedom';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
@@ -88,10 +88,16 @@ beforeEach(() => {
   }));
   root = createRoot(document.getElementById('root') as unknown as HTMLElement);
 });
-afterEach(async () => { await act(async () => root.unmount()); vi.unstubAllGlobals(); });
+afterEach(async () => {
+  await act(async () => root.unmount());
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
-test('Play after recovery exhaustion reinstalls media events and advances the preserved cursor', async () => {
+async function fixture(initialLayout = layout) {
   let playback!: ReturnType<typeof useTtsPlayback>;
+  let publishLayout!: (value: TtsPlaybackSeekLayout) => void;
   const plan: TtsPlaybackPlan = {
     planId: 'plan', planObjectKey: 'plans/document', sessionId: 'canonical',
     documentId: 'document', readerType: 'html',
@@ -108,9 +114,12 @@ test('Play after recovery exhaustion reinstalls media events and advances the pr
   };
   function Probe() {
     const [isPlaying, setIsPlaying] = useState(false);
-    const [seekLayout, setSeekLayout] = useState<TtsPlaybackSeekLayout | null>(layout);
+    const [seekLayout, setSeekLayout] = useState<TtsPlaybackSeekLayout | null>(initialLayout);
+    publishLayout = setSeekLayout;
     const selectedOrdinalRef = useRef<number | null>(1);
     const isPlayingRef = useRef(false);
+    // Match the intent synchronization owned by useTtsDocumentNavigation.
+    useEffect(() => { isPlayingRef.current = isPlaying; }, [isPlaying]);
     playback = useTtsPlayback({
       audioContext: null, audioSpeed: 1, canStartPlayback: true, isPlaying, isPlayingRef,
       playbackSegmentsRef: useRef(segments), playbackSeekLayout: seekLayout,
@@ -126,25 +135,76 @@ test('Play after recovery exhaustion reinstalls media events and advances the pr
     return null;
   }
   await act(async () => root.render(createElement(Probe)));
+  return { get playback() { return playback; }, publishLayout: (value: TtsPlaybackSeekLayout) => publishLayout(value) };
+}
+
+test('Play after recovery exhaustion reinstalls media events and advances the preserved cursor', async () => {
+  const f = await fixture();
+  const playback = f.playback;
   await act(async () => playback.togglePlay());
   await vi.waitFor(() => expect(mocks.recovery).toHaveBeenCalledTimes(1));
   const audio = TestAudio.instance;
   await act(async () => { audio.currentTime = 2; audio.ontimeupdate?.(new Event('timeupdate')); });
-  expect(playback.playbackPhase).toBe('playing');
-  expect(playback.playbackTimeSec).toBe(22);
+  expect(f.playback.playbackPhase).toBe('playing');
+  expect(f.playback.playbackTimeSec).toBe(22);
 
   await act(async () => mocks.recovery.mock.calls[0][0].onExhausted());
   expect(audio.onplaying).toBeNull();
   expect(playback.playbackActiveRef.current).toBe(false);
-  expect(playback.playbackPhase).toBe('failed');
-  expect(playback.playbackTimeSec).toBe(22);
+  expect(f.playback.playbackPhase).toBe('failed');
+  expect(f.playback.playbackTimeSec).toBe(22);
 
   await act(async () => playback.togglePlay());
   await vi.waitFor(() => expect(mocks.recovery).toHaveBeenCalledTimes(2));
   expect(mocks.createSession).toHaveBeenCalledTimes(2);
   expect(mocks.createSession.mock.calls[1][0]).toMatchObject({ planId: 'plan', startIntent: { selectedOrdinal: 1 } });
-  expect(playback.playbackPhase).toBe('playing');
+  expect(f.playback.playbackPhase).toBe('playing');
   expect(audio.onplaying).toBeTypeOf('function');
   await act(async () => { audio.currentTime = 5; audio.ontimeupdate?.(new Event('timeupdate')); });
-  expect(playback.playbackTimeSec).toBe(25);
+  expect(f.playback.playbackTimeSec).toBe(25);
+});
+
+test('a retarget during slow preparation keeps startup readiness ownership past the seek deadline', async () => {
+  vi.useFakeTimers();
+  const pending: TtsPlaybackSeekLayout = {
+    ...layout,
+    segments: layout.segments.map((segment) => ({ ...segment, generated: false, estimated: true, audioState: 'pending' })),
+  };
+  let prepare!: (value: unknown) => void;
+  mocks.createSession.mockImplementationOnce(() => new Promise((resolve) => { prepare = resolve; }));
+  mocks.foreground.mockImplementation((input: { setPlaybackSeekLayout: (value: TtsPlaybackSeekLayout) => void }) => ({
+    modelDownload: null, setWorkerPlaybackActive: mocks.activity,
+    startPlaybackForegroundSync: () => input.setPlaybackSeekLayout({ ...pending }),
+    stopPlaybackForegroundSync: mocks.stop, updateWorkerPlaybackCursor: vi.fn(),
+    refreshPlaybackOverview: mocks.refresh,
+  }));
+  const f = await fixture(pending);
+  await act(async () => f.playback.togglePlay());
+  await act(async () => f.playback.seekPlaybackTo(0));
+  await act(async () => vi.advanceTimersByTimeAsync(25_000));
+  await act(async () => prepare({ sessionId: 'canonical', sessionInstanceId: 'instance', audioUrl: '/audio', timelineUrl: '/timeline' }));
+  await act(async () => vi.advanceTimersByTimeAsync(40_000));
+  expect(f.playback.playbackPhase).toBe('ready');
+  expect(f.playback.playbackActiveRef.current).toBe(false);
+  // The selected target arrives 70s after Play, 45s into startup's readiness budget.
+  await act(async () => vi.advanceTimersByTimeAsync(5_000));
+  await act(async () => f.publishLayout({ ...layout }));
+  await act(async () => vi.advanceTimersByTimeAsync(250));
+  expect(f.playback.playbackPhase).toBe('playing');
+  expect(mocks.createSession).toHaveBeenCalledTimes(1);
+  expect(TestAudio.instance.src).toContain('fromOrdinal=0');
+  expect(f.playback.playbackTimeSec).toBe(0);
+  await act(async () => { TestAudio.instance.currentTime = 2; TestAudio.instance.ontimeupdate?.(new Event('timeupdate')); });
+  expect(f.playback.playbackTimeSec).toBe(2);
+});
+
+test('a preparation deadline settles loading and permits another Play', async () => {
+  mocks.createSession.mockRejectedValueOnce(new DOMException('The operation was aborted due to timeout', 'TimeoutError'));
+  const f = await fixture();
+  await act(async () => f.playback.togglePlay());
+  expect(f.playback.playbackPhase).toBe('failed');
+  expect(f.playback.playbackActiveRef.current).toBe(false);
+  await act(async () => f.playback.togglePlay());
+  await vi.waitFor(() => expect(f.playback.playbackPhase).toBe('playing'));
+  expect(mocks.createSession).toHaveBeenCalledTimes(2);
 });

@@ -37,7 +37,7 @@ export const createTtsPlaybackSession = async (
     method: 'POST',
     headers: headers as HeadersInit,
     body: JSON.stringify(payload),
-    signal,
+    signal: AbortSignal.any([AbortSignal.timeout(30_000), ...(signal ? [signal] : [])]),
   });
 
   if (!response.ok) {
