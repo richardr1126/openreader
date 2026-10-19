@@ -442,7 +442,10 @@ The player scrubber draws three layers from that same seek layout: the rail is
 the whole document, ready bands are merged runs of generated segments, and the
 fill is the heard position. A committed scrub offers a ten-second "Undo scrub"
 that returns to the start of the sentence playing at touch-down through
-`seekPlaybackTo`. OS media controls (`useMediaSession`, owned by the player)
+`seekPlaybackTo`. Only native `input` events preview a scrub: the trailing
+`change` after pointer-up can carry a value already snapped to a sentence
+start, and treating it as input left the preview holding the playhead and a
+stale commit armed for blur. OS media controls (`useMediaSession`, owned by the player)
 route `seekto`/`seekforward`/`seekbackward` through the same seek path and keep
 `setPositionState` in sync on whole-second, rate, duration, and play/pause
 changes. None of these add a session, cursor writer, or polling loop.

@@ -223,6 +223,10 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           disabled={!canSeek}
           onPointerDown={beginScrub}
           onChange={(event) => {
+            // React also routes the native change after pointer-up here. A
+            // seek can snap the value to a sentence start before it arrives,
+            // and treating it as input reopened the committed scrub.
+            if (event.nativeEvent.type !== 'input') return;
             beginScrub();
             setPreviewSec(Number(event.currentTarget.value));
           }}
