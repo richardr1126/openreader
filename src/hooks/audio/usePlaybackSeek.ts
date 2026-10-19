@@ -74,14 +74,17 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
   }, [playbackRunIdRef, setPendingSeek, setPlaybackPhase, updateWorkerPlaybackCursor]);
 
   useEffect(() => {
-    if (!pendingSeek) return undefined;
+    // Startup owns preparation, runway readiness, and initial positioning.
+    // Its target can change before media exists; a second seek deadline must
+    // not consume that readiness budget while preparation is still running.
+    if (!pendingSeek || !playbackActiveRef.current) return undefined;
     const timeout = setTimeout(() => {
       if (pendingSeekRef.current !== pendingSeek) return;
       setPendingSeek(null);
       onPendingSeekExpired();
     }, Math.max(0, pendingSeek.expiresAt - Date.now()));
     return () => clearTimeout(timeout);
-  }, [onPendingSeekExpired, pendingSeek, setPendingSeek]);
+  }, [onPendingSeekExpired, pendingSeek, playbackActiveRef, setPendingSeek]);
 
   useEffect(() => {
     if (!pendingSeek || applyingSeekRef.current === pendingSeek) return;

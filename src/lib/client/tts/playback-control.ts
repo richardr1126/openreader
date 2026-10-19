@@ -21,6 +21,9 @@ type PlaybackStartLayout = {
 };
 
 export function isPlaybackAbortError(error: unknown): boolean {
+  // Fetch deadlines are failures that must settle loading and allow retry.
+  // Their native message also contains "aborted", unlike a user cancellation.
+  if (typeof error === 'object' && error !== null && 'name' in error && error.name === 'TimeoutError') return false;
   if (error instanceof Error) {
     return error.name === 'AbortError' || /abort|cancel/i.test(error.message || '');
   }
