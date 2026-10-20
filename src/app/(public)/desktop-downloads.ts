@@ -35,16 +35,18 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / 1e6).toFixed(1)} MB`;
 }
 
-/** The one installer to offer first: the visitor's architecture, then the platform's usual format. */
+/**
+ * The one installer to offer first, preferring the platform's usual format. A known
+ * architecture is a strict filter: no build for it (an Intel Mac) offers nothing.
+ */
 export function pickInstaller(
   installers: DesktopInstaller[],
   platform: DesktopPlatform,
   arch: DesktopArch | null,
 ): DesktopInstaller | null {
-  const forPlatform = installers.filter((i) => i.platform === platform);
-  const rank = (i: DesktopInstaller) =>
-    (arch && i.arch !== arch ? 2 : 0) + (i.format === PLATFORMS[platform].preferred ? 0 : 1);
-  return [...forPlatform].sort((a, b) => rank(a) - rank(b))[0] ?? null;
+  const matching = installers.filter((i) => i.platform === platform && (!arch || i.arch === arch));
+  const rank = (i: DesktopInstaller) => (i.format === PLATFORMS[platform].preferred ? 0 : 1);
+  return matching.sort((a, b) => rank(a) - rank(b))[0] ?? null;
 }
 
 export function installerLabel(installer: DesktopInstaller): string {
