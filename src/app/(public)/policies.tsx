@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { PRIVACY_POLICY_EFFECTIVE_DATE } from '@/lib/shared/privacy-policy';
 
 /**
- * Policy text for the web and iOS privacy pages. Bodies use plain semantic
+ * Policy text for the web, desktop, and iOS privacy pages. Bodies use plain semantic
  * markup (p, ul, strong, code, a) plus `[data-callout]` for highlighted notes.
  * `summary` is a one-line plain-language digest shown in the at-a-glance
  * index and above each section. It never adds a claim the body does not make.
@@ -353,7 +353,7 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
 
 // The iOS app is a separate product with its own data flow, so its policy has
 // its own date rather than sharing PRIVACY_POLICY_EFFECTIVE_DATE.
-const IOS_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 7, 2026';
+const IOS_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 20, 2026';
 
 /* Claim audit (openreader-ios)
    Code-verified: PrivacyInfo.xcprivacy declares no collected data types and no tracking;
@@ -362,16 +362,22 @@ const IOS_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 7, 2026';
    Update this page when the app gains a network endpoint or SDK.
 */
 export const IOS_POLICY: PolicyDocument = {
-  title: 'OpenReader for iPhone and iPad collects no data.',
+  title: 'OpenReader for iPhone, iPad, and Mac collects no data.',
   effectiveDate: IOS_PRIVACY_POLICY_EFFECTIVE_DATE,
-  intro: <>This policy covers the OpenReader app for iOS and iPadOS, published on the App Store by Richard Roberson.</>,
+  intro: (
+    <>
+      This policy covers the OpenReader app for iOS, iPadOS, and macOS, published by Richard Roberson through the App
+      Store and TestFlight. The Mac version is the same app, so everything below applies to it too.
+    </>
+  ),
   facts: ['No data collection', 'No accounts', 'No analytics or tracking', 'On-device speech'],
   operatorNote: {
     label: 'A separate product',
     body: (
       <>
-        The iOS app does not connect to this website or to any OpenReader server, and it does not use the web
-        app&apos;s accounts. The web app&apos;s privacy policy does not apply to it.
+        This app does not connect to this website or to any OpenReader server, and it does not use the web
+        app&apos;s accounts. The web app&apos;s privacy policy does not apply to it, and neither does the policy for
+        OpenReader Desktop, a different app.
       </>
     ),
   },
@@ -464,6 +470,160 @@ export const IOS_POLICY: PolicyDocument = {
           iCloud database. Generated audio is never synced. Apple handles this data under the{' '}
           {ext('https://www.apple.com/legal/privacy/', 'Apple Privacy Policy')}. Turning sync off stops syncing, and
           you can manage or delete iCloud data in your device&apos;s iCloud settings.
+        </p>
+      ),
+    },
+    {
+      id: 'children',
+      title: 'Children',
+      summary: 'No personal information from anyone, including children.',
+      body: <p>The app collects no personal information from anyone, including children under 13.</p>,
+    },
+    {
+      id: 'contact',
+      title: 'Changes and contact',
+      summary: 'Updates change the date above. Questions go to GitHub issues.',
+      body: (
+        <p>
+          If the app&apos;s handling of data changes, this page will be updated and its effective date changed. For
+          privacy questions, open an issue on the OpenReader GitHub project. Please do not include document contents
+          or other private information in a public issue.
+        </p>
+      ),
+    },
+  ],
+};
+
+// OpenReader Desktop runs the whole stack on the owner's computer, so its policy
+// is about the network rather than an operator.
+const DESKTOP_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 20, 2026';
+
+/* Claim audit (desktop/)
+   Code-verified: runtime binds 127.0.0.1 only; Vercel Analytics, cookie banner and Resend
+   email are off for the desktop profile; NEXT_TELEMETRY_DISABLED; data under <appData>/OpenReader;
+   updates via electron-updater from GitHub Releases, toggle in Settings → Instance; model
+   downloads from Hugging Face (Kokoro, Whisper alignment, PP-DocLayoutV3) and Kokoro's
+   pronunciation data from raw.githubusercontent.com; Gutendex default gutendex.com; external
+   links open in the system browser. Update this page when the shell or runtime gains an endpoint.
+*/
+export const DESKTOP_POLICY: PolicyDocument = {
+  title: 'OpenReader Desktop keeps your library on your computer.',
+  effectiveDate: DESKTOP_PRIVACY_POLICY_EFFECTIVE_DATE,
+  intro: (
+    <>
+      This policy covers OpenReader Desktop for macOS, Windows, and Linux, published by Richard Roberson on the
+      OpenReader GitHub project.
+    </>
+  ),
+  facts: ['No data collection', 'No account with us', 'No analytics or telemetry', 'Runs on your computer'],
+  operatorNote: {
+    label: 'You are the operator',
+    body: (
+      <>
+        The desktop app runs its own copy of OpenReader on your computer and signs you in as its only owner. It does
+        not connect to the hosted service at openreader.richardr.dev or use its accounts, so the web app&apos;s
+        privacy policy does not apply to it.
+      </>
+    ),
+  },
+  sections: [
+    {
+      id: 'collection',
+      title: 'What we collect',
+      summary: 'Nothing.',
+      body: (
+        <p>
+          Nothing. The app has no analytics, no advertising, no crash-reporting service, and no tracking. The web
+          app&apos;s optional analytics are not included, and framework telemetry is turned off. The developer does
+          not receive your documents, your reading history, your settings, or any information that identifies you or
+          your computer.
+        </p>
+      ),
+    },
+    {
+      id: 'on-device',
+      title: 'What stays on your computer',
+      summary: 'Documents, audio, settings, and the database all live in the app’s data folder.',
+      body: (
+        <>
+          <ul>
+            <li>
+              <strong>Your library:</strong> documents, generated audio, word timings, previews, and exported
+              audiobooks are stored in the app&apos;s data folder (an <code>OpenReader</code> folder in your
+              system&apos;s application data). Settings → Library and storage → Show data folder opens it.
+            </li>
+            <li>
+              <strong>Reading data:</strong> positions, preferences, and voice settings are kept in a local database
+              in the same folder.
+            </li>
+            <li>
+              <strong>Local services:</strong> the app&apos;s server and its helper services listen only on your
+              computer (<code>127.0.0.1</code>), so other devices on your network cannot reach them.
+            </li>
+            <li>
+              <strong>Local speech:</strong> the built-in Kokoro voices, word alignment, and PDF layout analysis run
+              on your computer.
+            </li>
+          </ul>
+          <p data-callout>
+            Uninstalling the app may leave its data folder in place. Delete that folder to remove everything the app
+            stored.
+          </p>
+        </>
+      ),
+    },
+    {
+      id: 'network',
+      title: 'When the app uses the network',
+      summary: 'Updates, model downloads, the book catalog, and speech services you add. Text goes only to a speech service you choose.',
+      body: (
+        <>
+          <p>
+            Like any web request, each connection below reveals your IP address and basic request details to the
+            server it reaches. None of them carries an account, name, or identifier from the developer, and the
+            developer does not use them to identify or track you.
+          </p>
+          <ul>
+            <li>
+              <strong>Updates (GitHub):</strong> shortly after launch and every few hours, the app checks the
+              OpenReader GitHub releases for a newer version and downloads it. A check sends nothing about your
+              library. Turn this off under Settings → Instance → Automatic updates. See the{' '}
+              {ext('https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement', 'GitHub privacy statement')}.
+            </li>
+            <li>
+              <strong>Model downloads (Hugging Face and GitHub):</strong> the Kokoro voices, the word-alignment
+              model, and the PDF layout model are downloaded from Hugging Face when you choose to download them or
+              first need them, and Kokoro&apos;s pronunciation data from GitHub. See the{' '}
+              {ext('https://huggingface.co/privacy', 'Hugging Face privacy policy')}.
+            </li>
+            <li>
+              <strong>Release notes:</strong> after an update, the app fetches the release notes it shows you from
+              the OpenReader documentation site.
+            </li>
+            <li>
+              <strong>Book catalog (Gutendex and Project Gutenberg):</strong> browsing the free-book catalog sends
+              your search terms and language filter to the Gutendex server set in Settings → Instance (gutendex.com
+              unless you change it), and adding a book downloads it from Project Gutenberg. See the{' '}
+              {ext('https://www.gutenberg.org/policy/privacy_policy.html', 'Project Gutenberg privacy policy')}.
+            </li>
+            <li>
+              <strong>Speech services you add:</strong> if you connect a hosted provider such as OpenAI, Replicate,
+              or DeepInfra, or a speech server of your own, the text being read aloud is sent to it, and that
+              provider&apos;s own policy applies. The built-in voices send nothing.
+            </li>
+          </ul>
+          <p>Links to other websites open in your default browser, under that browser&apos;s settings.</p>
+        </>
+      ),
+    },
+    {
+      id: 'deletion',
+      title: 'Deleting your data',
+      summary: 'Delete documents in the app, or the data folder to remove everything.',
+      body: (
+        <p>
+          Deleting a document in the library removes it with its generated audio and timings. To remove everything,
+          quit the app and delete its data folder. Your files are never stored anywhere the developer can reach.
         </p>
       ),
     },

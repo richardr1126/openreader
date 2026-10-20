@@ -36,11 +36,11 @@ const PUBLIC_PATH_PREFIXES = [
 ];
 /**
  * Public pages served to every country, ahead of the production region gate.
- * The iOS app's privacy policy is linked from its App Store listing, which is
- * not limited to the United States, so App Review and international users
- * must be able to read it.
+ * The iOS app's privacy policy is linked from its App Store listing, and the
+ * desktop app is distributed through GitHub; neither is limited to the United
+ * States, so App Review and international users must be able to reach them.
  */
-const REGION_UNRESTRICTED_PATHS = new Set(['/ios-privacy']);
+const REGION_UNRESTRICTED_PATHS = new Set(['/ios-privacy', '/desktop-privacy', '/download']);
 const SERVICE_AUTHENTICATED_PATHS = new Set([
   '/api/internal/compute/tts-credentials',
   '/api/internal/compute/email-execution',

@@ -29,6 +29,28 @@ function sortEntries(entries) {
   });
 }
 
+// Desktop installers the download page lists (.github/workflows/desktop.yml).
+// The macOS zip, blockmaps and latest*.yml exist only for the updater.
+const INSTALLER = /^OpenReader-Desktop-.+\.(dmg|exe|AppImage|deb)$/;
+const PLATFORM_BY_EXT = { dmg: 'mac', exe: 'windows', AppImage: 'linux', deb: 'linux' };
+
+function toDesktopInstallers(assets) {
+  if (!Array.isArray(assets)) return [];
+  return assets.flatMap((asset) => {
+    const match = INSTALLER.exec(String(asset?.name || ''));
+    if (!match || !asset.browser_download_url) return [];
+    return [{
+      name: asset.name,
+      url: asset.browser_download_url,
+      size: Number(asset.size) || 0,
+      platform: PLATFORM_BY_EXT[match[1]],
+      // electron-builder spells x64 as x86_64 for AppImage and amd64 for .deb.
+      arch: /[-_.](arm64|aarch64)[-_.]/.test(asset.name) ? 'arm64' : 'x64',
+      format: match[1] === 'AppImage' ? 'AppImage' : `.${match[1]}`,
+    }];
+  });
+}
+
 function toManifestEntry(release) {
   return {
     tag_name: String(release.tag_name || ''),
@@ -37,6 +59,7 @@ function toManifestEntry(release) {
     html_url: String(release.html_url || ''),
     prerelease: Boolean(release.prerelease),
     body_path: '',
+    desktop_installers: toDesktopInstallers(release.assets),
   };
 }
 
@@ -90,6 +113,16 @@ async function fetchGitHubReleaseByTag(tagName) {
   const url = `https://api.github.com/repos/${REPO}/releases/tags/${encodeURIComponent(tagName)}`;
   try {
     return await fetchJson(url, { auth: true });
+  } catch {
+    return null;
+  }
+}
+
+/** The star count shown in the public header, refreshed on every docs deploy. */
+async function fetchStarCount() {
+  try {
+    const repo = await fetchJson(`https://api.github.com/repos/${REPO}`, { auth: true });
+    return Number.isFinite(repo?.stargazers_count) ? repo.stargazers_count : null;
   } catch {
     return null;
   }
@@ -224,10 +257,23 @@ async function buildState() {
     return { entries: applyBodyPath(sortEntries(manifest)), bodies, mode: 'incremental-upsert' };
   }
 
+  // Desktop installers are attached after a release is published, and the deploy
+  // that records them can be cancelled by a later push. Every mirror therefore
+  // refreshes the newest releases' installers, so any later deploy repairs them.
+  try {
+    const recent = await fetchJson(`https://api.github.com/repos/${REPO}/releases?per_page=${MUTABLE_COUNT}`, { auth: true });
+    for (const release of Array.isArray(recent) ? recent : []) {
+      const entry = manifest.find((x) => x.tag_name === release.tag_name);
+      if (entry) entry.desktop_installers = toDesktopInstallers(release.assets);
+    }
+  } catch (error) {
+    console.warn(`Could not refresh recent desktop installers: ${error.message}`);
+  }
+
   return { entries: applyBodyPath(manifest), bodies, mode: 'mirror' };
 }
 
-async function writeState({ entries, bodies, mode }) {
+async function writeState({ entries, bodies, mode }, stars) {
   await rm(OUTPUT_DIR, { recursive: true, force: true });
   await mkdir(RELEASES_DIR, { recursive: true });
 
@@ -236,6 +282,7 @@ async function writeState({ entries, bodies, mode }) {
     source: `https://github.com/${REPO}/releases`,
     mutable_window: MUTABLE_COUNT,
     mode,
+    repo: { stars },
     releases: entries,
   };
 
@@ -261,4 +308,4 @@ async function writeState({ entries, bodies, mode }) {
 }
 
 const state = await buildState();
-await writeState(state);
+await writeState(state, await fetchStarCount());

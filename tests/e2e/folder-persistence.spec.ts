@@ -23,16 +23,16 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await expect(epubLink).toBeVisible();
   await expect(pdfLink).toBeVisible();
   await expect(page.getByRole('button', { name: 'All Documents 3', exact: true })).toBeVisible();
-  const iosBanner = page.getByRole('complementary', { name: 'OpenReader for iOS beta' });
+  const iosBanner = page.getByRole('complementary', { name: 'OpenReader for iPhone, iPad, and Mac beta' });
   await expect(iosBanner).toBeVisible();
-  await expect(iosBanner.getByRole('link', { name: 'Join iOS beta' })).toHaveAttribute(
+  await expect(iosBanner.getByRole('link', { name: 'Join the beta' })).toHaveAttribute(
     'href',
     'https://testflight.apple.com/join/eJTYjDwV',
   );
 
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 844 });
-    const mobileTitle = iosBanner.getByText('OpenReader for iOS', { exact: true });
+    const mobileTitle = iosBanner.getByText('OpenReader for iOS and Mac', { exact: true });
     const mobileAction = iosBanner.getByRole('link', { name: 'Join beta' });
     await expect(mobileTitle).toBeVisible();
     await expect(mobileAction).toBeInViewport();
@@ -45,7 +45,7 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   }
 
   await page.setViewportSize({ width: 1280, height: 720 });
-  await iosBanner.getByRole('button', { name: 'Dismiss iOS beta banner' }).click();
+  await iosBanner.getByRole('button', { name: 'Dismiss beta banner' }).click();
   await expect(iosBanner).toBeHidden();
 
   const textTile = page.locator('[data-doc-tile]').filter({ has: textLink });
