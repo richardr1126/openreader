@@ -238,6 +238,14 @@ workflow by hand with its tag as `release_tag`; existing installers are
 replaced. A manual run with `sign` checked signs and notarizes without touching
 a release, to check the credentials. Windows and Linux installers are unsigned.
 
+The public download page (`/download`) lists installers from the docs changelog
+feed, never the GitHub API: `scripts/build-changelog-feed.mjs` adds each
+release's `desktop_installers` (name, URL, size, platform, arch, format) and the
+repository's star count. Attaching assets fires no release event, so the final
+job then dispatches Docs Deploy with the tag to refresh that release in the
+feed. Every other Docs Deploy also refreshes the newest releases' installers,
+so a push that cancels that run cannot leave a release without them.
+
 The smoke test starts the staged runtime in temporary directories and checks
 that a wrong launch token gets 401, the real one returns an HttpOnly session for
 the admin owner, `/app` loads without a redirect, the runtime runs until

@@ -24,7 +24,7 @@ export function IosBetaBanner({ show, onDismiss }: { show: boolean; onDismiss: (
     >
       <div className="min-h-0 overflow-hidden">
         <aside
-          aria-label="OpenReader for iOS beta"
+          aria-label="OpenReader for iPhone, iPad, and Mac beta"
           className="flex items-center gap-2.5 border-b border-line-soft bg-accent-wash px-3 py-1.5 sm:gap-3"
         >
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-accent-line bg-surface text-accent" aria-hidden="true">
@@ -34,8 +34,8 @@ export function IosBetaBanner({ show, onDismiss }: { show: boolean; onDismiss: (
             </svg>
           </span>
           <p className="min-w-0 flex-1 truncate text-[13px] leading-tight text-foreground">
-            <span className="font-semibold sm:hidden">OpenReader for iOS</span>
-            <span className="hidden font-semibold sm:inline">OpenReader for iOS is coming soon</span>
+            <span className="font-semibold sm:hidden">OpenReader for iOS and Mac</span>
+            <span className="hidden font-semibold sm:inline">OpenReader for iPhone, iPad, and Mac is coming soon</span>
             <span className="hidden text-soft md:inline">
               {' · '}On-device speech from many voice models, plus voice cloning, with Apple&rsquo;s Core AI.
             </span>
@@ -47,10 +47,10 @@ export function IosBetaBanner({ show, onDismiss }: { show: boolean; onDismiss: (
             className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-accent-line bg-surface px-2.5 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <span className="sm:hidden">Join beta</span>
-            <span className="hidden sm:inline">Join iOS beta</span>
+            <span className="hidden sm:inline">Join the beta</span>
             <ExternalLinkIcon className="h-3.5 w-3.5" aria-hidden />
           </a>
-          <IconButton onClick={onDismiss} size="sm" aria-label="Dismiss iOS beta banner">
+          <IconButton onClick={onDismiss} size="sm" aria-label="Dismiss beta banner">
             <XIcon className="h-4 w-4" aria-hidden />
           </IconButton>
         </aside>

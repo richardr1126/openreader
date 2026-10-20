@@ -1,3 +1,13 @@
+export interface DesktopInstaller {
+  name: string;
+  url: string;
+  /** Bytes. */
+  size: number;
+  platform: 'mac' | 'windows' | 'linux';
+  arch: 'arm64' | 'x64';
+  format: string;
+}
+
 export interface ChangelogManifestEntry {
   tag_name: string;
   name: string;
@@ -5,6 +15,8 @@ export interface ChangelogManifestEntry {
   html_url: string;
   prerelease: boolean;
   body_path: string;
+  /** Written by scripts/build-changelog-feed.mjs; absent from older feeds. */
+  desktop_installers?: DesktopInstaller[];
 }
 
 export interface ChangelogReleaseBody extends ChangelogManifestEntry {

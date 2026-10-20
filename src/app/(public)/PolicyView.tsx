@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import type { PolicyDocument } from './policies';
-import { LINKS } from './landing';
+import { LINKS } from './links';
 import { ScrollSpy } from './ScrollSpy';
 
 export function PolicyView({

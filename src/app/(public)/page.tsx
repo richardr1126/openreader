@@ -5,13 +5,14 @@ import { getSiteOrigin } from '@/lib/shared/urls';
 import {
   FEATURES,
   FORMATS,
-  LINKS,
   PROVIDERS,
   QUICK_START,
   STEPS,
   WIZARD_OF_OZ_DEMO,
   getLandingConfig,
 } from './landing';
+import { LINKS } from './links';
+import { DownloadLink } from './DownloadLink';
 import { FeatureVisual } from './FeatureVisual';
 import { ReaderDemo } from './ReaderDemo';
 import { Spotlight } from './Spotlight';
@@ -85,7 +86,7 @@ function structuredData(origin: string) {
         url: origin,
         description: DESCRIPTION,
         applicationCategory: 'MultimediaApplication',
-        operatingSystem: 'Web, Docker (amd64, arm64)',
+        operatingSystem: 'Web, macOS, Windows, Linux, Docker (amd64, arm64)',
         isAccessibleForFree: true,
         license: LINKS.license,
         sameAs: [LINKS.repo],
@@ -103,7 +104,7 @@ function structuredData(origin: string) {
 }
 
 export default async function LandingPage() {
-  const { canSignUp, instanceBadge } = await getLandingConfig();
+  const { instanceBadge } = await getLandingConfig();
   const jsonLd = JSON.stringify(structuredData(getSiteOrigin())).replace(/</g, '\\u003c');
 
   return (
@@ -138,11 +139,7 @@ export default async function LandingPage() {
           </p>
           <div className="lu-actions lu-in" style={{ '--d': 3 } as CSSProperties}>
             <a href="/app" className="lu-btn lu-btn-solid">Open the reader</a>
-            {canSignUp ? (
-              <a href="/signup" className="lu-btn lu-btn-glass">Create account</a>
-            ) : (
-              <a href="/signin" className="lu-btn lu-btn-glass">Sign in</a>
-            )}
+            <DownloadLink className="lu-btn lu-btn-glass" />
           </div>
         </div>
 
@@ -237,13 +234,44 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* ── iOS ──────────────────────────────────────────────────── */}
+      {/* ── Desktop ──────────────────────────────────────────────── */}
+      <section className="lu-section" aria-labelledby="lu-desktop">
+        <div className="lu-wrap">
+          <div className="lu-ios lu-desk lu-glass lu-reveal">
+            <div className="lu-desk-window" aria-hidden="true">
+              <span className="lu-desk-bar"><i /><i /><i /></span>
+              <span className="lu-desk-side">
+                {['70%', '52%', '64%'].map((w, i) => <span key={i} style={{ '--w': w } as CSSProperties} />)}
+              </span>
+              <span className="lu-desk-page">
+                {['92%', '78%', '88%', '60%', '84%', '70%'].map((w, i) => (
+                  <span key={i} className="lu-phone-line" style={{ '--w': w, '--i': i } as CSSProperties} />
+                ))}
+              </span>
+            </div>
+            <div className="lu-ios-copy">
+              <p className="lu-eyebrow">macOS · Windows · Linux</p>
+              <h2 id="lu-desktop">The whole reader, <Lit>no server needed.</Lit></h2>
+              <p>
+                OpenReader Desktop bundles everything this site runs, from local Kokoro voices to word alignment and
+                audiobook export, in one app that keeps your library on your computer and updates itself.
+              </p>
+              <div className="lu-actions">
+                <DownloadLink className="lu-btn lu-btn-solid" />
+                <Link href="/desktop-privacy" className="lu-btn lu-btn-glass">Desktop privacy</Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── iPhone, iPad, Mac ────────────────────────────────────── */}
       <section className="lu-section" aria-labelledby="lu-ios">
         <div className="lu-wrap">
           <div className="lu-ios lu-glass lu-reveal">
             <div className="lu-ios-copy">
-              <p className="lu-eyebrow">iPhone + iPad · Beta</p>
-              <h2 id="lu-ios">OpenReader for iOS, <Lit>entirely on-device.</Lit></h2>
+              <p className="lu-eyebrow">iPhone · iPad · Mac · Beta</p>
+              <h2 id="lu-ios">OpenReader for Apple devices, <Lit>entirely on-device.</Lit></h2>
               <p>
                 Several voice models and voice cloning, powered by Apple&rsquo;s Core AI. No account, no
                 analytics, no data collected.
@@ -252,7 +280,7 @@ export default async function LandingPage() {
                 <a href={LINKS.testflight} target="_blank" rel="noopener noreferrer" className="lu-btn lu-btn-solid">
                   Join the TestFlight beta
                 </a>
-                <Link href="/ios-privacy" className="lu-btn lu-btn-glass">iOS privacy</Link>
+                <Link href="/ios-privacy" className="lu-btn lu-btn-glass">App privacy</Link>
               </div>
             </div>
             <div className="lu-phone" aria-hidden="true">

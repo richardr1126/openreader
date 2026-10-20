@@ -14,17 +14,6 @@ export const FORMATS = ['EPUB', 'PDF', 'TXT', 'MD', 'DOCX'] as const;
 
 export const PROVIDERS = ['Kokoro', 'KittenTTS', 'Orpheus', 'OpenAI', 'Replicate', 'DeepInfra'] as const;
 
-export const LINKS = {
-  docs: 'https://docs.openreader.richardr.dev/',
-  deploy: 'https://docs.openreader.richardr.dev/deploy/docker-compose',
-  repo: 'https://github.com/richardr1126/openreader',
-  readme: 'https://github.com/richardr1126/openreader#readme',
-  discussions: 'https://github.com/richardr1126/openreader/discussions',
-  issues: 'https://github.com/richardr1126/openreader/issues',
-  license: 'https://github.com/richardr1126/openreader/blob/main/LICENSE',
-  testflight: 'https://testflight.apple.com/join/eJTYjDwV',
-} as const;
-
 export const STEPS = [
   {
     title: 'Upload a document',
