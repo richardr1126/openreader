@@ -376,9 +376,9 @@ h1, h2, h3, h4, h5, h6 {
   --header-height: 3.25rem;
 }
 
-/* Themed overlay using foreground color without relying on /opacity classes */
+/* Modal scrim: always darkens, using the theme's shadow tone */
 .overlay-dim {
-  background-color: color-mix(in srgb, var(--foreground), transparent 75%);
+  background-color: rgb(var(--shadow-rgb) / 0.4);
 }
 
 /* Shared floating reader-sidebar sizing (Segments/Settings/Audiobook) */
