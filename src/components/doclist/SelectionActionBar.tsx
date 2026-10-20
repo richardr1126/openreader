@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useDragLayer } from 'react-dnd';
-import { Button, IconButton, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger } from '@/components/ui';
+import { Button, IconButton, MenuItemsSurface, Tooltip, MenuRoot, MenuTransition, MenuTrigger } from '@/components/ui';
 import { useDocumentSelection } from './dnd/DocumentSelectionContext';
 import type { DocumentActions } from './document-actions';
 import { MoveToFolderItems } from './MoveToFolderItems';
@@ -48,9 +48,11 @@ export function SelectionActionBar({ actions }: { actions: DocumentActions }) {
         aria-label="Selected documents"
         className="pointer-events-auto flex max-w-full animate-fade-in items-center gap-1 rounded-xl border border-line bg-surface-solid p-1.5 shadow-elev-3"
       >
-        <IconButton size="sm" onClick={clear} aria-label="Clear selection" title="Clear selection (Esc)">
-          <CloseIcon className="h-4 w-4" />
-        </IconButton>
+        <Tooltip label="Clear selection" shortcut="Esc" side="top">
+          <IconButton size="sm" onClick={clear} aria-label="Clear selection" aria-keyshortcuts="Escape">
+            <CloseIcon className="h-4 w-4" />
+          </IconButton>
+        </Tooltip>
         <span role="status" aria-live="polite" className="whitespace-nowrap px-1.5 text-sm font-medium text-foreground tabular-nums">
           {selectionSize} selected
         </span>

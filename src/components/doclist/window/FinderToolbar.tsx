@@ -29,6 +29,7 @@ import {
   ToolbarButton,
   ToolbarGroup,
   ToolbarSegment,
+  Tooltip,
   cn,
   toolbarButtonStyles,
 } from '@/components/ui';
@@ -148,16 +149,17 @@ export function FinderToolbar({
           </div>
         )}
 
-        <ToolbarButton
-          onClick={onToggleSidebar}
-          active={isSidebarOpen}
-          className="shrink-0"
-          aria-pressed={isSidebarOpen}
-          aria-label="Toggle sidebar"
-          title="Toggle sidebar"
-        >
-          <HamburgerIcon className="w-4 h-4" />
-        </ToolbarButton>
+        <Tooltip label={isSidebarOpen ? 'Hide sidebar' : 'Show sidebar'}>
+          <ToolbarButton
+            onClick={onToggleSidebar}
+            active={isSidebarOpen}
+            className="shrink-0"
+            aria-pressed={isSidebarOpen}
+            aria-label="Toggle sidebar"
+          >
+            <HamburgerIcon className="w-4 h-4" />
+          </ToolbarButton>
+        </Tooltip>
 
         <div className="hidden sm:contents">
         <ToolbarGroup>
@@ -169,16 +171,17 @@ export function FinderToolbar({
                 key={value}
                 className={isIconsToggle ? 'relative group/icons inline-flex items-center' : 'inline-flex items-center'}
               >
-                <ToolbarSegment
-                  onClick={() => onViewModeChange(value)}
-                  active={active}
-                  aria-pressed={active}
-                  aria-label={`${label} view`}
-                  title={`${label} view`}
-                  className="w-7"
-                >
-                  <Icon className="w-4 h-4" />
-                </ToolbarSegment>
+                <Tooltip label={`${label} view`}>
+                  <ToolbarSegment
+                    onClick={() => onViewModeChange(value)}
+                    active={active}
+                    aria-pressed={active}
+                    aria-label={`${label} view`}
+                    className="w-7"
+                  >
+                    <Icon className="w-4 h-4" />
+                  </ToolbarSegment>
+                </Tooltip>
                 {isIconsToggle && viewMode === 'icons' && (
                   <div
                     className="absolute top-full left-1/2 z-30 -translate-x-1/2 pt-1 opacity-0 pointer-events-none transition-opacity duration-fast group-hover/icons:opacity-100 group-hover/icons:pointer-events-auto group-focus-within/icons:opacity-100 group-focus-within/icons:pointer-events-auto"
@@ -209,14 +212,18 @@ export function FinderToolbar({
 
         {showSortControls && (
           <div className="flex items-center gap-1 shrink-0">
-            <ToolbarButton onClick={onSortDirectionToggle} className="whitespace-nowrap" title="Toggle sort direction">
-              {directionLabel}
-            </ToolbarButton>
+            <Tooltip label="Reverse sort order">
+              <ToolbarButton onClick={onSortDirectionToggle} className="whitespace-nowrap">
+                {directionLabel}
+              </ToolbarButton>
+            </Tooltip>
             <Listbox value={sortBy} onChange={onSortByChange}>
-              <SharedListboxButton tone="toolbar" className="gap-1 min-w-[86px] justify-between">
-                <span>{currentSort.label}</span>
-                <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
-              </SharedListboxButton>
+              <Tooltip label="Sort by">
+                <SharedListboxButton tone="toolbar" className="gap-1 min-w-[86px] justify-between">
+                  <span>{currentSort.label}</span>
+                  <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
+                </SharedListboxButton>
+              </Tooltip>
               <SharedListboxOptions anchor="bottom end" tone="compact">
                 {SORT_OPTIONS.map((opt) => (
                   <SharedListboxOption
@@ -232,19 +239,21 @@ export function FinderToolbar({
           </div>
         )}
         <Listbox value={statusFilter} onChange={onStatusFilterChange}>
-          <SharedListboxButton
-            tone="toolbar"
-            aria-label={`Reading status: ${currentStatus.label}`}
-            className="shrink-0 gap-1 min-w-[96px] justify-between"
-          >
-            <span className="flex items-center gap-1.5">
-              {statusFilter !== 'any' && (
-                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
-              )}
-              {currentStatus.label}
-            </span>
-            <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
-          </SharedListboxButton>
+          <Tooltip label="Filter by reading status">
+            <SharedListboxButton
+              tone="toolbar"
+              aria-label={`Reading status: ${currentStatus.label}`}
+              className="shrink-0 gap-1 min-w-[96px] justify-between"
+            >
+              <span className="flex items-center gap-1.5">
+                {statusFilter !== 'any' && (
+                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-accent" />
+                )}
+                {currentStatus.label}
+              </span>
+              <ChevronUpDownIcon className="h-3 w-3 opacity-60" />
+            </SharedListboxButton>
+          </Tooltip>
           <SharedListboxOptions anchor="bottom end" tone="compact">
             {STATUS_OPTIONS.map((opt) => (
               <SharedListboxOption key={opt.value} value={opt.value} tone="compact">
@@ -280,7 +289,7 @@ export function FinderToolbar({
 
         {/* Phones: search and view/sort tuck behind two icon buttons. */}
         <div className="flex shrink-0 items-center gap-1.5 sm:hidden">
-          <ToolbarButton onClick={() => setSearchOpen(true)} aria-label="Search" title="Search">
+          <ToolbarButton onClick={() => setSearchOpen(true)} aria-label="Search">
             <SearchIcon className="w-4 h-4" />
           </ToolbarButton>
           <PopoverRoot className="relative">

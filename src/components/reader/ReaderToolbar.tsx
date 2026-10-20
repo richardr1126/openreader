@@ -12,7 +12,7 @@ import {
 } from '@/components/icons/Icons';
 import {
   Input, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger,
-  PopoverRoot, PopoverSurface, PopoverTrigger, ToolbarButton, cn,
+  PopoverRoot, PopoverSurface, PopoverTrigger, ToolbarButton, Tooltip, cn,
 } from '@/components/ui';
 import type { ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 
@@ -63,38 +63,41 @@ export function ReaderToolbar({
       )}
     >
       <div className="flex items-center gap-1">
-        <ToolbarButton
-          onClick={() => onTogglePanel('contents')}
-          active={contentsOpen}
-          aria-label={contentsOpen ? 'Hide contents' : 'Open contents'}
-          title="Contents"
-          className={compactButton}
-        >
-          <ListIcon aria-hidden="true" className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() => onTogglePanel('search')}
-          active={searchOpen}
-          aria-label={searchOpen ? 'Hide find in book' : 'Find in book'}
-          title="Find in Book"
-          className={compactButton}
-        >
-          <SearchIcon aria-hidden="true" className="h-4 w-4" />
-        </ToolbarButton>
+        <Tooltip label={contentsOpen ? 'Hide contents' : 'Contents'}>
+          <ToolbarButton
+            onClick={() => onTogglePanel('contents')}
+            active={contentsOpen}
+            aria-label={contentsOpen ? 'Hide contents' : 'Open contents'}
+            className={compactButton}
+          >
+            <ListIcon aria-hidden="true" className="h-4 w-4" />
+          </ToolbarButton>
+        </Tooltip>
+        <Tooltip label={searchOpen ? 'Hide find in book' : 'Find in book'}>
+          <ToolbarButton
+            onClick={() => onTogglePanel('search')}
+            active={searchOpen}
+            aria-label={searchOpen ? 'Hide find in book' : 'Find in book'}
+            className={compactButton}
+          >
+            <SearchIcon aria-hidden="true" className="h-4 w-4" />
+          </ToolbarButton>
+        </Tooltip>
       </div>
       <div className="flex min-w-0 items-center justify-center">{navigation}</div>
       <div className="flex shrink-0 items-center gap-1">
         {zoom}
         <MenuRoot as="div" className="relative inline-flex shrink-0 items-center text-left">
-          <MenuTrigger
-            as={ToolbarButton}
-            active={bookmarksOpen || sentenceBookmark.isBookmarked}
-            aria-label="Bookmarks"
-            title="Bookmarks"
-            className={compactButton}
-          >
-            <BookmarkIcon aria-hidden="true" filled={sentenceBookmark.isBookmarked} className="h-4 w-4" />
-          </MenuTrigger>
+          <Tooltip label="Bookmarks">
+            <MenuTrigger
+              as={ToolbarButton}
+              active={bookmarksOpen || sentenceBookmark.isBookmarked}
+              aria-label="Bookmarks"
+              className={compactButton}
+            >
+              <BookmarkIcon aria-hidden="true" filled={sentenceBookmark.isBookmarked} className="h-4 w-4" />
+            </MenuTrigger>
+          </Tooltip>
           <MenuTransition>
             <MenuItemsSurface anchor="bottom end" className="z-50 mt-1 min-w-[180px] focus:outline-none">
               <MenuActionItem
@@ -137,23 +140,27 @@ export function ReaderPager({
 }) {
   return (
     <div className="flex items-center gap-1">
-      <ToolbarButton
-        onClick={onPrevious}
-        disabled={!canPrevious}
-        aria-label={`Previous ${unit}`}
-        className={cn(compactButton, 'disabled:cursor-not-allowed disabled:opacity-50')}
-      >
-        <ChevronLeftIcon aria-hidden="true" className="h-4 w-4" />
-      </ToolbarButton>
+      <Tooltip label={`Previous ${unit}`}>
+        <ToolbarButton
+          onClick={onPrevious}
+          disabled={!canPrevious}
+          aria-label={`Previous ${unit}`}
+          className={cn(compactButton, 'disabled:cursor-not-allowed disabled:opacity-50')}
+        >
+          <ChevronLeftIcon aria-hidden="true" className="h-4 w-4" />
+        </ToolbarButton>
+      </Tooltip>
       {position}
-      <ToolbarButton
-        onClick={onNext}
-        disabled={!canNext}
-        aria-label={`Next ${unit}`}
-        className={cn(compactButton, 'disabled:cursor-not-allowed disabled:opacity-50')}
-      >
-        <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
-      </ToolbarButton>
+      <Tooltip label={`Next ${unit}`}>
+        <ToolbarButton
+          onClick={onNext}
+          disabled={!canNext}
+          aria-label={`Next ${unit}`}
+          className={cn(compactButton, 'disabled:cursor-not-allowed disabled:opacity-50')}
+        >
+          <ChevronRightIcon aria-hidden="true" className="h-4 w-4" />
+        </ToolbarButton>
+      </Tooltip>
     </div>
   );
 }
@@ -199,6 +206,7 @@ export function PageJumpControl({
     <PopoverRoot key={popoverKey} className="relative">
       {({ close }) => (
         <>
+          <Tooltip label="Go to page">
           <PopoverTrigger
             ref={triggerRef}
             className="whitespace-nowrap rounded-md bg-surface-sunken px-2 py-1 text-xs tabular-nums"
@@ -212,6 +220,7 @@ export function PageJumpControl({
           >
             {currentPage} / {numPages}
           </PopoverTrigger>
+          </Tooltip>
           <PopoverSurface anchor="bottom">
             <div className="flex flex-col space-y-2">
               <div className="text-xs font-medium text-foreground">Go to page</div>

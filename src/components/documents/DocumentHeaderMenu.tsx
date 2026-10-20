@@ -2,7 +2,7 @@
 
 import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon } from '@/components/icons/Icons';
 import { UserMenu } from '@/components/auth/UserMenu';
-import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton } from '@/components/ui';
+import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton, Tooltip } from '@/components/ui';
 
 interface DocumentHeaderMenuProps {
   /** Without it the document actions show disabled, as while the reader prepares. */
@@ -26,28 +26,30 @@ export function DocumentHeaderMenu({
   const DesktopView = (
     <div className="hidden sm:flex items-center gap-2">
       {showAudiobookExport && (onOpenAudiobook || disabled) && (
-        <ToolbarButton
-          onClick={onOpenAudiobook}
-          disabled={disabled}
-          active={isAudiobookOpen}
-          aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
-          title={isAudiobookOpen ? 'Hide Export Audiobook' : 'Export Audiobook'}
-        >
-          <DownloadIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
-        </ToolbarButton>
+        <Tooltip label={isAudiobookOpen ? 'Hide audiobook export' : 'Export audiobook'}>
+          <ToolbarButton
+            onClick={onOpenAudiobook}
+            disabled={disabled}
+            active={isAudiobookOpen}
+            aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
+          >
+            <DownloadIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
+          </ToolbarButton>
+        </Tooltip>
       )}
-      <ToolbarButton
-        onClick={onOpenSettings}
-        disabled={disabled}
-        active={isSettingsOpen}
-        aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
-        title={isSettingsOpen ? 'Hide Settings' : 'Settings'}
-      >
-        <FileSettingsIcon
-          aria-hidden="true"
-          className="w-4 h-4 transform transition-transform duration-base ease-standard"
-        />
-      </ToolbarButton>
+      <Tooltip label={isSettingsOpen ? 'Hide document settings' : 'Document settings'}>
+        <ToolbarButton
+          onClick={onOpenSettings}
+          disabled={disabled}
+          active={isSettingsOpen}
+          aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
+        >
+          <FileSettingsIcon
+            aria-hidden="true"
+            className="w-4 h-4 transform transition-transform duration-base ease-standard"
+          />
+        </ToolbarButton>
+      </Tooltip>
       <UserMenu />
     </div>
   );
@@ -60,7 +62,7 @@ export function DocumentHeaderMenu({
           as={IconButton}
           tone="surface"
           size="sm"
-          title="Menu"
+          aria-label="Menu"
         >
           <DotsVerticalIcon className="w-4 h-4 transform transition-transform duration-base ease-standard hover:text-accent" />
         </MenuTrigger>

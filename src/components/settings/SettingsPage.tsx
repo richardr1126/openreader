@@ -11,7 +11,7 @@ import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminSystemPanel } from '@/components/admin/AdminSystemPanel';
 import { AdminTasksPanel } from '@/components/admin/AdminTasksPanel';
 import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
-import { Sidebar, SidebarNav, SidebarNavGroup, SidebarNavItem, Toolbar } from '@/components/ui';
+import { Sidebar, SidebarNav, SidebarNavGroup, SidebarNavItem, Toolbar, Tooltip } from '@/components/ui';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
@@ -26,16 +26,17 @@ import { settingsNavGroups, visibleSettingsSections, type SettingsSectionId } fr
 
 function CloseSettingsLink() {
   return (
+    <Tooltip label="Close settings">
     <Link
       href="/app"
       aria-label="Close settings"
-      title="Close settings"
       className="inline-flex h-7 w-7 items-center justify-center rounded-md text-soft transition-colors duration-base hover:bg-accent-wash hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
       </svg>
     </Link>
+    </Tooltip>
   );
 }
 

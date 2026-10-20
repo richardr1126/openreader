@@ -13,7 +13,7 @@ import {
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { VoicesControl } from '@/components/player/VoicesControl';
 import { MAX_SPEED, MIN_SPEED, SpeedControl } from '@/components/player/SpeedControl';
-import { IconButton } from '@/components/ui';
+import { IconButton, Tooltip } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 import {
@@ -303,19 +303,22 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
 
         {/* Center: Primary playback controls */}
         <div className="col-start-2 row-start-2 flex items-center gap-2 sm:gap-1.5">
-          <IconButton
-            onClick={skipBackward}
-            aria-label="Skip backward"
-            aria-keyshortcuts={playbackShortcuts ? 'ArrowLeft' : undefined}
-            disabled={!canSkip}
-            className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
-          >
-            <SkipBackwardIcon className="w-5 h-5" />
-          </IconButton>
+          <Tooltip label="Skip backward" shortcut={playbackShortcuts ? '←' : undefined} side="top">
+            <IconButton
+              onClick={skipBackward}
+              aria-label="Skip backward"
+              aria-keyshortcuts={playbackShortcuts ? 'ArrowLeft' : undefined}
+              disabled={!canSkip}
+              className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
+            >
+              <SkipBackwardIcon className="w-5 h-5" />
+            </IconButton>
+          </Tooltip>
 
           {/* Loading is cancelable through this same control. Keep it focusable
               when cancellation flips intent back to Play, even if an older async
               render has not cleared its processing flag yet. */}
+          <Tooltip label={playbackControl.ariaLabel} shortcut={playbackShortcuts ? 'Space' : undefined} side="top">
           <IconButton
             onClick={togglePlay}
             aria-label={playbackControl.ariaLabel}
@@ -329,16 +332,19 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
               ? <PauseIcon className={showLoadingRing ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
               : <PlayIcon className={showLoadingRing ? 'w-3.5 h-3.5' : 'w-5 h-5'} />}
           </IconButton>
+          </Tooltip>
 
-          <IconButton
-            onClick={skipForward}
-            aria-label="Skip forward"
-            aria-keyshortcuts={playbackShortcuts ? 'ArrowRight' : undefined}
-            disabled={!canSkip}
-            className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
-          >
-            <SkipForwardIcon className="w-5 h-5" />
-          </IconButton>
+          <Tooltip label="Skip forward" shortcut={playbackShortcuts ? '→' : undefined} side="top">
+            <IconButton
+              onClick={skipForward}
+              aria-label="Skip forward"
+              aria-keyshortcuts={playbackShortcuts ? 'ArrowRight' : undefined}
+              disabled={!canSkip}
+              className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
+            >
+              <SkipForwardIcon className="w-5 h-5" />
+            </IconButton>
+          </Tooltip>
         </div>
 
         {/* Right side: timer and buffer display */}
