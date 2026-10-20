@@ -23,6 +23,7 @@ import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedP
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
+import { useDesktopUpdates } from '@/hooks/useDesktopUpdates';
 import {
   parseComputeLimitPolicyDocument,
 } from '@openreader/runtime-config/compute-limits';
@@ -97,6 +98,15 @@ export function AdminFeaturesPanel({
   const [draft, setDraft] = useState<Record<string, unknown>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const { providers: sharedProviders } = useSharedProviders();
+  // Automatic updates belong to the desktop shell, not the instance's settings,
+  // but share this panel's draft and save bar.
+  const desktopUpdates = useDesktopUpdates();
+  const [automaticUpdatesDraft, setAutomaticUpdatesDraft] = useState<boolean | null>(null);
+  const [savingAutomaticUpdates, setSavingAutomaticUpdates] = useState(false);
+  const automaticUpdatesDirty = desktopUpdates !== null
+    && automaticUpdatesDraft !== null
+    && automaticUpdatesDraft !== desktopUpdates.automatic;
+  const dirtyCount = dirty.size + (automaticUpdatesDirty ? 1 : 0);
 
   useEffect(() => {
     if (!data) return;
@@ -138,7 +148,7 @@ export function AdminFeaturesPanel({
     },
   });
 
-  const saving = resetMutation.isPending || saveMutation.isPending;
+  const saving = resetMutation.isPending || saveMutation.isPending || savingAutomaticUpdates;
 
   const updateDraft = (key: string, value: unknown) => {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -162,14 +172,32 @@ export function AdminFeaturesPanel({
     resetMutation.mutate(key);
   };
 
+  const saveAutomaticUpdates = async (announce: boolean) => {
+    if (!desktopUpdates || automaticUpdatesDraft === null) return;
+    setSavingAutomaticUpdates(true);
+    try {
+      await desktopUpdates.setAutomatic(automaticUpdatesDraft);
+      setAutomaticUpdatesDraft(null);
+      if (announce) toast.success('Settings saved');
+    } catch (saveError) {
+      console.error(saveError);
+      toast.error('Save failed');
+    } finally {
+      setSavingAutomaticUpdates(false);
+    }
+  };
+
   const saveAll = () => {
-    if (saving || dirty.size === 0) return;
+    if (saving || dirtyCount === 0) return;
+    if (automaticUpdatesDirty) void saveAutomaticUpdates(dirty.size === 0);
+    if (dirty.size === 0) return;
     const updates: Record<string, unknown> = {};
     for (const key of dirty) updates[key] = draft[key];
     saveMutation.mutate(updates);
   };
 
   const discardAll = () => {
+    setAutomaticUpdatesDraft(null);
     if (!data) return;
     setDraft({ ...data.values });
     setDirty(new Set());
@@ -373,6 +401,18 @@ export function AdminFeaturesPanel({
         />
       </Section> : null}
 
+      {/* Shell preferences live on this computer, not in instance settings. */}
+      {showInstanceSettings && desktopUpdates ? <Section title="Desktop app" variant="group" footer="Saved on this computer.">
+        <ToggleRow
+          label="Automatic updates"
+          icon={<RefreshIcon />}
+          info="Checks GitHub for new versions and downloads them in the background."
+          checked={automaticUpdatesDraft ?? desktopUpdates.automatic}
+          onChange={setAutomaticUpdatesDraft}
+          variant="plain"
+        />
+      </Section> : null}
+
       {showComputeSettings ? <Section
         title={multiUser ? 'Limits' : 'Uploads'}
         variant="group"
@@ -420,8 +460,8 @@ export function AdminFeaturesPanel({
         {numberRow({ key: 'ttsCacheTtlMs', label: 'Audio cache TTL', icon: <HourglassIcon />, unit: 'ms' })}
       </Section> : null}
 
-      {dirty.size > 0 || saving ? (
-        <SaveBar count={dirty.size} saving={saving} onDiscard={discardAll} onSave={saveAll} />
+      {dirtyCount > 0 || saving ? (
+        <SaveBar count={dirtyCount} saving={saving} onDiscard={discardAll} onSave={saveAll} />
       ) : null}
     </div>
   );

@@ -24,4 +24,21 @@ contextBridge.exposeInMainWorld('openreaderDesktop', {
   setTitleBarColors: (colors) => ipcRenderer.send('title-bar-colors', colors),
   revealDataFolder: () => ipcRenderer.invoke('reveal-data-folder'),
   openLogsFolder: () => ipcRenderer.invoke('open-logs-folder'),
+  /**
+   * App updates: `{ state, automatic }`, or null where the app cannot update
+   * itself. `state` is `{ status, version, percent }`, status idle, checking,
+   * downloading or ready.
+   */
+  getUpdates: () => ipcRenderer.invoke('updates:get'),
+  /** Calls back with each new update state. Returns a function that stops. */
+  onUpdateState(callback) {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('updates:state', listener);
+    return () => ipcRenderer.removeListener('updates:state', listener);
+  },
+  /** Resolves to `{ status: latest | available | ready | error, version?, message? }`. */
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  /** Stops the app, installs the downloaded update and reopens. */
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
+  setAutomaticUpdates: (automatic) => ipcRenderer.invoke('updates:set-automatic', Boolean(automatic)),
 });

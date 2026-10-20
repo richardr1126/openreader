@@ -2,6 +2,7 @@ import { DocumentList } from '@/components/doclist/DocumentList';
 import { SettingsIcon } from '@/components/icons/Icons';
 import { SidebarNavLink } from '@/components/ui';
 import { UserMenu } from '@/components/auth/UserMenu';
+import { DesktopRestartToUpdateItem } from '@/components/layout/DesktopUpdateItems';
 
 const Brand = () => (
   <div className="flex items-center gap-2 min-w-0">
@@ -16,6 +17,7 @@ const Brand = () => (
 export function HomeContent() {
   const appActions = (
     <div className="flex flex-col gap-0.5 w-full">
+      <DesktopRestartToUpdateItem />
       <SidebarNavLink
         href="/app/settings"
         compact

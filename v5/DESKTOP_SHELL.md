@@ -34,6 +34,7 @@ desktop/
   src/preload.cjs        the page's bridge into the shell
   src/open-documents.mjs reads opened documents and hands them to the library
   src/menu.mjs           the application menu
+  src/updates.mjs        automatic updates from GitHub Releases
   src/runtime.mjs        ports, environment, spawn/stop, readiness, token exchange
   src/loading.html       shown while the runtime starts
 ```
@@ -116,14 +117,17 @@ import, so the smoke test runs the shell's own startup and sign-in code.
 
 ## Bridge, menu and opened documents
 
-`preload.cjs` exposes `window.openreaderDesktop` with four fixed actions:
-`onOpenFiles(callback)`, `setTitleBarColors(colors)`, `revealDataFolder()` and
-`openLogsFolder()`. The page never passes a path (the shell accepts only two hex
-colours for the title bar), and the main process ignores bridge calls from any frame
-outside the app origin. The UI treats the bridge as a capability
-(`useDesktopBridge()` in `src/hooks`). Settings → Library and storage offers
-"Show data folder" and Maintenance offers "Open logs folder" only when the bridge
-has them.
+`preload.cjs` exposes `window.openreaderDesktop` with fixed actions:
+`onOpenFiles(callback)`, `setTitleBarColors(colors)`, `revealDataFolder()`,
+`openLogsFolder()`, and the updater's `getUpdates()`, `onUpdateState(callback)`,
+`checkForUpdates()`, `installUpdate()` and `setAutomaticUpdates(boolean)` (see
+Updates). The page never passes a path (the shell accepts only two hex colours
+for the title bar and a boolean for updates), and the main process ignores
+bridge calls from any frame outside the app origin. The UI treats the bridge as
+a capability (`useDesktopBridge()` and `useDesktopUpdates()` in `src/hooks`).
+Settings → Library and storage offers "Show data folder", Maintenance offers
+"Open logs folder", and the update controls appear, only when the bridge has
+them.
 
 Documents reach the library one way, whatever opened them:
 
@@ -149,11 +153,52 @@ Help (documentation, logs folder) to the standard roles. DevTools appear only
 when unpackaged. Play and pause stay with the page's own keys and media keys
 (`mediaSession`).
 
+## Updates
+
+The packaged app updates itself from GitHub Releases with electron-updater
+(`src/updates.mjs`). Unpackaged runs never check.
+
+- **Automatic updates.** On by default: 30 seconds after the runtime is up,
+  then every 4 hours, the shell checks and downloads a newer release in the
+  background. Settings → Advanced → Instance → Desktop app turns it off; the choice lives in
+  `<userData>/updates.json`, owned by the shell rather than the database, and
+  joins that panel's save bar. Off stops background checks and downloads only.
+- **Checks.** A check fetches the latest release's feed from GitHub; it sends
+  nothing about the library or the owner. The release must be a published,
+  non-prerelease release, and one whose feed for this platform is not uploaded
+  yet counts as up to date.
+- **Where it shows.** The Settings sidebar, under Changelog, has Check for
+  updates (in the toolbar on narrow windows); it reads Checking for updates…,
+  Downloading v… with a percentage, then Restart to update, and reports a
+  manual check's result as a toast. Once an update is downloaded, Restart to
+  update also appears above Settings in the library sidebar. The application
+  menu has the same item (the app menu on macOS, Help elsewhere), which answers
+  in a message box. Nothing appears unprompted otherwise; an update not
+  installed through Restart to update installs on the next quit. Downloads are
+  differential where the previous release's blockmap exists.
+- **Runtime first.** Installing stops the runtime before the app quits, as an
+  ordinary quit does (which now ends through `app.quit()`, not `app.exit()`, so
+  electron-updater's quit hook runs), so no bundled process holds files the
+  installer replaces. The new version runs bootstrap's startup, including
+  migrations, against the same userData directory.
+- **Platforms.** macOS installs the zip through Squirrel.Mac, which needs the
+  signed, notarized release build; an unsigned build cannot install an update
+  and logs why. Windows runs the NSIS installer silently and relaunches. Linux
+  replaces the AppImage in place, or installs the `.deb` through `pkexec`, which
+  asks for a password; an AppImage the user moved somewhere read-only cannot
+  update.
+- **Logs.** Checks and failures go to `<logs>/updates.log` (rotated at 1 MB);
+  background failures appear nowhere else.
+
 ## Packaging
 
 `pnpm --dir desktop package` builds for the host: a DMG on macOS, an NSIS
-installer on Windows, an AppImage and a `.deb` on Linux. The version is the root
-package version. On macOS electron-builder signs every Mach-O in the bundle with
+installer on Windows, an AppImage and a `.deb` on Linux, plus a zip on macOS
+for updates. The version is the root package version. The `publish` setting
+names the GitHub repository, which bakes `app-update.yml` into the app and
+writes the update feed (`latest-mac.yml`, `latest.yml`, `latest-linux.yml`,
+`latest-linux-arm64.yml`) and blockmaps beside the installers; packaging itself
+never uploads. On macOS electron-builder signs every Mach-O in the bundle with
 the hardened runtime and Electron's JIT entitlements, which the bundled Node.js
 needs; a local build uses whatever identity is in the keychain.
 
@@ -183,7 +228,12 @@ environment: electron-builder signs with `MAC_CERTS` (a base64 Developer ID
 Application `.p12`) and `MAC_CERTS_PASSWORD`, then notarizes and staples with
 the App Store Connect API key (`APPLE_API_KEY_P8`, the base64 `.p8`;
 `APPLE_API_KEY_ID`; `APPLE_API_ISSUER`), and the job requires `spctl` to report a notarized Developer ID app.
-A final job attaches every installer to the release. To redo a release, run the
+A final job attaches every installer to the release, then the update feeds, so
+an installed app never reads a feed naming a file not yet uploaded. Windows x64
+and arm64 each build their own `latest.yml`; the job merges them with `yq` into
+one feed listing both installers, and electron-updater installs the one whose
+name has its architecture. Until that job finishes, a new release has no feed
+and installed apps keep the version they have. To redo a release, run the
 workflow by hand with its tag as `release_tag`; existing installers are
 replaced. A manual run with `sign` checked signs and notarizes without touching
 a release, to check the credentials. Windows and Linux installers are unsigned.
@@ -211,7 +261,9 @@ pnpm --dir desktop package
 
 ## Not done yet
 
-- **Windows signing and updates.** Windows code signing and an update channel.
+- **Windows signing.** Windows installers and updates are unsigned, so
+  electron-updater cannot verify the publisher and SmartScreen warns on a fresh
+  install.
 - **SeaweedFS admin gRPC.** Bootstrap now keeps each of `weed mini`'s internal
   ports (persisted, else mini's default) unless it is taken, and turns off
   WebDAV, Iceberg and the admin UI. The admin server itself cannot be disabled

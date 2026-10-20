@@ -2,8 +2,9 @@ name: Desktop
 # Stages, smoke-tests and packages the desktop app on each platform it ships for
 # (v5/DESKTOP_SHELL.md). Pull requests build unsigned. A published release (or a
 # manual run naming its tag) signs and notarizes the macOS app with the Release
-# environment's credentials and attaches every installer to that release. A
-# manual run with `sign` checks those credentials without touching a release.
+# environment's credentials and attaches every installer to that release, with
+# the update feed the installed apps read (latest*.yml, blockmaps, the macOS zip).
+# A manual run with `sign` checks those credentials without touching a release.
 on:
   pull_request:
     branches: [main]
@@ -125,9 +126,13 @@ jobs:
           name: openreader-desktop-${{ matrix.os }}
           path: |
             desktop/dist/*.dmg
+            desktop/dist/*.zip
             desktop/dist/*.exe
             desktop/dist/*.AppImage
             desktop/dist/*.deb
+            desktop/dist/*.zip.blockmap
+            desktop/dist/*.exe.blockmap
+            desktop/dist/latest*.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -143,9 +148,29 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           pattern: openreader-desktop-*
-          path: installers
-          merge-multiple: true
-      - name: Upload installers
+          path: artifacts
+      - name: Collect installers and update feeds
+        run: |
+          mkdir installers feeds
+          find artifacts -type f ! -name 'latest*.yml' -exec mv -t installers {} +
+          # Windows x64 and arm64 each write latest.yml. electron-updater installs
+          # the listed file whose name has its arch, so one feed lists both.
+          for feed in latest.yml latest-mac.yml latest-linux.yml latest-linux-arm64.yml; do
+            sources=(artifacts/*/"$feed")
+            [ -f "${sources[0]}" ] || { echo "::error::No $feed was built"; exit 1; }
+            yq eval-all '. as $item ireduce ({}; . *+ $item)' "${sources[@]}" > "feeds/$feed"
+            versions=$(yq eval-all '[.version] | unique | length' "${sources[@]}")
+            listed=$(yq '.files | length' "feeds/$feed")
+            expected=$(yq eval-all '[.files[]] | length' "${sources[@]}")
+            if [ "$versions" != 1 ] || [ "$listed" != "$expected" ]; then
+              echo "::error::Could not merge $feed"; exit 1
+            fi
+          done
+          cat feeds/latest.yml
+      # Feeds go last, so an app never reads one naming an installer not yet there.
+      - name: Upload installers and update feeds
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" installers/* --clobber --repo "$GITHUB_REPOSITORY"
+        run: |
+          gh release upload "$RELEASE_TAG" installers/* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" feeds/* --clobber --repo "$GITHUB_REPOSITORY"

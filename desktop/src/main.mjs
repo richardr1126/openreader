@@ -11,6 +11,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, session, shell 
 import { buildMenu } from './menu.mjs';
 import { DOCUMENT_EXTENSIONS, DocumentInbox, documentPathsInArgv } from './open-documents.mjs';
 import { exchangeLaunchToken, startRuntime } from './runtime.mjs';
+import { createUpdates } from './updates.mjs';
 
 const srcDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -23,6 +24,55 @@ app.setPath('userData', dataDir);
 let runtime = null;
 let mainWindow = null;
 let quitting = false;
+
+/** Stops the runtime once; later quits and runtime exits pass straight through. */
+function stopRuntime() {
+  quitting = true;
+  return runtime?.stop() ?? Promise.resolve();
+}
+
+// The window's pages and the menu follow the update state.
+const updates = createUpdates({
+  beforeInstall: () => {
+    mainWindow?.hide();
+    return stopRuntime();
+  },
+  onChange: (state) => {
+    mainWindow?.webContents.send('updates:state', state);
+    setMenu();
+  },
+});
+
+/** The menu's Check for Updates… answers in a message box: the page is not involved. */
+async function checkForUpdatesFromMenu() {
+  if (updates.state.status === 'ready') {
+    await updates.install();
+    return;
+  }
+  const result = await updates.check();
+  const options = {
+    latest: { type: 'info', message: 'OpenReader Desktop is up to date', detail: `Version ${app.getVersion()}` },
+    available: { type: 'info', message: `Downloading OpenReader Desktop ${result.version}`, detail: 'Restart to update appears in the library when it is ready.' },
+    ready: { type: 'info', message: `OpenReader Desktop ${result.version} is ready to install` },
+    error: { type: 'error', message: 'OpenReader Desktop could not check for updates', detail: result.message },
+  }[result.status];
+  if (mainWindow) await dialog.showMessageBox(mainWindow, options);
+  else await dialog.showMessageBox(options);
+}
+
+function setMenu() {
+  Menu.setApplicationMenu(buildMenu({
+    isMac: process.platform === 'darwin',
+    isPackaged: app.isPackaged,
+    updates: updates.supported
+      ? { status: updates.state.status, onClick: () => void checkForUpdatesFromMenu() }
+      : null,
+    onOpen: () => void chooseDocuments(),
+    onSettings: () => showAppPage('/app/settings'),
+    onOpenLogs: () => void shell.openPath(app.getPath('logs')),
+    openExternal: openExternally,
+  }));
+}
 
 function isAppUrl(url) {
   try {
@@ -91,6 +141,17 @@ function registerBridge() {
   });
   ipcMain.handle('open-logs-folder', async (event) => {
     if (fromApp(event)) await shell.openPath(app.getPath('logs'));
+  });
+  // Null where the app cannot update itself, so the page offers nothing.
+  ipcMain.handle('updates:get', (event) => (
+    fromApp(event) && updates.supported ? { state: updates.state, automatic: updates.automatic } : null
+  ));
+  ipcMain.handle('updates:check', (event) => (fromApp(event) ? updates.check() : null));
+  ipcMain.handle('updates:install', async (event) => {
+    if (fromApp(event)) await updates.install();
+  });
+  ipcMain.handle('updates:set-automatic', (event, automatic) => {
+    if (fromApp(event) && typeof automatic === 'boolean') updates.setAutomatic(automatic);
   });
 }
 
@@ -234,6 +295,7 @@ async function launch() {
     return;
   }
   if (mainWindow) await mainWindow.loadURL(`${runtime.baseUrl}/app`);
+  updates.start();
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -260,23 +322,17 @@ if (!app.requestSingleInstanceLock()) {
     app.quit();
   });
 
+  // The second quit, after the runtime stops, runs the normal quit path, where
+  // electron-updater installs a downloaded update.
   app.on('before-quit', (event) => {
     if (!runtime || quitting) return;
-    quitting = true;
     event.preventDefault();
-    void runtime.stop().finally(() => app.exit(0));
+    void stopRuntime().finally(() => app.quit());
   });
 
   void app.whenReady().then(() => {
     registerBridge();
-    Menu.setApplicationMenu(buildMenu({
-      isMac: process.platform === 'darwin',
-      isPackaged: app.isPackaged,
-      onOpen: () => void chooseDocuments(),
-      onSettings: () => showAppPage('/app/settings'),
-      onOpenLogs: () => void shell.openPath(app.getPath('logs')),
-      openExternal: openExternally,
-    }));
+    setMenu();
     return launch();
   });
 }

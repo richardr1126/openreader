@@ -1,19 +1,34 @@
 // The application menu. Standard roles supply editing, zoom, full screen and the
-// window list; the shell adds Open…, Settings and Help. Playback keeps its
-// existing controls: media keys through mediaSession and the page's own keys.
+// window list; the shell adds Open…, Settings, Check for Updates… and Help.
+// Playback keeps its existing controls: media keys through mediaSession and the
+// page's own keys.
 
 import { Menu } from 'electron';
 
 const DOCS_URL = 'https://docs.openreader.richardr.dev';
 
-export function buildMenu({ isMac, isPackaged, onOpen, onSettings, onOpenLogs, openExternal }) {
+const UPDATE_LABELS = {
+  idle: 'Check for Updates…',
+  checking: 'Checking for Updates…',
+  downloading: 'Downloading Update…',
+  ready: 'Restart to Update…',
+};
+
+/** `updates` is null where the app cannot update itself (unpackaged runs). */
+export function buildMenu({ isMac, isPackaged, updates, onOpen, onSettings, onOpenLogs, openExternal }) {
   const settings = { label: isMac ? 'Settings…' : 'Settings', accelerator: 'CmdOrCtrl+,', click: onSettings };
+  const update = updates && {
+    label: UPDATE_LABELS[updates.status],
+    enabled: updates.status === 'idle' || updates.status === 'ready',
+    click: updates.onClick,
+  };
   const template = [
     ...(isMac
       ? [{
         role: 'appMenu',
         submenu: [
           { role: 'about' },
+          ...(update ? [update] : []),
           { type: 'separator' },
           settings,
           { type: 'separator' },
@@ -56,6 +71,7 @@ export function buildMenu({ isMac, isPackaged, onOpen, onSettings, onOpenLogs, o
       submenu: [
         { label: 'OpenReader Documentation', click: () => openExternal(DOCS_URL) },
         { label: 'Open Logs Folder', click: onOpenLogs },
+        ...(update && !isMac ? [{ type: 'separator' }, update] : []),
       ],
     },
   ];
