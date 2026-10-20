@@ -76,7 +76,7 @@ describe('playback read-model delivery under network delay', () => {
     events.update('after-stop');
     expect(subscribe).toHaveBeenCalledTimes(2);
     expect(close).toHaveBeenCalledTimes(2);
-    expect(onSnapshot.mock.calls.flat()).toEqual(['initial timing', 'new exact timing']);
+    expect(onSnapshot.mock.calls).toEqual([['initial timing', 'first'], ['new exact timing', 'refill']]);
   });
 
   test('shares slow timeline reads and fetches exact timing on the next refresh', async () => {

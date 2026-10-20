@@ -144,7 +144,7 @@ export function createPlaybackTimelineLoader<T>(input: {
 /** Retarget operation-scoped SSE on the existing cursor heartbeat, without polling. */
 export function createPlaybackOperationSubscription<T>(input: {
   subscribe: (operationId: string, onSnapshot: (snapshot: T) => void) => () => void;
-  onSnapshot: (snapshot: T) => void;
+  onSnapshot: (snapshot: T, operationId: string) => void;
 }) {
   let current: string | null = null;
   let unsubscribe: (() => void) | null = null;
@@ -157,7 +157,7 @@ export function createPlaybackOperationSubscription<T>(input: {
       current = operationId;
       if (operationId) {
         unsubscribe = input.subscribe(operationId, (snapshot) => {
-          if (!stopped && current === operationId) input.onSnapshot(snapshot);
+          if (!stopped && current === operationId) input.onSnapshot(snapshot, operationId);
         });
       }
     },

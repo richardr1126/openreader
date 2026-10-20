@@ -58,7 +58,7 @@ export async function resolveTtsPlaybackSession(
 export async function listCompletedTtsPlaybackSegments(
   session: TtsPlaybackSessionRow,
   options?: { minOrdinal?: number; limit?: number },
-): Promise<TtsPlaybackSegmentRow[]> {
+): Promise<{ segments: TtsPlaybackSegmentRow[]; erroredOrdinals: ReadonlySet<number> }> {
   const result = await getComputeWorkerClient().listTtsPlaybackSegments({
     sessionId: session.sessionId,
     ...(options?.minOrdinal === undefined
@@ -68,8 +68,12 @@ export async function listCompletedTtsPlaybackSegments(
       ? {}
       : { limit: Math.max(1, Math.min(Math.floor(options.limit), 10000)) }),
   });
-  return result.segments.map((segment) => ({
-    ...segment,
-    locator: null,
-  }));
+  return {
+    segments: result.segments.map((segment) => ({
+      ...segment,
+      locator: null,
+    })),
+    // A worker deployed before failed sentences were reported omits the field.
+    erroredOrdinals: new Set(result.erroredOrdinals ?? []),
+  };
 }

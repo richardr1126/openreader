@@ -284,7 +284,7 @@ export class ComputeWorkerClient {
     sessionId: string;
     minOrdinal?: number;
     limit?: number;
-  }): Promise<{ sessionId: string; segments: TtsPlaybackCompletedSegment[] }> {
+  }): Promise<{ sessionId: string; segments: TtsPlaybackCompletedSegment[]; erroredOrdinals?: number[] }> {
     const search = new URLSearchParams();
     if (input.minOrdinal !== undefined) search.set('minOrdinal', String(input.minOrdinal));
     if (input.limit !== undefined) search.set('limit', String(input.limit));

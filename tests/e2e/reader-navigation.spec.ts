@@ -24,6 +24,8 @@ test('tapping a sentence, contents and find in book move the Markdown reading po
 
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
   const contents = page.getByRole('dialog', { name: 'Contents' });
+  // The panel slides in; a click during the slide lands on a moving target.
+  await expect(contents).toBeInViewport({ ratio: 1 });
   await contents.getByRole('button', { name: 'Section One', exact: true }).click();
   await expect(sentence).toContainText('Section One');
 
@@ -64,14 +66,17 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
 
   // Move away, then return through the bookmarks panel.
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
-  await page.getByRole('dialog', { name: 'Contents' })
-    .getByRole('button', { name: 'Section One', exact: true }).click();
+  const contents = page.getByRole('dialog', { name: 'Contents' });
+  // The panel slides in; a click during the slide lands on a moving target.
+  await expect(contents).toBeInViewport({ ratio: 1 });
+  await contents.getByRole('button', { name: 'Section One', exact: true }).click();
   await expect(sentence).toContainText('Section One');
   await bookmarks.click();
   await expect(page.getByRole('menuitem', { name: 'Save bookmark', exact: true })).toBeVisible();
   await page.getByRole('menuitem', { name: 'View bookmarks', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Bookmarks' });
   const list = panel.getByRole('list', { name: 'Bookmarks' });
+  await expect(panel).toBeInViewport({ ratio: 1 });
   await expect(list.getByRole('listitem')).toHaveCount(1);
   await list.getByRole('button', { name: /^Visit/ }).click();
   // A sentence that crosses a link is painted as one span per text run.
@@ -80,7 +85,7 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
   await bookmarks.click();
   await expect(page.getByRole('menuitem', { name: 'Remove bookmark', exact: true })).toBeVisible();
   await page.getByRole('menuitem', { name: 'View bookmarks', exact: true }).click();
-  await expect(panel).toBeVisible();
+  await expect(panel).toBeInViewport({ ratio: 1 });
 
   await list.getByRole('button', { name: /^Rename bookmark/ }).click();
   await panel.getByRole('textbox', { name: 'Bookmark name' }).fill('Further reading');

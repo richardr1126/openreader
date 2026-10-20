@@ -18,7 +18,6 @@ import { describeModelDownload, type PlaybackModelDownload } from '@/lib/client/
 import { PLAYBACK_CURSOR_READ_LIMIT } from '@/lib/client/tts/playback-control';
 
 type UsePlaybackForegroundSyncInput = {
-  audioRef: MutableRefObject<HTMLAudioElement | null>;
   playbackCursorOrdinalRef: MutableRefObject<number | null>;
   playbackRequestHeadersRef: MutableRefObject<TTSRequestHeaders | null>;
   playbackRunIdRef: MutableRefObject<number>;
@@ -36,7 +35,6 @@ type PlaybackOperationSubscription = {
 export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput) {
   const { refresh: refreshComputeUsage } = useAuthRateLimit();
   const {
-    audioRef,
     playbackCursorOrdinalRef,
     playbackRequestHeadersRef,
     playbackRunIdRef,
@@ -108,8 +106,9 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           if (updated && runId === playbackRunIdRef.current
             && playbackSessionRef.current === session
             && playbackEventsRef.current === events) {
+            // A new operation's first snapshot reads the timeline; the
+            // heartbeat itself never does.
             events?.update(updated.workerOpId);
-            playbackRefreshRef.current?.request();
           }
         }
       } finally {
@@ -184,17 +183,13 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
       });
       if (readSignal.aborted || !isCurrent()) return;
       publish(timeline);
-      // Full cache visibility follows the priority read. It never blocks the
-      // next cursor window or first audio, and shares this SSE lifetime.
-      const audio = audioRef.current;
-      if (audio && !audio.paused && audio.readyState >= 2) overview.request();
     }, { minIntervalMs: 250 });
     playbackRefreshRef.current = refresh;
     refresh.request();
     let lastRefreshSnapshotKey = '';
     const events = createPlaybackOperationSubscription<TtsPlaybackEventSnapshot>({
       subscribe: (operationId, onSnapshot) => subscribeTtsPlaybackEvents(activeSession.sessionId, { onSnapshot }, operationId),
-      onSnapshot: (snapshot) => {
+      onSnapshot: (snapshot, operationId) => {
         if (runId !== playbackRunIdRef.current) return;
         if (snapshot.stopReason === 'usage_limit' && usageLimitRefreshRunRef.current !== runId) {
           usageLimitRefreshRunRef.current = runId;
@@ -208,6 +203,7 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
           return;
         }
         const refreshSnapshotKey = [
+          operationId,
           snapshot.status,
           snapshot.completedThroughOrdinal ?? '',
           snapshot.completedCount ?? '',
@@ -218,6 +214,15 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
         if (refreshSnapshotKey === lastRefreshSnapshotKey) return;
         lastRefreshSnapshotKey = refreshSnapshotKey;
         refresh.request();
+        // The cursor window covers what a run generates ahead of the cursor.
+        // The whole-document overview is read once playback starts, when a
+        // run ends, and when audio completes outside that window.
+        const cursor = Math.max(0, playbackCursorOrdinalRef.current ?? 0);
+        const completedThrough = snapshot.completedThroughOrdinal;
+        if (snapshot.status === 'succeeded' || (completedThrough != null && completedThrough >= 0
+          && (completedThrough < cursor || completedThrough >= cursor + PLAYBACK_CURSOR_READ_LIMIT))) {
+          overview.request();
+        }
       },
     });
     playbackEventsRef.current = events;
@@ -226,7 +231,6 @@ export function usePlaybackForegroundSync(input: UsePlaybackForegroundSyncInput)
       if (runId === playbackRunIdRef.current) updateWorkerPlaybackCursor();
     }, TTS_PLAYBACK_CURSOR_HEARTBEAT_MS);
   }, [
-    audioRef,
     playbackCursorOrdinalRef,
     playbackRunIdRef,
     playbackSessionRef,

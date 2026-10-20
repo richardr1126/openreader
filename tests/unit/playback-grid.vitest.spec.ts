@@ -5,9 +5,9 @@ import {
   mergePlaybackGrid,
   normalizePlaybackGrid,
   projectPlaybackGridAtTime,
-  shouldRefreshPlaybackSegmentTiming,
   type TtsPlaybackGrid,
 } from '@/lib/client/tts/playback-grid';
+import { isPlaybackSlotPlayable } from '@openreader/tts/playback-buffer';
 
 const grid: TtsPlaybackGrid = {
   sessionId: 'session-1',
@@ -97,9 +97,37 @@ describe('playback grid mapping', () => {
     expect(normalized.segments.map((segment) => segment.audioState)).toEqual(['pending', 'ready']);
     expect(normalized.segments.map((segment) => segment.durationSource)).toEqual(['estimated', 'exact']);
     expect(normalized.segments.map((segment) => segment.alignmentSource)).toEqual([null, null]);
-    expect(shouldRefreshPlaybackSegmentTiming(normalized.segments[0])).toBe(true);
-    expect(shouldRefreshPlaybackSegmentTiming(normalized.segments[1])).toBe(false);
-    expect(shouldRefreshPlaybackSegmentTiming(grid.segments[1])).toBe(false);
+  });
+
+  test('treats a failed sentence as a playable silent slot', () => {
+    const pending = { ...grid.segments[0], generated: false, audioState: 'pending' as const };
+    expect(isPlaybackSlotPlayable(grid.segments[0])).toBe(true);
+    expect(isPlaybackSlotPlayable(pending)).toBe(false);
+    expect(isPlaybackSlotPlayable({ ...pending, audioState: 'error' })).toBe(true);
+  });
+
+  test('merges window-only rows onto the held grid', () => {
+    const held = { ...grid, segments: [
+      grid.segments[0],
+      { ...grid.segments[1], generated: false, audioState: 'pending' as const, alignment: null },
+      { ...grid.segments[0], ordinal: 2, segmentKey: 'c', startMs: 3000, endMs: 4000 },
+    ] };
+    const window = {
+      ...grid,
+      durationMs: 9999,
+      readWindow: { minOrdinal: 1, limit: 1, rowsOnly: true },
+      segments: [{ ...grid.segments[1], durationMs: 1500, startMs: 0, endMs: 1500 }],
+    };
+    const merged = mergePlaybackGrid(held, window);
+    expect(merged.readWindow).toBeUndefined();
+    expect(merged.segments.map((segment) => [segment.ordinal, segment.generated, segment.startMs])).toEqual([
+      [0, true, 0], [1, true, 1000], [2, true, 2500],
+    ]);
+    expect(merged.durationMs).toBe(3500);
+    const canceled = mergePlaybackGrid(merged, {
+      ...window, status: 'canceled', segments: [{ ...held.segments[1], startMs: 0, endMs: 2000 }],
+    });
+    expect(canceled.segments.map((segment) => segment.generated)).toEqual([true, false, true]);
   });
 
   test('projects media time to segment and word position', () => {

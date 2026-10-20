@@ -52,7 +52,7 @@ describe('TTS playback seek-layout route', () => {
       },
       body: '{}',
     } as never);
-    vi.mocked(listCompletedTtsPlaybackSegments).mockResolvedValue([]);
+    vi.mocked(listCompletedTtsPlaybackSegments).mockResolvedValue({ segments: [], erroredOrdinals: new Set() });
     vi.mocked(buildPlaybackGrid).mockReturnValue({
       durationMs: 12_000,
       segments: [],

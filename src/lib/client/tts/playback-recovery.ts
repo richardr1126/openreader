@@ -1,6 +1,6 @@
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { isPlaybackStartBufferReady } from '@/lib/client/tts/playback-control';
-import { PLAYBACK_RECOVERY_BUFFER_WALL_MS } from '@openreader/tts/playback-buffer';
+import { isPlaybackSlotPlayable, PLAYBACK_RECOVERY_BUFFER_WALL_MS } from '@openreader/tts/playback-buffer';
 
 /** Watch the local media clock; readiness comes from the existing SSE read model. */
 export function createPlaybackRecovery<T>(input: {
@@ -81,7 +81,7 @@ export function createTtsMediaRecovery(input: {
       const layout = input.getLayout();
       const ordinal = input.getOrdinal();
       const slot = layout?.segments.find((segment) => segment.ordinal === ordinal);
-      if (!layout || !slot?.generated) return null;
+      if (!layout || !slot || !isPlaybackSlotPlayable(slot)) return null;
       const documentTime = input.getDocumentTime();
       return isPlaybackStartBufferReady({
         segments: layout.segments, startOrdinal: slot.ordinal, playbackRate: input.audio.playbackRate,

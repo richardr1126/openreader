@@ -746,7 +746,7 @@ describe('server-state architecture', () => {
     expect(streamTimelineRoute).toContain('buildPlaybackGrid');
     expect(streamTimelineRoute).toContain('listCompletedTtsPlaybackSegments(session, readWindow)');
     expect(streamTimelineRoute).toContain("throw new Error('TTS playback timeline requires a canonical plan artifact')");
-    expect(streamTimelineRoute).toContain('segments: layout.segments');
+    expect(streamTimelineRoute).toContain('segments: responseSegments');
     expect(streamTimelineRoute).toContain('completedSegments');
     expect(seekLayoutRoute).toContain('segments: layout.segments');
     expect(streamTimelineRoute).not.toContain('let cursorMs');
@@ -763,7 +763,7 @@ describe('server-state architecture', () => {
     expect(streamSessions).not.toContain('readStreamPlanSegments(session)');
     expect(streamSessions).not.toContain('locatorIdentityKey(plan.locator)');
     expect(streamSessions).toContain('getComputeWorkerClient().listTtsPlaybackSegments');
-    expect(streamSessions).toContain('return result.segments.map((segment) => ({');
+    expect(streamSessions).toContain('segments: result.segments.map((segment) => ({');
     expect(context).not.toContain('plannedSegmentsByLocationRef');
     expect(context).not.toContain('pendingNextLocationRef');
     expect(existsSync(path.join(root, 'src/lib/client/cache/audio.ts'))).toBe(false);

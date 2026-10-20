@@ -176,6 +176,21 @@ describe('playback session read model', () => {
     expect(fixture.readSegmentMetadata.mock.calls.map(([scope]) => scope.ordinal)).toEqual([40, 41, 42]);
   });
 
+  test('reports failed sentences beside the completed rows', async () => {
+    const fixture = createFixture();
+    fixture.sidecars.set(41, completedSidecar(41));
+    fixture.sidecars.set(42, {
+      ...completedSidecar(42),
+      status: 'error',
+      error: { message: 'provider failed' },
+    });
+
+    await expect(fixture.model.readSegmentIndex(session, { minOrdinal: 40, limit: 3 }))
+      .resolves.toMatchObject({ rows: [{ ordinal: 41 }], erroredOrdinals: [42] });
+    await expect(fixture.model.readSegmentIndex(session))
+      .resolves.toMatchObject({ rows: [{ ordinal: 41 }], erroredOrdinals: [42] });
+  });
+
   test('keeps all cached chapters visible without probing absent ordinals', async () => {
     const fixture = createFixture();
     fixture.sidecars.set(2, completedSidecar(2));

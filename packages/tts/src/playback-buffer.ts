@@ -5,7 +5,15 @@ export const PLAYBACK_REFILL_WALL_MS = 45_000;
 export const PLAYBACK_AHEAD_WALL_MS = 60_000;
 export const PLAYBACK_PROGRESS_TIMEOUT_MS = 120_000;
 
-export type PlaybackBufferSegment = { ordinal: number; durationMs: number; generated: boolean };
+export type PlaybackBufferSegment = { ordinal: number; durationMs: number; generated: boolean; audioState?: string };
+
+/**
+ * Ready audio, or a failed sentence the audio stream plays as silence for its
+ * estimated slot. Either lets playback start on, seek to, or pass the slot.
+ */
+export function isPlaybackSlotPlayable(segment: Pick<PlaybackBufferSegment, 'generated' | 'audioState'>): boolean {
+  return segment.generated || segment.audioState === 'error';
+}
 
 export function measurePlaybackBuffer(input: {
   segments: readonly PlaybackBufferSegment[];
@@ -18,7 +26,7 @@ export function measurePlaybackBuffer(input: {
   let segmentCount = 0;
   if (startIndex >= 0) {
     for (const segment of input.segments.slice(startIndex)) {
-      if (!segment.generated || !Number.isFinite(segment.durationMs) || segment.durationMs <= 0) break;
+      if (!isPlaybackSlotPlayable(segment) || !Number.isFinite(segment.durationMs) || segment.durationMs <= 0) break;
       durationMs += segment.durationMs;
       segmentCount++;
     }

@@ -22,9 +22,10 @@ beforeEach(() => {
   vi.mocked(readTtsPlaybackPlanArtifact).mockResolvedValue({
     artifact: { segments: Array.from({ length: 10_000 }, (_, ordinal) => ({ ordinal, text: 'A sentence.', segmentKey: `key-${ordinal}` })) },
   } as never);
-  vi.mocked(listCompletedTtsPlaybackSegments).mockResolvedValue([
-    { ordinal: 8000, durationMs: 12_000, alignmentJson: null, alignmentSource: null },
-  ] as never);
+  vi.mocked(listCompletedTtsPlaybackSegments).mockResolvedValue({
+    segments: [{ ordinal: 8000, durationMs: 12_000, alignmentJson: null, alignmentSource: null }],
+    erroredOrdinals: new Set([8001]),
+  } as never);
 });
 
 test('a deep startup window preserves the canonical plan and bounds worker metadata reads', async () => {
@@ -38,6 +39,18 @@ test('a deep startup window preserves the canonical plan and bounds worker metad
   expect(grid.readWindow).toEqual({ minOrdinal: 8000, limit: 64 });
   expect(grid.segments[8000]).toMatchObject({ generated: true, durationMs: 12_000 });
   expect(grid.generationStartOrdinal).toBe(8000);
+});
+
+test('a client holding the grid receives only the window rows, failed sentences marked', async () => {
+  const response = await GET(new NextRequest('http://localhost/api/tts/stream/session/timeline?minOrdinal=8000&limit=64&rows=window'), {
+    params: Promise.resolve({ sessionId: 'session' }),
+  });
+  expect(response.status).toBe(200);
+  const grid = await response.json();
+  expect(grid.segments).toHaveLength(64);
+  expect(grid.segments[0]).toMatchObject({ ordinal: 8000, audioState: 'ready' });
+  expect(grid.segments[1]).toMatchObject({ ordinal: 8001, audioState: 'error', generated: false, durationSource: 'estimated' });
+  expect(grid.readWindow).toEqual({ minOrdinal: 8000, limit: 64, rowsOnly: true });
 });
 
 test('an overview still reads every cached chapter', async () => {

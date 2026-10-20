@@ -433,9 +433,10 @@ coalesces rapid updates to the newest ordinal, retargets the operation SSE from
 the cursor response, and uses the same writer for the foreground heartbeat and
 explicit seeks. Activity changes share its command queue and resolve the cursor
 at dispatch, so a delayed activation cannot restore an obsolete seek target.
-Distinct SSE progress snapshots request one whole-timeline read,
-which supplies both projection timing and seek-layout state. Reads run at a
-bounded four-per-second cadence with one trailing refresh, so cached-segment
+Distinct SSE progress snapshots, keyed by operation, request one cursor-window
+timeline read, which supplies both projection timing and seek-layout state. The
+heartbeat only retargets the subscription; it never reads the timeline. Reads run
+at a bounded four-per-second cadence with one trailing refresh, so cached-segment
 bursts cannot monopolize browser JSON parsing or React delivery.
 
 The player scrubber draws three layers from that same seek layout: the rail is
@@ -2073,3 +2074,50 @@ window, and a run that has completed nothing yet, keep the current run. A model
 call that has already started still finishes on the provider. A queued one is
 dropped only by a provider that stops on client disconnect, as KittenTTS-FastAPI
 does from v0.2.2.
+
+### Readiness without polling, and failed sentences
+
+Readiness reads follow the operation's SSE snapshots only. A cursor heartbeat
+used to request a timeline read after every response, and the projection loop
+re-read the cursor window once a second while the playhead sat on a slot it
+held as pending. Together these made a steady read loop during every generation
+wait. The heartbeat now only retargets the operation subscription. The snapshot
+dedupe key includes the operation id, so a refill run's first snapshot always
+reads, even when its progress counters match the previous run's. Completed audio
+changes `completedThroughOrdinal`, and new word timing changes `alignedCount`,
+so the timing heal was redundant and is gone.
+
+A client that holds the session's grid sends `rows=window` with its cursor
+window. The route then returns only the window rows, marked
+`readWindow.rowsOnly`, and `mergePlaybackGrid` overlays them onto the held grid
+and recomputes positions. A whole-grid answer to a window read marked every
+cached row outside the window pending, which the client then had to keep from
+regressing. Requests without the flag, from a tab loaded before this change,
+still receive the whole grid. The web route keeps a few parsed plan artifacts in
+memory per instance, since a plan object key is immutable. The whole-document
+overview is no longer read after every window read during playback. It runs when
+media reports `playing`, when an operation succeeds, and when a snapshot
+completes audio outside `[cursor, cursor + 64)`, such as backward padding or
+document-extent generation.
+
+A stream opened at a new position still supersedes a run that has not shown it
+serves that position. But a continuation keeps the session's original
+`generationStartOrdinal`, so the stream a seek opens at the run's own cursor also
+looked like a reposition. In production that superseded the run the seek's
+cursor update had just started, and the provider resynthesized its in-flight
+segments. A stream reposition now keeps a run whose known watermark serves the
+cursor (`playbackRunServesCursor`) and that will either reach the cursor next or
+has already settled the cursor segment. A run that has completed nothing yet, or
+that is past an unsettled cursor it will never return to, is still superseded.
+
+A sentence the provider fails to synthesize has a terminal error sidecar, and
+the audio stream pads its estimated slot with silence. The worker's segments
+listing reports these as `erroredOrdinals`, and the grid marks them
+`audioState: 'error'` with their estimated duration, matching the stream bytes.
+`isPlaybackSlotPlayable` counts an error slot as playable silence for start
+buffers, readiness deadlines, stalled-stream recovery, pending seeks, and
+end-of-document detection. Seeking onto a failed sentence therefore proceeds
+instead of expiring. A playback run no longer fails because its requested
+segment failed. It fails only when that segment failed and nothing at or after
+it completed, the case where a provider produces no audio at all (#148).
+

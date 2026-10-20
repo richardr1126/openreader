@@ -28,9 +28,11 @@ export type TtsPlaybackGrid = {
   generationStartOrdinal: number;
   durationMs: number;
   segments: TtsPlaybackGridSegment[];
-  readWindow?: { minOrdinal: number; limit: number };
+  /** `rowsOnly`: the response carries just the window rows, to merge onto the held grid. */
+  readWindow?: { minOrdinal: number; limit: number; rowsOnly?: boolean };
   sessionUpdatedAt?: number;
 };
+
 
 export type TtsPlaybackTimeProjection = {
   segment: TtsPlaybackGridSegment | null;
@@ -121,7 +123,13 @@ export function normalizePlaybackGrid(value: unknown): TtsPlaybackGrid {
     ...(rec.readWindow && typeof rec.readWindow === 'object'
       && Number.isSafeInteger((rec.readWindow as { minOrdinal?: unknown }).minOrdinal)
       && Number.isSafeInteger((rec.readWindow as { limit?: unknown }).limit)
-      ? { readWindow: rec.readWindow as { minOrdinal: number; limit: number } } : {}),
+      ? {
+        readWindow: {
+          minOrdinal: (rec.readWindow as { minOrdinal: number }).minOrdinal,
+          limit: (rec.readWindow as { limit: number }).limit,
+          ...((rec.readWindow as { rowsOnly?: unknown }).rowsOnly === true ? { rowsOnly: true } : {}),
+        },
+      } : {}),
   };
 }
 
@@ -133,13 +141,22 @@ export function mergePlaybackGrid(
   previous: TtsPlaybackGrid | null,
   incoming: TtsPlaybackGrid,
 ): TtsPlaybackGrid {
+  if (!previous || previous.sessionId !== incoming.sessionId) return incoming;
   // A canceled snapshot (for example after clearing audio) is authoritative.
-  if (!previous || previous.sessionId !== incoming.sessionId || incoming.status === 'canceled') return incoming;
+  const authoritative = incoming.status === 'canceled';
+  if (authoritative && !incoming.readWindow?.rowsOnly) return incoming;
   const old = new Map(previous.segments.map((segment) => [segment.ordinal, segment]));
+  // A window-only read updates its rows in place of the held grid's.
+  const windowRows = incoming.readWindow?.rowsOnly
+    ? new Map(incoming.segments.map((segment) => [segment.ordinal, segment]))
+    : null;
+  const rows = windowRows
+    ? previous.segments.map((segment) => windowRows.get(segment.ordinal) ?? segment)
+    : incoming.segments;
   let cursorMs = 0;
-  const segments = incoming.segments.map((segment) => {
+  const segments = rows.map((segment) => {
     const cached = old.get(segment.ordinal);
-    const ready = cached?.generated && (!segment.generated || (cached.alignment && !segment.alignment))
+    const ready = !authoritative && cached?.generated && (!segment.generated || (cached.alignment && !segment.alignment))
       ? cached : segment;
     const merged = { ...ready, startMs: cursorMs, endMs: cursorMs + ready.durationMs };
     cursorMs = merged.endMs;
@@ -150,13 +167,10 @@ export function mergePlaybackGrid(
   const older = (incoming.sessionUpdatedAt ?? 0) < (previous.sessionUpdatedAt ?? 0);
   const status = older || (incoming.status === 'queued' && previous.status !== 'queued')
     ? previous.status : incoming.status;
-  return { ...incoming, status,
+  const { readWindow, ...snapshot } = incoming;
+  return { ...snapshot, ...(windowRows || !readWindow ? {} : { readWindow }), status,
     sessionUpdatedAt: Math.max(incoming.sessionUpdatedAt ?? 0, previous.sessionUpdatedAt ?? 0),
     durationMs: cursorMs, segments };
-}
-
-export function shouldRefreshPlaybackSegmentTiming(segment: TtsPlaybackGridSegment): boolean {
-  return !segment.generated;
 }
 
 export function findPlaybackGridSegmentAtMs(

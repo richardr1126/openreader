@@ -87,12 +87,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     // Seek layout and timeline share the same whole-document cache view. The
     // worker bounds object-store reads while retaining every completed sidecar
     // it has discovered for this document/settings scope.
-    const completedSegments = await listCompletedTtsPlaybackSegments(session);
+    const { segments: completedSegments, erroredOrdinals } = await listCompletedTtsPlaybackSegments(session);
     const layout = buildPlaybackGrid({
       artifact,
       settingsJson: session.settingsJson,
       completedDurations: new Map(completedSegments.map((segment) => [segment.ordinal, segment.durationMs])),
       startOrdinal: START_ORDINAL,
+      erroredOrdinals,
     });
     return seekLayoutResponse({ planId, session, layout });
   } catch (error) {

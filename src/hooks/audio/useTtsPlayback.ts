@@ -32,6 +32,7 @@ import {
   type PlaybackSessionState,
 } from '@/hooks/audio/usePlaybackProjection';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
+import { isPlaybackSlotPlayable } from '@openreader/tts/playback-buffer';
 export type TtsPlaybackPlanRequest = {
   payload: TtsPlaybackPlanPayload;
   headers: TTSRequestHeaders;
@@ -156,7 +157,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     updateWorkerPlaybackCursor,
     refreshPlaybackOverview,
   } = usePlaybackForegroundSync({
-    audioRef: unlockedAudioRef,
     playbackCursorOrdinalRef,
     playbackRequestHeadersRef,
     playbackRunIdRef,
@@ -426,7 +426,7 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
         reachedEnd: () => {
           if (!isPlayingRef.current || hasPendingSeek()) return false;
           const last = latestSeekLayoutRef.current?.segments.at(-1);
-          if (!last || (!last.generated && last.audioState !== 'error')) return false;
+          if (!last || !isPlaybackSlotPlayable(last)) return false;
           return documentTimeForAudio(audio) * 1000 >= last.endMs;
         },
         onPause: () => {
