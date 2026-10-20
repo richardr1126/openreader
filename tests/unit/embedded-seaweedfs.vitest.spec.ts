@@ -141,6 +141,18 @@ describe('embedded SeaweedFS internal ports', () => {
     expect(ports['s3.port.grpc']).toBe(19000);
   });
 
+  test('keeps the S3 gRPC partner when an internal default would take it', async () => {
+    const free = [40000];
+    const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dataDir(), '127.0.0.1', {
+      s3Port: 13646,
+      isFree: async () => true,
+      pickFree: async () => free.shift()!,
+    }));
+    expect(ports['s3.port.grpc']).toBe(23646);
+    expect(ports['admin.port']).toBe(40000);
+    expect(ports['admin.port.grpc']).toBe(50000);
+  });
+
   test('turns off components OpenReader never uses, including the admin UI', () => {
     expect(WEED_MINI_DISABLED_COMPONENTS).toEqual(['-webdav=false', '-s3.port.iceberg=0', '-admin.ui=false']);
   });

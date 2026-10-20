@@ -338,6 +338,12 @@ export async function resolveWeedMiniInternalPorts(dir, bindHost, {
     taken.add(port);
     chosen.push([key, port]);
   };
+  // The S3 gateway's HTTP port is the operator's, so only its gRPC partner is
+  // chosen, first, so an internal pair cannot take it when the pair could move instead.
+  let s3Grpc = s3Port + WEED_GRPC_PORT_OFFSET;
+  while (!await usable(s3Grpc)) s3Grpc = await pickFree(bindHost);
+  claim('s3.port.grpc', s3Grpc);
+
   for (const [key, fallback] of WEED_MINI_INTERNAL_PORTS) {
     let port = null;
     for (const candidate of [Number.parseInt(persisted.get(key) ?? '', 10), fallback]) {
@@ -353,10 +359,5 @@ export async function resolveWeedMiniInternalPorts(dir, bindHost, {
     claim(key, port);
     claim(`${key}.grpc`, port + WEED_GRPC_PORT_OFFSET);
   }
-
-  // The S3 gateway's HTTP port is the operator's, so only its gRPC partner is chosen here.
-  let s3Grpc = s3Port + WEED_GRPC_PORT_OFFSET;
-  while (!await usable(s3Grpc)) s3Grpc = await pickFree(bindHost);
-  claim('s3.port.grpc', s3Grpc);
   return chosen;
 }
