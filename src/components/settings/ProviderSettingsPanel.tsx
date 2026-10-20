@@ -355,19 +355,6 @@ export function ProviderSettingsPanel({
           />
         ) : null}
       >
-        {voicesPending ? (
-          <p className="text-xs text-soft">Loading voices…</p>
-        ) : (
-          <VoicePicker
-            voices={voiceOptions}
-            value={shownVoice}
-            onChange={setLocalVoice}
-            pickPolicy={voicePickPolicy}
-            groupByLanguage={providerModelPolicy.isKokoroModel}
-            preview={pickerPreview}
-          />
-        )}
-
         {providerModelPolicy.supportsNativeModelSpeed && (
           <div className="space-y-2">
             <div className="flex items-center gap-3">
@@ -384,6 +371,19 @@ export function ProviderSettingsPanel({
               onChange={(event) => setLocalSpeed(Number(Number(event.target.value).toFixed(2)))}
             />
           </div>
+        )}
+
+        {voicesPending ? (
+          <p className="text-xs text-soft">Loading voices…</p>
+        ) : (
+          <VoicePicker
+            voices={voiceOptions}
+            value={shownVoice}
+            onChange={setLocalVoice}
+            pickPolicy={voicePickPolicy}
+            groupByLanguage={providerModelPolicy.isKokoroModel}
+            preview={pickerPreview}
+          />
         )}
       </Section>
 
