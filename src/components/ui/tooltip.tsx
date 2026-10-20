@@ -78,7 +78,6 @@ export function Tooltip({
   const timerRef = useRef<number | null>(null);
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
-  openRef.current = open;
   const [position, setPosition] = useState<{
     left: number;
     top: number;
@@ -134,6 +133,10 @@ export function Tooltip({
   };
 
   useEffect(() => clearTimer, []);
+
+  useLayoutEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;

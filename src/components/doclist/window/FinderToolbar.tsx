@@ -213,7 +213,11 @@ export function FinderToolbar({
         {showSortControls && (
           <div className="flex items-center gap-1 shrink-0">
             <Tooltip label="Reverse sort order">
-              <ToolbarButton onClick={onSortDirectionToggle} className="whitespace-nowrap">
+              <ToolbarButton
+                onClick={onSortDirectionToggle}
+                aria-label={`${directionLabel}, reverse sort order`}
+                className="whitespace-nowrap"
+              >
                 {directionLabel}
               </ToolbarButton>
             </Tooltip>

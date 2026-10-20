@@ -198,7 +198,8 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           aria-label="Reading position"
           className={cn(
             // Bottom-aligned with the Undo chip, which sits on the scrubber's top edge.
-            'absolute bottom-full left-1/2 z-40 mb-[18px] flex h-7 -translate-x-1/2 items-center rounded-full border border-line-soft bg-surface-solid px-0.5 text-xs text-soft shadow-elev-2 transition-opacity duration-fast ease-standard sm:mb-[13px]',
+            // Collapses while the navigator renders nothing, e.g. before the plan is ready.
+            'absolute bottom-full left-1/2 z-40 mb-[18px] flex h-7 empty:hidden -translate-x-1/2 items-center rounded-full border border-line-soft bg-surface-solid px-0.5 text-xs text-soft shadow-elev-2 transition-opacity duration-fast ease-standard sm:mb-[13px]',
             // The scrub preview's time label takes this space while dragging.
             previewSec !== null && 'pointer-events-none opacity-0',
           )}
