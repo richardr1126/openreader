@@ -50,15 +50,9 @@ interface DocumentHeaderMenuProps {
   reader?: ReaderHeaderControls;
 }
 
-const contentsTooltipItems = [
-  { icon: <ListIcon />, label: 'Chapters' },
-  { icon: <SearchIcon />, label: 'Find in book' },
-];
+const contentsTooltipIcons = [<ListIcon key="chapters" />, <SearchIcon key="search" />];
 
-const moreTooltipItems = [
-  { icon: <BookmarkIcon />, label: 'Bookmarks' },
-  { icon: <ZoomIcon />, label: 'Zoom' },
-];
+const moreTooltipIcons = [<BookmarkIcon key="bookmarks" />, <ZoomIcon key="zoom" />];
 
 function PanelRow({
   onClick,
@@ -111,7 +105,7 @@ export function DocumentHeaderMenu({
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">
       {reader ? (
-        <Tooltip label="Contents" items={contentsTooltipItems}>
+        <Tooltip label="Contents" icons={contentsTooltipIcons}>
           <ToolbarButton
             onClick={reader.onToggleContents}
             active={reader.contentsOpen}
@@ -125,7 +119,7 @@ export function DocumentHeaderMenu({
       <PopoverRoot className={cn('relative', !reader && 'sm:hidden')}>
         {({ open, close }) => (
           <>
-            <Tooltip label="More" items={reader ? moreTooltipItems : undefined}>
+            <Tooltip label="More" icons={reader ? moreTooltipIcons : undefined}>
               <PopoverTrigger aria-label="Menu" className={toolbarButtonStyles({ active: open ? 'true' : 'false' })}>
                 <DotsHorizontalIcon aria-hidden="true" className="h-4 w-4" />
               </PopoverTrigger>

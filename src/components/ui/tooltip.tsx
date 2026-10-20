@@ -17,12 +17,6 @@ import { cn } from './cn';
 
 export type TooltipSide = 'top' | 'bottom';
 
-/** One of several actions a combined control opens, listed under the label. */
-export interface TooltipItem {
-  icon?: ReactNode;
-  label: string;
-  shortcut?: string;
-}
 
 const OPEN_DELAY_MS = 450;
 /** Moving between controls soon after a tooltip closes shows the next one at once. */
@@ -53,7 +47,7 @@ function KeyHint({ children }: { children: string }) {
 
 /**
  * A hover and keyboard-focus label for one control. A control that opens
- * several actions passes `items`, so the card previews what is inside it. The wrapper is
+ * several actions passes their `icons`, previewed beside the label. The wrapper is
  * layout-neutral (`display: contents`), so it can sit inside flex, grid and
  * headless-ui trigger compositions without changing them. The label mirrors
  * the control's accessible name, which stays on the control itself.
@@ -61,14 +55,15 @@ function KeyHint({ children }: { children: string }) {
 export function Tooltip({
   label,
   shortcut,
-  items,
+  icons,
   side = 'bottom',
   children,
 }: {
   label: ReactNode;
   /** Shown as a key hint after the label, e.g. "Space" or "Esc". */
   shortcut?: string;
-  items?: readonly TooltipItem[];
+  /** The actions a combined control opens, shown as icons after the label. */
+  icons?: readonly ReactNode[];
   side?: TooltipSide;
   children: ReactElement;
 }) {
@@ -212,25 +207,15 @@ export function Tooltip({
               style={{ left: position.arrowLeft }}
             />
           ) : null}
-          <div className="relative flex items-center gap-2 px-2.5 py-1.5 font-medium">
-            <span className={items?.length ? 'font-semibold' : undefined}>{label}</span>
+          <div className="relative flex items-center gap-2 whitespace-nowrap px-2.5 py-1.5 font-medium">
+            <span>{label}</span>
+            {icons?.length ? (
+              <span aria-hidden className="flex items-center gap-1 border-l border-line-soft pl-2 text-soft [&_svg]:h-3 [&_svg]:w-3">
+                {icons.map((icon, index) => <span key={index} className="flex">{icon}</span>)}
+              </span>
+            ) : null}
             {shortcut ? <KeyHint>{shortcut}</KeyHint> : null}
           </div>
-          {items?.length ? (
-            <ul className="relative space-y-0.5 border-t border-line-soft px-1.5 py-1.5">
-              {items.map((item) => (
-                <li key={item.label} className="flex items-center gap-2 rounded-sm px-1 py-0.5 text-soft">
-                  {item.icon ? (
-                    <span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-surface-sunken text-foreground [&_svg]:h-3 [&_svg]:w-3">
-                      {item.icon}
-                    </span>
-                  ) : null}
-                  <span className="whitespace-nowrap">{item.label}</span>
-                  {item.shortcut ? <KeyHint>{item.shortcut}</KeyHint> : null}
-                </li>
-              ))}
-            </ul>
-          ) : null}
         </div>,
         document.body,
       )}
