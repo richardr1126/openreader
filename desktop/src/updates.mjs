@@ -147,6 +147,12 @@ export function createUpdates({ beforeInstall, onChange }) {
       if (installing || state.status !== 'ready') return;
       installing = true;
       await beforeInstall().catch(() => {});
+      // The runtime is already stopped, so a failed install relaunches the
+      // current version rather than leaving a hidden window with nothing behind it.
+      autoUpdater.once('error', () => {
+        app.relaunch();
+        app.exit(0);
+      });
       // Silent on Windows (no installer wizard) and relaunched afterwards.
       autoUpdater.quitAndInstall(true, true);
     },
