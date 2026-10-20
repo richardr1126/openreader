@@ -294,7 +294,10 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             onClick={undoScrub}
             aria-label="Undo scrub"
             className={cn(
-              'absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-elev-2 hover:border-accent-line hover:bg-accent-wash hover:text-accent',
+              'absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-elev-2 hover:border-accent-line hover:text-accent',
+              // The chip floats over the page, so its hover wash is mixed into the surface;
+              // the translucent accent-wash would let a light page show through.
+              'hover:bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface-solid))]',
               focusRing,
               motionColors,
             )}
