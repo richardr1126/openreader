@@ -350,9 +350,9 @@ async function main() {
         runtimeEnv.WEED_MINI_DIR,
         runtimeEnv.WEED_MINI_BIND_HOST,
         {
-          // The S3 gateway and the services started after weed.
+          s3Port: Number.parseInt(runtimeEnv.WEED_MINI_PORT, 10),
+          // The services started after weed.
           reserved: [
-            runtimeEnv.WEED_MINI_PORT,
             withDefault(runtimeEnv.PORT, '3003'),
             withDefault(runtimeEnv.EMBEDDED_COMPUTE_WORKER_PORT, '8081'),
             withDefault(runtimeEnv.EMBEDDED_NATS_PORT, '4222'),

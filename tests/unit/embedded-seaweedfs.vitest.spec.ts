@@ -107,9 +107,9 @@ describe('embedded SeaweedFS internal ports', () => {
     expect(ports['volume.port']).toBe(9340);
   });
 
-  test('moves only taken ports, never onto a reserved or already chosen port', async () => {
-    const taken = new Set([8888, 23646]);
-    const free = [8081, 50001, 50002];
+  test('moves taken ports with their gRPC partner, never onto a reserved or already chosen port', async () => {
+    const taken = new Set([8888, 33646, 50002 + 10000]);
+    const free = [8081, 60000, 50001, 50002, 50003];
     const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dataDir(), '127.0.0.1', {
       reserved: [8081],
       isFree: async (port) => !taken.has(port),
@@ -117,8 +117,28 @@ describe('embedded SeaweedFS internal ports', () => {
     }));
     expect(ports['master.port']).toBe(9333);
     expect(ports['filer.port']).toBe(50001);
-    expect(ports['admin.port']).toBe(50002);
+    expect(ports['admin.port']).toBe(50003);
+    for (const key of ['master', 'filer', 'volume', 'admin']) {
+      expect(ports[`${key}.port.grpc`]).toBe(ports[`${key}.port`] + 10000);
+    }
     expect(new Set(Object.values(ports)).size).toBe(Object.keys(ports).length);
+  });
+
+  test('re-pairs gRPC ports persisted apart from their HTTP port, keeping the HTTP ports', async () => {
+    const dir = dataDir('master.port=55368\nmaster.port.grpc=55369\nadmin.port=55375\nadmin.port.grpc=55376\n');
+    const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dir, '127.0.0.1', { isFree: async () => true }));
+    expect(ports['master.port']).toBe(55368);
+    expect(ports['master.port.grpc']).toBe(65368);
+    expect(ports['admin.port']).toBe(55375);
+    expect(ports['admin.port.grpc']).toBe(65375);
+  });
+
+  test('pairs the S3 gRPC port with the configured S3 port', async () => {
+    const ports = Object.fromEntries(await resolveWeedMiniInternalPorts(dataDir(), '127.0.0.1', {
+      s3Port: 9000,
+      isFree: async () => true,
+    }));
+    expect(ports['s3.port.grpc']).toBe(19000);
   });
 
   test('turns off components OpenReader never uses, including the admin UI', () => {

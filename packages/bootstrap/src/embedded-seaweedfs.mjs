@@ -161,18 +161,17 @@ export function isRunningInDocker() {
 
 // weed mini runs a master, filer, volume server and admin server behind its S3
 // gateway. OpenReader only talks to S3, but each of these still listens, on
-// ports mini fixes at these defaults unless told otherwise.
+// ports mini fixes at these defaults unless told otherwise. Each gRPC port must
+// stay its HTTP port plus this offset: parts of weed (the admin's maintenance
+// worker among them) derive it instead of reading the configured value.
+const WEED_GRPC_PORT_OFFSET = 10000;
 const WEED_MINI_INTERNAL_PORTS = [
   ['master.port', 9333],
-  ['master.port.grpc', 19333],
   ['filer.port', 8888],
-  ['filer.port.grpc', 18888],
   ['volume.port', 9340],
-  ['volume.port.grpc', 19340],
-  ['s3.port.grpc', 18333],
   ['admin.port', 23646],
-  ['admin.port.grpc', 33646],
 ];
+const MAX_PAIRED_PORT = 65535 - WEED_GRPC_PORT_OFFSET;
 
 // Components OpenReader never uses. The admin server cannot be turned off, but
 // without its UI it serves only health and metrics. It ignores -ip.bind and
@@ -298,23 +297,24 @@ export async function isPortFree(port, bindHost) {
   return true;
 }
 
-async function pickFreePort(bindHost) {
-  for (;;) {
-    const port = await listenOnce(0, bindHost);
-    if (port !== null && await isPortFree(port, bindHost)) return port;
-  }
+/** A random HTTP port whose gRPC partner is still a valid port. */
+async function pickPairedPortCandidate() {
+  return 10000 + crypto.randomInt(MAX_PAIRED_PORT - 10000 + 1);
 }
 
 /**
- * Chooses weed mini's internal ports. Each one keeps the value weed persisted in
- * mini.options, else mini's default, as long as it is free; a taken port moves
- * to a free one. Every choice is passed explicitly, so weed persists it and the
- * next start keeps it (the master keeps its state in a directory named after its
- * port). Another weed, Jupyter on 8888 or a second OpenReader no longer collide.
+ * Chooses weed mini's internal ports. Each HTTP port keeps the value weed
+ * persisted in mini.options, else mini's default, as long as it and its gRPC
+ * partner are free; otherwise the pair moves together. Every choice is passed
+ * explicitly, so weed persists it and the next start keeps it (the master keeps
+ * its state in a directory named after its HTTP port). A persisted gRPC port is
+ * never kept on its own, which repairs data directories from before pairing.
+ * Another weed, Jupyter on 8888 or a second OpenReader no longer collide.
  *
  * @param {string} dir
  * @param {string} bindHost
  * @param {{
+ *   s3Port?: number,
  *   reserved?: number[],
  *   isFree?: (port: number, bindHost: string) => Promise<boolean>,
  *   pickFree?: (bindHost: string) => Promise<number>,
@@ -322,26 +322,41 @@ async function pickFreePort(bindHost) {
  * @returns {Promise<Array<[string, number]>>}
  */
 export async function resolveWeedMiniInternalPorts(dir, bindHost, {
+  s3Port = 8333,
   reserved = [],
   isFree = isPortFree,
-  pickFree = pickFreePort,
+  pickFree = pickPairedPortCandidate,
 } = {}) {
   const persisted = readWeedMiniOptions(dir);
-  const taken = new Set(reserved.map(Number));
+  const taken = new Set([s3Port, ...reserved].map(Number));
+  const usable = async (port) => Number.isInteger(port) && port > 0 && port <= 65535 && !taken.has(port) && await isFree(port, bindHost);
+  const usablePair = async (port) => port <= MAX_PAIRED_PORT
+    && await usable(port) && await usable(port + WEED_GRPC_PORT_OFFSET);
+
   const chosen = [];
+  const claim = (key, port) => {
+    taken.add(port);
+    chosen.push([key, port]);
+  };
   for (const [key, fallback] of WEED_MINI_INTERNAL_PORTS) {
-    const candidates = [Number.parseInt(persisted.get(key) ?? '', 10), fallback]
-      .filter((port) => Number.isInteger(port) && port > 0 && port <= 65535);
     let port = null;
-    for (const candidate of candidates) {
-      if (!taken.has(candidate) && await isFree(candidate, bindHost)) {
+    for (const candidate of [Number.parseInt(persisted.get(key) ?? '', 10), fallback]) {
+      if (await usablePair(candidate)) {
         port = candidate;
         break;
       }
     }
-    while (port === null || taken.has(port)) port = await pickFree(bindHost);
-    taken.add(port);
-    chosen.push([key, port]);
+    while (port === null) {
+      const candidate = await pickFree(bindHost);
+      if (await usablePair(candidate)) port = candidate;
+    }
+    claim(key, port);
+    claim(`${key}.grpc`, port + WEED_GRPC_PORT_OFFSET);
   }
+
+  // The S3 gateway's HTTP port is the operator's, so only its gRPC partner is chosen here.
+  let s3Grpc = s3Port + WEED_GRPC_PORT_OFFSET;
+  while (!await usable(s3Grpc)) s3Grpc = await pickFree(bindHost);
+  claim('s3.port.grpc', s3Grpc);
   return chosen;
 }
