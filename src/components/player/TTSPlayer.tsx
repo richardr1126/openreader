@@ -13,7 +13,7 @@ import {
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { VoicesControl } from '@/components/player/VoicesControl';
 import { MAX_SPEED, MIN_SPEED, SpeedControl } from '@/components/player/SpeedControl';
-import { IconButton, Tooltip } from '@/components/ui';
+import { IconButton, Tooltip, cn, focusRing, motionColors } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 import {
@@ -271,12 +271,16 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           </div>
         )}
         {scrubUndo && previewSec === null && (
+          <Tooltip label="Return to where you were before scrubbing" side="top">
           <button
             type="button"
             onClick={undoScrub}
             aria-label="Undo scrub"
-            title="Return to where you were before scrubbing"
-            className="absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-accent shadow-elev-2 hover:bg-accent-wash focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            className={cn(
+              'absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-elev-2 hover:border-accent-line hover:bg-accent-wash hover:text-accent',
+              focusRing,
+              motionColors,
+            )}
           >
             <svg aria-hidden viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 4 3 7l3 3" />
@@ -284,6 +288,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             </svg>
             Undo
           </button>
+          </Tooltip>
         )}
       </div>
 
