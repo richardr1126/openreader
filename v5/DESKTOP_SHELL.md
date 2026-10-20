@@ -160,7 +160,7 @@ The packaged app updates itself from GitHub Releases with electron-updater
 
 - **Automatic updates.** On by default: 30 seconds after the runtime is up,
   then every 4 hours, the shell checks and downloads a newer release in the
-  background. Settings → Instance → Features turns it off; the choice lives in
+  background. Settings → Instance → Desktop app turns it off; the choice lives in
   `<userData>/updates.json`, owned by the shell rather than the database, and
   joins that panel's save bar. Off stops background checks and downloads only.
 - **Checks.** A check fetches the latest release's feed from GitHub; it sends

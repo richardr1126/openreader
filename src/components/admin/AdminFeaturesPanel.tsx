@@ -399,16 +399,18 @@ export function AdminFeaturesPanel({
           meta={renderSource('enableDocxConversion')}
           variant="plain"
         />
-        {desktopUpdates ? (
-          <ToggleRow
-            label="Automatic updates"
-            icon={<RefreshIcon />}
-            info="Checks GitHub for new versions and downloads them in the background."
-            checked={automaticUpdatesDraft ?? desktopUpdates.automatic}
-            onChange={setAutomaticUpdatesDraft}
-            variant="plain"
-          />
-        ) : null}
+      </Section> : null}
+
+      {/* Shell preferences live on this computer, not in instance settings. */}
+      {showInstanceSettings && desktopUpdates ? <Section title="Desktop app" variant="group" footer="Saved on this computer.">
+        <ToggleRow
+          label="Automatic updates"
+          icon={<RefreshIcon />}
+          info="Checks GitHub for new versions and downloads them in the background."
+          checked={automaticUpdatesDraft ?? desktopUpdates.automatic}
+          onChange={setAutomaticUpdatesDraft}
+          variant="plain"
+        />
       </Section> : null}
 
       {showComputeSettings ? <Section
