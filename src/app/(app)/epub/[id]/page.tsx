@@ -156,7 +156,7 @@ function EpubReader({
               }}
             />
           </div>
-        ) : null}
+        ) : <DocumentHeaderMenu showAudiobookExport={canExportAudiobook} />}
       />
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight ?? 0 }}>
         {epubState.currDocData && containerHeight !== null ? (

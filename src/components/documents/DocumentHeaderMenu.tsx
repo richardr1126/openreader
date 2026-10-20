@@ -104,23 +104,27 @@ export function DocumentHeaderMenu({
 
   return (
     <div className="flex items-center gap-1.5 sm:gap-2">
-      {reader ? (
-        <Tooltip label="Contents" icons={contentsTooltipIcons}>
-          <ToolbarButton
-            onClick={reader.onToggleContents}
-            active={reader.contentsOpen}
-            aria-label={reader.contentsOpen ? 'Hide contents' : 'Open contents'}
-          >
-            <ContentsSearchIcon aria-hidden="true" className="h-4 w-4" />
-          </ToolbarButton>
-        </Tooltip>
-      ) : null}
+      {/* Reading controls keep their place, disabled, until the reader is ready. */}
+      <Tooltip label="Contents" icons={contentsTooltipIcons}>
+        <ToolbarButton
+          onClick={reader?.onToggleContents}
+          disabled={!reader}
+          active={reader?.contentsOpen}
+          aria-label={reader?.contentsOpen ? 'Hide contents' : 'Open contents'}
+        >
+          <ContentsSearchIcon aria-hidden="true" className="h-4 w-4" />
+        </ToolbarButton>
+      </Tooltip>
 
-      <PopoverRoot className={cn('relative', !reader && 'sm:hidden')}>
+      <PopoverRoot className="relative">
         {({ open, close }) => (
           <>
-            <Tooltip label="More" icons={reader ? moreTooltipIcons : undefined}>
-              <PopoverTrigger aria-label="Menu" className={toolbarButtonStyles({ active: open ? 'true' : 'false' })}>
+            <Tooltip label="More" icons={moreTooltipIcons}>
+              <PopoverTrigger
+                aria-label="Menu"
+                disabled={!reader}
+                className={toolbarButtonStyles({ active: open ? 'true' : 'false' })}
+              >
                 <DotsHorizontalIcon aria-hidden="true" className="h-4 w-4" />
               </PopoverTrigger>
             </Tooltip>
@@ -182,7 +186,7 @@ export function DocumentHeaderMenu({
       </PopoverRoot>
 
       <div className="hidden items-center gap-2 sm:flex">
-        <span aria-hidden="true" className={cn('h-4 w-px bg-line', !reader && 'hidden')} />
+        <span aria-hidden="true" className="h-4 w-px bg-line" />
         {showExport ? (
           <Tooltip label={isAudiobookOpen ? 'Hide audiobook export' : 'Export audiobook'}>
             <ToolbarButton

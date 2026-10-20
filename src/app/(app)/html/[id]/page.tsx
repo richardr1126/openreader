@@ -134,7 +134,7 @@ function HtmlReader({
               }}
             />
           </div>
-        ) : null}
+        ) : <DocumentHeaderMenu showAudiobookExport={canExportAudiobook} />}
       />
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
         {currDocData !== undefined ? (

@@ -150,6 +150,9 @@ test('a reader that cannot prepare keeps the way back to the library', async ({ 
   await page.getByRole('link', { name: 'sample.md', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'This document is not ready yet' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open settings', exact: true })).toBeDisabled();
+  // The header keeps the ready layout, with reading controls disabled.
+  await expect(page.getByRole('button', { name: 'Open contents', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeDisabled();
 
   await page.getByRole('link', { name: 'Back to documents', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
