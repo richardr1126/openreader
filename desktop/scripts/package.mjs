@@ -2,7 +2,9 @@
 // Packages the shell and the staged runtime (scripts/stage.mjs) with
 // electron-builder for this machine's platform and architecture: a DMG on macOS,
 // an NSIS installer on Windows, and an AppImage and a .deb on Linux. The app
-// version is the root package version.
+// version is the root package version. Each build also writes the update feed
+// electron-updater reads from the GitHub release (src/updates.mjs): latest*.yml,
+// blockmaps, and on macOS the zip Squirrel.Mac installs from.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,8 +53,10 @@ const config = {
     { ext: 'epub', name: 'EPUB Document', mimeType: 'application/epub+zip', role: 'Viewer', rank: 'Default' },
     { ext: 'pdf', name: 'PDF Document', mimeType: 'application/pdf', role: 'Viewer', rank: 'Alternate' },
   ],
+  // Bakes app-update.yml into the app and writes the feed beside the installers.
+  publish: { provider: 'github', owner: 'richardr1126', repo: 'openreader', releaseType: 'release' },
   mac: {
-    target: 'dmg',
+    target: ['dmg', 'zip'],
     category: 'public.app-category.productivity',
     minimumSystemVersion: '12.0',
   },

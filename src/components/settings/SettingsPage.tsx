@@ -13,6 +13,7 @@ import { AdminTasksPanel } from '@/components/admin/AdminTasksPanel';
 import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
 import { Sidebar, SidebarNav, SidebarNavGroup, SidebarNavItem, Toolbar, Tooltip } from '@/components/ui';
 import { showPrivacyModal } from '@/components/PrivacyModal';
+import { DesktopUpdateNavItem, DesktopUpdateToolbarButton } from '@/components/layout/DesktopUpdateItems';
 import { useOnboardingFlow } from '@/contexts/OnboardingFlowContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -81,6 +82,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
         >
           Changelog
         </button>
+        <DesktopUpdateToolbarButton className="md:hidden" />
         <CloseSettingsLink />
       </Toolbar>
 
@@ -119,6 +121,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                 icon={<InfoIcon className="h-3.5 w-3.5" />}
                 label={displayVersion ? `Changelog · v${displayVersion}` : 'Changelog'}
               />
+              <DesktopUpdateNavItem />
               {/* The notice describes a hosted instance; desktop has no operator. */}
               {installProfile === 'server' ? (
                 <SidebarNavItem
