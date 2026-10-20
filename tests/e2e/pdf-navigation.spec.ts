@@ -39,6 +39,12 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   await expect(page.getByRole('button', { name: '1 / 2', exact: true })).toBeFocused();
   await expect(page.getByText('Chapter One', { exact: true })).toBeVisible();
 
+  // Shift with an arrow turns the page; a plain arrow stays a sentence skip.
+  await page.keyboard.press('Shift+ArrowRight');
+  await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
+  await page.keyboard.press('Shift+ArrowLeft');
+  await expect(page.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
+
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
   const zoomControls = page.getByLabel('Zoom controls', { exact: true });
   await zoomControls.getByRole('button', { name: 'Zoom in', exact: true }).click();

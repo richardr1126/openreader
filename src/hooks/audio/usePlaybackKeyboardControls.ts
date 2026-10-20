@@ -17,6 +17,33 @@ const ARROW_OWNERS = '[role="slider"], [role="radiogroup"], [role="radio"], [rol
 /** Controls that Space activates. */
 const SPACE_OWNERS = 'button, a[href], summary, [role="button"], [role="checkbox"], [role="switch"], [role="link"], [role="tab"], [role="radio"]';
 
+type Within = (selector: string) => boolean;
+
+/** Applies the shared shortcut policy, in the page and relayed from an EPUB
+ * frame, and runs the action `resolve` picks for an eligible key press. */
+function listenForReaderKeys(resolve: (event: KeyboardEvent, within: Within) => (() => void) | undefined) {
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || event.repeat || event.isComposing
+      || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target as Element | null;
+    // Structural checks work for elements belonging to an EPUB frame too.
+    const within: Within = (selector) => typeof target?.closest === 'function' && target.closest(selector) !== null;
+    if (within(EDITING)) return;
+    if (document.querySelector('[aria-modal="true"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
+    const action = resolve(event, within);
+    if (!action) return;
+    event.preventDefault();
+    action();
+  };
+  const onEpubKeyDown = (event: Event) => onKeyDown((event as CustomEvent<KeyboardEvent>).detail);
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener(EPUB_KEY_EVENT, onEpubKeyDown);
+  return () => {
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener(EPUB_KEY_EVENT, onEpubKeyDown);
+  };
+}
+
 export function usePlaybackKeyboardControls({
   enabled, togglePlay, skipBackward, skipForward, changeSpeed,
   canToggle, canSkip, canChangeSpeed,
@@ -32,43 +59,40 @@ export function usePlaybackKeyboardControls({
 }) {
   useEffect(() => {
     if (!enabled) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat || event.isComposing
-        || event.altKey || event.ctrlKey || event.metaKey) return;
-      const target = event.target as Element | null;
-      // Structural checks work for elements belonging to an EPUB frame too.
-      const within = (selector: string) => typeof target?.closest === 'function' && target.closest(selector) !== null;
-      if (within(EDITING)) return;
-      if (document.querySelector('[aria-modal="true"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
-
-      let action: (() => void) | undefined;
+    return listenForReaderKeys((event, within) => {
       switch (event.key) {
         case ' ':
-          if (canToggle && !within(SPACE_OWNERS)) action = togglePlay;
-          break;
+          return canToggle && !within(SPACE_OWNERS) ? togglePlay : undefined;
         case 'ArrowLeft':
-          if (canSkip && !event.shiftKey && !within(ARROW_OWNERS)) action = skipBackward;
-          break;
+          return canSkip && !event.shiftKey && !within(ARROW_OWNERS) ? skipBackward : undefined;
         case 'ArrowRight':
-          if (canSkip && !event.shiftKey && !within(ARROW_OWNERS)) action = skipForward;
-          break;
+          return canSkip && !event.shiftKey && !within(ARROW_OWNERS) ? skipForward : undefined;
         case '<':
-          if (canChangeSpeed) action = () => changeSpeed(-1);
-          break;
+          return canChangeSpeed ? () => changeSpeed(-1) : undefined;
         case '>':
-          if (canChangeSpeed) action = () => changeSpeed(1);
-          break;
+          return canChangeSpeed ? () => changeSpeed(1) : undefined;
       }
-      if (!action) return;
-      event.preventDefault();
-      action();
-    };
-    const onEpubKeyDown = (event: Event) => onKeyDown((event as CustomEvent<KeyboardEvent>).detail);
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener(EPUB_KEY_EVENT, onEpubKeyDown);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener(EPUB_KEY_EVENT, onEpubKeyDown);
-    };
+    });
   }, [enabled, togglePlay, skipBackward, skipForward, changeSpeed, canToggle, canSkip, canChangeSpeed]);
+}
+
+/** Shift with an arrow turns the page or section; a plain arrow skips a sentence. */
+export function usePageTurnKeyboardControls({
+  enabled, onPrevious, onNext, canPrevious, canNext,
+}: {
+  enabled: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  canPrevious: boolean;
+  canNext: boolean;
+}) {
+  useEffect(() => {
+    if (!enabled) return;
+    return listenForReaderKeys((event, within) => {
+      if (!event.shiftKey || within(ARROW_OWNERS)) return undefined;
+      if (event.key === 'ArrowLeft') return canPrevious ? onPrevious : undefined;
+      if (event.key === 'ArrowRight') return canNext ? onNext : undefined;
+      return undefined;
+    });
+  }, [enabled, onPrevious, onNext, canPrevious, canNext]);
 }

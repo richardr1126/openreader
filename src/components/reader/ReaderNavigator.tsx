@@ -1,7 +1,9 @@
 'use client';
 
 import { useRef, useState, type ReactNode } from 'react';
+import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
+import { usePageTurnKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
 import { ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import {
   IconButton, Input, PopoverRoot, PopoverSurface, PopoverTrigger, Tooltip,
@@ -30,13 +32,17 @@ export function ReaderPager({
   canNext?: boolean;
   position: ReactNode;
 }) {
+  const { playbackShortcuts } = useConfig();
+  usePageTurnKeyboardControls({ enabled: playbackShortcuts, onPrevious, onNext, canPrevious, canNext });
+
   return (
     <div className="flex items-center gap-0.5">
-      <Tooltip label={`Previous ${unit}`} side="top">
+      <Tooltip label={`Previous ${unit}`} shortcut={playbackShortcuts ? '⇧←' : undefined} side="top">
         <IconButton
           onClick={onPrevious}
           disabled={!canPrevious}
           aria-label={`Previous ${unit}`}
+          aria-keyshortcuts={playbackShortcuts ? 'Shift+ArrowLeft' : undefined}
           size="sm"
           className={pillStepButton}
         >
@@ -44,11 +50,12 @@ export function ReaderPager({
         </IconButton>
       </Tooltip>
       {position}
-      <Tooltip label={`Next ${unit}`} side="top">
+      <Tooltip label={`Next ${unit}`} shortcut={playbackShortcuts ? '⇧→' : undefined} side="top">
         <IconButton
           onClick={onNext}
           disabled={!canNext}
           aria-label={`Next ${unit}`}
+          aria-keyshortcuts={playbackShortcuts ? 'Shift+ArrowRight' : undefined}
           size="sm"
           className={pillStepButton}
         >
