@@ -1,20 +1,17 @@
 import { IconButton, Tooltip } from '@/components/ui';
 
-export function ZoomControl({
-  value,
-  onIncrease,
-  onDecrease,
-  min = 50,
-  max = 300,
-}: {
+/** A reader's page scale, or its column width when the text reflows. */
+export interface ZoomSetting {
   value: number;
   onIncrease: () => void;
   onDecrease: () => void;
-  min?: number;
-  max?: number;
-}) {
+  min: number;
+  max: number;
+}
+
+export function ZoomControl({ value, onIncrease, onDecrease, min, max }: ZoomSetting) {
   return (
-    <div className="flex items-center gap-1 select-none" aria-label="Zoom controls">
+    <div role="group" className="flex items-center gap-1 select-none" aria-label="Zoom controls">
       <Tooltip label="Zoom out">
         <IconButton
           onClick={onDecrease}
@@ -26,7 +23,7 @@ export function ZoomControl({
           −
         </IconButton>
       </Tooltip>
-      <span className="text-xs tabular-nums w-10 sm:w-12 text-center text-soft">{value}%</span>
+      <span className="text-xs tabular-nums w-10 text-center text-soft">{value}%</span>
       <Tooltip label="Zoom in">
         <IconButton
           onClick={onIncrease}

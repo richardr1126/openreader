@@ -7,7 +7,6 @@ import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
-import { ZoomControl } from '@/components/documents/ZoomControl';
 import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
@@ -28,7 +27,7 @@ import type { DocumentSettings as DocumentSettingsValue } from '@/types/document
 import { usePdfDocument } from './usePdfDocument';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PlanTextReader } from '@/components/views/HTMLViewer';
-import { PageJumpControl, ReaderPager, ReaderToolbar } from '@/components/reader/ReaderToolbar';
+import { PageJumpControl, ReaderPager } from '@/components/reader/ReaderNavigator';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import { usePdfOutline } from '@/hooks/pdf/usePdfOutline';
@@ -163,50 +162,30 @@ function PdfReader({
               isSettingsOpen={activeSidebar === 'settings'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
+              reader={rendererReady ? {
+                contentsOpen: activeSidebar === 'contents',
+                onToggleContents: () => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents'),
+                sentenceBookmark,
+                onViewBookmarks: () => setActiveSidebar('bookmarks'),
+                zoom: readerShowsLayout ? {
+                  value: zoomLevel,
+                  onIncrease: () => setZoomLevel(prev => Math.min(prev + 10, 300)),
+                  onDecrease: () => setZoomLevel(prev => Math.max(prev - 10, 50)),
+                  min: 50,
+                  max: 300,
+                } : {
+                  value: padPct,
+                  onIncrease: () => setPadPct(p => Math.min(p + 10, 100)),
+                  onDecrease: () => setPadPct(p => Math.max(p - 10, 0)),
+                  min: 0,
+                  max: 100,
+                },
+              } : undefined}
             />
           </div>
         }
       />
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
-        <ReaderToolbar
-          hidden={!rendererReady}
-          activePanel={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
-          onTogglePanel={(panel) => setActiveSidebar((prev) => prev === panel ? null : panel)}
-          sentenceBookmark={sentenceBookmark}
-          navigation={currDocPages ? (
-            <ReaderPager
-              unit="page"
-              onPrevious={() => skipToLocation(currDocPage - 1, true)}
-              onNext={() => skipToLocation(currDocPage + 1, true)}
-              canPrevious={currDocPage > 1}
-              canNext={currDocPage < currDocPages}
-              position={(
-                <PageJumpControl
-                  currentPage={currDocPage}
-                  numPages={currDocPages}
-                  onGoToPage={(page) => skipToLocation(page, true)}
-                />
-              )}
-            />
-          ) : null}
-          zoom={readerShowsLayout ? (
-            <ZoomControl
-              value={zoomLevel}
-              onIncrease={() => setZoomLevel(prev => Math.min(prev + 10, 300))}
-              onDecrease={() => setZoomLevel(prev => Math.max(prev - 10, 50))}
-              min={50}
-              max={300}
-            />
-          ) : (
-            <ZoomControl
-              value={padPct}
-              onIncrease={() => setPadPct(p => Math.min(p + 10, 100))}
-              onDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
-              min={0}
-              max={100}
-            />
-          )}
-        />
         <div id="main-content" tabIndex={-1} className={rendererReady ? 'min-h-0 flex-1' : 'min-h-0 flex-1 opacity-0 pointer-events-none'}>
           {readerShowsLayout ? (
             <PDFViewer
@@ -232,7 +211,24 @@ function PdfReader({
         />
       )}
       {rendererReady ? (
-        <TTSPlayer isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
+        <TTSPlayer isPlaybackReady={isPlaybackReady} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')}
+          navigator={currDocPages ? (
+            <ReaderPager
+              unit="page"
+              onPrevious={() => skipToLocation(currDocPage - 1, true)}
+              onNext={() => skipToLocation(currDocPage + 1, true)}
+              canPrevious={currDocPage > 1}
+              canNext={currDocPage < currDocPages}
+              position={(
+                <PageJumpControl
+                  currentPage={currDocPage}
+                  numPages={currDocPages}
+                  onGoToPage={(page) => skipToLocation(page, true)}
+                />
+              )}
+            />
+          ) : null}
+        />
       ) : null}
       <VoiceSidebar
         isOpen={activeSidebar === 'voice'}

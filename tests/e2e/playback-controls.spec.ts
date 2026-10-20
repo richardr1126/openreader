@@ -445,11 +445,11 @@ test('anonymous user controls playback across every accepted document journey', 
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
   await expect(bookTitle).toBeVisible();
 
-  await expect(page.getByRole('toolbar', { name: 'Reader', exact: true }).getByLabel('Zoom controls', { exact: true })).toBeVisible();
-
+  // Phones gather the document actions and reading tools into one menu.
   await page.getByRole('button', { name: 'Menu', exact: true }).click();
-  const mobileMenu = page.getByRole('menu');
-  await expect(mobileMenu.getByRole('menuitem', { name: 'Settings', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Zoom controls', { exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
 
   await page.setViewportSize({ width: 1280, height: 900 });
 

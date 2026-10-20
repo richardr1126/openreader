@@ -35,8 +35,8 @@ test('Kokoro warnings follow the document across the player, settings, export, a
     await expect(page.getByRole('heading', { name: 'french-sample.txt', exact: true })).toBeVisible();
 
     const mismatch = 'Selected Kokoro voice is American English, but the document is French. Select a French voice.';
-    const warning = page.getByLabel('Voice language warning', { exact: true });
-    await expect(warning).toHaveAttribute('title', mismatch);
+    const warning = page.getByRole('img', { name: `Voice language warning: ${mismatch}`, exact: true });
+    await expect(warning).toBeVisible();
     await page.getByRole('button', { name: 'Open settings', exact: true }).click();
     const settings = page.getByRole('dialog', { name: 'Document settings', exact: true });
     await expect(settings.getByText('Detected: French', { exact: true })).toBeVisible();
@@ -53,7 +53,7 @@ test('Kokoro warnings follow the document across the player, settings, export, a
     await voices.getByRole('button', { name: 'ff_siwis', exact: true }).click();
     await expect(voices.getByText(mismatch, { exact: true })).toHaveCount(0);
     // A draft does not change the applied voice or its warning until Apply.
-    await expect(warning).toHaveAttribute('title', mismatch);
+    await expect(warning).toBeVisible();
     await voices.getByRole('button', { name: 'Apply', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Voice: ff_siwis', exact: true })).toBeVisible();
     await expect(warning).toHaveCount(0);

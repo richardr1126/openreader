@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { useTTS, useTTSPlaybackProgress } from '@/contexts/TTSContext';
 import { measurePlaybackBuffer } from '@openreader/tts/playback-buffer';
@@ -61,9 +61,11 @@ function PlaybackLoadingRing() {
   );
 }
 
-export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel }: {
+export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel, navigator }: {
   /** Opens the reader's voice panel; the reader page owns which sidebar is open. */
   onOpenVoicePanel: () => void;
+  /** The reader's page or section stepper, floated above the dock's top edge. */
+  navigator?: ReactNode;
   /** Shown by the OS media controls (lock screen, hardware keys). */
   documentTitle?: string;
   isPlaybackReady?: boolean;
@@ -190,6 +192,20 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
       statusMessage={shownModelDownload?.statusMessage}
     />
     <section aria-label="Playback controls" className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-sm sm:shadow-none" data-app-ttsbar>
+      {navigator ? (
+        <div
+          role="group"
+          aria-label="Reading position"
+          className={cn(
+            // Bottom-aligned with the Undo chip, which sits on the scrubber's top edge.
+            'absolute bottom-full left-1/2 z-40 mb-[18px] flex h-7 -translate-x-1/2 items-center rounded-full border border-line-soft bg-surface-solid px-0.5 text-xs text-soft shadow-elev-2 transition-opacity duration-fast ease-standard sm:mb-[13px]',
+            // The scrub preview's time label takes this space while dragging.
+            previewSec !== null && 'pointer-events-none opacity-0',
+          )}
+        >
+          {navigator}
+        </div>
+      ) : null}
       {/* Top Edge Scrubber bar */}
       <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:-top-[5px] sm:h-2.5">
         {/* Rail: the whole document. Foreground-mixed so it stays visible in dark themes. */}

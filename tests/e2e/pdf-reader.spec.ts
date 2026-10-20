@@ -24,13 +24,12 @@ test('anonymous user opens a PDF and reads its visible page content', async ({ p
   ).toBeVisible();
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible();
-  const toolbar = page.getByRole('toolbar', { name: 'Reader' });
-  await expect(toolbar.getByRole('button', { name: 'Open contents', exact: true })).toBeVisible();
-  await expect(toolbar.getByRole('button', { name: 'Previous page', exact: true })).toBeDisabled();
-  await expect(toolbar.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
-  await expect(toolbar.getByRole('button', { name: 'Next page', exact: true })).toBeEnabled();
-  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toHaveCount(1);
-  await expect(toolbar.getByRole('button', { name: 'Bookmarks', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open contents', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeVisible();
+  const pager = page.getByRole('group', { name: 'Reading position', exact: true });
+  await expect(pager.getByRole('button', { name: 'Previous page', exact: true })).toBeDisabled();
+  await expect(pager.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
+  await expect(pager.getByRole('button', { name: 'Next page', exact: true })).toBeEnabled();
 
   // A committed scrub offers a short-lived way back to where the listener was.
   const position = page.getByRole('slider', { name: 'Playback position', exact: true });

@@ -669,6 +669,49 @@ export function SearchIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Contents and find in book share one panel: a short outline with a lens over it. */
+export function ContentsSearchIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={props.width || "1.5em"}
+      height={props.height || "1.5em"}
+      {...props}
+    >
+      <path d="M4 5h14M4 10h7M4 15h4M4 20h4" />
+      <circle cx="16" cy="15" r="4" />
+      <path d="m19 18 2 2" />
+    </svg>
+  );
+}
+
+/** Page scale or column width. */
+export function ZoomIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={props.width || "1.5em"}
+      height={props.height || "1.5em"}
+      {...props}
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5M11 8v6M8 11h6" />
+    </svg>
+  );
+}
+
 export function BookmarkIcon({ filled = false, ...props }: React.SVGProps<SVGSVGElement> & { filled?: boolean }) {
   return (
     <svg

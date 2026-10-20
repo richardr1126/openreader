@@ -12,7 +12,6 @@ import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
-import { ZoomControl } from '@/components/documents/ZoomControl';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -21,7 +20,7 @@ import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
-import { ReaderToolbar, ReadingProgress } from '@/components/reader/ReaderToolbar';
+import { ReadingProgress } from '@/components/reader/ReaderNavigator';
 import type { OutlineEntry } from '@/lib/client/reader/chapters';
 
 export default function HTMLPage() {
@@ -120,27 +119,24 @@ function HtmlReader({
               isSettingsOpen={activeSidebar === 'settings'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
+              reader={{
+                contentsOpen: activeSidebar === 'contents',
+                onToggleContents: () => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents'),
+                sentenceBookmark,
+                onViewBookmarks: () => setActiveSidebar('bookmarks'),
+                zoom: {
+                  value: padPct,
+                  onIncrease: () => setPadPct(p => Math.min(p + 10, 100)),
+                  onDecrease: () => setPadPct(p => Math.max(p - 10, 0)),
+                  min: 0,
+                  max: 100,
+                },
+              }}
             />
           </div>
         ) : null}
       />
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
-        <ReaderToolbar
-          hidden={!rendererReady}
-          activePanel={isReaderNavigationPanel(activeSidebar) ? activeSidebar : null}
-          onTogglePanel={(panel) => setActiveSidebar((prev) => prev === panel ? null : panel)}
-          sentenceBookmark={sentenceBookmark}
-          navigation={<ReadingProgress />}
-          zoom={(
-            <ZoomControl
-              value={padPct}
-              onIncrease={() => setPadPct(p => Math.min(p + 10, 100))}
-              onDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
-              min={0}
-              max={100}
-            />
-          )}
-        />
         {currDocData !== undefined ? (
           <div
             id="main-content"
@@ -169,7 +165,7 @@ function HtmlReader({
         />
       )}
       {rendererReady && (
-        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
+        <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} navigator={<ReadingProgress />} />
       )}
       <VoiceSidebar
         isOpen={activeSidebar === 'voice'}

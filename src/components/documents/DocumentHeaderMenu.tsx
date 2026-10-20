@@ -1,8 +1,44 @@
 'use client';
 
-import { DotsVerticalIcon, FileSettingsIcon, DownloadIcon } from '@/components/icons/Icons';
+import type { ReactNode } from 'react';
+import {
+  BookmarkIcon,
+  BookmarksListIcon,
+  ContentsSearchIcon,
+  DotsHorizontalIcon,
+  DownloadIcon,
+  FileSettingsIcon,
+  ListIcon,
+  SearchIcon,
+  ZoomIcon,
+} from '@/components/icons/Icons';
 import { UserMenu } from '@/components/auth/UserMenu';
-import { IconButton, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTransition, MenuTrigger, ToolbarButton, Tooltip } from '@/components/ui';
+import { ZoomControl, type ZoomSetting } from '@/components/documents/ZoomControl';
+import {
+  PopoverRoot,
+  PopoverSurface,
+  PopoverTrigger,
+  ToolbarButton,
+  Tooltip,
+  cn,
+  toolbarButtonStyles,
+} from '@/components/ui';
+
+export interface SentenceBookmarkControl {
+  isBookmarked: boolean;
+  /** False while there is no current sentence that can be bookmarked. */
+  canToggle: boolean;
+  onToggle: () => void;
+}
+
+/** The reading controls a ready reader adds to its header. */
+export interface ReaderHeaderControls {
+  contentsOpen: boolean;
+  onToggleContents: () => void;
+  sentenceBookmark: SentenceBookmarkControl;
+  onViewBookmarks: () => void;
+  zoom: ZoomSetting;
+}
 
 interface DocumentHeaderMenuProps {
   /** Without it the document actions show disabled, as while the reader prepares. */
@@ -11,91 +47,172 @@ interface DocumentHeaderMenuProps {
   isSettingsOpen?: boolean;
   isAudiobookOpen?: boolean;
   showAudiobookExport?: boolean;
+  reader?: ReaderHeaderControls;
 }
 
+const contentsTooltipItems = [
+  { icon: <ListIcon />, label: 'Chapters' },
+  { icon: <SearchIcon />, label: 'Find in book' },
+];
+
+const moreTooltipItems = [
+  { icon: <BookmarkIcon />, label: 'Bookmarks' },
+  { icon: <ZoomIcon />, label: 'Zoom' },
+];
+
+function PanelRow({
+  onClick,
+  disabled,
+  active = false,
+  className,
+  children,
+}: {
+  onClick?: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={active || undefined}
+      className={cn(
+        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors duration-fast ease-standard focus:outline-none focus-visible:bg-accent-wash focus-visible:text-accent',
+        active ? 'bg-accent-wash text-accent' : 'text-foreground hover:bg-accent-wash hover:text-accent',
+        'disabled:cursor-not-allowed disabled:bg-transparent disabled:text-faint',
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The reader header's actions. Contents and the ⋯ panel are reading
+ * controls at every width; export, settings and the account sit beside them
+ * on wider screens and move into the ⋯ panel on phones, so each action has
+ * one control.
+ */
 export function DocumentHeaderMenu({
   onOpenSettings,
   onOpenAudiobook,
   isSettingsOpen = false,
   isAudiobookOpen = false,
   showAudiobookExport,
+  reader,
 }: DocumentHeaderMenuProps) {
   const disabled = !onOpenSettings;
-
-  // --- Desktop View ---
-  const DesktopView = (
-    <div className="hidden sm:flex items-center gap-2">
-      {showAudiobookExport && (onOpenAudiobook || disabled) && (
-        <Tooltip label={isAudiobookOpen ? 'Hide audiobook export' : 'Export audiobook'}>
-          <ToolbarButton
-            onClick={onOpenAudiobook}
-            disabled={disabled}
-            active={isAudiobookOpen}
-            aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
-          >
-            <DownloadIcon className="w-4 h-4 transform transition-transform duration-base ease-standard" />
-          </ToolbarButton>
-        </Tooltip>
-      )}
-      <Tooltip label={isSettingsOpen ? 'Hide document settings' : 'Document settings'}>
-        <ToolbarButton
-          onClick={onOpenSettings}
-          disabled={disabled}
-          active={isSettingsOpen}
-          aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
-        >
-          <FileSettingsIcon
-            aria-hidden="true"
-            className="w-4 h-4 transform transition-transform duration-base ease-standard"
-          />
-        </ToolbarButton>
-      </Tooltip>
-      <UserMenu />
-    </div>
-  );
-
-  // --- Mobile View ---
-  const MobileView = (
-    <div className="sm:hidden flex items-center">
-      <MenuRoot as="div" className="relative inline-block text-left">
-        <MenuTrigger
-          as={IconButton}
-          tone="surface"
-          size="sm"
-          aria-label="Menu"
-        >
-          <DotsVerticalIcon className="w-4 h-4 transform transition-transform duration-base ease-standard hover:text-accent" />
-        </MenuTrigger>
-        <MenuTransition>
-          <MenuItemsSurface className="absolute right-0 z-50 mt-2 min-w-max origin-top-right divide-y divide-line-soft focus:outline-none">
-            {/* Actions Section */}
-            <div className="p-1">
-              {showAudiobookExport && (onOpenAudiobook || disabled) && (
-                <MenuActionItem onClick={onOpenAudiobook} disabled={disabled} activeOverride={isAudiobookOpen}>
-                  <DownloadIcon className="h-4 w-4" />
-                  {isAudiobookOpen ? 'Hide Audiobook' : 'Export Audiobook'}
-                </MenuActionItem>
-              )}
-              <MenuActionItem onClick={onOpenSettings} disabled={disabled} activeOverride={isSettingsOpen}>
-                <FileSettingsIcon aria-hidden="true" className="h-4 w-4" />
-                {isSettingsOpen ? 'Hide Settings' : 'Settings'}
-              </MenuActionItem>
-            </div>
-
-            {/* Auth Section (empty on desktop, where there is no account menu) */}
-            <div className="p-2 border-t border-line-soft flex justify-center empty:hidden">
-              <UserMenu />
-            </div>
-          </MenuItemsSurface>
-        </MenuTransition>
-      </MenuRoot>
-    </div>
-  );
+  const showExport = showAudiobookExport && (onOpenAudiobook || disabled);
 
   return (
-    <>
-      {DesktopView}
-      {MobileView}
-    </>
+    <div className="flex items-center gap-1.5 sm:gap-2">
+      {reader ? (
+        <Tooltip label="Contents" items={contentsTooltipItems}>
+          <ToolbarButton
+            onClick={reader.onToggleContents}
+            active={reader.contentsOpen}
+            aria-label={reader.contentsOpen ? 'Hide contents' : 'Open contents'}
+          >
+            <ContentsSearchIcon aria-hidden="true" className="h-4 w-4" />
+          </ToolbarButton>
+        </Tooltip>
+      ) : null}
+
+      <PopoverRoot className={cn('relative', !reader && 'sm:hidden')}>
+        {({ open, close }) => (
+          <>
+            <Tooltip label="More" items={reader ? moreTooltipItems : undefined}>
+              <PopoverTrigger aria-label="Menu" className={toolbarButtonStyles({ active: open ? 'true' : 'false' })}>
+                <DotsHorizontalIcon aria-hidden="true" className="h-4 w-4" />
+              </PopoverTrigger>
+            </Tooltip>
+            <PopoverSurface flush anchor={{ to: 'bottom end', gap: 6 }} className="w-56">
+              <div className="p-1 sm:hidden">
+                {showExport ? (
+                  <PanelRow
+                    onClick={() => { onOpenAudiobook?.(); close(); }}
+                    disabled={disabled}
+                    active={isAudiobookOpen}
+                  >
+                    <DownloadIcon aria-hidden="true" className="h-4 w-4" />
+                    {isAudiobookOpen ? 'Hide audiobook export' : 'Export audiobook'}
+                  </PanelRow>
+                ) : null}
+                <PanelRow
+                  onClick={() => { onOpenSettings?.(); close(); }}
+                  disabled={disabled}
+                  active={isSettingsOpen}
+                >
+                  <FileSettingsIcon aria-hidden="true" className="h-4 w-4" />
+                  {isSettingsOpen ? 'Hide settings' : 'Settings'}
+                </PanelRow>
+              </div>
+
+              {reader ? (
+                <>
+                  {/* Phones list export and settings above; wider screens start here. */}
+                  <div className="border-t border-line-soft p-1 sm:border-t-0">
+                    <PanelRow
+                      onClick={() => { reader.sentenceBookmark.onToggle(); close(); }}
+                      disabled={!reader.sentenceBookmark.canToggle}
+                    >
+                      <BookmarkIcon aria-hidden="true" filled={reader.sentenceBookmark.isBookmarked} className="h-4 w-4" />
+                      {reader.sentenceBookmark.isBookmarked ? 'Remove bookmark' : 'Save bookmark'}
+                    </PanelRow>
+                    <PanelRow onClick={() => { reader.onViewBookmarks(); close(); }}>
+                      <BookmarksListIcon aria-hidden="true" className="h-4 w-4" />
+                      View bookmarks
+                    </PanelRow>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-line-soft py-1 pl-3 pr-1.5 text-xs text-foreground">
+                    <span className="flex items-center gap-2">
+                      <ZoomIcon aria-hidden="true" className="h-4 w-4 text-soft" />
+                      Zoom
+                    </span>
+                    <ZoomControl {...reader.zoom} />
+                  </div>
+                </>
+              ) : null}
+
+              {/* Empty on desktop installs, where there is no account menu. */}
+              <div className="flex justify-center border-t border-line-soft p-1.5 empty:hidden sm:hidden">
+                <UserMenu />
+              </div>
+            </PopoverSurface>
+          </>
+        )}
+      </PopoverRoot>
+
+      <div className="hidden items-center gap-2 sm:flex">
+        <span aria-hidden="true" className={cn('h-4 w-px bg-line', !reader && 'hidden')} />
+        {showExport ? (
+          <Tooltip label={isAudiobookOpen ? 'Hide audiobook export' : 'Export audiobook'}>
+            <ToolbarButton
+              onClick={onOpenAudiobook}
+              disabled={disabled}
+              active={isAudiobookOpen}
+              aria-label={isAudiobookOpen ? 'Hide audiobook export' : 'Open audiobook export'}
+            >
+              <DownloadIcon aria-hidden="true" className="h-4 w-4" />
+            </ToolbarButton>
+          </Tooltip>
+        ) : null}
+        <Tooltip label={isSettingsOpen ? 'Hide document settings' : 'Document settings'}>
+          <ToolbarButton
+            onClick={onOpenSettings}
+            disabled={disabled}
+            active={isSettingsOpen}
+            aria-label={isSettingsOpen ? 'Hide settings' : 'Open settings'}
+          >
+            <FileSettingsIcon aria-hidden="true" className="h-4 w-4" />
+          </ToolbarButton>
+        </Tooltip>
+        <UserMenu />
+      </div>
+    </div>
   );
 }
