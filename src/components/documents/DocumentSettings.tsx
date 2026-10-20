@@ -77,6 +77,7 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
 const PLAYBACK_KEYS: [string[], string][] = [
   [['Space'], 'Play or pause'],
   [['←', '→'], 'Skip back or forward'],
+  [['⇧←', '⇧→'], 'Previous or next page or section'],
   [['<', '>'], 'Slower or faster'],
 ];
 

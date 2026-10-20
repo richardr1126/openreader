@@ -16,9 +16,7 @@ test('keyboard user controls reader panels and playback shortcuts', async ({ pag
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
   await expect(playButton).toHaveAttribute('aria-keyshortcuts', 'Space');
 
-  const openContents = page
-    .getByRole('toolbar', { name: 'Reader' })
-    .getByRole('button', { name: 'Open contents', exact: true });
+  const openContents = page.getByRole('button', { name: 'Open contents', exact: true });
   await openContents.focus();
   await page.keyboard.press('Enter');
   const contents = page.getByRole('dialog', { name: 'Contents' });

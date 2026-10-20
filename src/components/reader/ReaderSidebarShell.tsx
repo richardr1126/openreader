@@ -4,7 +4,7 @@ import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon } from '@/components/icons/Icons';
 import { useReaderSidebarBounds } from '@/hooks/useReaderSidebarBounds';
-import { IconButton } from '@/components/ui';
+import { IconButton, Tooltip } from '@/components/ui';
 
 interface ReaderSidebarShellProps {
   isOpen: boolean;
@@ -107,16 +107,17 @@ export function ReaderSidebarShell({
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {headerActions}
-                <IconButton
-                  ref={closeRef}
-                  onClick={onClose}
-                  aria-label="Close"
-                  title="Close"
-                  tone="surface"
-                  className="text-soft"
-                >
-                  <XCircleIcon className="w-4 h-4" />
-                </IconButton>
+                <Tooltip label="Close" shortcut="Esc">
+                  <IconButton
+                    ref={closeRef}
+                    onClick={onClose}
+                    aria-label="Close"
+                    tone="surface"
+                    className="text-soft"
+                  >
+                    <XCircleIcon className="w-4 h-4" />
+                  </IconButton>
+                </Tooltip>
               </div>
             </div>
 

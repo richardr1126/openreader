@@ -7,7 +7,7 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useRouter } from 'next/navigation';
 import { LogoutIcon, UserIcon } from '@/components/icons/Icons';
-import { ButtonLink, IconButton, SidebarNavLink } from '@/components/ui';
+import { ButtonLink, IconButton, SidebarNavLink, Tooltip } from '@/components/ui';
 
 type UserMenuVariant = 'toolbar' | 'sidebar';
 
@@ -84,24 +84,25 @@ export function UserMenu({
           icon={<UserIcon className="h-3.5 w-3.5" />}
           label={accountLabel}
         />
-        <IconButton
-          onClick={handleSignOut}
-          title="Sign out"
-          aria-label="Sign out"
-          size="xs"
-          className="h-auto w-8 self-stretch rounded-none border-l border-line-soft hover:bg-danger-wash hover:text-danger"
-        >
-          <LogoutIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        </IconButton>
+        <Tooltip label="Sign out">
+          <IconButton
+            onClick={handleSignOut}
+            aria-label="Sign out"
+            size="xs"
+            className="h-auto w-8 self-stretch rounded-none border-l border-line-soft hover:bg-danger-wash hover:text-danger"
+          >
+            <LogoutIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          </IconButton>
+        </Tooltip>
       </div>
     );
   }
 
   return (
     <div className={`flex h-7 min-w-0 items-stretch overflow-hidden rounded-md border border-line bg-surface ${className}`}>
+      <Tooltip label="Account settings">
       <Link
         href="/app/settings?section=account"
-        title="Account settings"
         aria-label="Open account settings"
         className="group flex min-w-0 items-center gap-1.5 px-2 text-[11px] font-medium text-foreground transition-colors duration-base hover:bg-accent-wash hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
       >
@@ -110,16 +111,18 @@ export function UserMenu({
           {accountLabel}
         </span>
       </Link>
+      </Tooltip>
 
-      <IconButton
-        onClick={handleSignOut}
-        title="Sign out"
-        aria-label="Sign out"
-        size="xs"
-        className="h-full w-7 rounded-none border-l border-line-soft hover:bg-danger-wash hover:text-danger"
-      >
-        <LogoutIcon className="h-3.5 w-3.5" aria-hidden />
-      </IconButton>
+      <Tooltip label="Sign out">
+        <IconButton
+          onClick={handleSignOut}
+          aria-label="Sign out"
+          size="xs"
+          className="h-full w-7 rounded-none border-l border-line-soft hover:bg-danger-wash hover:text-danger"
+        >
+          <LogoutIcon className="h-3.5 w-3.5" aria-hidden />
+        </IconButton>
+      </Tooltip>
     </div>
   );
 }

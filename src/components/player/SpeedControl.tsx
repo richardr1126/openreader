@@ -3,7 +3,7 @@
 import { ChevronUpDownIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useCallback, useEffect, useState } from 'react';
-import { PopoverRoot, PopoverSurface, PopoverTrigger, RangeInput } from '@/components/ui';
+import { PopoverRoot, PopoverSurface, PopoverTrigger, RangeInput, Tooltip } from '@/components/ui';
 
 export const MIN_SPEED = 0.5;
 export const MAX_SPEED = 3;
@@ -42,6 +42,7 @@ export const SpeedControl = ({
 
   return (
     <PopoverRoot className="relative">
+      <Tooltip label="Playback speed" side="top">
       <PopoverTrigger
         disabled={disabled}
         aria-label={`Playback speed ${formatSpeed(localAudioSpeed)}`}
@@ -51,6 +52,7 @@ export const SpeedControl = ({
         <span>{formatSpeed(localAudioSpeed)}</span>
         <ChevronUpDownIcon className="h-2.5 w-2.5 sm:h-3 sm:w-3" />
       </PopoverTrigger>
+      </Tooltip>
       <PopoverSurface anchor="top">
         <div className="flex flex-col space-y-2">
           <div className="text-xs font-medium text-foreground">Playback speed</div>

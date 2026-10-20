@@ -15,12 +15,8 @@ export function useReaderSidebarBounds(isOpen: boolean): ReaderSidebarBounds {
 
     const computeBounds = () => {
       const header = document.querySelector('[data-app-header]') as HTMLElement | null;
-      const toolbar = document.querySelector('[data-reader-toolbar]') as HTMLElement | null;
       const ttsbar = document.querySelector('[data-app-ttsbar]') as HTMLElement | null;
-      const contentTop = Math.ceil(Math.max(
-        header?.getBoundingClientRect().bottom ?? 0,
-        toolbar?.getBoundingClientRect().bottom ?? 0,
-      ));
+      const contentTop = Math.ceil(header?.getBoundingClientRect().bottom ?? 0);
       const ttsH = ttsbar ? Math.ceil(ttsbar.getBoundingClientRect().height) : 0;
       setBounds({ top: contentTop, bottom: ttsH });
     };

@@ -6,6 +6,7 @@ import { AudioWaveIcon, InfoIcon } from '@/components/icons/Icons';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { formatVoiceDockLabel } from '@/lib/client/tts/voice-draft';
+import { Tooltip, cn, focusRing } from '@/components/ui';
 
 /** The dock's voice button: shows the applied voice and opens the voice panel. */
 export const VoicesControl = ({ disabled = false, onOpen }: {
@@ -30,6 +31,7 @@ export const VoicesControl = ({ disabled = false, onOpen }: {
 
   return (
     <div className="flex items-center gap-1">
+      <Tooltip label="Voice" side="top">
       <button
         type="button"
         onClick={onOpen}
@@ -41,14 +43,19 @@ export const VoicesControl = ({ disabled = false, onOpen }: {
         <AudioWaveIcon className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         <span className="truncate">{label}</span>
       </button>
+      </Tooltip>
       {languageWarnings.length > 0 ? (
-        <span
-          aria-label="Voice language warning"
-          title={languageWarnings.join(' ')}
-          className="text-warning"
-        >
-          <InfoIcon className="h-3.5 w-3.5" />
-        </span>
+        <Tooltip label={languageWarnings.join(' ')} side="top">
+          {/* Focusable so keyboard users can open the same explanation. */}
+          <span
+            role="img"
+            tabIndex={0}
+            aria-label={`Voice language warning: ${languageWarnings.join(' ')}`}
+            className={cn('rounded-sm text-warning', focusRing)}
+          >
+            <InfoIcon aria-hidden="true" className="h-3.5 w-3.5" />
+          </span>
+        </Tooltip>
       ) : null}
     </div>
   );

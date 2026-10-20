@@ -22,14 +22,14 @@ import {
   type OutlineEntry,
 } from '@/lib/client/reader/chapters';
 
-export type ReaderNavigationPanel = 'contents' | 'search' | 'bookmarks';
+export type ReaderNavigationPanel = 'contents' | 'bookmarks';
 
 export function isReaderNavigationPanel(value: string | null): value is ReaderNavigationPanel {
-  return value === 'contents' || value === 'search' || value === 'bookmarks';
+  return value === 'contents' || value === 'bookmarks';
 }
 
 /**
- * Contents, find-in-book and bookmarks for every reader. Each resolves to a
+ * Contents (with find in book at its top) and bookmarks for every reader. Each resolves to a
  * worker-plan ordinal and seeks through the same command as tapping a
  * sentence, so none creates a playback session or moves the view
  * independently of the playback cursor.
@@ -55,19 +55,9 @@ export function ReaderNavigationSidebars({
         ariaLabel="Contents"
         title="Contents"
         panelClassName="w-full sm:w-[24rem]"
-        bodyClassName="flex-1 overflow-y-auto px-2 py-2"
-      >
-        <ContentsList outline={outline} documentTitle={documentTitle} onChoose={onClose} />
-      </ReaderSidebarShell>
-      <ReaderSidebarShell
-        isOpen={open === 'search'}
-        onClose={onClose}
-        ariaLabel="Find in book"
-        title="Find in book"
-        panelClassName="w-full sm:w-[24rem]"
         bodyClassName="flex-1 min-h-0 flex flex-col"
       >
-        <SearchPanel />
+        <ContentsPanel outline={outline} documentTitle={documentTitle} onChoose={onClose} />
       </ReaderSidebarShell>
       <ReaderSidebarShell
         isOpen={open === 'bookmarks'}
@@ -134,30 +124,48 @@ function ContentsList({
   );
 }
 
-function SearchPanel() {
+/** Chapters, replaced by find-in-book matches while the field holds a query. */
+function ContentsPanel({
+  outline,
+  documentTitle,
+  onChoose,
+}: {
+  outline: readonly OutlineEntry[];
+  documentTitle: string;
+  onChoose: () => void;
+}) {
   const { playbackSegments, skipToOrdinal } = useTTS();
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
-  // Built once per open panel and plan; the panel unmounts when closed.
-  const index = useMemo(() => buildBookSearchIndex(playbackSegments), [playbackSegments]);
+  const trimmed = deferredQuery.trim();
+  const searching = trimmed.length > 0;
+  // Built on the first query of an open panel; the panel unmounts when closed.
+  const index = useMemo(
+    () => (searching ? buildBookSearchIndex(playbackSegments) : null),
+    [playbackSegments, searching],
+  );
   const results = useMemo(
-    () => searchBookIndex(index, deferredQuery, BOOK_SEARCH_RESULT_LIMIT),
+    () => (index ? searchBookIndex(index, deferredQuery, BOOK_SEARCH_RESULT_LIMIT) : []),
     [deferredQuery, index],
   );
-  const trimmed = deferredQuery.trim();
 
   return (
     <>
       <div className="border-b border-line-soft px-4 py-3">
         <SearchField
-          autoFocus
           aria-label="Find in book"
           placeholder="Find in book"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape' && query) {
+              event.stopPropagation();
+              setQuery('');
+            }
+          }}
           icon={<SearchIcon className="h-3.5 w-3.5" />}
         />
-        {trimmed ? (
+        {searching ? (
           <p className="mt-1.5 text-xs text-soft" aria-live="polite">
             {results.length === 0
               ? 'No matches'
@@ -167,23 +175,29 @@ function SearchPanel() {
           </p>
         ) : null}
       </div>
-      <ol className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5" aria-label="Search results">
-        {results.map((result) => (
-          <li key={result.id}>
-            <button
-              type="button"
-              onClick={() => skipToOrdinal(result.ordinal)}
-              className="w-full rounded-md px-2 py-1.5 text-left text-xs leading-relaxed text-soft transition-colors duration-fast hover:bg-surface-sunken"
-            >
-              {result.snippet.slice(0, result.matchStart)}
-              <mark className="rounded-sm bg-accent-wash px-0.5 text-accent">
-                {result.snippet.slice(result.matchStart, result.matchEnd)}
-              </mark>
-              {result.snippet.slice(result.matchEnd)}
-            </button>
-          </li>
-        ))}
-      </ol>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        {searching ? (
+          <ol className="space-y-0.5" aria-label="Search results">
+            {results.map((result) => (
+              <li key={result.id}>
+                <button
+                  type="button"
+                  onClick={() => skipToOrdinal(result.ordinal)}
+                  className="w-full rounded-md px-2 py-1.5 text-left text-xs leading-relaxed text-soft transition-colors duration-fast hover:bg-surface-sunken"
+                >
+                  {result.snippet.slice(0, result.matchStart)}
+                  <mark className="rounded-sm bg-accent-wash px-0.5 text-accent">
+                    {result.snippet.slice(result.matchStart, result.matchEnd)}
+                  </mark>
+                  {result.snippet.slice(result.matchEnd)}
+                </button>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <ContentsList outline={outline} documentTitle={documentTitle} onChoose={onChoose} />
+        )}
+      </div>
     </>
   );
 }
@@ -208,7 +222,7 @@ function BookmarksPanel({ documentId }: { documentId: string }) {
   if (bookmarks.length === 0) {
     return (
       <p className="px-2 py-4 text-xs leading-relaxed text-soft">
-        No bookmarks yet. Choose Save bookmark from the toolbar’s bookmark menu to save the sentence being read.
+        No bookmarks yet. Choose Save bookmark from the ⋯ menu to save the sentence being read.
       </p>
     );
   }

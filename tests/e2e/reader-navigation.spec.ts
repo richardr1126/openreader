@@ -29,13 +29,13 @@ test('tapping a sentence, contents and find in book move the Markdown reading po
   await contents.getByRole('button', { name: 'Section One', exact: true }).click();
   await expect(sentence).toContainText('Section One');
 
-  await page.getByRole('button', { name: 'Find in book', exact: true }).click();
-  const find = page.getByRole('dialog', { name: 'Find in book' });
-  const search = find.getByRole('searchbox', { name: 'Find in book' });
-  await expect(search).toBeFocused();
+  // Searching replaces the chapter list until the query is cleared.
+  await page.getByRole('button', { name: 'Open contents', exact: true }).click();
+  await expect(contents).toBeInViewport({ ratio: 1 });
+  const search = contents.getByRole('searchbox', { name: 'Find in book' });
   await search.fill('BASIC markdown');
-  await expect(find.getByText('1 match', { exact: true })).toBeVisible();
-  await find.getByRole('list', { name: 'Search results' }).getByRole('button').first().click();
+  await expect(contents.getByText('1 match', { exact: true })).toBeVisible();
+  await contents.getByRole('list', { name: 'Search results' }).getByRole('button').first().click();
   await expect(sentence).toContainText('basic Markdown elements');
 });
 
@@ -54,15 +54,16 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
   await expect.poll(() => sentence.allTextContents().then((parts) => parts.join(' ')))
     .toBe('Visit OpenAI for more information');
 
-  const bookmarks = page.getByRole('toolbar', { name: 'Reader' })
-    .getByRole('button', { name: 'Bookmarks', exact: true });
-  await expect(bookmarks).toHaveCount(1);
-  await bookmarks.click();
-  await page.getByRole('menuitem', { name: 'Save bookmark', exact: true }).click();
-  await expect(page.getByRole('menu')).toBeHidden();
-  await bookmarks.click();
-  await expect(page.getByRole('menuitem', { name: 'Remove bookmark', exact: true })).toBeVisible();
-  await page.getByRole('menu').press('Escape');
+  const more = page.getByRole('button', { name: 'Menu', exact: true });
+  const saveBookmark = page.getByRole('button', { name: 'Save bookmark', exact: true });
+  const removeBookmark = page.getByRole('button', { name: 'Remove bookmark', exact: true });
+  await more.click();
+  await saveBookmark.click();
+  await expect(saveBookmark).toBeHidden();
+  await more.click();
+  await expect(removeBookmark).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(removeBookmark).toBeHidden();
 
   // Move away, then return through the bookmarks panel.
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
@@ -71,9 +72,9 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
   await expect(contents).toBeInViewport({ ratio: 1 });
   await contents.getByRole('button', { name: 'Section One', exact: true }).click();
   await expect(sentence).toContainText('Section One');
-  await bookmarks.click();
-  await expect(page.getByRole('menuitem', { name: 'Save bookmark', exact: true })).toBeVisible();
-  await page.getByRole('menuitem', { name: 'View bookmarks', exact: true }).click();
+  await more.click();
+  await expect(saveBookmark).toBeVisible();
+  await page.getByRole('button', { name: 'View bookmarks', exact: true }).click();
   const panel = page.getByRole('dialog', { name: 'Bookmarks' });
   const list = panel.getByRole('list', { name: 'Bookmarks' });
   await expect(panel).toBeInViewport({ ratio: 1 });
@@ -82,9 +83,9 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
   // A sentence that crosses a link is painted as one span per text run.
   await expect.poll(() => sentence.allTextContents().then((parts) => parts.join(' ')))
     .toBe('Visit OpenAI for more information');
-  await bookmarks.click();
-  await expect(page.getByRole('menuitem', { name: 'Remove bookmark', exact: true })).toBeVisible();
-  await page.getByRole('menuitem', { name: 'View bookmarks', exact: true }).click();
+  await more.click();
+  await expect(removeBookmark).toBeVisible();
+  await page.getByRole('button', { name: 'View bookmarks', exact: true }).click();
   await expect(panel).toBeInViewport({ ratio: 1 });
 
   await list.getByRole('button', { name: /^Rename bookmark/ }).click();
@@ -94,9 +95,10 @@ test('bookmarking the current sentence lists it, seeks to it, and deletes it', a
 
   await list.getByRole('button', { name: 'Delete bookmark Further reading', exact: true }).click();
   await expect(panel.getByText(/No bookmarks yet/)).toBeVisible();
-  await bookmarks.click();
-  await expect(page.getByRole('menuitem', { name: 'Save bookmark', exact: true })).toBeVisible();
-  await page.getByRole('menu').press('Escape');
+  await more.click();
+  await expect(saveBookmark).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(saveBookmark).toBeHidden();
 });
 
 test('a PDF can be read as flowing text and tapped to seek', async ({ page }) => {
@@ -115,18 +117,20 @@ test('a PDF can be read as flowing text and tapped to seek', async ({ page }) =>
   await expect(showPages).not.toBeChecked();
   await page.getByRole('button', { name: 'Hide settings', exact: true }).click();
 
-  await expect(page.getByRole('toolbar', { name: 'Reader' })).toBeVisible();
   const reader = page.getByTestId('text-reader');
   const target = reader.getByText('This is chapter one text used for integration tests.');
   await expect(target).toBeVisible();
 
-  // Flowing text has no page scale, so the toolbar control narrows the column instead.
-  const zoomControls = page.getByRole('toolbar', { name: 'Reader' }).getByLabel('Zoom controls', { exact: true });
+  // Flowing text has no page scale, so the zoom control narrows the column instead.
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const zoomControls = page.getByLabel('Zoom controls', { exact: true });
   await expect(zoomControls).toContainText('100%');
   const fullWidth = (await reader.boundingBox())!.width;
   await zoomControls.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await expect(zoomControls).toContainText('90%');
   await expect.poll(async () => (await reader.boundingBox())!.width).toBeLessThan(fullWidth);
+  await page.keyboard.press('Escape');
+  await expect(zoomControls).toBeHidden();
   await target.click({ position: { x: 4, y: 6 } });
   await expect(reader.locator('.openreader-html-highlight-sentence').first())
     .toContainText('This is chapter one text');

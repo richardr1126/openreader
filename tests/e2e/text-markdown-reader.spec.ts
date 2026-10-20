@@ -33,9 +33,7 @@ test('anonymous user reads literal text and semantic Markdown', async ({ page })
   ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'English', exact: true })).toHaveCount(0);
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
-  await expect(
-    page.getByRole('toolbar', { name: 'Reader' }).getByRole('button', { name: 'Open contents', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open contents', exact: true })).toBeVisible();
 
   const textReaderUrl = page.url();
   await page.reload();
@@ -74,7 +72,5 @@ test('anonymous user reads literal text and semantic Markdown', async ({ page })
   );
   await expect(page.getByText("console.log('hello markdown');", { exact: true })).toBeVisible();
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
-  await expect(
-    page.getByRole('toolbar', { name: 'Reader' }).getByRole('button', { name: 'Find in book', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open contents', exact: true })).toBeVisible();
 });

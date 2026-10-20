@@ -4,7 +4,7 @@ import { cn } from './cn';
 import { IconButton } from './icon-button';
 
 const popoverPanelClass = cn(
-  'z-50 rounded-md border border-line bg-surface p-3 shadow-elev-2 focus:outline-none',
+  'z-50 rounded-md border border-line bg-surface shadow-elev-2 focus:outline-none',
 );
 
 export const PopoverRoot = Popover;
@@ -36,12 +36,16 @@ export function PopoverIconTrigger({
 }
 
 export function PopoverSurface({
+  flush = false,
   className,
   children,
   ...props
-}: ComponentProps<typeof PopoverPanel>) {
+}: ComponentProps<typeof PopoverPanel> & {
+  /** Rows that run edge to edge, such as a menu, set their own padding. */
+  flush?: boolean;
+}) {
   return (
-    <PopoverPanel className={cn(popoverPanelClass, className)} {...props}>
+    <PopoverPanel className={cn(popoverPanelClass, !flush && 'p-3', className)} {...props}>
       {children}
     </PopoverPanel>
   );

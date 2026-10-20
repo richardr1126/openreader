@@ -12,7 +12,6 @@ import { ReaderHeader } from '@/components/reader/ReaderHeader';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
-import { ZoomControl } from '@/components/documents/ZoomControl';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
@@ -22,7 +21,7 @@ import { useEpubDocument } from './useEpubDocument';
 import { epubTocOutline, findEpubTocTitle } from '@/lib/client/epub/toc-titles';
 import { useConfig } from '@/contexts/ConfigContext';
 import { PlanTextReader } from '@/components/views/HTMLViewer';
-import { ReaderPager, ReaderPosition, ReaderToolbar, ReadingProgress } from '@/components/reader/ReaderToolbar';
+import { ReaderPager, ReaderPosition, ReadingProgress } from '@/components/reader/ReaderNavigator';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import type { TtsExportChapterProgress } from '@/types/tts-export';
@@ -142,36 +141,24 @@ function EpubReader({
               isSettingsOpen={activeSidebar === 'settings'}
               isAudiobookOpen={activeSidebar === 'audiobook'}
               showAudiobookExport={canExportAudiobook}
+              reader={{
+                contentsOpen: navigationPanel === 'contents',
+                onToggleContents: () => toggleNavigationPanel('contents'),
+                sentenceBookmark,
+                onViewBookmarks: () => setActiveSidebar('bookmarks'),
+                zoom: {
+                  value: padPct,
+                  onIncrease: () => setPadPct(p => Math.min(p + 10, 100)),
+                  onDecrease: () => setPadPct(p => Math.max(p - 10, 0)),
+                  min: 0,
+                  max: 100,
+                },
+              }}
             />
           </div>
         ) : null}
       />
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight ?? 0 }}>
-        <ReaderToolbar
-          hidden={!rendererReady}
-          activePanel={navigationPanel}
-          onTogglePanel={toggleNavigationPanel}
-          sentenceBookmark={sentenceBookmark}
-          navigation={readerShowsLayout ? (
-            <ReaderPager
-              unit="section"
-              onPrevious={() => epubState.handleLocationChanged('prev')}
-              onNext={() => epubState.handleLocationChanged('next')}
-              position={typeof epubState.currDocPage === 'number' && epubState.currDocPages !== undefined
-                ? <ReaderPosition current={epubState.currDocPage} total={epubState.currDocPages} />
-                : null}
-            />
-          ) : <ReadingProgress />}
-          zoom={(
-            <ZoomControl
-              value={padPct}
-              onIncrease={() => setPadPct(p => Math.min(p + 10, 100))}
-              onDecrease={() => setPadPct(p => Math.max(p - 10, 0))}
-              min={0}
-              max={100}
-            />
-          )}
-        />
         {epubState.currDocData && containerHeight !== null ? (
           <div
             id="main-content"
@@ -203,7 +190,18 @@ function EpubReader({
           resolveChapterTitle={resolveChapterTitle}
         />
       )}
-      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')} />
+      <TTSPlayer isPlaybackReady={isPlaybackReady} hasReadableContent={sentences.length > 0} documentTitle={currDocName || payload.document.name} onOpenVoicePanel={() => setActiveSidebar('voice')}
+        navigator={readerShowsLayout ? (
+          <ReaderPager
+            unit="section"
+            onPrevious={() => epubState.handleLocationChanged('prev')}
+            onNext={() => epubState.handleLocationChanged('next')}
+            position={typeof epubState.currDocPage === 'number' && epubState.currDocPages !== undefined
+              ? <ReaderPosition current={epubState.currDocPage} total={epubState.currDocPages} />
+              : null}
+          />
+        ) : <ReadingProgress />}
+      />
       <VoiceSidebar
         isOpen={activeSidebar === 'voice'}
         onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}

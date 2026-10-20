@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { useTTS, useTTSPlaybackProgress } from '@/contexts/TTSContext';
 import { measurePlaybackBuffer } from '@openreader/tts/playback-buffer';
@@ -13,7 +13,7 @@ import {
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { VoicesControl } from '@/components/player/VoicesControl';
 import { MAX_SPEED, MIN_SPEED, SpeedControl } from '@/components/player/SpeedControl';
-import { IconButton } from '@/components/ui';
+import { IconButton, Tooltip, cn, focusRing, motionColors } from '@/components/ui';
 import { formatPlaybackTime } from '@/lib/client/format-playback-time';
 import { resolvePlaybackControlPresentation } from '@/lib/client/tts/playback-control';
 import {
@@ -61,9 +61,11 @@ function PlaybackLoadingRing() {
   );
 }
 
-export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel }: {
+export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel, navigator }: {
   /** Opens the reader's voice panel; the reader page owns which sidebar is open. */
   onOpenVoicePanel: () => void;
+  /** The reader's page or section stepper, floated above the dock's top edge. */
+  navigator?: ReactNode;
   /** Shown by the OS media controls (lock screen, hardware keys). */
   documentTitle?: string;
   isPlaybackReady?: boolean;
@@ -190,6 +192,21 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
       statusMessage={shownModelDownload?.statusMessage}
     />
     <section aria-label="Playback controls" className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-sm sm:shadow-none" data-app-ttsbar>
+      {navigator ? (
+        <div
+          role="group"
+          aria-label="Reading position"
+          className={cn(
+            // Bottom-aligned with the Undo chip, which sits on the scrubber's top edge.
+            // Collapses while the navigator renders nothing, e.g. before the plan is ready.
+            'absolute bottom-full left-1/2 z-40 mb-[18px] flex h-7 empty:hidden -translate-x-1/2 items-center rounded-full border border-line-soft bg-surface-solid px-0.5 text-xs text-soft shadow-elev-2 transition-opacity duration-fast ease-standard sm:mb-[13px]',
+            // The scrub preview's time label takes this space while dragging.
+            previewSec !== null && 'pointer-events-none opacity-0',
+          )}
+        >
+          {navigator}
+        </div>
+      ) : null}
       {/* Top Edge Scrubber bar */}
       <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:-top-[5px] sm:h-2.5">
         {/* Rail: the whole document. Foreground-mixed so it stays visible in dark themes. */}
@@ -271,12 +288,16 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           </div>
         )}
         {scrubUndo && previewSec === null && (
+          <Tooltip label="Return to where you were before scrubbing" side="top">
           <button
             type="button"
             onClick={undoScrub}
             aria-label="Undo scrub"
-            title="Return to where you were before scrubbing"
-            className="absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-accent shadow-elev-2 hover:bg-accent-wash focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            className={cn(
+              'absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-elev-2 hover:border-accent-line hover:bg-accent-wash hover:text-accent',
+              focusRing,
+              motionColors,
+            )}
           >
             <svg aria-hidden viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 4 3 7l3 3" />
@@ -284,6 +305,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             </svg>
             Undo
           </button>
+          </Tooltip>
         )}
       </div>
 
@@ -303,19 +325,22 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
 
         {/* Center: Primary playback controls */}
         <div className="col-start-2 row-start-2 flex items-center gap-2 sm:gap-1.5">
-          <IconButton
-            onClick={skipBackward}
-            aria-label="Skip backward"
-            aria-keyshortcuts={playbackShortcuts ? 'ArrowLeft' : undefined}
-            disabled={!canSkip}
-            className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
-          >
-            <SkipBackwardIcon className="w-5 h-5" />
-          </IconButton>
+          <Tooltip label="Skip backward" shortcut={playbackShortcuts ? '←' : undefined} side="top">
+            <IconButton
+              onClick={skipBackward}
+              aria-label="Skip backward"
+              aria-keyshortcuts={playbackShortcuts ? 'ArrowLeft' : undefined}
+              disabled={!canSkip}
+              className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
+            >
+              <SkipBackwardIcon className="w-5 h-5" />
+            </IconButton>
+          </Tooltip>
 
           {/* Loading is cancelable through this same control. Keep it focusable
               when cancellation flips intent back to Play, even if an older async
               render has not cleared its processing flag yet. */}
+          <Tooltip label={playbackControl.ariaLabel} shortcut={playbackShortcuts ? 'Space' : undefined} side="top">
           <IconButton
             onClick={togglePlay}
             aria-label={playbackControl.ariaLabel}
@@ -329,16 +354,19 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
               ? <PauseIcon className={showLoadingRing ? 'w-3.5 h-3.5' : 'w-5 h-5'} />
               : <PlayIcon className={showLoadingRing ? 'w-3.5 h-3.5' : 'w-5 h-5'} />}
           </IconButton>
+          </Tooltip>
 
-          <IconButton
-            onClick={skipForward}
-            aria-label="Skip forward"
-            aria-keyshortcuts={playbackShortcuts ? 'ArrowRight' : undefined}
-            disabled={!canSkip}
-            className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
-          >
-            <SkipForwardIcon className="w-5 h-5" />
-          </IconButton>
+          <Tooltip label="Skip forward" shortcut={playbackShortcuts ? '→' : undefined} side="top">
+            <IconButton
+              onClick={skipForward}
+              aria-label="Skip forward"
+              aria-keyshortcuts={playbackShortcuts ? 'ArrowRight' : undefined}
+              disabled={!canSkip}
+              className="relative h-9 w-9 rounded-full sm:h-8 sm:w-8 sm:rounded-md"
+            >
+              <SkipForwardIcon className="w-5 h-5" />
+            </IconButton>
+          </Tooltip>
         </div>
 
         {/* Right side: timer and buffer display */}
