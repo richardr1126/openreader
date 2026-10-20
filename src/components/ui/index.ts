@@ -24,3 +24,4 @@ export * from './toolbar';
 export * from './tooltip';
 export * from './variants';
 export * from './sidebar-dialog';
+export * from './save-bar';

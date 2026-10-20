@@ -4,54 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { BookIcon, CheckIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
-import { LoadingSpinner } from '@/components/Spinner';
-import { Button, IconButton, Input, RangeField, Section, cn } from '@/components/ui';
+import { BookIcon } from '@/components/icons/Icons';
+import { Button, RangeField, Section } from '@/components/ui';
+import { SELECTION_PREVIEW_KEY, VoicePicker, VoicePreviewButton, type VoicePickerPreview } from '@/components/player/VoicePicker';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
-import { useVoicePreview, type VoicePreviewState } from '@/hooks/audio/useVoicePreview';
+import { useVoicePreview } from '@/hooks/audio/useVoicePreview';
 import { getTtsLanguageCompatibilityWarnings, resolveTtsLanguage } from '@openreader/tts/language';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import {
   describePendingVoiceChanges,
   formatModelSpeed,
-  groupVoices,
   pendingVoiceSettings,
-  selectedVoicesFor,
-  toggleDraftVoice,
-  voiceStringFor,
   type VoicePickPolicy,
   type VoiceSettingsDraft,
 } from '@/lib/client/tts/voice-draft';
 import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
-
-const DRAFT_PREVIEW_KEY = 'draft';
-
-function PreviewButton({ previewKey, label, state, disabled, onPlay, onStop }: {
-  previewKey: string;
-  label: string;
-  state: VoicePreviewState;
-  disabled?: boolean;
-  onPlay: () => void;
-  onStop: () => void;
-}) {
-  const active = state.phase !== 'idle' && state.phase !== 'error' && state.key === previewKey;
-  return (
-    <IconButton
-      onClick={active ? onStop : onPlay}
-      disabled={disabled}
-      aria-label={active ? `Stop preview of ${label}` : `Preview ${label}`}
-      aria-busy={active && state.phase === 'loading'}
-      tone="surface"
-      className="h-7 w-7 shrink-0 rounded-full text-soft hover:text-accent"
-    >
-      {active && state.phase === 'loading'
-        ? <LoadingSpinner className="h-3.5 w-3.5" />
-        : active
-          ? <PauseIcon className="h-3.5 w-3.5" />
-          : <PlayIcon className="h-3.5 w-3.5" />}
-    </IconButton>
-  );
-}
 
 /**
  * The reader's voice panel. Voice and model-speed picks are a draft: they
@@ -94,7 +61,6 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   const draft: VoiceSettingsDraft = { ...applied, ...edits };
   const pending = pendingVoiceSettings(applied, draft);
   const pendingLines = describePendingVoiceChanges(applied, draft);
-  const [query, setQuery] = useState('');
 
   const preview = useVoicePreview({ isPlaying, pausePlayback: pause });
   const { stop: stopPreview } = preview;
@@ -102,7 +68,6 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   const close = useCallback(() => {
     stopPreview();
     setEdits({});
-    setQuery('');
     onClose();
   }, [onClose, stopPreview]);
 
@@ -110,15 +75,9 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     if (!isOpen) {
       stopPreview();
       setEdits({});
-      setQuery('');
     }
   }, [isOpen, stopPreview]);
 
-  const selectedVoices = selectedVoicesFor(draft.voice, availableVoices, pickPolicy);
-  const groups = useMemo(
-    () => groupVoices(availableVoices, query, policy.isKokoroModel),
-    [availableVoices, policy.isKokoroModel, query],
-  );
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     providerType: policy.providerType,
@@ -154,10 +113,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     ttsModel,
   ]);
 
-  const pickVoice = (voiceId: string) => {
-    const next = voiceStringFor(toggleDraftVoice(selectedVoices, voiceId, pickPolicy), pickPolicy);
-    if (next) setEdits((current) => ({ ...current, voice: next }));
-  };
+  const pickerPreview: VoicePickerPreview = { state: preview.state, play: playPreview, stop: stopPreview };
 
   const apply = () => {
     if (!pending) return;
@@ -182,8 +138,6 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
       </div>
     </div>
   ) : null;
-
-  const previewError = preview.state.phase === 'error' ? preview.state : null;
 
   return (
     <ReaderSidebarShell
@@ -243,84 +197,29 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
           action={availableVoices.length > 0 ? (
             <span className="flex items-center gap-1.5">
               <span>Preview selection</span>
-              <PreviewButton
-                previewKey={DRAFT_PREVIEW_KEY}
+              <VoicePreviewButton
+                previewKey={SELECTION_PREVIEW_KEY}
                 label="selection"
-                state={preview.state}
+                preview={pickerPreview}
                 disabled={!draft.voice}
-                onPlay={() => playPreview(DRAFT_PREVIEW_KEY, draft.voice)}
-                onStop={stopPreview}
+                voice={draft.voice}
               />
             </span>
           ) : undefined}
         >
-          <div className="space-y-2">
-            <Input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={policy.isKokoroModel ? 'Search voices or languages' : 'Search voices'}
-              aria-label="Search voices"
-              controlSize="sm"
-            />
-            {languageWarnings.map((warning) => (
+          {/* Remounting on open starts each visit with an empty search. */}
+          <VoicePicker
+            key={isOpen ? 'open' : 'closed'}
+            voices={availableVoices}
+            value={draft.voice}
+            onChange={(voice) => setEdits((current) => ({ ...current, voice }))}
+            pickPolicy={pickPolicy}
+            groupByLanguage={policy.isKokoroModel}
+            preview={pickerPreview}
+            notices={languageWarnings.map((warning) => (
               <p key={warning} className="text-xs text-warning">{warning}</p>
             ))}
-            {previewError && (
-              <p role="status" className="text-xs text-warning">{previewError.message}</p>
-            )}
-            {availableVoices.length === 0 ? (
-              <p className="py-2 text-sm text-soft">No voices are available for this model.</p>
-            ) : groups.length === 0 ? (
-              <p className="py-2 text-sm text-soft">No voices match “{query.trim()}”.</p>
-            ) : (
-              <div className="space-y-3 pt-1">
-                {groups.map((group) => (
-                  <div key={group.key} role="group" aria-label={group.label}>
-                    {groups.length > 1 || policy.isKokoroModel ? (
-                      <h4 className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-faint">
-                        {group.label}
-                      </h4>
-                    ) : null}
-                    <ul className="space-y-0.5">
-                      {group.voices.map((voiceId) => {
-                        const selected = selectedVoices.includes(voiceId);
-                        return (
-                          <li
-                            key={voiceId}
-                            className={cn(
-                              'flex items-center gap-2 rounded-md pl-1 pr-2',
-                              selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken',
-                            )}
-                          >
-                            <PreviewButton
-                              previewKey={voiceId}
-                              label={voiceId}
-                              state={preview.state}
-                              onPlay={() => playPreview(voiceId, voiceId)}
-                              onStop={stopPreview}
-                            />
-                            <button
-                              type="button"
-                              aria-pressed={selected}
-                              onClick={() => pickVoice(voiceId)}
-                              className={cn(
-                                'flex min-w-0 flex-1 items-center justify-between gap-2 py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded',
-                                selected ? 'font-medium text-accent' : 'text-foreground',
-                              )}
-                            >
-                              <span className="truncate">{voiceId}</span>
-                              {selected ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden /> : null}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          />
         </Section>
       </div>
     </ReaderSidebarShell>

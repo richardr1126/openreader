@@ -1,0 +1,147 @@
+'use client';
+
+import { useMemo, useState, type ReactNode } from 'react';
+import { CheckIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
+import { LoadingSpinner } from '@/components/Spinner';
+import { IconButton, Input, cn } from '@/components/ui';
+import type { VoicePreviewState } from '@/hooks/audio/useVoicePreview';
+import {
+  groupVoices,
+  selectedVoicesFor,
+  toggleDraftVoice,
+  voiceStringFor,
+  type VoicePickPolicy,
+} from '@/lib/client/tts/voice-draft';
+
+/** The preview key for "the voice as currently picked", beside per-voice keys. */
+export const SELECTION_PREVIEW_KEY = 'selection';
+
+export interface VoicePickerPreview {
+  state: VoicePreviewState;
+  play: (key: string, voice: string) => void;
+  stop: () => void;
+}
+
+export function VoicePreviewButton({ previewKey, label, preview, disabled, voice }: {
+  previewKey: string;
+  label: string;
+  preview: VoicePickerPreview;
+  disabled?: boolean;
+  voice: string;
+}) {
+  const { state } = preview;
+  const active = state.phase !== 'idle' && state.phase !== 'error' && state.key === previewKey;
+  return (
+    <IconButton
+      onClick={active ? preview.stop : () => preview.play(previewKey, voice)}
+      disabled={disabled}
+      aria-label={active ? `Stop preview of ${label}` : `Preview ${label}`}
+      aria-busy={active && state.phase === 'loading'}
+      tone="surface"
+      className="h-7 w-7 shrink-0 rounded-full text-soft hover:text-accent"
+    >
+      {active && state.phase === 'loading'
+        ? <LoadingSpinner className="h-3.5 w-3.5" />
+        : active
+          ? <PauseIcon className="h-3.5 w-3.5" />
+          : <PlayIcon className="h-3.5 w-3.5" />}
+    </IconButton>
+  );
+}
+
+/**
+ * The searchable voice list with a sample per voice. Kokoro voices group by
+ * language and, where the provider allows, blend when several are picked.
+ * The reader's voice panel and the default-voice setting share it.
+ */
+export function VoicePicker({
+  voices,
+  value,
+  onChange,
+  pickPolicy,
+  groupByLanguage,
+  preview,
+  notices,
+}: {
+  voices: string[];
+  /** The voice string: one id, or a Kokoro blend. */
+  value: string;
+  onChange: (voice: string) => void;
+  pickPolicy: VoicePickPolicy;
+  groupByLanguage: boolean;
+  preview: VoicePickerPreview;
+  /** Warnings shown between the search field and the list. */
+  notices?: ReactNode;
+}) {
+  const [query, setQuery] = useState('');
+  const selectedVoices = selectedVoicesFor(value, voices, pickPolicy);
+  const groups = useMemo(() => groupVoices(voices, query, groupByLanguage), [voices, query, groupByLanguage]);
+  const previewError = preview.state.phase === 'error' ? preview.state : null;
+
+  const pick = (voiceId: string) => {
+    const next = voiceStringFor(toggleDraftVoice(selectedVoices, voiceId, pickPolicy), pickPolicy);
+    if (next) onChange(next);
+  };
+
+  return (
+    <div className="space-y-2">
+      <Input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        placeholder={groupByLanguage ? 'Search voices or languages' : 'Search voices'}
+        aria-label="Search voices"
+        controlSize="sm"
+      />
+      {notices}
+      {previewError && (
+        <p role="status" className="text-xs text-warning">{previewError.message}</p>
+      )}
+      {voices.length === 0 ? (
+        <p className="py-2 text-sm text-soft">No voices are available for this model.</p>
+      ) : groups.length === 0 ? (
+        <p className="py-2 text-sm text-soft">No voices match “{query.trim()}”.</p>
+      ) : (
+        <div className="space-y-3 pt-1">
+          {groups.map((group) => (
+            <div key={group.key} role="group" aria-label={group.label}>
+              {groups.length > 1 || groupByLanguage ? (
+                <h4 className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-faint">
+                  {group.label}
+                </h4>
+              ) : null}
+              <ul className="space-y-0.5">
+                {group.voices.map((voiceId) => {
+                  const selected = selectedVoices.includes(voiceId);
+                  return (
+                    <li
+                      key={voiceId}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md pl-1 pr-2',
+                        selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken',
+                      )}
+                    >
+                      <VoicePreviewButton previewKey={voiceId} label={voiceId} preview={preview} voice={voiceId} />
+                      <button
+                        type="button"
+                        aria-pressed={selected}
+                        onClick={() => pick(voiceId)}
+                        className={cn(
+                          'flex min-w-0 flex-1 items-center justify-between gap-2 rounded py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                          selected ? 'font-medium text-accent' : 'text-foreground',
+                        )}
+                      >
+                        <span className="truncate">{voiceId}</span>
+                        {selected ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden /> : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

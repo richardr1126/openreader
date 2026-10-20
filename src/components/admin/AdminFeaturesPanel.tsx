@@ -14,7 +14,7 @@ import {
   Select,
   SelectOptionDetail,
   SegmentedControl,
-  Button,
+  SaveBar,
   InlineButton,
   Input,
 } from '@/components/ui';
@@ -421,29 +421,7 @@ export function AdminFeaturesPanel({
       </Section> : null}
 
       {dirty.size > 0 || saving ? (
-        <div className="sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-lg border border-line bg-surface-solid px-3 py-2 shadow-elev-3">
-          <p className="text-xs text-soft">
-            {dirty.size} unsaved change{dirty.size === 1 ? '' : 's'}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              onClick={discardAll}
-              disabled={dirty.size === 0 || saving}
-              variant="secondary"
-              size="sm"
-            >
-              Discard
-            </Button>
-            <Button
-              onClick={saveAll}
-              disabled={dirty.size === 0 || saving}
-              variant="primary"
-              size="sm"
-            >
-              {saving ? 'Saving…' : `Save (${dirty.size})`}
-            </Button>
-          </div>
-        </div>
+        <SaveBar count={dirty.size} saving={saving} onDiscard={discardAll} onSave={saveAll} />
       ) : null}
     </div>
   );

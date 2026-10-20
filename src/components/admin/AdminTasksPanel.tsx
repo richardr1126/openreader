@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
-import { Button, InfoTip, Input, RowIcon, Section, Switch } from '@/components/ui';
+import { Button, InfoTip, Input, RowIcon, SaveBar, Section, Switch } from '@/components/ui';
 import {
   ClockIcon, HeadphonesIcon, RefreshIcon, SlidersIcon, TrashIcon, UploadIcon, WrenchIcon,
 } from '@/components/icons/Icons';
@@ -103,6 +103,18 @@ export function AdminTasksPanel() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: tasksQueryKey });
 
+  // Interval edits wait for the save bar; switches and Run now act at once.
+  const [intervalDrafts, setIntervalDrafts] = useState<Record<string, string>>({});
+  const minimumIntervalMs = data?.scheduler.minimumIntervalMs ?? 60_000;
+  const dirtyIntervals = (data?.tasks ?? []).flatMap((task) => {
+    const draft = intervalDrafts[task.key];
+    if (draft === undefined) return [];
+    const intervalMs = parseFloat(draft) * 60000;
+    return Number.isFinite(intervalMs) && intervalMs >= minimumIntervalMs && intervalMs !== task.intervalMs
+      ? [{ key: task.key, intervalMs }]
+      : [];
+  });
+
   const patchTask = useMutation({
     mutationFn: async ({ key, patch }: { key: string; patch: { enabled?: boolean; intervalMs?: number } }) => {
       const res = await fetch(`/api/admin/tasks/${encodeURIComponent(key)}`, {
@@ -114,6 +126,28 @@ export function AdminTasksPanel() {
     },
     onSuccess: invalidate,
     onError: () => toast.error('Update failed'),
+  });
+
+  const saveIntervals = useMutation({
+    mutationFn: async (changes: Array<{ key: string; intervalMs: number }>) => {
+      for (const { key, intervalMs } of changes) {
+        const res = await fetch(`/api/admin/tasks/${encodeURIComponent(key)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ intervalMs }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      }
+    },
+    onSuccess: async () => {
+      await invalidate();
+      setIntervalDrafts({});
+      toast.success('Task intervals saved');
+    },
+    onError: () => {
+      toast.error('Save failed');
+      void invalidate();
+    },
   });
 
   const runTask = useMutation({
@@ -130,36 +164,47 @@ export function AdminTasksPanel() {
   });
 
   return (
-    <Section
-      variant="group"
-      title="Scheduled tasks"
-      footer={data?.scheduler.mode === 'vercel-cron'
-        ? 'Vercel Hobby runs scheduled tasks once daily, so shorter intervals do not apply here.'
-        : undefined}
-    >
-      {isLoading ? (
-        <TasksSkeleton />
-      ) : (
-        <ul className="divide-y divide-line-soft !p-0">
-          {(data?.tasks ?? []).map((task) => (
-            <TaskRow
-              key={task.key}
-              task={task}
-              schedulerMode={data?.scheduler.mode ?? 'self-hosted'}
-              minimumIntervalMs={data?.scheduler.minimumIntervalMs ?? 60_000}
-              busy={patchTask.isPending || runTask.isPending}
-              runPending={runTask.isPending && runTask.variables === task.key}
-              onToggle={(enabled) => patchTask.mutate({ key: task.key, patch: { enabled } })}
-              onSaveInterval={(intervalMs) => patchTask.mutate({ key: task.key, patch: { intervalMs } })}
-              onRun={() => runTask.mutate(task.key)}
-            />
-          ))}
-          {data && data.tasks.length === 0 && (
-            <li className="text-sm text-soft">No maintenance tasks registered.</li>
-          )}
-        </ul>
-      )}
-    </Section>
+    <>
+      <Section
+        variant="group"
+        title="Scheduled tasks"
+        footer={data?.scheduler.mode === 'vercel-cron'
+          ? 'Vercel Hobby runs scheduled tasks once daily, so shorter intervals do not apply here.'
+          : undefined}
+      >
+        {isLoading ? (
+          <TasksSkeleton />
+        ) : (
+          <ul className="divide-y divide-line-soft !p-0">
+            {(data?.tasks ?? []).map((task) => (
+              <TaskRow
+                key={task.key}
+                task={task}
+                schedulerMode={data?.scheduler.mode ?? 'self-hosted'}
+                minimumIntervalMs={minimumIntervalMs}
+                minutes={intervalDrafts[task.key] ?? String(task.intervalMs / 60000)}
+                onMinutesChange={(minutes) => setIntervalDrafts((current) => ({ ...current, [task.key]: minutes }))}
+                busy={patchTask.isPending || runTask.isPending || saveIntervals.isPending}
+                runPending={runTask.isPending && runTask.variables === task.key}
+                onToggle={(enabled) => patchTask.mutate({ key: task.key, patch: { enabled } })}
+                onRun={() => runTask.mutate(task.key)}
+              />
+            ))}
+            {data && data.tasks.length === 0 && (
+              <li className="text-sm text-soft">No maintenance tasks registered.</li>
+            )}
+          </ul>
+        )}
+      </Section>
+      {dirtyIntervals.length > 0 || saveIntervals.isPending ? (
+        <SaveBar
+          count={dirtyIntervals.length}
+          saving={saveIntervals.isPending}
+          onDiscard={() => setIntervalDrafts({})}
+          onSave={() => saveIntervals.mutate(dirtyIntervals)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -191,34 +236,23 @@ function TaskRow({
   task,
   schedulerMode,
   minimumIntervalMs,
+  minutes,
+  onMinutesChange,
   busy,
   runPending,
   onToggle,
-  onSaveInterval,
   onRun,
 }: {
   task: TaskView;
   schedulerMode: TaskSchedulerInfo['mode'];
   minimumIntervalMs: number;
+  minutes: string;
+  onMinutesChange: (minutes: string) => void;
   busy: boolean;
   runPending: boolean;
   onToggle: (enabled: boolean) => void;
-  onSaveInterval: (intervalMs: number) => void;
   onRun: () => void;
 }) {
-  const [minutes, setMinutes] = useState(String(task.intervalMs / 60000));
-
-  useEffect(() => {
-    setMinutes(String(task.intervalMs / 60000));
-  }, [task.intervalMs]);
-
-  const parsedMinutes = parseFloat(minutes);
-  const newIntervalMs = parsedMinutes * 60000;
-  const intervalDirty =
-    Number.isFinite(parsedMinutes)
-    && newIntervalMs >= minimumIntervalMs
-    && newIntervalMs !== task.intervalMs;
-
   const running = task.running || runPending;
 
   const about = [task.description, task.lastStatus === 'ok' ? task.lastResult : null].filter(Boolean);
@@ -262,15 +296,10 @@ function TaskRow({
             controlSize="sm"
             className="!w-16 text-center"
             value={minutes}
-            onChange={(e) => setMinutes(e.target.value)}
+            onChange={(e) => onMinutesChange(e.target.value)}
             aria-label={`${task.name} interval in minutes`}
           />
           <span>min</span>
-          {intervalDirty && (
-            <Button variant="primary" size="xs" onClick={() => onSaveInterval(newIntervalMs)} disabled={busy}>
-              Save
-            </Button>
-          )}
           <Button variant="outline" size="xs" className="whitespace-nowrap" onClick={onRun} disabled={busy || running}>
             {running ? 'Running…' : 'Run now'}
           </Button>

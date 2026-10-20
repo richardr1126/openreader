@@ -1,16 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ChatBubbleIcon, CubeIcon, MicrophoneIcon, ServerStackIcon, SpeedometerIcon } from '@/components/icons/Icons';
-import { Button, Input, RangeInput, RowIcon, Section, Select, SelectOptionDetail, SettingRow, Textarea } from '@/components/ui';
-import { LoadingSpinner } from '@/components/Spinner';
+import { ChatBubbleIcon, CubeIcon, ServerStackIcon, SpeedometerIcon } from '@/components/icons/Icons';
+import { InlineButton, Input, RangeInput, RowIcon, SaveBar, Section, Select, SelectOptionDetail, SettingRow, Textarea } from '@/components/ui';
+import { SELECTION_PREVIEW_KEY, VoicePicker, VoicePreviewButton, type VoicePickerPreview } from '@/components/player/VoicePicker';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
+import { useVoicePreview } from '@/hooks/audio/useVoicePreview';
 import { formatModelSpeed } from '@/lib/client/tts/voice-draft';
 import { MODEL_SPEED_MAX, MODEL_SPEED_MIN } from '@/lib/shared/document-settings';
+import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
+import { resolveTtsLanguage } from '@openreader/tts/language';
 import { resolveTtsSettingsViewModel } from '@/lib/client/settings/tts-settings';
 import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 import {
@@ -19,6 +22,7 @@ import {
   resolveTtsProviderModelPolicy,
 } from '@openreader/tts/provider-policy';
 
+const noop = () => {};
 
 export function ProviderSettingsPanel({
   active = true,
@@ -103,8 +107,7 @@ export function ProviderSettingsPanel({
     setLocalVoice('');
   };
 
-  useEffect(() => {
-    if (configLoading || (active && hydrated)) return;
+  const loadSaved = useCallback(() => {
     setLocalProviderRef(providerRef);
     setLocalProviderType(providerType);
     setModelValue(ttsModel);
@@ -112,8 +115,46 @@ export function ProviderSettingsPanel({
     setLocalInstructions(ttsInstructions);
     setLocalVoice(voice);
     setLocalSpeed(voiceSpeed);
+  }, [providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed]);
+
+  useEffect(() => {
+    if (configLoading || (active && hydrated)) return;
+    loadSaved();
     setHydrated(true);
-  }, [active, configLoading, hydrated, providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed]);
+  }, [active, configLoading, hydrated, loadSaved]);
+
+  // Settings has no document playing, so a preview has nothing to pause.
+  const preview = useVoicePreview({ isPlaying: false, pausePlayback: noop });
+  const { play: playSample, stop: stopPreview } = preview;
+  useEffect(() => stopPreview, [stopPreview]);
+  const playPreview = useCallback((key: string, previewVoice: string) => {
+    void playSample(key, {
+      settings: {
+        providerRef: viewModel.selectedProviderRef,
+        providerType: effectiveProviderType,
+        ttsModel: modelValue,
+        voice: previewVoice,
+        nativeSpeed: providerModelPolicy.supportsNativeModelSpeed ? localSpeed : 1,
+        ...(providerModelPolicy.supportsInstructions && localInstructions ? { ttsInstructions: localInstructions } : {}),
+        language: resolveTtsLanguage({ voice: previewVoice }),
+      },
+      text: buildVoicePreviewText({ currentSentence: null, documentLanguage: null, voice: previewVoice }),
+    });
+  }, [
+    effectiveProviderType,
+    localInstructions,
+    localSpeed,
+    modelValue,
+    playSample,
+    providerModelPolicy.supportsInstructions,
+    providerModelPolicy.supportsNativeModelSpeed,
+    viewModel.selectedProviderRef,
+  ]);
+  const pickerPreview: VoicePickerPreview = { state: preview.state, play: playPreview, stop: stopPreview };
+  const voicePickPolicy = {
+    multi: providerModelPolicy.isKokoroModel && providerModelPolicy.maxVoices > 1,
+    maxVoices: providerModelPolicy.maxVoices,
+  };
 
   useEffect(() => {
     if (!viewModel.models.some((model) => model.id === modelValue) && modelValue !== '') {
@@ -137,7 +178,7 @@ export function ProviderSettingsPanel({
     setCustomModelInput('');
   }, [selectedProvider, sharedProviders, viewModel.providers]);
 
-  const reset = () => {
+  const resetToDefaults = () => {
     const defaults = resolveProviderDefaults({
       providerRef: runtimeConfig.defaultTtsProvider,
       sharedProviders,
@@ -148,15 +189,27 @@ export function ProviderSettingsPanel({
     setLocalSpeed(1);
   };
 
-  const save = async () => {
-    const defaults = resolveProviderDefaults({
+  const finalModel = runtimeConfig.showAllProviderModels
+    ? (viewModel.selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
+    : resolveProviderDefaults({
       providerRef: viewModel.selectedProviderRef,
       providerType: viewModel.selectedProviderType,
       sharedProviders,
-    });
-    const finalModel = runtimeConfig.showAllProviderModels
-      ? (viewModel.selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
-      : defaults.defaultModel;
+    }).defaultModel;
+  const dirty = viewModel.selectedProviderRef !== providerRef
+    || viewModel.selectedProviderType !== providerType
+    || finalModel !== ttsModel
+    || localInstructions !== ttsInstructions
+    || localVoice !== voice
+    || (providerModelPolicy.supportsNativeModelSpeed && localSpeed !== voiceSpeed);
+
+  const discard = () => {
+    stopPreview();
+    loadSaved();
+  };
+
+  const save = async () => {
+    stopPreview();
     setSaving(true);
     try {
       // One request; key order matters, so the voice lands under the new provider and model.
@@ -192,7 +245,15 @@ export function ProviderSettingsPanel({
 
   return (
     <div className="space-y-5">
-      <Section title="Provider" variant="group">
+      <Section
+        title="Provider"
+        variant="group"
+        action={(
+          <InlineButton onClick={resetToDefaults} disabled={saving} className="no-underline hover:text-accent">
+            Use defaults
+          </InlineButton>
+        )}
+      >
         <SettingRow label="Provider" icon={<ServerStackIcon />}>
           {sharedProvidersLoading ? (
             <p className="text-xs text-soft">Loading providers…</p>
@@ -281,26 +342,31 @@ export function ProviderSettingsPanel({
         </SettingRow>
       </Section>
 
-      <Section title="Default voice" variant="group" subtitle="Books use this unless you pick a voice for one in the reader.">
-        <SettingRow label="Voice" icon={<MicrophoneIcon />}>
-          {voicesPending ? (
-            <p className="text-xs text-soft">Loading voices…</p>
-          ) : voiceOptions.length === 0 ? (
-            <p className="text-xs text-soft">No voices are available for this model.</p>
-          ) : (
-            <Select
-              aria-label="Default voice"
-              value={shownVoice}
-              options={voiceOptions}
-              getOptionKey={(option) => option}
-              renderValue={(option) => <span className="block truncate">{option}</span>}
-              renderOption={(option, { selected }) => (
-                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>{option}</span>
-              )}
-              onChange={setLocalVoice}
-            />
-          )}
-        </SettingRow>
+      <Section
+        title="Default voice"
+        variant="group"
+        subtitle="Books use this unless you pick a voice for one in the reader."
+        action={shownVoice ? (
+          <VoicePreviewButton
+            previewKey={SELECTION_PREVIEW_KEY}
+            label="selection"
+            preview={pickerPreview}
+            voice={shownVoice}
+          />
+        ) : null}
+      >
+        {voicesPending ? (
+          <p className="text-xs text-soft">Loading voices…</p>
+        ) : (
+          <VoicePicker
+            voices={voiceOptions}
+            value={shownVoice}
+            onChange={setLocalVoice}
+            pickPolicy={voicePickPolicy}
+            groupByLanguage={providerModelPolicy.isKokoroModel}
+            preview={pickerPreview}
+          />
+        )}
 
         {providerModelPolicy.supportsNativeModelSpeed && (
           <div className="space-y-2">
@@ -335,31 +401,14 @@ export function ProviderSettingsPanel({
         </Section>
       )}
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="secondary" size="md" onClick={reset} disabled={saving}>
-          Reset
-        </Button>
-        <Button
-          data-testid="settings-save-button"
-          type="button"
-          variant="primary"
-          size="md"
-          // While saving the button stays at full strength (not the faded
-          // disabled look) and ignores clicks, so it reads as busy.
-          disabled={!saving && (!viewModel.canSubmit || sharedProvidersLoading)}
-          aria-disabled={saving || undefined}
-          aria-busy={saving}
-          onClick={saving ? undefined : save}
-          className={saving ? 'min-w-[6.5rem] cursor-progress' : 'min-w-[6.5rem]'}
-        >
-          {saving ? (
-            <span className="inline-flex items-center gap-2">
-              <LoadingSpinner className="h-3.5 w-3.5" />
-              Saving…
-            </span>
-          ) : 'Save'}
-        </Button>
-      </div>
+      {dirty || saving ? (
+        <SaveBar
+          saving={saving}
+          saveDisabled={!viewModel.canSubmit || sharedProvidersLoading}
+          onDiscard={discard}
+          onSave={() => void save()}
+        />
+      ) : null}
     </div>
   );
 }
