@@ -17,14 +17,14 @@ Known compatible implementations: [Kokoro-FastAPI](./kokoro-fastapi), [KittenTTS
 
 ## Setup
 
-**Recommended (auth + admin): Settings → Admin → Shared providers**
+In **Settings → Admin → Providers**:
 
-1. Add a shared provider with type `custom-openai`.
+1. Add a provider with type **Custom OpenAI-like**.
 2. Set `API_BASE` to your service base URL (typically ending in `/v1`).
 3. Set API key if your service requires authentication.
 4. Set a default model/voice supported by your backend.
 
-**Bootstrap seed (optional, first boot only):**
+**Or seed it on first boot** (see [Seed a provider from the environment](../tts-providers#seed-a-provider-from-the-environment)):
 
 ```env
 API_BASE=http://your-tts-server/v1
@@ -32,12 +32,12 @@ API_BASE=http://your-tts-server/v1
 API_MODEL_NAME=your-model-name
 ```
 
-Users select the configured shared provider, model, and voice from **Settings → Model & Voice**.
+Users choose the provider, model and voice in **Settings → Model & Voice**.
 
 :::warning Provider reachability
 Speech synthesis runs in the compute worker, while optional voice discovery runs in the Next.js app
 server. The provider URL should be reachable from both. See the
-[provider topology table](../tts-providers#custom-provider-requirements) for native, Docker,
+[provider address table](../tts-providers#self-hosted-provider-addresses) for native, Docker,
 Compose, and remote-worker examples.
 :::
 

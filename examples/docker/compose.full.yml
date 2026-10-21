@@ -69,9 +69,12 @@ services:
       - "8880:8880"
 
   seaweedfs:
-    image: chrislusf/seaweedfs:4.18
+    image: chrislusf/seaweedfs:4.48
     command: ["mini", "-dir=/data"]
     environment:
+      # Data created by SeaweedFS 4.18 (OpenReader 5.3.0 and earlier) needs its
+      # existing encryption key here. See the Docker Compose docs, "Update".
+      WEED_S3_SSE_KEK: ${WEED_S3_SSE_KEK:-}
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-devkey}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-devsecret}
     healthcheck:

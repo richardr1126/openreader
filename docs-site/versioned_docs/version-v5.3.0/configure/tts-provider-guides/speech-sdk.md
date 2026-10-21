@@ -8,13 +8,13 @@ Models use the `provider/model` format. The API key you enter belongs to the pro
 
 ## Setup
 
-**Recommended (auth + admin): Settings → Admin → Shared providers**
+In **Settings → Admin → Providers**:
 
-1. Add a shared provider with type `speech-sdk`.
+1. Add a provider with type **Speech SDK**.
 2. Enter the API key for the provider you want to use.
 3. Set default model to a matching `provider/model` (for example `elevenlabs/eleven_multilingual_v2`).
 
-Users select the enabled shared provider, model, and voice from **Settings → Model & Voice**.
+Users choose the provider, model and voice in **Settings → Model & Voice**.
 
 ## Built-in models
 
@@ -49,7 +49,7 @@ ElevenLabs and Cartesia identify voices by opaque IDs. The built-in lists map to
 - Playback speed is applied client-side, so cached audio segments stay valid when you change speed.
 - Providers without a built-in voice list fall back to a `default` entry, which lets the provider pick its default voice.
 - Word-by-word highlighting works the same as with every other provider (alignment runs in OpenReader, not the provider).
-- TTS requests are sent from the server, not the browser. The API key is never exposed to clients.
+- Speech is requested by the compute worker, not the browser. The API key is never sent to browsers.
 
 ## References
 

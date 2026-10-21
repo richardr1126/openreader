@@ -6,8 +6,8 @@ description: A step-by-step checklist for upgrading a v4.4 OpenReader instance t
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-Follow this page top to bottom. It covers a single-container `docker run` install and the Docker
-Compose stacks. If you are starting fresh, use the [Docker Quick Start](../docker-quick-start) instead.
+Follow this page top to bottom. Steps 1–5 cover a single-container `docker run` install and the
+Docker Compose stacks. A Vercel deployment follows [Vercel and other app-only deployments](#vercel-and-other-app-only-deployments) instead. If you are starting fresh, use the [Docker Quick Start](../docker-quick-start) instead.
 
 :::danger There is no downgrade without a backup
 The first v5 start applies database migrations that **cannot be reversed**, and permanently deletes
@@ -136,7 +136,7 @@ docker compose -f examples/docker/compose.yml up -d
 docker compose -f examples/docker/compose.yml logs -f openreader
 ```
 
-Use `compose.full.yml` for the full stack.
+Use `compose.full.yml` for the full stack, and first [copy its storage key](./docker-compose#full-stacks-from-530-or-earlier) while the v4 stack is still running.
 
 </TabItem>
 </Tabs>
@@ -162,7 +162,18 @@ The first v5 start removes:
 - The v4 TTS audio cache (`tts_segments_v1/`, `tts_segments_v2/`).
 
 To skip the storage purge, set `RUN_V4_DECOMMISSION=false`. Database migrations still run. See
-[Migrations](../configure/migrations) for the full history.
+[Database and Migrations](../configure/database#schema-history) for the full history.
+
+## Vercel and other app-only deployments
+
+Deployments without OpenReader's startup process, including Vercel, run both steps by hand:
+
+1. Export any audiobooks you want to keep (step 1 above).
+2. Take the v4 app offline, then back up Postgres and the S3 bucket.
+3. From a v5 checkout, with the production `POSTGRES_URL` set, run `pnpm migrate`.
+4. With the production S3 settings set (`S3_INTERNAL_ENDPOINT`, bucket, region, keys, `S3_FORCE_PATH_STYLE` and `S3_PREFIX`), run `pnpm migrate-decommission` once. It deletes only the folders listed above and is safe to run again.
+5. Deploy the v5 [compute worker](./compute-worker), then the app, as described in [Vercel + External Worker](./vercel-deployment).
+6. Check the deployment (step 5 above) before restoring traffic.
 
 ## If something goes wrong
 

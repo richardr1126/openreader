@@ -1,180 +1,83 @@
 ---
-title: Vercel Deployment
+title: Vercel + External Worker
+description: Run the OpenReader app on Vercel with Postgres, S3 storage and a separately hosted compute worker.
 ---
 
-This guide covers deploying the OpenReader app to Vercel with external Postgres, S3-compatible
-object storage, NATS JetStream, and a standalone compute worker such as Railway.
+On Vercel, the app runs as serverless functions, so everything long-running happens elsewhere:
 
-## What works on Vercel
+| Piece | Where it runs |
+| --- | --- |
+| App (sign-in, library, settings) | Vercel |
+| Database | Postgres, such as Neon (`POSTGRES_URL`) |
+| File storage | An S3-compatible bucket |
+| Speech, alignment, PDF layout, previews, DOCX conversion, audiobooks | The [compute worker](./compute-worker), for example on Railway |
+| Job queue | NATS JetStream, for example Synadia Cloud, reached only by the worker |
 
-- Documents (PDF/EPUB/DOCX/TXT/MD) work with `POSTGRES_URL` + external S3 storage.
-- Background TTS generation, playback, previews, DOCX conversion, Whisper alignment, PDF layout
-  parsing, and audiobook export run through an external compute worker service.
-- The worker assembles audiobook files in object storage. Same-origin
-  `/api/tts/export/*` routes authorize lookup, generation commands, SSE, and
-  downloads; assembly and conversion continue outside Vercel requests.
-- For worker setup details and worker-specific env vars, see [Compute Worker (NATS JetStream)](./compute-worker).
+Deploy the same version of the app and the worker.
 
-:::info DOCX conversion
-The published compute-worker image includes headless LibreOffice. DOCX conversion therefore works
-with Vercel when the external worker is configured; Vercel itself does not run `soffice`.
-:::
+## 1. Deploy the worker
 
-## 1. Environment Variables
+Set up the worker, its NATS connection and storage first, following [Compute Worker](./compute-worker). It ends with the three shared values the app also needs: `COMPUTE_WORKER_TOKEN`, `COMPUTE_CREDENTIAL_BROKER_TOKEN` and `TTS_PLAYBACK_TOKEN_SECRET`.
 
-Recommended production setup (auth enabled, admin panel enabled):
+## 2. Set the app's environment variables
 
 ```bash
-# Infrastructure
+# Database and storage
 POSTGRES_URL=postgres://...
 USE_EMBEDDED_WEED_MINI=false
-S3_ACCESS_KEY_ID=...
-S3_SECRET_ACCESS_KEY=...
 S3_BUCKET=...
 S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
 S3_PREFIX=openreader
-# Optional (non-AWS S3-compatible providers):
-# S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
-# S3_PUBLIC_ENDPOINT=https://s3.example
-# S3_BROWSER_TRANSPORT=presigned
+# For AWS, both are https://s3.<region>.amazonaws.com
+S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
+S3_PUBLIC_ENDPOINT=https://s3.example
+# Non-AWS storage that needs path-style URLs:
 # S3_FORCE_PATH_STYLE=true
 
-# Auth (required for the admin panel)
+# Sign-in
 BASE_URL=https://your-app.vercel.app
-AUTH_SECRET=...
-BOOTSTRAP_ADMIN_EMAIL=owner@example.com # new database only; remove after setup
-BOOTSTRAP_ADMIN_PASSWORD=... # unique 16+ character initial password; remove after rotation
-CRON_SECRET=...               # generate with: openssl rand -base64 32
+AUTH_SECRET=...                 # openssl rand -base64 32; keep it stable
+BOOTSTRAP_ADMIN_EMAIL=...       # new database only
+BOOTSTRAP_ADMIN_PASSWORD=...    # at least 16 characters
+CRON_SECRET=...                 # openssl rand -base64 32
 
-# Heavy compute (required on Vercel in current releases)
-COMPUTE_WORKER_URL=https://<railway-worker-domain>
-# Optional when browsers need a different public worker URL for playback audio
-# COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>
+# Compute worker (the same values as on the worker)
+COMPUTE_WORKER_URL=https://<worker-domain>
 COMPUTE_WORKER_TOKEN=...
-COMPUTE_CREDENTIAL_BROKER_TOKEN=... # generate separately; set the same value on the worker
-TTS_PLAYBACK_TOKEN_SECRET=... # generate with: openssl rand -base64 32; set the same value on the worker
+COMPUTE_CREDENTIAL_BROKER_TOKEN=...
+TTS_PLAYBACK_TOKEN_SECRET=...
 
-# Logging (recommended for Vercel log ingestion)
+# Logs in Vercel's format
 LOG_FORMAT=json
 LOG_LEVEL=info
-
-# First-boot seed for the TTS shared provider (optional; manage in-app afterwards)
-# API_KEY=your_replicate_key
-# API_BASE only needed for OpenAI-compatible self-hosted providers
-# API_MODEL_NAME=the-upstream-model-name
 ```
 
-If you also run an external worker service (for example Railway), configure it with:
+The worker reaches the app at `https://<your-app-domain>/api/internal/compute/tts-credentials` to fetch provider keys, so set that as the worker's `COMPUTE_CREDENTIAL_BROKER_URL`.
 
-- `COMPUTE_CREDENTIAL_BROKER_URL=https://<your-app-domain>/api/internal/compute/tts-credentials`
-- the matching `COMPUTE_CREDENTIAL_BROKER_TOKEN`
-- the matching `COMPUTE_WORKER_TOKEN` and `TTS_PLAYBACK_TOKEN_SECRET`
-- its NATS connection and the same S3 storage configuration used by the app
-- `LOG_FORMAT=json`
-- `COMPUTE_LOG_LEVEL=info`
+Every variable is described in [Environment Variables](../reference/environment-variables).
 
-Do not set the app's `AUTH_SECRET` or `POSTGRES_URL` on the worker. Provider lookup and decryption remain app-owned.
-Self-hosted provider URLs configured in the admin panel must be reachable from the worker runtime,
-not from Vercel or the browser. A Railway worker cannot reach a provider through `localhost` or
-`host.docker.internal` on your personal computer.
+## 3. Run migrations
 
-:::note Env vars vs. admin panel (important for Vercel)
-`API_KEY` / `API_BASE` / `API_MODEL_NAME` are one-shot bootstrap seeds on first deploy. `API_MODEL_NAME` sets the seeded provider's default model and defaults to `kokoro`. After boot, manage providers and site features in **Settings → Admin**. Changes there apply on refresh without a redeploy. See [Admin Panel](../configure/admin-panel).
-:::
+Vercel does not run OpenReader's startup process, so migrations do not run on deploy. From a checkout of the version you are deploying, with the production `POSTGRES_URL` set, run:
 
-## 1a. Railway + Synadia quick start (worker mode)
+```bash
+pnpm migrate
+```
 
-If your Vercel app uses an external compute worker on Railway with Synadia Cloud (NGS):
+Do this before deploying any release that adds migrations (see [Database and Migrations](../configure/database#migrations)). Upgrading from v4 has extra steps; see [Upgrade from v4](./upgrade-from-v4).
 
-1. Deploy a Railway service from:
-   - `ghcr.io/richardr1126/openreader-compute-worker:latest`
-2. Enable public networking on that Railway service and set:
-   - `COMPUTE_WORKER_URL=https://<railway-worker-domain>` (in Vercel)
-   - `COMPUTE_WORKER_PUBLIC_URL=https://<railway-worker-domain>` (in Vercel) if browsers cannot reach `COMPUTE_WORKER_URL` directly
-3. Use the same `COMPUTE_WORKER_TOKEN` value in both Vercel and Railway worker env vars.
-4. Use the same `COMPUTE_CREDENTIAL_BROKER_TOKEN` value in both Vercel and Railway worker env vars, and point the worker broker URL at the Vercel app.
-5. Use the same `TTS_PLAYBACK_TOKEN_SECRET` value in both Vercel and Railway worker env vars. The worker derives a domain-separated private-text fingerprint key from it; no additional text-hash secret is configured.
+## 4. Deploy and set up
 
-For complete Railway worker env vars (`NATS_*`, `S3_*`, health checks, and Synadia `.creds` guidance), see [Compute Worker (NATS JetStream)](./compute-worker).
+Deploy the app, then [create the first administrator](../configure/admin-panel#create-the-first-administrator), add a [TTS provider](../configure/tts-providers) and review [Instance Settings](../configure/instance-settings). Changes there apply without a redeploy.
 
-## 2. First-run admin configuration (recommended)
+Scheduled cleanup runs once a day through Vercel Cron, which needs `CRON_SECRET` (see [Maintenance](../configure/maintenance#how-tasks-are-triggered)).
 
-On a fresh database, sign in with the seeded credential and change its password
-in **Settings → Account** to activate the administrator role. No second deploy
-is required. The initial password is then invalid; removing the bootstrap
-values from Vercel later is optional secret hygiene. Existing v4 administrators keep their
-roles during migration. Then open **Settings → Admin** and configure:
+## 5. Check the deployment
 
-- **Shared providers**: create/edit your provider key(s) here (encrypted at rest).
-- **Site features**:
-  - `enableDocxConversion=true` when the published compute-worker image is connected.
-  - `enableTtsProvidersTab=false` if you want shared-provider-only UX.
-  - `signupPolicy=open`, `approval`, or `closed` according to your registration policy.
-  - `defaultTtsProvider=replicate` (or your preferred shared slug).
-  - `showAllProviderModels=false` if you want users locked to each provider's default model.
-  - `enableAudiobookExport=true`.
-
-## 3. Runtime JSON seed (optional)
-
-If you must pre-seed site features, shared providers, or account email delivery at deploy time, use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` (versioned JSON seed document). Keep the seed secret when it contains a Resend API key. Prefer the admin panel for ongoing management.
-
-See [Environment Variables](../reference/environment-variables#runtime-json-seed) for schema and examples.
-
-:::warning Auth recommendation
-Set both `BASE_URL` and `AUTH_SECRET` — they are required for startup, the admin panel, and
-encrypting admin-stored TTS credentials. Keep `AUTH_SECRET` stable across deployments.
-:::
-
-:::warning Rotating AUTH_SECRET invalidates admin-stored keys
-Admin-managed TTS provider keys are encrypted with a key derived from `AUTH_SECRET`. If you rotate `AUTH_SECRET` after the first deploy, you must re-enter each admin shared provider's API key from the UI.
-:::
-
-:::tip
-For all variables and defaults, see [Environment Variables](../reference/environment-variables).
-:::
-
-## 4. Upgrade from v4.4 to v5
-
-Vercel deployments do not run the `@openreader/bootstrap` process, so automatic startup migrations do not run there.
-
-1. Take the v4 app offline or pause deployment traffic, then back up Postgres and the S3 bucket.
-2. From a v5 source checkout, configure the production `POSTGRES_URL` and run `pnpm migrate`.
-3. In the same controlled environment, configure the production `S3_INTERNAL_ENDPOINT`, bucket,
-   region, access key, secret key, path-style setting, and prefix, then run
-   `pnpm migrate-decommission` once.
-4. Deploy the v5 worker and app with matching worker, credential-broker, playback, and S3 settings;
-   configure the worker's NATS connection.
-5. Check the migration output, then perform the smoke test below before restoring normal traffic.
-
-The decommission command idempotently deletes only the retired v4 object roots
-`tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/`. It does not remove documents,
-accounts, settings, or v5 playback artifacts. Re-running it is safe if a deployment is interrupted.
-
-For the full schema history and Docker's automatic path, see [Migrations](../configure/migrations).
-
-## 5. Scheduled maintenance tasks
-
-The repository configures `/api/admin/tasks/tick` as a Vercel Cron route. Set `CRON_SECRET`; requests without the matching bearer token are rejected.
-
-The checked-in Hobby-compatible schedule invokes the route once daily. The admin task panel therefore prevents selecting intervals shorter than one day on Vercel, even though self-hosted deployments can run tasks more frequently.
-
-Each due task is claimed with a database-backed lease, due tasks start independently, and individual runs are aborted and marked failed after four minutes. Review failures and run tasks manually from **Settings → Admin → Scheduled tasks**.
-
-## 6. Runtime expectations and caveats
-
-- Playback and audiobook export require the external compute worker and S3-compatible object
-  storage because generation continues outside the serverless request lifecycle.
-- For production Vercel deploys, use `POSTGRES_URL` instead of SQLite.
-- Deploy matching web and worker versions. The document storage measurement
-  endpoint is worker-backed; an older Railway image can lack that endpoint.
-- Worker and object-storage network latency affects discovery and preparation.
-  Audiobook controls show checking/pending feedback while calls are outstanding,
-  and file discovery does not wait for the full chapter-progress scan.
-
-## 7. Smoke test after deploy
-
-1. Upload and read a PDF/EPUB document.
-2. Confirm sync/blob fetch works across refreshes/devices.
-3. Start TTS playback and download an audiobook MP3 export.
-4. Verify worker-backed word highlighting and PDF parsing.
-5. Open **Settings → Admin → Scheduled tasks**, run one task manually, and confirm the next daily cron invocation succeeds.
+1. Open **Settings → Admin → Maintenance**. Every system check row should read **OK**.
+2. Upload a PDF and an EPUB, and open them on a second device or after a refresh.
+3. Play one, and confirm that words highlight as they are read.
+4. Export a short audiobook.
+5. In **Scheduled tasks**, run one task with **Run now**.

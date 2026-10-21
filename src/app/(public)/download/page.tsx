@@ -78,7 +78,9 @@ export default async function DownloadPage() {
         )}
         <p className="lu-dl-foot">
           What the app sends over the network, and when, is in the{' '}
-          <Link href="/desktop-privacy">desktop app privacy policy</Link>.
+          <Link href="/desktop-privacy">desktop app privacy policy</Link>. Voices, updates, and where your
+          library is stored are covered in the{' '}
+          <a href={LINKS.desktopDocs} target="_blank" rel="noopener noreferrer">desktop app docs</a>.
         </p>
       </section>
     </main>

@@ -3,11 +3,13 @@ import path from 'path';
 export const DOCSTORE_DIR = path.join(process.cwd(), 'docstore');
 export const DEFAULT_LIBRARY_DIR = path.join(DOCSTORE_DIR, 'library');
 
-export function parseLibraryRoots(): string[] {
-  const raw = process.env.IMPORT_LIBRARY_DIRS ?? '';
-
+// Colons separate paths too, except on Windows, where they follow drive letters.
+export function parseLibraryRoots(
+  raw = process.env.IMPORT_LIBRARY_DIRS ?? '',
+  platform: NodeJS.Platform = process.platform,
+): string[] {
   const roots = raw
-    .split(/[,:;]/g)
+    .split(platform === 'win32' ? /[,;]/g : /[,:;]/g)
     .map((value) => value.trim())
     .filter(Boolean);
 

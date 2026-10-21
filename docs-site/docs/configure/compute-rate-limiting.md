@@ -1,51 +1,47 @@
 ---
-title: Compute Rate Limiting
+title: Compute and Rate Limits
+description: Upload size, per-user limits, and TTS generation tuning in Settings → Admin → Compute.
 ---
 
-OpenReader uses one versioned policy document for user admission, metered TTS usage, worker scheduling, resource capacity, and TTS-provider throughput.
+**Settings → Admin → Compute** controls how much work the compute worker accepts and how speech generation behaves. As with [instance settings](./instance-settings), each setting shows its source, can be reset, and can be seeded with `RUNTIME_SEED_JSON`.
 
-## Covered work
+## Limits
 
-The policy has independently configurable entries for PDF layout analysis, live TTS playback, TTS plan creation, audiobook assembly, document previews, document conversion, account export, and TTS segment synthesis. Each user or provider limit has a direct enabled switch: enabled limits enforce their configured values, while disabled limits are bypassed.
+| Setting | Key | What it does |
+| --- | --- | --- |
+| **Max upload size** | `maxUploadMb` | The largest document one upload may be, in MB. |
+| Compute limits | `computeLimitPolicies` | Per-user, site, worker and provider limits for every kind of compute work. Not shown in the desktop app. |
 
-The complete policy is available in **Settings → Admin → Site features → Rate limiting**. The form exposes every admission window, active lease, usage threshold, queue, worker resource, and provider capacity value. Named provider overrides can be added for different service plans.
+Every limit is off by default on a self-hosted install. Turn them on when you run a public or shared instance.
 
-## TTS character thresholds
+The compute limits cover PDF layout analysis, live playback, audiobook export, document previews, DOCX conversion, account export and TTS generation. Each kind of work has its own switch, and its own:
 
-TTS usage is measured at the segment that actually needs provider synthesis:
+- **start windows**: how often one user, or the whole site, can start it;
+- **active work**: how many can run at once, which recovers automatically after a crash;
+- **queue and concurrency**: queue length, priority and parallel jobs per worker, plus CPU, model, FFmpeg, LibreOffice and archive capacity.
 
-- Cached segments are free.
-- A missing segment is checked immediately before its provider call.
-- If usage starts below the daily threshold, that complete segment is generated and charged even if it crosses the threshold.
-- The next missing segment stops. Playback can finish the audio already generated.
-- One stable event key makes retries and redelivery free of duplicate charges.
+**Provider limits** cap concurrent requests and the request and character rates sent to each provider, across all worker replicas. Add named overrides for providers on a different service plan. A provider's `429 Retry-After` response pauses requests to that provider. **Max concurrent** is the number of segments generated in parallel for live playback. The default of three keeps playback ahead of the listener; lower it for a server that can only handle one request at a time.
 
-The self-host default keeps these generated-character thresholds configured but disabled. Administrators can opt in without rebuilding the policy; when enabled, the separate anonymous and authenticated user/IP thresholds plus an anonymous-device backstop reset at midnight UTC.
+### Daily character limits
 
-Users can see their generated-character usage and reset timing in **Settings → Account**. The reader controls remain available after the threshold is reached so cached audio can still be played and sought normally.
+TTS usage is counted in characters sent to a provider, and only for audio that has to be generated. Replaying cached audio is always free.
 
-## Other limits
+- Before each missing segment is generated, OpenReader checks the user's usage. A segment that starts below the limit is finished and counted even if it crosses the limit; the next one stops.
+- Playback can continue through audio that is already generated, and seeking still works.
+- Retries never count twice.
 
-- Admission windows cap how frequently users can start each compute action.
-- Active leases cap concurrent user and site work and recover automatically after crashes.
-- Worker concurrency, per-action queues, priorities, and named CPU/model/FFmpeg/LibreOffice/archive resources protect each worker.
-- Provider concurrency and rolling request/character limits are coordinated across worker replicas through JetStream KV.
-- Live playback keeps up to three ordered segment requests ready, while the provider's configurable **Max concurrent** value remains the actual cross-worker limit. The self-host default of three restores useful playback runway; lower it for a server that cannot synthesize requests in parallel.
-- Provider `429 Retry-After` responses cool down that provider's shared capacity bucket.
-- All operation admission limits are disabled by default for self-hosted installations. The configured values remain available as an opt-in for public or shared installations.
-- New-generation character limits are disabled by default. When enabled, they stop only uncached provider work at a segment boundary.
+Separate limits apply to signed-in users, guests, and each IP address, plus a backstop per guest device. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**.
 
-The application owns SQL admission and usage decisions. The worker owns local execution scheduling and provider capacity. No database two-phase commit is used.
+The complete policy, with every value, is in [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). An incomplete or unknown policy in a seed stops startup before anything is written.
 
-## Storage and seeding
+## TTS generation
 
-`compute_limit_admissions`, `compute_limit_buckets`, and `compute_limit_events` hold the app-owned limiter state. The v5 migration intentionally drops the retired `user_tts_chars` and `user_job_events` tables and starts users with fresh usage.
+| Setting | Key | What it does |
+| --- | --- | --- |
+| **Background generation** | `ttsPlaybackBackgroundExtent` | How far the worker keeps generating after the reader stops reporting its position: to the end of the current page or chapter (**Current section**, the default) or to the end of the document (**Full document**). |
+| **Retry attempts** | `ttsUpstreamMaxRetries` | How many times a failed provider request (429 or 5xx) is retried before the segment fails. |
+| **Upstream timeout** | `ttsUpstreamTimeoutMs` | How long to wait for a provider response. |
+| **Audio cache size** | `ttsCacheMaxSizeBytes` | The worker's in-memory cache of recently generated audio. |
+| **Audio cache TTL** | `ttsCacheTtlMs` | How long audio stays in that cache. |
 
-Use `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` to seed `runtimeConfig.computeLimitPolicies`. The complete maintained example is `examples/openreader-seed.json`; unknown or incomplete policy fields make the seed fail before any setting is written.
-
-## Related docs
-
-- [Admin Panel](./admin-panel#rate-limiting)
-- [Environment Variables](../reference/environment-variables#runtime-json-seed)
-- [Auth](./auth)
-- [TTS Providers](./tts-providers)
+Generated audio is also stored permanently in object storage, so these cache settings only affect speed, not what is kept.

@@ -34,21 +34,21 @@ On native Linux Docker, `host.docker.internal` needs `--add-host=host.docker.int
 - Or start Supertonic with `--host 0.0.0.0` so the bridge can reach it — keep it on a trusted network or behind a firewall.
 :::
 
-**Recommended (auth + admin): Settings → Admin → Shared providers**
+In **Settings → Admin → Providers**:
 
-1. Add a shared provider with type `custom-openai`.
+1. Add a provider with type **Custom OpenAI-like**.
 2. Set base URL to `http://host.docker.internal:7788/v1`.
 3. Leave API key blank — `supertonic serve` does not require one.
 4. Set default model to `supertonic-3` (or `supertonic-2`).
 
-**Bootstrap seed (optional, first boot only):**
+**Or seed it on first boot** (see [Seed a provider from the environment](../tts-providers#seed-a-provider-from-the-environment)):
 
 ```env
 API_BASE=http://host.docker.internal:7788/v1
 API_MODEL_NAME=supertonic-3
 ```
 
-Users select the configured shared provider, model, and voice from **Settings → Model & Voice**.
+Users choose the provider, model and voice in **Settings → Model & Voice**.
 
 ## Running OpenReader directly on the host
 
@@ -56,7 +56,7 @@ If OpenReader runs on the same machine (e.g. `pnpm dev`) rather than in Docker, 
 
 If the compute worker runs on a remote host, the loopback-only Supertonic server is not reachable.
 Expose it through a secured public/private network or run the provider alongside the worker. See
-the [provider topology table](../tts-providers#custom-provider-requirements).
+the [provider address table](../tts-providers#self-hosted-provider-addresses).
 
 ## References
 

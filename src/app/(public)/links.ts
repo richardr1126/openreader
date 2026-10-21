@@ -2,6 +2,7 @@
 export const LINKS = {
   docs: 'https://docs.openreader.richardr.dev/',
   deploy: 'https://docs.openreader.richardr.dev/deploy/docker-compose',
+  desktopDocs: 'https://docs.openreader.richardr.dev/desktop-app',
   repo: 'https://github.com/richardr1126/openreader',
   readme: 'https://github.com/richardr1126/openreader#readme',
   discussions: 'https://github.com/richardr1126/openreader/discussions',

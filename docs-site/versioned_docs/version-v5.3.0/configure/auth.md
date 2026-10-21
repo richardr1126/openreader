@@ -1,121 +1,82 @@
 ---
-title: Auth
+title: Users and Sign-in
+description: Sign-in methods, sign-up policy, guest sessions, account email, and managing users.
 ---
 
-This page covers application-level configuration for provider access and authentication.
+Every server install requires an account. This page covers how people sign in and how admins manage accounts. To create the first administrator, see [Administration](./admin-panel#create-the-first-administrator). The desktop app has a single owner who is signed in automatically, so none of this applies there.
 
-## Auth behavior
+## Required settings
 
-- `BASE_URL` and `AUTH_SECRET` are required at startup.
-- Keep `AUTH_TRUSTED_ORIGINS` empty to trust only `BASE_URL`.
-- Guest (anonymous) sessions are disabled by default. Turn them on with
-  **Guest sessions** under **Settings → Admin → Instance → Site features**, or
-  seed `runtimeConfig.allowAnonymousSessions`.
+| Variable | Purpose |
+| --- | --- |
+| `BASE_URL` | The address people open in the browser, for example `https://reader.example.com`. |
+| `AUTH_SECRET` | Signs sessions and encrypts saved keys. Generate it once with `openssl rand -base64 32` and [keep it stable](./admin-panel#how-saved-keys-are-protected). |
+| `AUTH_TRUSTED_ORIGINS` | Optional. Other addresses allowed to sign in, comma-separated. Leave empty to trust only `BASE_URL`. |
 
-## Single sign-on (OAuth / OIDC)
+## Sign-in methods
 
-Alongside email/password, two optional SSO methods are supported. Each appears on the sign-in page only when configured:
+Email and password sign-in is always available. You can add single sign-on; each button appears on the sign-in page only when it is configured.
 
-- **GitHub** — set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. The OAuth callback URL to register with GitHub is `<BASE_URL>/api/auth/callback/github`.
-- **Generic OIDC** — for self-hosted identity providers (Pocket ID, Authelia, Authentik, Keycloak, etc.). Set `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_DISCOVERY_URL` (the provider's `/.well-known/openid-configuration` URL). The callback URL to register with your provider is `<BASE_URL>/api/auth/callback/<OIDC_PROVIDER_ID>` (`oidc` unless you override `OIDC_PROVIDER_ID`). Optional: `OIDC_PROVIDER_NAME` labels the sign-in button (defaults to `SSO`), and `OIDC_SCOPES` overrides the requested scopes (defaults to `openid profile email`).
+### GitHub
 
-```env
+Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET`. Register `<BASE_URL>/api/auth/callback/github` as the callback URL in your GitHub OAuth app.
+
+### OpenID Connect
+
+For a self-hosted identity provider such as Pocket ID, Authelia, Authentik or Keycloak:
+
+```dotenv
 OIDC_CLIENT_ID=your-client-id
 OIDC_CLIENT_SECRET=your-client-secret
 OIDC_DISCOVERY_URL=https://auth.example.com/.well-known/openid-configuration
 OIDC_PROVIDER_NAME=Pocket ID
 ```
 
-`OIDC_DISCOVERY_URL` must use `https://`; plain `http://` is accepted only for `localhost` during development, because the discovery document decides where the client secret and authorization codes are sent.
+- Register `<BASE_URL>/api/auth/callback/oidc` as the callback URL. If you set `OIDC_PROVIDER_ID`, use that value instead of `oidc`.
+- `OIDC_PROVIDER_NAME` labels the button (default `SSO`). `OIDC_SCOPES` overrides the requested scopes (default `openid profile email`).
+- `OIDC_DISCOVERY_URL` must use `https://`. Plain `http://` is accepted only for `localhost`.
 
-A user who originally signed up with email/password and later signs in through your identity provider with the same email address is attached to their existing account, keeping their documents and settings. Linking requires both sides to be verified: the provider must return `email_verified: true` for the user, and the local account's email must be verified, which requires [account email delivery](./admin-panel#account-email-through-resend) to be enabled. Whether the provider sends `email_verified` depends on its configuration — Pocket ID reflects its email-verification setting, Authentik 2025.10+ sends `false` unless you add a scope mapping, and Keycloak reflects the per-user flag — so check the claim in your provider before relying on linking. When either side is unverified, an existing email/password user who tries the OIDC button is told to sign in with their password instead, while users who never had a local account can still sign up through the provider.
+**Linking existing accounts.** Someone who signed up with a password and later uses your identity provider with the same email keeps their account, but only when both sides are verified. Your provider must send `email_verified: true`, and their OpenReader email must be verified, which needs [account email](#account-email). Providers differ: Pocket ID follows its email-verification setting, Authentik 2025.10 and later sends `false` unless you add a scope mapping, and Keycloak uses each user's flag. If either side is unverified, the person is asked to sign in with their password instead. People without an existing account sign up through the provider, subject to the **New account sign-ups** setting below.
 
-## Runtime modes
+## Sign-ups and guests
 
-OpenReader has two common runtime modes:
+Both settings are in **Settings → Admin → Instance → Site features**.
 
-- **Auth enabled, non-admin user**: user account/session features are available, but no admin controls.
-- **Auth enabled, admin user**: full **Settings → Admin** access (shared providers + site features).
+- **New account sign-ups**:
+  - **Open** lets anyone register.
+  - **Approve** creates pending accounts that can sign in only after an admin approves them in **Users**. Approval does not verify email ownership. If that matters, turn on account email and check that the address is verified before approving.
+  - **Closed** refuses new accounts.
 
-## Admin role
+  None of these block the [first-admin](./admin-panel#create-the-first-administrator) account.
+- **Guest sessions** (off by default) let visitors use the app without an account. A guest who later signs up can keep their documents and progress. Turning it off refuses new guest sessions and signs existing guests out on their next page load.
 
-On a fresh installation, set a one-time first-admin credential before boot:
+## Managing users
 
-```env
-BOOTSTRAP_ADMIN_EMAIL=owner@example.com
-BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
-```
+**Settings → Admin → Users** lists registered and guest accounts with search and filters. Expanding a user shows their activity, sessions, email verification, documents, storage and TTS usage.
 
-OpenReader creates that account once. Sign in and change the initial password
-under **Settings → Account**; the **Admin** tab appears after the password change.
-If account email delivery is already enabled, the first sign-in attempt sends
-a verification link. Follow it before signing in. No configuration edit or
-restart is needed afterward. The initial password is invalid after the change;
-removing the seed values later is optional. The email is not an admin allowlist,
-and changing it later does not alter the role. Existing v4 admins are preserved
-on upgrade. Additional admins are granted under **Settings → Admin → Users**.
+Admins can approve pending accounts, suspend or restore them, grant or remove admin access, and delete accounts. Deleting an account first removes its documents and audio; if that cleanup fails, the account is kept so you can try again. Role and access changes sign the affected user out.
 
-Admins see dedicated areas for users, providers, account email, instance
-settings, compute, and maintenance.
+You cannot remove the last administrator, and you cannot demote, suspend or delete yourself.
 
-- **Shared TTS providers** — server-managed TTS provider instances with encrypted keys, visible to all users.
-- **Site features** — runtime overrides for what were previously build-time public env flags (including account signup availability, default TTS provider, audiobook export, etc.).
+## Account email
 
-## Email verification and password recovery
+Account email is off by default. When it is on, OpenReader sends verification and password-reset emails through [Resend](https://resend.com).
 
-Account email is opt-in and disabled by default. An administrator configures it
-under **Settings → Admin → Instance → Account email** using a verified Resend sender and a
-sending-only API key, sends a test, and then explicitly enables it.
+To set it up in **Settings → Admin → Instance → Account email**:
 
-When enabled:
+1. Verify your sending domain in Resend.
+2. Create a sending-only API key, ideally restricted to that domain.
+3. Enter the sender name, sender email, an optional reply-to address and the API key, then save.
+4. Send a test and wait for **Accepted by Resend**. This means Resend accepted the request, not that it reached the inbox.
+5. Turn on **Enable account emails** and save.
 
-- password registrations receive a one-hour verification link;
-- password sign-in is blocked for existing and new unverified accounts and can
-  resend a fresh verification link;
-- **Forgot password?** sends a generic acknowledgement whether or not the
-  address exists;
-- reset links expire after one hour, successful resets revoke existing
-  sessions, and the user signs in again;
-- GitHub sign-in and already-active sessions keep their existing behavior.
-- Registered users can request a new address in **Settings → Account**. The
-  address changes only after the new inbox's verification link is followed.
+Removing the API key turns account email off.
 
-When disabled, registration and password sign-in retain their previous
-behavior; verification, email change, and recovery actions are clearly
-unavailable. Users can still change a known password under **Settings → Account**.
-Turning the feature off also prevents queued verification/reset messages from
-being delivered.
+While it is on:
 
-Changing a password signs out other sessions. Admin role changes and signup
-approval are managed in [Admin Panel](./admin-panel), not through email lists.
+- New password accounts must follow a verification link (valid for one hour) before they can sign in. Unverified existing accounts are asked to verify on their next sign-in.
+- **Forgot password?** sends a reset link, valid for one hour. The page shows the same message whether or not the address exists. A reset signs out every other session.
+- People can change their email in **Settings → Account**. The change applies once they follow the link sent to the new address.
+- GitHub sign-in and existing sessions are unaffected.
 
-## Route behavior
-
-- `/` is a public landing/onboarding page and remains indexable.
-- `/app` is the protected app home (document list and uploader UI).
-- If a valid session exists (including anonymous), visiting `/` redirects to `/app`.
-- Protected app routes continue to require auth; when anonymous sessions are disabled and no session exists, users are redirected to `/signin`.
-- `/verify-email`, `/forgot-password`, and `/reset-password` are public. Token-bearing pages send a `no-referrer` policy and are excluded from indexing.
-
-## Related docs
-
-- For auth environment variables: [Environment Variables](../reference/environment-variables#auth-and-identity)
-- For admin role and shared TTS provider config: [Admin Panel](./admin-panel)
-- For TTS character limits and quota behavior: [Compute Rate Limiting](./compute-rate-limiting)
-- For provider-specific guidance: [TTS Providers](./tts-providers)
-- For storage/S3/SeaweedFS behavior: [Object / Blob Storage](./object-blob-storage)
-- For database mode: [Database](./database)
-- For migration behavior and commands: [Migrations](./migrations)
-
-## Sync notes
-
-### Auth enabled
-
-- Settings and reading progress are saved to the server.
-- Updates are not instant push-based sync; they use normal client polling/refresh behavior.
-- If two devices change the same item around the same time, the newest update wins.
-
-## Claim modal note
-
-- You may still see old anonymous settings/progress available to claim from older deployments.
-- Legacy `unclaimed` data is only surfaced through the claim flow; normal authenticated routes are scoped to your current user id.
+While it is off, verification, email changes and password recovery are unavailable, and queued messages are not sent. People can still change a password they know in **Settings → Account**. Changing a password always signs out other sessions.
