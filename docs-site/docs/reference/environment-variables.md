@@ -41,11 +41,11 @@ Upgrading a v4 instance? Follow [Upgrade from v4](../deploy/upgrade-from-v4).
 
 Setup details are in [Users and Sign-in](../configure/auth). `ADMIN_EMAILS` from v4 is no longer used.
 
-### DESKTOP_LAUNCH_TOKEN
+### `DESKTOP_LAUNCH_TOKEN`
 
 Internal to the desktop app; never set it yourself. The desktop shell generates a new token on every launch and exchanges it once at `POST /api/auth/desktop/session` for a session for the app's single owner, who has no password. When it is unset, that route does not exist. It also switches the interface to the desktop layout. Startup refuses a value shorter than 32 characters, and the embedded worker, NATS and SeaweedFS never receive it.
 
-### RICHARDRDEV_PRODUCTION
+### `RICHARDRDEV_PRODUCTION`
 
 Only for the official instance at `openreader.richardr.dev`. Exactly `true` shows the official-instance label and privacy notice and limits requests to the US. Leave it unset.
 
