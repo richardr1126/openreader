@@ -45,8 +45,8 @@ S3_BUCKET=<same as the app>
 S3_REGION=<same as the app>
 S3_ACCESS_KEY_ID=<same as the app>
 S3_SECRET_ACCESS_KEY=<same as the app>
+S3_INTERNAL_ENDPOINT=<the same storage, at an address the worker can reach>
 # S3_FORCE_PATH_STYLE and S3_PREFIX: same as the app
-# S3_INTERNAL_ENDPOINT: the same storage, at an address the worker can reach
 
 LOG_FORMAT=json
 COMPUTE_LOG_LEVEL=info

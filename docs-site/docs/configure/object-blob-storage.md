@@ -13,7 +13,7 @@ Document files, generated audio, audiobooks and preview images live in object st
 | Backend | When it is used |
 | --- | --- |
 | **Embedded SeaweedFS** (default) | OpenReader starts `weed mini` itself and stores data under `docstore`. Its S3 endpoint listens on port `8333` inside the container; browsers never need to reach it. |
-| **External S3-compatible** | Set `USE_EMBEDDED_WEED_MINI=false` with `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and, for non-AWS services, `S3_INTERNAL_ENDPOINT`. Works with AWS S3, Cloudflare R2, MinIO, an external SeaweedFS and similar. |
+| **External S3-compatible** | Set `USE_EMBEDDED_WEED_MINI=false` with `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and `S3_INTERNAL_ENDPOINT` (for AWS, `https://s3.<region>.amazonaws.com`), plus a [browser transport](#how-browsers-reach-files). Works with AWS S3, Cloudflare R2, MinIO, an external SeaweedFS and similar. |
 
 Every variable is listed in [Environment Variables](../reference/environment-variables#database-and-object-blob-storage).
 

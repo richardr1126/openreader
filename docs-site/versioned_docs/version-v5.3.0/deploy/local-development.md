@@ -108,7 +108,10 @@ S3_BUCKET=your-bucket
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
-# Non-AWS providers: S3_INTERNAL_ENDPOINT, S3_FORCE_PATH_STYLE=true
+S3_INTERNAL_ENDPOINT=https://s3.us-east-1.amazonaws.com
+# Browsers download through the app; or set S3_PUBLIC_ENDPOINT for presigned URLs
+S3_BROWSER_TRANSPORT=proxy
+# Non-AWS providers that need path-style URLs: S3_FORCE_PATH_STYLE=true
 ```
 
 **An external worker** instead of the embedded one. Set `COMPUTE_WORKER_URL` and the three shared values described in [Compute Worker](./compute-worker#shared-values).

@@ -59,7 +59,7 @@ Only for the official instance at `openreader.richardr.dev`. Exactly `true` show
 | `S3_BUCKET` | `openreader-documents` (embedded) | Required for external storage. |
 | `S3_REGION` | `us-east-1` (embedded) | Required for external storage. |
 | `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | generated (embedded) | Required for external storage. |
-| `S3_INTERNAL_ENDPOINT` | `http://127.0.0.1:8333` (embedded) | The endpoint the app and worker use. Set it for non-AWS services. A [separate worker](../deploy/compute-worker) needs an address it can reach, which may differ from the app's. |
+| `S3_INTERNAL_ENDPOINT` | `http://127.0.0.1:8333` (embedded) | The endpoint the app and worker use. Required for external storage, AWS included (`https://s3.<region>.amazonaws.com`). A [separate worker](../deploy/compute-worker) needs an address it can reach, which may differ from the app's. |
 | `S3_PUBLIC_ENDPOINT` | unset | A public HTTPS endpoint for browsers, used with `presigned` transfers. |
 | `S3_BROWSER_TRANSPORT` | `auto` | `proxy`, `presigned` or `auto`. See [how browsers reach files](../configure/object-blob-storage#how-browsers-reach-files). `proxy` is refused on Vercel. |
 | `S3_FORCE_PATH_STYLE` | `true` (embedded) | Path-style URLs, as many non-AWS services require. |
@@ -75,7 +75,7 @@ Only for the official instance at `openreader.richardr.dev`. Exactly `true` show
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `IMPORT_LIBRARY_DIRS` | `docstore/library` | Folders for [Server Library Import](../configure/server-library-import), separated by commas, colons or semicolons. |
+| `IMPORT_LIBRARY_DIRS` | `docstore/library` | Folders for [Server Library Import](../configure/server-library-import), separated by commas or semicolons, and also colons except on Windows. |
 
 ## Compute Worker and Model Configuration
 
@@ -210,7 +210,7 @@ These are read only while no providers exist and the seed below has no `provider
 | Key | Notes |
 | --- | --- |
 | `version` | Required; must be `1`. |
-| `runtimeConfig` | Any [instance](../configure/instance-settings) or [compute](../configure/compute-rate-limiting) setting, by key. Unknown keys stop startup. `computeLimitPolicies` must be a complete policy; start from [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). |
+| `runtimeConfig` | Any [instance](../configure/instance-settings) or [compute](../configure/compute-rate-limiting) setting, by key. An invalid seed, such as one with unknown keys, is logged and not applied; startup continues. `computeLimitPolicies` must be a complete policy; start from [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). |
 | `providers` | Shared providers. When present, even as `[]`, the `API_*` variables are ignored. |
 | `accountEmail` | Resend settings. `enabled`, `senderName`, `senderEmail` and `apiKey` are required; `replyTo` may be `null`. |
 | `gutendex` | A Project Gutenberg catalog server. Omit it to use the public `gutendex.com`. When present, `serverUrl` is required, `enabled` defaults to `true`, and `apiKey` may be `null`. |

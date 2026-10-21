@@ -30,10 +30,10 @@ S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=...
 S3_SECRET_ACCESS_KEY=...
 S3_PREFIX=openreader
-# Non-AWS storage only:
-# S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
-# S3_PUBLIC_ENDPOINT=https://s3.example
-# S3_BROWSER_TRANSPORT=presigned
+# For AWS, both are https://s3.<region>.amazonaws.com
+S3_INTERNAL_ENDPOINT=https://private-s3-endpoint.example
+S3_PUBLIC_ENDPOINT=https://s3.example
+# Non-AWS storage that needs path-style URLs:
 # S3_FORCE_PATH_STYLE=true
 
 # Sign-in
