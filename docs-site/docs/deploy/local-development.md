@@ -109,7 +109,8 @@ S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
 S3_INTERNAL_ENDPOINT=https://s3.us-east-1.amazonaws.com
-# Browsers download through the app; or set S3_PUBLIC_ENDPOINT for presigned URLs
+# Browsers download through the app. For presigned URLs instead, remove this
+# line and set S3_PUBLIC_ENDPOINT to a public HTTPS endpoint.
 S3_BROWSER_TRANSPORT=proxy
 # Non-AWS providers that need path-style URLs: S3_FORCE_PATH_STYLE=true
 ```
