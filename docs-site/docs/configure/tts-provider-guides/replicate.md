@@ -13,14 +13,6 @@ In **Settings → Admin → Providers**:
 3. Set default model to:
    `alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5` (or your preferred model).
 
-**Or seed it on first boot** (see [Seed a provider from the environment](../tts-providers#seed-a-provider-from-the-environment)):
-
-```env
-API_KEY=r8_...
-```
-
-Then change the provider's **Default model** in **Settings → Admin → Providers**.
-
 Users choose the provider, model and voice in **Settings → Model & Voice**.
 
 ## Notes

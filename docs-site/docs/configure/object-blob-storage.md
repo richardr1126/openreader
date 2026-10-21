@@ -27,6 +27,8 @@ In Docker, mount a volume at `/app/docstore`:
 
 It holds the embedded storage, the SQLite database and temporary files. Embedded SeaweedFS encrypts every object with a key kept in the same directory (`.mini_sse_kek`), so back up the whole volume. The object files cannot be read without that key.
 
+The full Compose stacks keep storage in the `seaweedfs-data` volume instead. Back it up together with `examples/docker/.env`, which may hold its key as `WEED_S3_SSE_KEK` (see [Docker Compose](../deploy/docker-compose#full-stacks-from-530-or-earlier)).
+
 ## How browsers reach files
 
 `S3_BROWSER_TRANSPORT` decides how browsers upload and download files:

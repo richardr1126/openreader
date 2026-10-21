@@ -3,7 +3,7 @@ title: Administration
 description: Create the first administrator and find each admin setting in Settings → Admin.
 ---
 
-A server install is administered from **Settings → Admin**, which appears for administrators only. Almost everything an admin configures lives there and takes effect without a restart or redeploy. Environment variables only cover infrastructure (addresses, secrets, database and storage). See [Environment Variables](../reference/environment-variables).
+A server install is administered from **Settings → Admin**, which appears for administrators only. Almost everything an admin configures lives there and takes effect without a restart or redeploy. Environment variables cover infrastructure (addresses, secrets, database and storage) and can seed admin settings on first start. See [Environment Variables](../reference/environment-variables).
 
 | Settings → Admin tab | What it manages | Page |
 | --- | --- | --- |

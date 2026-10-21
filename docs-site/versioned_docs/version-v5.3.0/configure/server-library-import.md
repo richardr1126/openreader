@@ -15,7 +15,7 @@ By default the folder is `docstore/library`. In Docker, mount your files there, 
 -v /path/to/your/library:/app/docstore/library:ro
 ```
 
-To use other folders, set `IMPORT_LIBRARY_DIRS` to one or more paths separated by commas, colons or semicolons.
+To use other folders, set `IMPORT_LIBRARY_DIRS` to one or more paths separated by commas, colons or semicolons. On Windows, use commas or semicolons; colons belong to drive letters.
 
 In the [desktop app](../desktop-app), this option is called **Library Folder**. It reads the `docstore/library` folder inside the app's data folder (**Settings → Library and storage → Show data folder**).
 

@@ -36,7 +36,7 @@ OIDC_PROVIDER_NAME=Pocket ID
 - `OIDC_PROVIDER_NAME` labels the button (default `SSO`). `OIDC_SCOPES` overrides the requested scopes (default `openid profile email`).
 - `OIDC_DISCOVERY_URL` must use `https://`. Plain `http://` is accepted only for `localhost`.
 
-**Linking existing accounts.** Someone who signed up with a password and later uses your identity provider with the same email keeps their account, but only when both sides are verified. Your provider must send `email_verified: true`, and their OpenReader email must be verified, which needs [account email](#account-email). Providers differ: Pocket ID follows its email-verification setting, Authentik 2025.10 and later sends `false` unless you add a scope mapping, and Keycloak uses each user's flag. If either side is unverified, the person is asked to sign in with their password instead. People without an existing account can always sign up through the provider.
+**Linking existing accounts.** Someone who signed up with a password and later uses your identity provider with the same email keeps their account, but only when both sides are verified. Your provider must send `email_verified: true`, and their OpenReader email must be verified, which needs [account email](#account-email). Providers differ: Pocket ID follows its email-verification setting, Authentik 2025.10 and later sends `false` unless you add a scope mapping, and Keycloak uses each user's flag. If either side is unverified, the person is asked to sign in with their password instead. People without an existing account sign up through the provider, subject to the **New account sign-ups** setting below.
 
 ## Sign-ups and guests
 

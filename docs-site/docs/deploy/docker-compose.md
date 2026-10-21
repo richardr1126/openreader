@@ -94,10 +94,11 @@ Upgrading a v4 instance? Follow [Upgrade from v4](./upgrade-from-v4) first.
 Those full stacks ran SeaweedFS 4.18; newer ones run 4.48, which keeps its encryption key differently. Before you pull, while the old stack is still running, copy the existing key into `examples/docker/.env`, or the update leaves your documents and audio unreadable:
 
 ```bash
-echo "WEED_S3_SSE_KEK=$(docker compose -f examples/docker/compose.full.yml exec -T seaweedfs wget -qO- http://127.0.0.1:8888/etc/s3/sse_kek)" >> examples/docker/.env
+KEK=$(docker compose -f examples/docker/compose.full.yml exec -T seaweedfs wget -qO- http://127.0.0.1:8888/etc/s3/sse_kek)
+if [ "${#KEK}" -eq 64 ]; then echo "WEED_S3_SSE_KEK=$KEK" >> examples/docker/.env; else echo "No key found"; fi
 ```
 
-Check that the line in `.env` holds a 64-character value, then update as above. Keep it in `.env` for good, like `AUTH_SECRET`. If the value is empty, the stack never stored a file; delete the line.
+Then update as above, and keep the line in `.env` for good, like `AUTH_SECRET`. "No key found" means the stack never stored a file, so there is nothing to carry over.
 
 New installs need nothing: SeaweedFS creates its key in the `seaweedfs-data` volume.
 
@@ -110,8 +111,12 @@ F="docker compose -f examples/docker/compose.full.yml"
 WRAPPED=$($F exec -T seaweedfs wget -qO- http://127.0.0.1:8888/etc/s3/sse_kek)
 PASSPHRASE=$($F exec -T seaweedfs cat /data/.mini_kek_passphrase)
 KEK=$($F exec -T openreader node --input-type=module -e "import { unwrapWeedFilerKek } from '/opt/openreader/bootstrap/src/embedded-seaweedfs.mjs'; console.log(unwrapWeedFilerKek(process.argv[1], process.argv[2]))" "$WRAPPED" "$PASSPHRASE")
-echo "WEED_S3_SSE_KEK=$KEK" >> examples/docker/.env
-$F up -d
+if [ "${#KEK}" -eq 64 ]; then
+  echo "WEED_S3_SSE_KEK=$KEK" >> examples/docker/.env
+  $F up -d
+else
+  echo "Recovery failed; .env was not changed"
+fi
 ```
 
-Check that the line holds a 64-character value before running the last command. Use `compose.local-full.yml` in the first line if you started from that file.
+Use `compose.local-full.yml` in the first line if you started from that file.
