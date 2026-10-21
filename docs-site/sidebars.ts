@@ -4,21 +4,44 @@ const sidebars: SidebarsConfig = {
   tutorialSidebar: [
     'intro',
     {
-      type: 'doc',
-      id: 'docker-quick-start',
-      label: '🐳 Docker Quick Start',
+      type: 'category',
+      label: '🚀 Get Started',
+      collapsed: false,
+      items: [
+        { type: 'doc', id: 'desktop-app', label: '💻 Desktop App' },
+        { type: 'doc', id: 'docker-quick-start', label: '🐳 Docker Quick Start' },
+      ],
     },
     {
       type: 'category',
-      label: '⚙️ Configure',
+      label: '📖 Using OpenReader',
       items: [
+        'guide/library',
+        'guide/reading-and-listening',
+        'guide/audiobook-export',
+        'guide/keyboard-shortcuts',
+      ],
+    },
+    {
+      type: 'category',
+      label: '🖥️ Self-Hosting',
+      items: [
+        'deploy/docker-compose',
+        'deploy/vercel-deployment',
+        'deploy/compute-worker',
+        'deploy/upgrade-from-v4',
+      ],
+    },
+    {
+      type: 'category',
+      label: '🛡️ Administration',
+      link: { type: 'doc', id: 'configure/admin-panel' },
+      items: [
+        'configure/auth',
         {
           type: 'category',
-          label: '🔊 TTS Providers',
-          link: {
-            type: 'doc',
-            id: 'configure/tts-providers',
-          },
+          label: 'TTS Providers',
+          link: { type: 'doc', id: 'configure/tts-providers' },
           items: [
             'configure/tts-provider-guides/kokoro-fastapi',
             'configure/tts-provider-guides/kitten-tts-fastapi',
@@ -31,45 +54,25 @@ const sidebars: SidebarsConfig = {
             'configure/tts-provider-guides/other',
           ],
         },
-        {
-          type: 'doc',
-          id: 'configure/auth',
-          label: '🔐 Auth',
-        },
-        {
-          type: 'doc',
-          id: 'configure/admin-panel',
-          label: '🛡️ Admin Panel',
-        },
-        {
-          type: 'doc',
-          id: 'configure/server-library-import',
-          label: '📥 Server Library Import',
-        },
+        'configure/instance-settings',
         'configure/compute-rate-limiting',
-        'configure/database',
-        'configure/object-blob-storage',
-        'configure/migrations',
+        'configure/maintenance',
       ],
     },
     {
       type: 'category',
-      label: '🚀 Deploy',
-      items: [
-        'deploy/local-development',
-        'deploy/docker-compose',
-        'deploy/upgrade-from-v4',
-        'deploy/compute-worker',
-        'deploy/vercel-deployment',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Reference',
+      label: '🧰 Infrastructure Reference',
       items: [
         'reference/environment-variables',
-        'reference/stack',
+        'configure/database',
+        'configure/object-blob-storage',
+        'configure/server-library-import',
       ],
+    },
+    {
+      type: 'category',
+      label: '🛠️ Contributing',
+      items: ['deploy/local-development', 'reference/stack'],
     },
     {
       type: 'category',

@@ -1,162 +1,69 @@
 ---
-title: Object / Blob Storage
+title: Object Storage
+description: Where document files and generated audio are stored, and how browsers reach them.
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
-This page documents storage backends, blob upload routing, and core Docker mount behavior.
+Document files, generated audio, audiobooks and preview images live in object storage. The [database](./database) holds only their records.
 
-## Scope of this page
+## Embedded or external
 
-- Focus: object/blob backends, keyspaces, upload/read paths, and storage debugging.
-- Not covered here: relational metadata tables and SQL state modeling (see [Database](./database)).
+| Backend | When it is used |
+| --- | --- |
+| **Embedded SeaweedFS** (default) | OpenReader starts `weed mini` itself and stores data under `docstore`. Its S3 endpoint listens on port `8333` inside the container; browsers never need to reach it. |
+| **External S3-compatible** | Set `USE_EMBEDDED_WEED_MINI=false` with `S3_BUCKET`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` and, for non-AWS services, `S3_INTERNAL_ENDPOINT`. Works with AWS S3, Cloudflare R2, MinIO, an external SeaweedFS and similar. |
 
-## Storage backends
+Every variable is listed in [Environment Variables](../reference/environment-variables#database-and-object-blob-storage).
 
-- Embedded (default): embedded SeaweedFS (`weed mini`) blob storage.
-- External: external S3-compatible object storage.
+### Persist and back up `docstore`
 
-Metadata database mode (SQLite vs Postgres) is configured separately in [Database](./database).
+In Docker, mount a volume at `/app/docstore`:
 
-:::note Embedded storage encryption
-Embedded SeaweedFS encrypts every object with a key kept in its data directory
-(`.mini_sse_kek`). Back up the whole `docstore` volume; the object files alone
-cannot be read without that key.
-:::
+```bash
+-v openreader_docstore:/app/docstore
+```
 
-Storage variables are documented in [Environment Variables](../reference/environment-variables#database-and-object-blob-storage).
+It holds the embedded storage, the SQLite database and temporary files. Embedded SeaweedFS encrypts every object with a key kept in the same directory (`.mini_sse_kek`), so back up the whole volume. The object files cannot be read without that key.
 
-## Ports
+## How browsers reach files
 
-- `3003`: OpenReader app and API routes
-- `8333`: embedded SeaweedFS S3 endpoint for app/worker storage traffic
+`S3_BROWSER_TRANSPORT` decides how browsers upload and download files:
 
-:::info
-The embedded default uses same-origin OpenReader proxy routes, so `8333` does not need to be exposed to browsers.
-:::
+| Value | Behavior |
+| --- | --- |
+| `proxy` | Browsers go through OpenReader's own routes. The default for embedded storage. |
+| `presigned` | Browsers use signed URLs to `S3_PUBLIC_ENDPOINT` directly. The app and worker still use `S3_INTERNAL_ENDPOINT`. |
+| `auto` | `proxy` for embedded storage; otherwise `presigned`, which requires a public HTTPS `S3_PUBLIC_ENDPOINT`. |
 
-## Upload behavior
+A failed direct transfer is not retried through the proxy.
 
-OpenReader chooses one browser transport before every transfer with `S3_BROWSER_TRANSPORT`; it never retries a failed direct request through the app proxy.
+For `presigned`, give the bucket its own HTTPS hostname, such as `s3.reader.example`, rather than a path like `/s3`. Your reverse proxy must keep the signed path, query string, `Host` and signed headers unchanged. Configure CORS for the OpenReader address with `GET`, `HEAD`, `PUT` and `OPTIONS`, allowing the `Content-Type` and `x-amz-server-side-encryption` headers.
 
-- `proxy` (the embedded default): uploads use `/api/documents/blob/upload`, reads use `/api/documents/blob/get`, and previews use `/api/documents/blob/preview`.
-- `presigned`: browser transfers use signatures generated from `S3_PUBLIC_ENDPOINT`. The server and compute worker still use `S3_INTERNAL_ENDPOINT`.
-- `auto`: chooses `proxy` for embedded SeaweedFS, otherwise requires a public HTTPS `S3_PUBLIC_ENDPOINT` and chooses `presigned`.
+## What is stored
 
-For a public SeaweedFS/S3 origin, use a dedicated HTTPS hostname such as `s3.reader.example`, not a `/s3` path mount. Preserve the signed path, query string, `Host`, and signed headers in the reverse proxy. Configure CORS for the OpenReader origin with `GET`, `HEAD`, `PUT`, and `OPTIONS`, allowing `Content-Type` and `x-amz-server-side-encryption`.
+All keys are under `S3_PREFIX`.
 
-## Document upload integrity
+| Prefix | Contents | Kept until |
+| --- | --- | --- |
+| `documents_v1/` | Uploaded documents, named by SHA-256 so identical files are stored once. Each upload is read back and its hash checked before it is added to the library. | No document references it ([Clean up unowned documents](./maintenance#scheduled-tasks)). |
+| `document_uploads_temp_v1/` | Uploads in progress. | Finished, or expired ([Clean up expired uploads](./maintenance#scheduled-tasks)). |
+| `document_previews_v1/` | Library thumbnails for PDF and EPUB. | The document is deleted. They can be regenerated. |
+| `tts_playback_segments_audio_v1/` | Generated speech, one file per segment. | The user clears audio or deletes the document. |
+| `tts_playback_segments_v1/`, `tts_playback_plan_v1/` | Word timings and the playback plan for each document and voice. | Same as the audio. |
+| `tts_playback_exports_v1/` | Finished audiobooks and temporary account export ZIPs. | Audiobooks: until audio is cleared. Export ZIPs: seven days. |
 
-Canonical documents use their SHA-256 digest as the storage object key. Finalization reads
-back the persisted canonical object and verifies the full SHA-256 and expected byte count
-**before** registering it in the library or issuing a successful finalize receipt. This
-also applies to PDFs produced by DOCX conversion. Existing finalize receipts are
-revalidated against the content hash before being returned; their recorded size is
-not trusted because old receipts may have been created before verification existed.
+Deleting an account removes its documents, previews and audio first. If that fails, the account is kept so the deletion can be retried.
 
-If the canonical object is already present but corrupt, or the first copy does not
-verify, finalization makes **one** replacement attempt using the original temporary
-upload or converted artifact and re-verifies it. If the bytes still do not match,
-the upload fails with DOCUMENT_BLOB_INTEGRITY_MISMATCH. The temporary upload remains
-available until its normal expiry so the operation can be retried. Network/read errors
-are not treated as corruption and do not trigger a replacement. A failed verification
-does not register a document or schedule its preview.
+Browsers also keep copies of documents, previews and audio in Cache Storage (`openreader-blobs-v1`) to load faster. It is only a cache; clearing it loses nothing.
 
-Object size, an S3 HEAD response, or an ETag alone cannot prove content integrity
-(particularly for multipart or encrypted objects). Verification reads and hashes the
-stored bytes. It does not retroactively scan previously registered library documents.
-
-## Browser Cache Storage
-
-The browser may retain reusable document, preview, and TTS audio responses in the versioned `openreader-blobs-v1` Cache Storage cache. This is strictly an evictable performance optimization:
-
-- The server database and object storage remain authoritative.
-- Clearing or losing Cache Storage must not change application correctness.
-- Cache keys are same-origin synthetic identities and are not fetchable server routes.
-- Successful full `200` responses may be cached; partial, opaque, redirect-error, and failed responses are not.
-- Presigned URLs are network sources only and are never used as persistent cache identities.
-
-Synthetic key layouts:
-
-- `/openreader-cache/documents/{documentId}/{contentVersion}`
-- `/openreader-cache/previews/{documentId}/{previewVersion}`
-- `/openreader-cache/audio/{audioKey}/{version}`
-
-Audiobook MP3/M4B downloads are not persisted in browser Cache Storage. Completed
-files and their metadata are durable in server object storage and are kept until
-you clear the relevant audio, delete the document/account, or remove the stored
-objects. Downloads get fresh links; a signed link expires after five minutes,
-which does not delete the file. Temporary account export ZIPs expire after seven
-days. Document storage sizes include finished audiobook variants.
-
-## Document previews
-
-- PDF/EPUB previews are generated server-side and stored in object storage under `document_previews_v1`.
-- Preview generation is triggered on upload registration and also backfills on first preview request for older docs.
-- Preview artifacts are temporary-cache friendly and can be regenerated from the source document blob.
-
-## FS / Volume Mounts
-
-### App data mount
-
-- Target: `/app/docstore`
-- Recommended: yes, for persistence
-- Purpose: persists SeaweedFS blob data, SQLite metadata DB, migrations, and local runtime temp state
-- Mount string: `-v openreader_docstore:/app/docstore`
-
-### Library source mount (optional)
-
-- Target: `/app/docstore/library`
-- Recommended: optional, use read-only (`:ro`)
-- Purpose: exposes host files as a source for server library import
-- Mount string: `-v /path/to/your/library:/app/docstore/library:ro`
-- Details: [Server Library Import](./server-library-import)
-
-## Transport topology
-
-The default embedded topology is `Browser → OpenReader → http://127.0.0.1:8333 SeaweedFS`. For public object storage, use `Browser → https://s3.example → S3/SeaweedFS` and configure the app and worker with a private `S3_INTERNAL_ENDPOINT`.
-
-## TTS Playback Storage
-
-Worker-owned TTS playback artifacts are stored under dedicated playback keyspaces.
-
-Typical key layout:
-
-- `${S3_PREFIX}/tts_playback_segments_audio_v1/users/<url-encoded-user-id>/docs/<document-id>/<document-version>/<settings-hash>/<audio-content-hash>.mp3`
-- `${S3_PREFIX}/tts_playback_segments_v1/users/<user-hash>/docs/<document-id>/<document-version>/<settings-hash>/segments/<ordinal>.json`
-- `${S3_PREFIX}/tts_playback_plan_v1/...`
-- `${S3_PREFIX}/tts_playback_v1/...`
-
-Notes:
-
-- Docker, Compose, `pnpm dev`, and `pnpm start` automatically purge the legacy
-  `tts_segments_v1/`, `tts_segments_v2/`, and `audiobooks_v1/` roots during startup. Vercel/custom
-  app-only deployments run the same idempotent cleanup with `pnpm migrate-decommission` during the
-  v5 rollout.
-- The playback sidecar prefix uses a hashed user id; audio uses the storage user id for content-addressed deduplication.
-
-## Account Deletion Cleanup
-
-Account deletion performs best-effort object cleanup:
-
-- Document blobs + preview artifacts
-- TTS playback audio and sidecar blobs
-
-If object deletion fails, account deletion still proceeds and orphaned objects may require manual cleanup.
-
-## TTS Playback Storage Debug Commands
-
-Use these commands to inspect playback audio objects.
+## Inspect playback audio
 
 <Tabs groupId="tts-segment-storage-access-cli">
   <TabItem value="aws-s3" label="AWS S3" default>
 
 ```bash
-# List all playback audio objects
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive
-
-# Filter to one document id (replace <document-id>)
 aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive | grep "/docs/<document-id>/"
 ```
 
@@ -164,10 +71,6 @@ aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursi
   <TabItem value="s3-compatible" label="Embedded / MinIO / R2 / etc">
 
 ```bash
-# List all playback audio objects
-aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_INTERNAL_ENDPOINT"
-
-# Filter to one document id (replace <document-id>)
 aws s3 ls "s3://$S3_BUCKET/$S3_PREFIX/tts_playback_segments_audio_v1/" --recursive --endpoint-url "$S3_INTERNAL_ENDPOINT" | grep "/docs/<document-id>/"
 ```
 

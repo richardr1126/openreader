@@ -1,228 +1,106 @@
 ---
 title: Local Development
+description: Run OpenReader from source with pnpm.
 ---
 
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
 
+Run OpenReader from a checkout to work on it. To run it from source without changing code, [Docker Compose](./docker-compose) with a local-build file is usually simpler.
+
 ## Prerequisites
 
-<details>
-<summary><strong>Node.js + pnpm (required)</strong></summary>
+| Tool | Needed | Why |
+| --- | --- | --- |
+| Node.js LTS and pnpm | Always | Runs the app. The repository pins the pnpm version. |
+| `weed` (SeaweedFS) | Unless you use external S3 | Embedded object storage. |
+| `nats-server` | Unless you use an external worker | The embedded worker's job queue. |
+| `soffice` (LibreOffice) | Optional | DOCX conversion. Without it, DOCX uploads fail. |
 
-<Tabs groupId="local-dev-node-pnpm-os">
+FFmpeg and the worker's models need no install: `pnpm i` brings an FFmpeg build (`FFMPEG_BIN` overrides it), and models download into `docstore/model` the first time they are needed.
+
+<Tabs groupId="local-dev-os">
 <TabItem value="macos" label="macOS" default>
 
 ```bash
-brew install nvm pnpm
-mkdir -p ~/.nvm
-echo 'export NVM_DIR="$HOME/.nvm"' >> ~/.zshrc
-echo '[ -s "$(brew --prefix nvm)/nvm.sh" ] && . "$(brew --prefix nvm)/nvm.sh"' >> ~/.zshrc
-source ~/.zshrc
-nvm install --lts
-nvm use --lts
-node -v
-pnpm -v
+brew install node pnpm seaweedfs nats-server
+brew install --cask libreoffice   # optional
 ```
 
 </TabItem>
-<TabItem value="linux" label="Linux">
+<TabItem value="linux" label="Linux (amd64)">
+
+Install Node.js LTS (for example with [nvm](https://github.com/nvm-sh/nvm)), then:
 
 ```bash
-# Debian/Ubuntu example
-sudo apt update
-sudo apt install -y curl
-curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-nvm install --lts
-nvm use --lts
 corepack enable
-corepack prepare pnpm@latest --activate
-node -v
-pnpm -v
+mkdir -p "$HOME/.local/bin" && cd /tmp
+
+# SeaweedFS 4.48, the version Docker ships
+curl -fsSL https://github.com/seaweedfs/seaweedfs/releases/download/4.48/linux_amd64.tar.gz | tar -xz weed
+install -m 0755 weed "$HOME/.local/bin/weed"
+
+# NATS
+curl -fsSLO https://github.com/nats-io/nats-server/releases/download/v2.12.1/nats-server-v2.12.1-linux-amd64.zip
+unzip -j nats-server-v2.12.1-linux-amd64.zip '*/nats-server'
+install -m 0755 nats-server "$HOME/.local/bin/nats-server"
+
+sudo apt install -y libreoffice   # optional
 ```
+
+Make sure `$HOME/.local/bin` is on your `PATH`.
 
 </TabItem>
 </Tabs>
 
-</details>
-
-<details>
-<summary><strong>SeaweedFS <code>weed</code> binary (required unless using external S3)</strong></summary>
-
-<Tabs groupId="local-dev-seaweed-os">
-<TabItem value="macos" label="macOS" default>
-
-```bash
-brew install seaweedfs
-weed version
-```
-
-</TabItem>
-<TabItem value="linux" label="Linux">
-
-```bash
-# Linux amd64 example (4.48, the version Docker ships)
-mkdir -p "$HOME/.local/bin"
-curl -fsSL -o /tmp/seaweedfs.tar.gz \
-  https://github.com/seaweedfs/seaweedfs/releases/download/4.48/linux_amd64.tar.gz
-tar -xzf /tmp/seaweedfs.tar.gz -C /tmp weed
-install -m 0755 /tmp/weed "$HOME/.local/bin/weed"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-export PATH="$HOME/.local/bin:$PATH"
-weed version
-```
-
-</TabItem>
-</Tabs>
-
-</details>
-
-<details>
-<summary><strong>NATS Server <code>nats-server</code> (required for embedded compute mode)</strong></summary>
-
-If `COMPUTE_WORKER_URL` is unset, startup launches embedded compute worker + NATS, so `nats-server` must be available on host PATH.
-
-If you always use an external worker (`COMPUTE_WORKER_URL` set), this is not required.
-
-<Tabs groupId="local-dev-nats-os">
-<TabItem value="macos" label="macOS" default>
-
-```bash
-brew install nats-server
-nats-server -v
-```
-
-</TabItem>
-<TabItem value="linux" label="Linux">
-
-```bash
-# Linux amd64 example
-mkdir -p "$HOME/.local/bin"
-curl -fsSL -o /tmp/nats-server.zip \
-  https://github.com/nats-io/nats-server/releases/latest/download/nats-server-v2.12.1-linux-amd64.zip
-unzip -j /tmp/nats-server.zip '*/nats-server' -d /tmp
-install -m 0755 /tmp/nats-server "$HOME/.local/bin/nats-server"
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-export PATH="$HOME/.local/bin:$PATH"
-nats-server -v
-```
-
-</TabItem>
-</Tabs>
-
-</details>
-
-<details>
-<summary><strong>LibreOffice (optional, for DOCX conversion)</strong></summary>
-
-<Tabs groupId="local-dev-libreoffice-os">
-<TabItem value="macos" label="macOS" default>
-
-```bash
-brew install libreoffice
-```
-
-</TabItem>
-<TabItem value="linux" label="Linux">
-
-```bash
-# Debian/Ubuntu example
-sudo apt update
-sudo apt install -y libreoffice
-```
-
-</TabItem>
-</Tabs>
-
-</details>
-
-<details>
-<summary><strong>Word-by-word highlighting (optional)</strong></summary>
-
-No extra native Whisper CLI build step is required.
-
-Word-by-word highlighting and PDF layout parsing are worker-backed in current releases.
-
-If you need mirrors or pinned artifact locations, set `WHISPER_MODEL_BASE_URL` in `.env` (current defaults expect q4 Whisper files at that base URL).
-
-</details>
-
-:::tip Docker Compose
-To run OpenReader and Kokoro-FastAPI with Docker Compose, including slim, full, and local-build
-options, see [Docker Compose](./docker-compose).
-:::
-
-## Steps
-
-### Required flow
-
-1. Clone the repository.
+## Run it
 
 ```bash
 git clone https://github.com/richardr1126/openreader.git
 cd openreader
-```
-
-2. Install dependencies.
-
-```bash
 pnpm i
-```
-
-3. Create your `.env` file.
-
-```bash
 cp .env.example .env
-openssl rand -base64 32
 ```
 
-Open `.env` and set these two values. Paste the command output as `AUTH_SECRET`:
+In `.env`, set:
 
 ```env
 BASE_URL=http://localhost:3003
-AUTH_SECRET=<paste-the-generated-value>
+AUTH_SECRET=<output of: openssl rand -base64 32>
 ```
 
-That is a complete configuration: the app starts its own storage, queue, and compute worker, and
-the worker and playback secrets are generated or derived for you. Keep `AUTH_SECRET` stable, since it
-also encrypts saved provider keys.
+That is a complete configuration. The app starts its own storage, queue and compute worker, and generates or derives the worker and playback secrets. Keep `AUTH_SECRET` stable: it also encrypts saved provider keys.
 
-Then add only what applies to you. Each tab lists **what to add to the same `.env`**, so you can
-combine them. If something is missing or wrong, startup lists every problem at once and exits.
+```bash
+pnpm dev
+```
 
-<Tabs groupId="local-env-additions">
-  <TabItem value="admin" label="First admin account" default>
+Open [http://localhost:3003](http://localhost:3003). If anything is missing or misconfigured, startup lists every problem at once and exits.
 
-**Use when:** you want an admin account ready on the first boot.
+To run a production build instead, use `pnpm build` then `pnpm start`. The build compiles the worker to JavaScript; `pnpm dev` runs it from its TypeScript sources.
+
+Migrations and [scheduled tasks](../configure/maintenance#scheduled-tasks) run automatically, as on any self-hosted install.
+
+## Optional settings
+
+Add any of these to the same `.env`.
+
+**First administrator.** Create an admin account on first boot, then sign in and change the password ([details](../configure/admin-panel#create-the-first-administrator)):
 
 ```env
 BOOTSTRAP_ADMIN_EMAIL=owner@example.com
 BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
 ```
 
-**Then:** sign in, and change the password in **Settings → Account**. The **Admin** tab appears
-after that. Remove these two lines afterward.
-
-  </TabItem>
-  <TabItem value="tts" label="Existing TTS server">
-
-**Use when:** you already run an OpenAI-compatible speech server such as Kokoro-FastAPI.
+**A TTS server you already run.** Adds it as a shared provider on first boot; manage it afterwards in **Settings → Admin → Providers** ([which address to use](../configure/tts-providers#self-hosted-provider-addresses)):
 
 ```env
 API_BASE=http://127.0.0.1:8880/v1
 API_MODEL_NAME=kokoro
-# API_KEY=<only-if-your-server-requires-one>
+# API_KEY=<only if your server requires one>
 ```
 
-**Then:** these are read once on first boot to create a shared provider. Manage providers later in
-**Settings → Admin → Providers**. Adding them after the first boot has no effect.
-
-  </TabItem>
-  <TabItem value="s3" label="External S3">
-
-**Use when:** you want an S3-compatible bucket instead of the embedded SeaweedFS.
+**External S3** instead of the embedded SeaweedFS ([details](../configure/object-blob-storage)):
 
 ```env
 USE_EMBEDDED_WEED_MINI=false
@@ -230,98 +108,27 @@ S3_BUCKET=your-bucket
 S3_REGION=us-east-1
 S3_ACCESS_KEY_ID=your-access-key
 S3_SECRET_ACCESS_KEY=your-secret-key
-# Non-AWS providers only:
-# S3_INTERNAL_ENDPOINT=https://your-s3-compatible-endpoint
-# S3_PUBLIC_ENDPOINT=https://s3.your-domain.example
-# S3_BROWSER_TRANSPORT=presigned
-# S3_FORCE_PATH_STYLE=true
+# Non-AWS providers: S3_INTERNAL_ENDPOINT, S3_FORCE_PATH_STYLE=true
 ```
 
-**Then:** the `weed` binary is no longer needed. See [Object / Blob Storage](../configure/object-blob-storage).
+**An external worker** instead of the embedded one. Set `COMPUTE_WORKER_URL` and the three shared values described in [Compute Worker](./compute-worker#shared-values).
 
-  </TabItem>
-  <TabItem value="worker" label="External worker">
+After signing in as an admin, **Settings → Admin → Maintenance** confirms the worker, storage and providers are healthy.
 
-**Use when:** the compute worker runs as its own service. The `nats-server` binary is then not
-needed on this machine.
+## Generate migrations
 
-```env
-COMPUTE_WORKER_URL=http://localhost:8081
-COMPUTE_WORKER_TOKEN=<same-token-used-by-worker>
-COMPUTE_CREDENTIAL_BROKER_TOKEN=<same-broker-token-used-by-worker>
-TTS_PLAYBACK_TOKEN_SECRET=<same-secret-used-by-worker>
-# Only when browsers reach the worker at a different address:
-# COMPUTE_WORKER_PUBLIC_URL=http://localhost:8081
-```
-
-**Then:** set the same three values on the worker, along with its own `NATS_*`, `S3_*`, and
-`COMPUTE_CREDENTIAL_BROKER_URL` settings. `AUTH_SECRET` and database settings stay on the app only.
-See [Compute Worker](./compute-worker).
-
-  </TabItem>
-</Tabs>
-
-:::note Env vars vs. admin panel
-Provider and runtime settings in `.env` seed the database on first boot (`API_*`,
-`RUNTIME_SEED_JSON`, `RUNTIME_SEED_JSON_PATH`). After that the admin UI is authoritative and editing
-those variables no longer changes behavior. See [Admin Panel](../configure/admin-panel). Browsers
-never supply provider credentials.
-:::
-
-Related guides: [Auth](../configure/auth), [Database](../configure/database),
-[Migrations](../configure/migrations), and the full
-[Environment Variables](../reference/environment-variables) reference. Upgrading from v4? See
-[Upgrade from v4](./upgrade-from-v4).
-
-:::info Scheduled maintenance tasks
-Local and self-hosted Node.js deployments start the scheduled-task loop in-process and check for due work once per minute. No `CRON_SECRET` is required unless you intentionally invoke the cron HTTP route yourself. Manage task intervals and inspect failures from **Settings → Admin → Scheduled tasks**.
-:::
-
-4. Start the app.
-
-<Tabs groupId="local-run-mode">
-  <TabItem value="dev" label="Dev (recommended)" default>
+After changing the database schema, generate migration files for both SQLite and Postgres:
 
 ```bash
-pnpm dev
+pnpm generate
 ```
 
-If you use embedded worker startup (no `COMPUTE_WORKER_URL`) and the host is missing `nats-server`,
-install `nats-server` locally or switch to external worker mode.
+This runs the Better Auth CLI to regenerate the auth table schemas, then `drizzle-kit generate` for both dialects. Running `drizzle-kit generate` directly skips the Better Auth step.
 
-  </TabItem>
-  <TabItem value="prod" label="Build + Start">
+| Files | Owner |
+| --- | --- |
+| `packages/database/src/schema_sqlite.ts`, `schema_postgres.ts` | App tables. Edit by hand and keep both dialects in sync. |
+| `packages/database/src/schema_auth_sqlite.ts`, `schema_auth_postgres.ts` | Auth tables, generated by Better Auth. Do not edit. |
+| `packages/database/migrations/{sqlite,postgres}/` | Generated SQL and `meta/_journal.json` for each dialect. |
 
-```bash
-pnpm build
-pnpm start
-```
-
-`pnpm build` also builds the embedded compute worker to plain JavaScript, which `pnpm start` runs.
-`pnpm dev` runs the worker from its TypeScript sources instead.
-
-  </TabItem>
-</Tabs>
-
-:::warning Provider reachability
-Background speech generation runs in the compute worker, while optional custom voice discovery runs
-in the app server. A self-hosted provider base URL must therefore be reachable from both runtimes.
-For native `pnpm dev`/`pnpm start` with the embedded worker, `http://127.0.0.1:<port>/v1` is correct.
-If the worker is remote, configure a URL reachable from that host as well.
-:::
-
-Visit [http://localhost:3003](http://localhost:3003). Signed in as an admin, open **Settings → Admin → Maintenance** to confirm the worker, storage, and providers are healthy.
-
-### Optional workflows
-
-Run manual DB migrations only for troubleshooting or explicit migration workflows:
-
-- Migrations run automatically on startup through the shared entrypoint for both `pnpm dev` and `pnpm start`.
-
-```bash
-pnpm migrate
-```
-
-:::info
-If `POSTGRES_URL` is set, migrations target Postgres; otherwise local SQLite is used. To disable automatic startup migrations, set `RUN_DRIZZLE_MIGRATIONS=false` and/or `RUN_V4_DECOMMISSION=false`. You can run the idempotent v4 legacy storage decommission manually with `pnpm migrate-decommission`. See [Upgrade from v4](./upgrade-from-v4) before a production v4.4→v5 upgrade.
-:::
+To apply migrations by hand, run `pnpm migrate` (Postgres when `POSTGRES_URL` is set, otherwise SQLite). See [Database and Migrations](../configure/database#migrations).

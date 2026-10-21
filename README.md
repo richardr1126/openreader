@@ -14,7 +14,19 @@ OpenReader is an open-source, self-host-friendly text-to-speech document reader 
 
 > Previously named **OpenReader-WebUI**.
 
-> **Get started in the [docs](https://docs.openreader.richardr.dev/)**.
+## 💻 Download the Desktop App
+
+**[OpenReader Desktop](https://openreader.richardr.dev/download)** is the full reader in one app for macOS, Windows, and Linux, with local voices, audiobook export, and automatic updates. No server, Docker, or account to set up.
+
+| Platform | Installers |
+| --- | --- |
+| macOS 12+ | `.dmg` for Apple silicon (signed and notarized) |
+| Windows 10+ | `.exe` for x64 and Arm |
+| Linux | `AppImage` and `.deb` for x86-64 and ARM64 |
+
+**[Download for your computer](https://openreader.richardr.dev/download)** · [Desktop docs](https://docs.openreader.richardr.dev/desktop-app) · [All releases](https://github.com/richardr1126/openreader/releases)
+
+Want to self-host for several people instead? **Get started in the [docs](https://docs.openreader.richardr.dev/)**. On iPhone, iPad, or Mac, try the separate native app on [TestFlight](https://testflight.apple.com/join/eJTYjDwV).
 
 ## ✨ Highlights
 
@@ -25,16 +37,18 @@ OpenReader is an open-source, self-host-friendly text-to-speech document reader 
 - ⏱️ **Word-by-word highlighting** via ONNX Whisper alignment through the compute worker control plane (NATS JetStream-backed).
 - 📚 **Five readable formats** — synchronized EPUB, PDF, TXT, MD, and worker-converted DOCX,
   with generated PDF/EPUB library previews.
-- 🎯 **Multi-provider TTS** — self-hosted OpenAI-compatible servers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI) or cloud APIs (OpenAI, Replicate, DeepInfra).
+- 🎯 **Multi-provider TTS** — Kokoro running locally with no API key, self-hosted OpenAI-compatible servers (Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI, Supertonic), or cloud APIs (OpenAI, Replicate, DeepInfra, and ElevenLabs, Cartesia, Google, and more through Speech SDK).
 - 🌐 **Multilingual support** — choose a document language for language-aware narration and highlighting. Available languages depend on the configured TTS provider and voice.
 - 🎧 **Audiobook export** in M4B or MP3, assembled by the worker from the same playback cache.
 - 🗂️ **Flexible backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync.
+- 💻 **Desktop app** for macOS, Windows, and Linux, with local voices and automatic updates.
 - 🐳 **Self-host friendly** — Docker (amd64/arm64), built-in auth/session support, and automatic startup migrations.
 
 ## 🚀 Start Here
 
 | Goal | Link |
 | --- | --- |
+| Install the desktop app | [Download](https://openreader.richardr.dev/download) · [Desktop App docs](https://docs.openreader.richardr.dev/desktop-app) |
 | Run with Docker Compose | [Docker Compose](https://docs.openreader.richardr.dev/deploy/docker-compose) |
 | Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/deploy/vercel-deployment) |
 | Deploy external compute worker | [Compute Worker (NATS JetStream)](https://docs.openreader.richardr.dev/deploy/compute-worker) |
@@ -45,6 +59,7 @@ OpenReader is an open-source, self-host-friendly text-to-speech document reader 
 | Configure TTS providers | [TTS Providers](https://docs.openreader.richardr.dev/configure/tts-providers) |
 | Run Kokoro locally | [Kokoro-FastAPI](https://docs.openreader.richardr.dev/configure/tts-provider-guides/kokoro-fastapi) |
 | Run KittenTTS locally | [KittenTTS-FastAPI](https://docs.openreader.richardr.dev/configure/tts-provider-guides/kitten-tts-fastapi) |
+| Upgrade a v4 instance | [Upgrade from v4](https://docs.openreader.richardr.dev/deploy/upgrade-from-v4) |
 | Get support or contribute | [Support and Contributing](https://docs.openreader.richardr.dev/about/support-and-contributing) |
 
 ## 🧭 Community
