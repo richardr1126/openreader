@@ -26,7 +26,7 @@ Generate each once (for example with `openssl rand -base64 32`) and set the same
 | --- | --- |
 | `COMPUTE_WORKER_TOKEN` | The app's requests to the worker. |
 | `COMPUTE_CREDENTIAL_BROKER_TOKEN` | The worker's requests to the app for provider keys. |
-| `TTS_PLAYBACK_TOKEN_SECRET` | Signing the short-lived audio links browsers use. Changing it makes cached audio regenerate. |
+| `TTS_PLAYBACK_TOKEN_SECRET` | Signing the short-lived audio links browsers use. |
 
 None of them is ever sent to browsers.
 

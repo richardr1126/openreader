@@ -1,4 +1,3 @@
-import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import { TtsCredentialBrokerClientError } from '../jobs/tts-credential-broker-error';
 
@@ -69,12 +68,4 @@ export function getEmailExecutionBrokerConfig(): TtsCredentialBrokerConfig {
   const url = new URL(config.url);
   url.pathname = '/api/internal/compute/email-execution';
   return { ...config, url };
-}
-
-export function requireTtsSegmentTextHashSecret(): string {
-  const playbackSecret = process.env.TTS_PLAYBACK_TOKEN_SECRET?.trim();
-  if (!playbackSecret) throw new Error('TTS_PLAYBACK_TOKEN_SECRET is required for playback segment metadata');
-  return createHmac('sha256', playbackSecret)
-    .update('openreader:tts-segment-text:v1')
-    .digest('base64url');
 }

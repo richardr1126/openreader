@@ -2,7 +2,6 @@ import { generateTTSBuffer } from '@openreader/tts/generate';
 import {
   buildTtsPlaybackAudioContentHash,
   buildTtsPlaybackSegmentAudioKey,
-  buildTtsSegmentTextHash,
   locatorFingerprint,
   normalizeLocator,
   normalizeSegmentText,
@@ -12,7 +11,6 @@ import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts
 import { prepareKokoro } from '../../inference/kokoro/engine';
 import { runWhisperAlignmentFromAudioBuffer } from '../../inference/runtime';
 import { withTimeout } from '../../infrastructure/config';
-import { requireTtsSegmentTextHashSecret } from '../../infrastructure/credential-broker-config';
 import type { TtsPlaybackStorage } from '../../playback/storage';
 import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
 import { parseTtsSettings, type TtsPlaybackSegmentInput } from './plan';
@@ -213,7 +211,6 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     : providerDepth;
   const effectiveSettings = resolveEffectiveTtsSettings(settings, requestCreds);
 
-  const secret = requireTtsSegmentTextHashSecret();
   const normalized = input.segments.map((segment) => {
     const text = normalizeSegmentText(segment.text);
     const locator = normalizeLocator(segment.locator as never);
@@ -234,7 +231,6 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         locatorFingerprint: locatorFingerprint(locator),
       }),
       segmentKey,
-      textHash: buildTtsSegmentTextHash(text, secret),
     };
   }).filter((segment): segment is NonNullable<typeof segment> => Boolean(segment));
   if (normalized.length === 0) return;
@@ -317,7 +313,6 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       settingsJson: input.request.settingsJson,
       ordinal: segment.original.ordinal,
       segmentKey: segment.segmentKey,
-      textHash: segment.textHash,
       textLength: segment.text.length,
       audioKey: metadata.audioKey,
       audioFormat: 'mp3',

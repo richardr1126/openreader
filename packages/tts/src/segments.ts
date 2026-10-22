@@ -1,4 +1,4 @@
-import { createHash, createHmac } from 'crypto';
+import { createHash } from 'crypto';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -195,10 +195,6 @@ export function buildTtsPlaybackAudioContentHash(input: {
     l: input.segmentKey ? null : input.locatorFingerprint,
   });
   return createHash('sha256').update(canonical).digest('hex');
-}
-
-export function buildTtsSegmentTextHash(text: string, secret: string): string {
-  return createHmac('sha256', secret).update(text).digest('hex');
 }
 
 export function buildTtsPlaybackSegmentAudioKey(input: {

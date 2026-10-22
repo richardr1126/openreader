@@ -75,7 +75,6 @@ function sidecar(ordinal: number, status: 'completed' | 'error', audioKey: strin
     settingsHash: request.settingsHash,
     ordinal,
     segmentKey: null,
-    textHash: `hash-${ordinal}`,
     textLength: 4,
     audioKey,
     audioFormat: 'mp3' as const,

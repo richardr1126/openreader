@@ -5,7 +5,6 @@ import {
   buildTtsPlaybackAudioContentHash,
   buildTtsSegmentSettingsJson,
   buildTtsSegmentSettingsHash,
-  buildTtsSegmentTextHash,
   locatorFingerprint,
   normalizeLocator,
   normalizeSegmentText,
@@ -169,12 +168,6 @@ describe('tts segment helpers', () => {
     });
     expect(id1).toBe(id2);
     expect(id1).not.toBe(id3);
-  });
-
-  test('does not leak plaintext via text hash', () => {
-    const hash = buildTtsSegmentTextHash('plain sentence', 'secret');
-    expect(hash).not.toContain('plain');
-    expect(hash).toHaveLength(64);
   });
 
   test('normalizes PDF locators and creates fingerprints', () => {

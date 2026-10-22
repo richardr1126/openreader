@@ -41,7 +41,6 @@ function errorSidecar(): TtsPlaybackSegmentMetadata {
     settingsHash: 'settings-1',
     ordinal: 0,
     segmentKey: 'segment-0',
-    textHash: 'hash',
     textLength: 10,
     audioKey: 'audio-key',
     audioFormat: 'mp3',

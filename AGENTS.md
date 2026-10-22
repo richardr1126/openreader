@@ -219,8 +219,8 @@ caused conflicts, high CPU, misleading failures, and overheating.
   pre-v5 database is detected; `runtime-secrets.mjs` derives the playback secret.
 - With the embedded worker, `TTS_PLAYBACK_TOKEN_SECRET` is derived from
   `AUTH_SECRET` when unset (an explicit value wins). External workers cannot
-  derive it and need the explicit shared value. The secret keys the persisted
-  audio cache identity, so changing it or the derivation invalidates cached audio.
+  derive it and need the explicit shared value. It only signs short-lived audio
+  URLs: rotating it breaks open players until they reconnect, not cached audio.
 - Keep the v4 upgrade page, the bootstrap notice, and the env reference in sync
   when upgrade behavior changes. Never reference pre-v5 storage prefixes from v5
   runtime code; `runV4Decommission` alone owns the legacy purge.

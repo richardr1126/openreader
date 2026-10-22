@@ -54,7 +54,6 @@ export interface TtsPlaybackSegmentMetadata {
   settingsJson?: unknown;
   ordinal: number;
   segmentKey: string | null;
-  textHash: string;
   textLength: number;
   audioKey: string;
   audioFormat: 'mp3';

@@ -5,7 +5,6 @@ import {
 } from '../../src/jobs/tts-credential-broker';
 import {
   getTtsCredentialBrokerConfig as readTtsCredentialBrokerConfig,
-  requireTtsSegmentTextHashSecret,
 } from '../../src/infrastructure/credential-broker-config';
 import { fetchComputeLimitPolicy } from '../../src/jobs/compute-limit-policy-broker';
 
@@ -198,16 +197,5 @@ describe('TTS credential broker client', () => {
     process.env.COMPUTE_CREDENTIAL_BROKER_URL =
       'http://openreader:3003/api/internal/compute/tts-credentials';
     expect(() => readTtsCredentialBrokerConfig()).toThrow(TtsCredentialBrokerClientError);
-  });
-
-  test('derives a stable domain-separated text fingerprint key from the playback secret', () => {
-    process.env.TTS_PLAYBACK_TOKEN_SECRET = 'stable-playback-secret';
-    const first = requireTtsSegmentTextHashSecret();
-    const second = requireTtsSegmentTextHashSecret();
-    process.env.TTS_PLAYBACK_TOKEN_SECRET = 'rotated-playback-secret';
-
-    expect(first).toBe(second);
-    expect(first).not.toBe('stable-playback-secret');
-    expect(requireTtsSegmentTextHashSecret()).not.toBe(first);
   });
 });

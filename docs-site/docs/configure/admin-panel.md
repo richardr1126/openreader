@@ -48,5 +48,5 @@ Seeds only fill in values that are not set yet. After that, the admin panel is t
 Provider API keys, the Resend key and the Gutendex key are encrypted in the database with AES-256-GCM, using a key derived from `AUTH_SECRET`. The admin panel only ever shows the last four characters. Browsers never receive keys or provider addresses. The compute worker fetches provider credentials from the app just in time and never stores them.
 
 :::danger Keep `AUTH_SECRET` stable
-Changing `AUTH_SECRET` makes every saved key unreadable, signs everyone out, and invalidates cached audio on installs that derive the playback secret from it. If you must change it, re-enter each provider's API key (and the Resend and Gutendex keys) in the admin panel afterward. There is no automatic re-encryption.
+Changing `AUTH_SECRET` makes every saved key unreadable and signs everyone out. If you must change it, re-enter each provider's API key (and the Resend and Gutendex keys) in the admin panel afterward. There is no automatic re-encryption.
 :::

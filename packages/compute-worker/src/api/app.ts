@@ -19,10 +19,7 @@ import {
   readPositiveIntEnv,
   requireEnv,
 } from '../infrastructure/config';
-import {
-  getTtsCredentialBrokerConfig,
-  requireTtsSegmentTextHashSecret,
-} from '../infrastructure/credential-broker-config';
+import { getTtsCredentialBrokerConfig } from '../infrastructure/credential-broker-config';
 import { OperationOrchestrator } from '../operations/service';
 import type {
   AccountExportJobRequest,
@@ -142,7 +139,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   if (!disableWorkers) {
     resolveStorageTransport(process.env);
     getTtsCredentialBrokerConfig();
-    requireTtsSegmentTextHashSecret();
+    requireEnv('TTS_PLAYBACK_TOKEN_SECRET');
   }
   // The model loads on the first local Kokoro request, not here.
   registerLocalTtsSynthesizer((request, signal) => synthesizeKokoro(request, signal));

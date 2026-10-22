@@ -3,9 +3,8 @@ import { createHmac } from 'node:crypto';
 const PLAYBACK_SECRET_CONTEXT = 'openreader:tts-playback-token-secret:v1';
 
 /**
- * Stable, domain-separated playback secret for embedded mode. The value also keys
- * the persisted segment content hash, so it must be identical on every boot; it is
- * derived from AUTH_SECRET, which deployments already keep stable.
+ * Domain-separated playback secret for embedded mode, derived from AUTH_SECRET so
+ * the app and its embedded worker share it without extra configuration.
  */
 export function deriveEmbeddedPlaybackSecret(authSecret) {
   return createHmac('sha256', authSecret.trim())
@@ -15,7 +14,7 @@ export function deriveEmbeddedPlaybackSecret(authSecret) {
 
 /**
  * Fills TTS_PLAYBACK_TOKEN_SECRET for an embedded worker when the operator did not
- * set one. An explicit value always wins so existing caches keep their identity.
+ * set one. An explicit value always wins.
  * Returns true when a value was derived.
  */
 export function applyEmbeddedPlaybackSecret(env) {

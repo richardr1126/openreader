@@ -44,7 +44,7 @@ S3_ACCESS_KEY_ID=<your-choice>
 S3_SECRET_ACCESS_KEY=<your-choice>
 ```
 
-- Keep `AUTH_SECRET` the same forever. It also encrypts saved provider keys ([details](../configure/admin-panel#how-saved-keys-are-protected)). Changing `TTS_PLAYBACK_TOKEN_SECRET` makes cached audio regenerate.
+- Keep `AUTH_SECRET` the same forever. It also encrypts saved provider keys ([details](../configure/admin-panel#how-saved-keys-are-protected)).
 - The slim stacks generate their worker tokens on each start, so they need only the first two lines.
 - The full stacks also use a default PostgreSQL password (`openreader`). PostgreSQL is not published outside the Compose network, but change it in the file if that matters to you.
 - Then [create the first administrator](../configure/admin-panel#create-the-first-administrator).

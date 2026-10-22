@@ -39,7 +39,6 @@ function completedSidecar(ordinal: number, cacheEpoch = 0): TtsPlaybackSegmentMe
     settingsHash: session.settingsHash,
     ordinal,
     segmentKey: `segment-${ordinal}`,
-    textHash: 'a'.repeat(64),
     textLength: 10,
     audioKey: `audio-${ordinal}.mp3`,
     audioFormat: 'mp3',

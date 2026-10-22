@@ -91,13 +91,13 @@ Only needed with a [standalone worker](../deploy/compute-worker).
 | `COMPUTE_CREDENTIAL_BROKER_TOKEN` | both | Authorizes the worker's requests to the app for provider keys. |
 | `COMPUTE_CREDENTIAL_BROKER_URL` | worker | `https://<app>/api/internal/compute/tts-credentials`. Never the worker's public address. |
 | `COMPUTE_CREDENTIAL_BROKER_TIMEOUT_MS` | worker | Default `5000`. |
-| `TTS_PLAYBACK_TOKEN_SECRET` | both | Signs short-lived audio links and keys the audio cache. See below. |
+| `TTS_PLAYBACK_TOKEN_SECRET` | both | Signs short-lived audio links. See below. |
 | `NATS_URL` | worker | The NATS server. The embedded worker uses `nats://127.0.0.1:4222`. |
 | `NATS_CREDS` or `NATS_CREDS_FILE` | worker | NATS credentials, inline or as a file path. `NATS_CREDS` wins when both are set. |
 
 Generate each token with `openssl rand -base64 32` and use the same value on both sides.
 
-`TTS_PLAYBACK_TOKEN_SECRET` is optional with the embedded worker: it is derived from `AUTH_SECRET`, and a value you set always wins. A standalone worker never receives `AUTH_SECRET`, so it needs the explicit value. Changing it, or `AUTH_SECRET` when derived, makes cached audio regenerate. The example Compose files ship a local default; replace it before exposing a stack beyond your machine.
+`TTS_PLAYBACK_TOKEN_SECRET` is optional with the embedded worker: it is derived from `AUTH_SECRET`, and a value you set always wins. A standalone worker never receives `AUTH_SECRET`, so it needs the explicit value. Rotating it keeps cached audio; players that are already open reconnect with fresh links. The example Compose files ship a local default; replace it before exposing a stack beyond your machine.
 
 ### Worker tuning
 
