@@ -80,6 +80,8 @@ describe('romance numbers', () => {
   test('a dot between groups of three is a thousands separator, a comma the decimal point', () => {
     expect(numberParts('es', '3.628.800')).toEqual([3, 'millones', 628, 'mil', 800]);
     expect(numberParts('es', '3,05')).toEqual([3, 'coma', 0, 5]);
+    expect(numberParts('es', '1.000,50')).toEqual(['mil', 'coma', 50]);
+    expect(numberParts('pt-br', '2.500,05')).toEqual([2, 'mil', 'e', 500, 'vírgula', 0, 5]);
     expect(numberParts('it', '2.5')).toEqual([2, 'punto', 5]);
   });
 

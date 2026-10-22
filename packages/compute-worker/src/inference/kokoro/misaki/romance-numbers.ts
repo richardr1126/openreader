@@ -161,20 +161,19 @@ export function numberParts(language: LearnedLanguage, token: string): NumberPar
   if (!match) return null;
   const words = LANGUAGES[language];
   const [, number, suffix] = match;
-  let value: NumberPart[];
-  if (/^\d{1,3}(?:\.\d{3})+$/.test(number!)) {
-    value = cardinal(words, number!.replaceAll('.', ''));
-  } else {
-    const [whole, ...fractions] = number!.split(/([.,])/);
-    value = cardinal(words, whole!);
-    for (let index = 0; index < fractions.length; index += 2) {
-      const fraction = fractions[index + 1]!;
-      value.push(fractions[index] === ',' ? words.decimal : words.point);
-      // "3,05" keeps its zero: "tres coma cero cinco".
-      const leading = /^0+/.exec(fraction)?.[0] ?? '';
-      value.push(...Array.from(leading, () => 0));
-      if (leading.length < fraction.length) value.push(...cardinal(words, fraction.slice(leading.length)));
-    }
+  // "1.250,99": dots group thousands, so only the comma is a decimal point.
+  const grouped = /^(\d{1,3}(?:\.\d{3})+)(?:,(\d+))?$/.exec(number!);
+  const [whole, ...fractions] = grouped
+    ? [grouped[1]!.replaceAll('.', ''), ...(grouped[2] === undefined ? [] : [',', grouped[2]])]
+    : number!.split(/([.,])/);
+  const value = cardinal(words, whole!);
+  for (let index = 0; index < fractions.length; index += 2) {
+    const fraction = fractions[index + 1]!;
+    value.push(fractions[index] === ',' ? words.decimal : words.point);
+    // "3,05" keeps its zero: "tres coma cero cinco".
+    const leading = /^0+/.exec(fraction)?.[0] ?? '';
+    value.push(...Array.from(leading, () => 0));
+    if (leading.length < fraction.length) value.push(...cardinal(words, fraction.slice(leading.length)));
   }
   if (suffix === '%') return [...value, ...words.percent];
   if (suffix === '°') return [...value, words.degrees];
