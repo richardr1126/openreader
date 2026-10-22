@@ -4,11 +4,15 @@ import { useEffect, useState } from 'react';
 import { Analytics } from '@vercel/analytics/next';
 import {
   CONSENT_CHANGED_EVENT,
-  disableAnalytics,
-  enableAnalytics,
   getConsentState,
   isAnalyticsAllowed,
 } from '@/lib/client/analytics';
+
+// The script stays loaded after consent is withdrawn, so every event checks
+// the current consent before it is sent.
+function dropWithoutConsent<T>(event: T): T | null {
+  return isAnalyticsAllowed(getConsentState()) ? event : null;
+}
 
 export function ConsentAwareAnalytics() {
   const [enabled, setEnabled] = useState(false);
@@ -16,13 +20,7 @@ export function ConsentAwareAnalytics() {
 
   useEffect(() => {
     const sync = () => {
-      const allowAnalytics = isAnalyticsAllowed(getConsentState());
-      setEnabled(allowAnalytics);
-      if (allowAnalytics) {
-        enableAnalytics();
-      } else {
-        disableAnalytics();
-      }
+      setEnabled(isAnalyticsAllowed(getConsentState()));
       setReady(true);
     };
 
@@ -37,5 +35,5 @@ export function ConsentAwareAnalytics() {
   }, []);
 
   if (!ready || !enabled) return null;
-  return <Analytics />;
+  return <Analytics beforeSend={dropWithoutConsent} />;
 }
