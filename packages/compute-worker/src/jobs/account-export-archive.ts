@@ -1,4 +1,4 @@
-import archiver from 'archiver';
+import { ZipArchive, type Archiver } from 'archiver';
 import { PassThrough } from 'node:stream';
 
 export const ACCOUNT_EXPORT_SCHEMA_VERSION = 5;
@@ -82,7 +82,7 @@ function normalizeErrorMessage(error: unknown): string {
   return 'Unknown error';
 }
 
-function appendJson(archive: archiver.Archiver, name: string, data: unknown): void {
+function appendJson(archive: Archiver, name: string, data: unknown): void {
   archive.append(JSON.stringify(data, null, 2), { name });
 }
 
@@ -100,7 +100,7 @@ export async function buildAccountExportArchive(input: BuildAccountExportArchive
   const { manifest, readObject, onProgress } = input;
   validateManifest(manifest);
 
-  const archive = archiver('zip', {
+  const archive = new ZipArchive({
     zlib: { level: 0 },
     forceZip64: true,
   });

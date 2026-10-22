@@ -126,7 +126,6 @@ async function seedInitialAdmin(): Promise<void> {
       id: randomUUID(),
       accountId: userId,
       providerId: 'credential',
-      issuer: 'local:credential',
       userId,
       password: passwordHash,
       createdAt: now,

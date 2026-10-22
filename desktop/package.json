@@ -8,7 +8,7 @@
   "license": "MIT",
   "type": "module",
   "main": "src/main.mjs",
-  "packageManager": "pnpm@10.33.4",
+  "packageManager": "pnpm@10.34.7",
   "scripts": {
     "stage": "node scripts/stage.mjs",
     "start": "electron .",
@@ -16,10 +16,10 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
-    "electron": "44.5.0",
-    "electron-builder": "26.17.0"
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0"
   },
   "dependencies": {
-    "electron-updater": "6.8.10"
+    "electron-updater": "6.8.11"
   }
 }

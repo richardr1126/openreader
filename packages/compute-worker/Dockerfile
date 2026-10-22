@@ -5,7 +5,7 @@ RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
 
 FROM node:lts AS deploy-stage
 
-RUN npm install -g pnpm@10.33.4
+RUN npm install -g pnpm@10.34.7
 
 WORKDIR /workspace
 
