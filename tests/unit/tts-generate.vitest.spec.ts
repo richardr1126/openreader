@@ -202,6 +202,31 @@ describe('speech-sdk request resolution', () => {
   });
 });
 
+describe('provider request text', () => {
+  test('drops private-use glyphs such as Word symbol-font bullets', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, _init?: unknown) => new Response(
+      JSON.stringify({ error: { message: 'stop after the request' } }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(generateTTSBuffer({
+        text: '\tTables, lists and footnotes.',
+        voice: 'af_bella',
+        speed: 1,
+        model: 'hexgrad/Kokoro-82M',
+        provider: 'deepinfra',
+        apiKey: 'test-key',
+      })).rejects.toThrow();
+      const [input, init] = fetchMock.mock.calls[0];
+      const body = input instanceof Request ? await input.text() : String((init as RequestInit).body);
+      expect(JSON.parse(body).input).toBe('\tTables, lists and footnotes.');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('OpenAI-compatible base URL', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

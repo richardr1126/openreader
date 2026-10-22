@@ -359,6 +359,10 @@ export function extractReplicateAudioUrl(output: unknown): string | null {
   return extractReplicateAudioUrlFromValue(output, new Set<object>());
 }
 
+// Private-use code points are font-specific glyphs (Word's Symbol/Wingdings
+// bullets) with no pronunciation; some providers reject the whole request.
+const PRIVATE_USE_CHARACTERS = /\p{Co}/gu;
+
 function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const provider = input.provider || 'openai';
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
@@ -388,7 +392,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
     : undefined;
 
   return {
-    text: input.text,
+    text: input.text.replace(PRIVATE_USE_CHARACTERS, ''),
     voice: normalizedVoice,
     speed,
     format,
