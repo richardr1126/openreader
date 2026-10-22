@@ -38,7 +38,7 @@ import type { LearnedLanguage } from './misaki/romance-numbers';
  * tables. The voices are onnx-community's, byte for byte.
  */
 const KOKORO_REPO_URL =
-  'https://huggingface.co/richardr1126/Kokoro-82M-OpenReader/resolve/ba35f2fa858c3ee47bff817abfc759844e542f92';
+  'https://huggingface.co/richardr1126/Kokoro-82M-OpenReader/resolve/ee9a26d2886e5a60953de169a2c944fa327e71f8';
 const KOKORO_ONNX_BASE_URL = `${KOKORO_REPO_URL}/onnx`;
 /** hexgrad/misaki (Apache-2.0) at the commit misaki 0.9.4's dictionaries were last changed. */
 const MISAKI_DATA_BASE_URL =
@@ -166,7 +166,7 @@ export const KOKORO_COMPONENTS: readonly KokoroComponent[] = [
     name: 'Pronunciation data',
     files: [
       learnedFile('es', 184_339, 'eff1f115e9c082ea6889a295e7fb658e81b4af298d2c54722389391d90bef21e'),
-      learnedFile('hi', 163_537, '10741a70c44efd766dc795515bf3c888314a6301236b0c10b1c6440ddc1182ad'),
+      learnedFile('hi', 163_591, '562797a685ab7148bc6fdff745a7142ab4b27b2471b270747ae6303e8212c0de'),
       learnedFile('it', 363_007, '78a266c9172507fa53c069048fddb2ff05de676d4c73d91ce1f9dfb886ecbd48'),
       learnedFile('pt-br', 586_315, '6aae16e69e46269be8ca8c759fd9e7c9e1e24dbf2c322e68b2063810943573e6'),
       misakiFile('us_gold.json', 3_000_469, 'dc414872a49a28ae6c141463d502fd945f3b2fde040484fdc47d00cc4612686f'),

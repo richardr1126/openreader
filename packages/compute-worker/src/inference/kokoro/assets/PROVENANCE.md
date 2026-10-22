@@ -32,6 +32,9 @@ These were already in the Swift sources and are kept unchanged. The iOS
   learned from the Tatoeba Hindi export, excluding the held-out parity corpus,
   with Kokoro 0.9.4's reference readings. Like the Spanish, Italian and Portuguese
   tables, it is downloaded separately and attributed to Tatoeba under CC BY 2.0 FR.
+  The trainer preserves `r.` sound notation when removing punctuation; the
+  revised Hindi table improves held-out parity to 86.9% exact / 0.98% PER
+  without changing the training corpus or runtime frontend.
 
 - **Tagging.** Node has no `NLTagger`. `tagger.ts` splits words the way the
   Swift code expects and asks `compromise` (MIT) for each word's part of speech,
