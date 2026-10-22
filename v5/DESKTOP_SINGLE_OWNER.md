@@ -206,11 +206,11 @@ provider exists.
 
 Card: **Kokoro on this device** (server: **Kokoro on the compute worker**).
 
-- State line: *Not downloaded · about 336 MB*, *Downloading · 128 MB of 336.4 MB*,
-  *Partly downloaded*, *Downloaded · 336 MB* (with a Ready badge), or the failure
+- State line: *Not downloaded · about 342 MB*, *Downloading · 128 MB of 341.6 MB*,
+  *Partly downloaded*, *Downloaded · 342 MB* (with a Ready badge), or the failure
   reason (a cancel reads *The Kokoro download was canceled.*).
 - Components listed with progress while downloading: Model weights, Voice pack,
-  English pronunciation data. Each file is checked against a pinned size and
+  Pronunciation data. Each file is checked against a pinned size and
   SHA-256 before it is renamed into place.
 - Actions: **Download** (or **Resume download**), **Cancel** while running, then
   **Remove** behind a confirmation that names the reclaimable size.
@@ -231,7 +231,7 @@ Card: **Kokoro on this device** (server: **Kokoro on the compute worker**).
 ### Desktop first run
 
 A fresh desktop install must have a voice without an account or key, and must
-not make reading wait on a 336 MB download.
+not make reading wait on a 342 MB download.
 
 - **Seed.** The shell passes `RUNTIME_SEED_JSON` with one provider, `kokoro`
   (`kokoro-local`). As the only enabled provider it is the implicit default. The

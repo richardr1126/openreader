@@ -1,20 +1,26 @@
 /**
- * TypeScript port of the OpenReader iOS `LetterToSound`: rules induced from
- * the Apache-2.0 Misaki dictionaries (`tools/letter-to-sound` in the iOS
- * repository), used in place of upstream Misaki's espeak fallback. Nothing in
- * the rules or this code derives from espeak. Apache-2.0; see
+ * TypeScript port of the OpenReader iOS `LetterToSound`: spelling-to-phoneme
+ * rules induced offline by the iOS repository's tooling. English tables come
+ * from the Apache-2.0 Misaki dictionaries (`tools/letter-to-sound`), used in
+ * place of upstream Misaki's espeak fallback; the other languages' tables are
+ * part of their `LearnedG2P` data (`tools/learned-g2p`). Apache-2.0; see
  * ../assets/LICENSE.txt.
  *
  * It is the last step before an unknown word would otherwise reach Kokoro as
  * the unknown marker, which the model's vocabulary drops — a deleted word. A
- * plausible English reading is the smaller failure.
+ * plausible reading is the smaller failure.
  */
 
-/** Vowels that can carry stress; `ᵻ` and `ᵊ` are reduced and never marked. */
-const STRESSABLE = new Set(Array.from('AIOQWYaiuæɑɒɔɛɜɪʊʌ'));
+/** English vowels that can carry stress; `ᵻ` and `ᵊ` are reduced and never marked. */
+const ENGLISH_STRESSABLE = new Set(Array.from('AIOQWYaiuæɑɒɔɛɜɪʊʌ'));
 /** The full vowel a reduced one stands for when it has to carry the stress. */
 const UNREDUCED: Record<string, string> = { 'ə': 'ʌ', 'ᵻ': 'ɪ', 'ᵊ': 'ʌ' };
 const ASCII_LETTER = /^[a-z]$/;
+
+/** Code points, each combining mark kept with the one before it (`ɐ̃` is one). */
+export function phonemeSymbols(phonemes: string): string[] {
+  return phonemes.match(/\P{M}\p{M}*|\p{M}+/gu) ?? [];
+}
 
 export class LetterToSound {
   /** Rules keyed by context, widest first; the last level is the bare letter. */
@@ -22,8 +28,15 @@ export class LetterToSound {
   /** Stress patterns keyed by `suffix|syllableCount`, indexed by suffix length. */
   private readonly stressPatterns: Map<string, string>[];
   private readonly maxWidth: number;
+  /**
+   * The symbols that carry stress. A table may list its own (`vowels`); an
+   * English table does not, and also lets a reduced vowel take the stress.
+   */
+  private readonly stressable: Set<string>;
+  private readonly english: boolean;
 
   constructor(tsv: string) {
+    let vowels: string[] | null = null;
     let width = 5;
     const skeleton = Array.from({ length: 8 }, () => new Map<string, string>());
     const stress = Array.from({ length: 8 }, () => new Map<string, string>());
@@ -34,6 +47,10 @@ export class LetterToSound {
       const kind = line.slice(0, first);
       if (kind === 'maxw') {
         width = Number.parseInt(line.slice(first + 1), 10) || 5;
+        continue;
+      }
+      if (kind === 'vowels') {
+        vowels = line.slice(first + 1).split(' ').filter(Boolean);
         continue;
       }
       const second = line.indexOf('\t', first + 1);
@@ -48,12 +65,20 @@ export class LetterToSound {
     this.maxWidth = width;
     this.skeleton = skeleton;
     this.stressPatterns = stress;
+    this.stressable = vowels ? new Set(vowels) : ENGLISH_STRESSABLE;
+    this.english = vowels === null;
   }
 
-  /** `null` for anything that is not a plain ASCII word, or has no vowel. */
+  /**
+   * `null` for a word with a letter the rules do not cover, or with no vowel.
+   * English rules cover a–z, though not every letter keeps a bare rule; a
+   * learned table covers exactly the letters that have one.
+   */
   guess(word: string): string | null {
     const letters = Array.from(word.toLowerCase());
-    if (letters.length === 0 || !letters.every((letter) => ASCII_LETTER.test(letter))) return null;
+    const bareLetters = this.skeleton[this.maxWidth];
+    const covered = (letter: string) => (this.english ? ASCII_LETTER.test(letter) : bareLetters?.has(`|${letter}|`));
+    if (letters.length === 0 || !letters.every(covered)) return null;
 
     // "^" and "$" are real context: rules can match only at a word edge.
     const padded = ['^', ...letters, '$'];
@@ -70,9 +95,10 @@ export class LetterToSound {
       bare += emitted ?? this.skeleton[this.maxWidth]?.get(`|${padded[centre]}|`) ?? '';
     }
 
-    const phonemes = Array.from(bare);
-    let syllables = phonemes.filter((phoneme) => STRESSABLE.has(phoneme)).length;
+    const phonemes = phonemeSymbols(bare);
+    let syllables = phonemes.filter((phoneme) => this.stressable.has(phoneme)).length;
     if (syllables === 0) {
+      if (!this.english) return null;
       // A short word can come out with only a reduced vowel ("va" is `və`,
       // "chan" `ʧən`); it still has a syllable, so give it the full vowel. No
       // vowel at all means no pronounceable word; initialisms have their own
@@ -95,7 +121,7 @@ export class LetterToSound {
     let result = '';
     let syllable = 0;
     for (const phoneme of phonemes) {
-      if (STRESSABLE.has(phoneme)) {
+      if (this.stressable.has(phoneme)) {
         const mark = marks[syllable];
         result += mark === '1' ? 'ˈ' : mark === '2' ? 'ˌ' : '';
         syllable += 1;

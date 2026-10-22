@@ -165,6 +165,17 @@
       ]
     },
     {
+      "name": "Tatoeba",
+      "versions": [],
+      "kind": "model",
+      "license": "CC-BY-2.0-FR",
+      "role": "Spanish, Italian and Brazilian Portuguese pronunciation tables, learned from Kokoro's readings of its sentences (downloaded at runtime)",
+      "notice": "Derived from sentences by the Tatoeba Project and its contributors, licensed CC BY 2.0 FR (https://creativecommons.org/licenses/by/2.0/fr/). The tables hold words and their readings, no sentences.",
+      "url": "https://tatoeba.org",
+      "copyright": [],
+      "textIds": []
+    },
+    {
       "name": "@acemir/cssom",
       "kind": "npm",
       "license": "MIT",

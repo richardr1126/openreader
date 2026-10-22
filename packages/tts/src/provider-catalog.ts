@@ -110,8 +110,11 @@ export const KOKORO_DEFAULT_VOICES = [
   'jf_nezumi', 'jf_tebukuro', 'jm_kumo', 'pf_dora', 'pm_alex', 'pm_santa', 'zf_xiaobei', 'zf_xiaoni',
   'zf_xiaoxiao', 'zf_xiaoyi', 'zm_yunjian', 'zm_yunxi', 'zm_yunxia', 'zm_yunyang',
 ] as const;
-/** The English voices the local engine downloads (American `a*`, British `b*`). */
-export const KOKORO_LOCAL_VOICES = KOKORO_DEFAULT_VOICES.filter((voice) => /^[ab][fm]_/.test(voice));
+/**
+ * The voices the local engine downloads: English (American `a*`, British
+ * `b*`), Spanish `e*`, Italian `i*` and Brazilian Portuguese `p*`.
+ */
+export const KOKORO_LOCAL_VOICES = KOKORO_DEFAULT_VOICES.filter((voice) => /^[abeip][fm]_/.test(voice));
 export const ORPHEUS_DEFAULT_VOICES = ['tara', 'leah', 'jess', 'leo', 'dan', 'mia', 'zac'] as const;
 export const SESAME_DEFAULT_VOICES = ['conversational_a', 'conversational_b', 'read_speech_a', 'read_speech_b', 'read_speech_c', 'read_speech_d', 'none'] as const;
 

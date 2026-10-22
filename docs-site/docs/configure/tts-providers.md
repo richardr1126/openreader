@@ -11,7 +11,7 @@ API keys stay on the server, encrypted (see [How saved keys are protected](./adm
 
 | Type | What it is | Needs |
 | --- | --- | --- |
-| **Kokoro** | Kokoro-82M running inside the compute worker. English only, with 28 American and British voices that can be blended. | Nothing; voice data (about 336 MB) downloads the first time it speaks. |
+| **Kokoro** | Kokoro-82M running inside the compute worker. English (28 American and British voices), Spanish, Italian and Brazilian Portuguese (8 voices); voices can be blended. | Nothing; voice data (about 342 MB) downloads the first time it speaks. |
 | **Custom OpenAI-like** | Any server with an OpenAI-compatible speech endpoint, such as Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI or Supertonic. | Base URL; API key if the server requires one. |
 | **OpenAI** | OpenAI's speech API (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`). | API key. |
 | **Replicate** | Hosted models on Replicate, from a built-in list or any model ID. | API key. |

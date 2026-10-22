@@ -1,7 +1,8 @@
 /**
  * Kokoro-82M on onnxruntime-node, in the worker process.
  *
- * Text goes through the Misaki port (no espeak, no GPL phonemizer), is split
+ * Text goes through the Misaki port for English and the learned tables for
+ * Spanish, Italian and Portuguese (no espeak, no GPL phonemizer), is split
  * into model-sized chunks exactly as Kokoro's own `KPipeline` splits it, and
  * each chunk is one ONNX run. The model returns each phoneme's frame count
  * beside the audio, which gives the word timings without a second model. Runs are serialized through one queue: the
@@ -22,11 +23,14 @@ import {
   KOKORO_SAMPLE_RATE,
   KOKORO_VOICE_SHA256,
   kokoroAssetPath,
+  kokoroLearnedG2PFile,
   removeKokoroAssetFiles,
 } from './model-files';
 import { G2P } from './misaki/g2p';
+import { LearnedG2P } from './misaki/learned-g2p';
 import { LetterToSound } from './misaki/letter-to-sound';
 import { Lexicon } from './misaki/lexicon';
+import type { LearnedLanguage } from './misaki/romance-numbers';
 import type { MToken } from './misaki/token';
 
 /** Kokoro's phoneme vocabulary (hexgrad/Kokoro-82M config.json). */
@@ -252,7 +256,7 @@ export function parseVoiceBlend(spec: string): VoiceWeight[] {
     const match = /^([a-z]{2}_[a-z0-9]+)(?:\(\s*([0-9]*\.?[0-9]+)\s*\))?$/i.exec(part);
     if (!match) throw new Error(`Local Kokoro cannot read the voice "${part}"`);
     const voice = match[1]!.toLowerCase();
-    if (!Object.hasOwn(KOKORO_VOICE_SHA256, voice)) throw new Error(`Local Kokoro has no English voice "${voice}"`);
+    if (!Object.hasOwn(KOKORO_VOICE_SHA256, voice)) throw new Error(`Local Kokoro has no voice "${voice}"`);
     return { voice, weight: match[2] === undefined ? 1 : Number(match[2]) };
   });
   if (voices.length === 0) throw new Error('Local Kokoro needs a voice');
@@ -292,9 +296,24 @@ export function encodeWav(samples: Float32Array, sampleRate = KOKORO_SAMPLE_RATE
   return wav;
 }
 
+type KokoroLanguage = 'us' | 'gb' | LearnedLanguage;
+
+/** Kokoro names a voice for its language: `af_heart` is American, `ef_dora` Spanish. */
+const VOICE_LANGUAGES: Record<string, KokoroLanguage> = { a: 'us', b: 'gb', e: 'es', i: 'it', p: 'pt-br' };
+
+function kokoroVoiceLanguage(voice: string): KokoroLanguage {
+  const language = VOICE_LANGUAGES[voice[0]!];
+  if (!language) throw new Error(`Local Kokoro has no voice "${voice}"`);
+  return language;
+}
+
+interface Phonemizer {
+  phonemize(text: string): { tokens: MToken[] };
+}
+
 interface KokoroRuntime {
   session: ort.InferenceSession;
-  g2p(british: boolean): Promise<G2P>;
+  g2p(language: KokoroLanguage): Promise<Phonemizer>;
   voice(name: string): Promise<Float32Array>;
 }
 
@@ -310,26 +329,37 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
     executionMode: 'sequential',
   });
 
-  const dialects = new Map<boolean, Promise<G2P>>();
+  const languages = new Map<KokoroLanguage, Promise<Phonemizer>>();
   const voices = new Map<string, Promise<Float32Array>>();
+
+  const english = async (dialect: 'us' | 'gb'): Promise<Phonemizer> => {
+    const british = dialect === 'gb';
+    const [gold, silver, rules] = await Promise.all([
+      readFile(at(`misaki/${dialect}_gold.json`), 'utf8'),
+      readFile(at(`misaki/${dialect}_silver.json`), 'utf8'),
+      readFile(kokoroLetterToSoundPath(british), 'utf8'),
+    ]);
+    return new G2P({
+      lexicon: new Lexicon({
+        british,
+        data: { gold: JSON.parse(gold), silver: JSON.parse(silver) },
+        letterToSound: new LetterToSound(rules),
+      }),
+      // Kokoro's own pipeline drops unknown words rather than reading a marker.
+      unk: '',
+    });
+  };
+  const learned = async (language: LearnedLanguage): Promise<Phonemizer> =>
+    new LearnedG2P(language, await readFile(at(kokoroLearnedG2PFile(language)), 'utf8'));
 
   return {
     session,
-    g2p(british) {
-      let pending = dialects.get(british);
+    g2p(language) {
+      let pending = languages.get(language);
       if (!pending) {
-        const dialect = british ? 'gb' : 'us';
-        pending = Promise.all([
-          readFile(at(`misaki/${dialect}_gold.json`), 'utf8'),
-          readFile(at(`misaki/${dialect}_silver.json`), 'utf8'),
-          readFile(kokoroLetterToSoundPath(british), 'utf8').then((tsv) => new LetterToSound(tsv)),
-        ]).then(([gold, silver, lts]) => new G2P({
-          lexicon: new Lexicon({ british, data: { gold: JSON.parse(gold), silver: JSON.parse(silver) }, letterToSound: lts }),
-          // Kokoro's own pipeline drops unknown words rather than reading a marker.
-          unk: '',
-        }));
-        pending.catch(() => dialects.delete(british));
-        dialects.set(british, pending);
+        pending = language === 'us' || language === 'gb' ? english(language) : learned(language);
+        pending.catch(() => languages.delete(language));
+        languages.set(language, pending);
       }
       return pending;
     },
@@ -415,9 +445,9 @@ export async function synthesizeKokoro(
   const blend = parseVoiceBlend(request.voice);
   const kokoro = await getRuntime(onModelDownloadProgress);
   signal?.throwIfAborted();
-  const british = blend[0]!.voice.startsWith('b');
+  // A blend speaks its first voice's language.
   const [g2p, packs] = await Promise.all([
-    kokoro.g2p(british),
+    kokoro.g2p(kokoroVoiceLanguage(blend[0]!.voice)),
     Promise.all(blend.map((entry) => kokoro.voice(entry.voice))),
   ]);
   const voicePack = packs.length === 1 ? packs[0]! : blendVoices(packs, blend.map((entry) => entry.weight));
