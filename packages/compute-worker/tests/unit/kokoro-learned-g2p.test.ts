@@ -21,10 +21,12 @@ const TABLE = [
   'l\tN\tˈene',
   'l\tU\tˈu',
   'n\t1\tˈuno',
+  'n\t50\tθinkwˈenta',
   'n\t776\tsˌeteθjˈɛntos sɛtˌɛntaisˈAs',
   'w\tde\tde',
   'w\tla\tla',
   'w\tmil\tmˈil',
+  'w\tcoma\tkˈoma',
 ].join('\n');
 
 const phonemes = (text: string) =>
@@ -81,6 +83,7 @@ describe('romance numbers', () => {
     expect(numberParts('es', '3.628.800')).toEqual([3, 'millones', 628, 'mil', 800]);
     expect(numberParts('es', '3,05')).toEqual([3, 'coma', 0, 5]);
     expect(numberParts('es', '1.000,50')).toEqual(['mil', 'coma', 50]);
+    expect(phonemes('1.000,50')).toBe('mˈil kˈoma θinkwˈenta');
     expect(numberParts('pt-br', '2.500,05')).toEqual([2, 'mil', 'e', 500, 'vírgula', 0, 5]);
     expect(numberParts('it', '2.5')).toEqual([2, 'punto', 5]);
   });
