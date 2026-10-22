@@ -26,7 +26,7 @@ It supports multiple TTS providers, including Kokoro running locally in OpenRead
   - Cached audio is reused across seeks, reloads, and M4B/MP3 exports
 - 🧱 **Layout-aware PDF Parsing**
   - PP-DocLayoutV3 (ONNX) detects structured blocks with cross-page stitching and geometry-based highlighting for precise read-along sync and clean TTS segmentation
-- ⏱️ **Word-by-word Highlighting** via ONNX Whisper alignment
+- ⏱️ **Word-by-word Highlighting** from local Kokoro's own timings, or ONNX Whisper alignment for other providers
   - Powered by the embedded or standalone compute worker control plane (NATS JetStream-backed)
 - 📚 **Five Readable Formats**
   - Synchronized EPUB, PDF, TXT, MD, and worker-converted DOCX, with generated PDF/EPUB library previews

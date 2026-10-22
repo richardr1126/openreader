@@ -30,9 +30,13 @@ import {
   type ModelFetch,
 } from '../model-download';
 
-/** onnx-community/Kokoro-82M-v1.0-ONNX (Apache-2.0), pinned. */
+/**
+ * richardr1126/Kokoro-82M-OpenReader (Apache-2.0), pinned: Kokoro-82M exported
+ * with its per-token durations as a second output, which give word timings
+ * (`packaging/kokoro-onnx`). The voices are onnx-community's, byte for byte.
+ */
 const KOKORO_ONNX_BASE_URL =
-  'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231';
+  'https://huggingface.co/richardr1126/Kokoro-82M-OpenReader/resolve/7ba0e746c661aaed852ed0252800ba63db3f1375/onnx';
 /** hexgrad/misaki (Apache-2.0) at the commit misaki 0.9.4's dictionaries were last changed. */
 const MISAKI_DATA_BASE_URL =
   'https://raw.githubusercontent.com/hexgrad/misaki/e820629b96334db28227df37f280e4836d46fadb/misaki/data';
@@ -53,6 +57,7 @@ export const KOKORO_MODEL_DIR = path.join(DOCSTORE_DIR, 'model', 'kokoro-82m');
  * win over the larger one-time download.
  */
 export const KOKORO_MODEL_FILE = 'onnx/model.onnx';
+const KOKORO_MODEL_URL = `${KOKORO_ONNX_BASE_URL}/model.onnx`;
 export const KOKORO_SAMPLE_RATE = 24_000;
 
 const VOICE_BYTES = 510 * 256 * 4;
@@ -112,9 +117,9 @@ export const KOKORO_COMPONENTS: readonly KokoroComponent[] = [
     name: 'Model weights',
     files: [{
       path: KOKORO_MODEL_FILE,
-      url: `${KOKORO_ONNX_BASE_URL}/${KOKORO_MODEL_FILE}`,
-      size: 325_532_232,
-      sha256: '8fbea51ea711f2af382e88c833d9e288c6dc82ce5e98421ea61c058ce21a34cb',
+      url: KOKORO_MODEL_URL,
+      size: 325_700_391,
+      sha256: 'd81c0d8e89a78a3c17da609404dc7917e26d2d0bfc441eb7c32ddb7e0d3a5197',
     }],
   },
   {

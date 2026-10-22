@@ -7,8 +7,12 @@ size and SHA-256 before loading it.
 
 Kokoro-82M model weights and voice packs
   Upstream:  https://huggingface.co/hexgrad/Kokoro-82M (Apache-2.0)
-  ONNX export: https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX
-             commit 1939ad2a8e416c0acfeecc08a694d14ef25f2231 (Apache-2.0)
+  ONNX export: https://huggingface.co/richardr1126/Kokoro-82M-OpenReader
+             commit 7ba0e746c661aaed852ed0252800ba63db3f1375, onnx/ (Apache-2.0)
+             The model is exported from the upstream checkpoint with its
+             per-token durations as a second output (packaging/kokoro-onnx);
+             the voice packs are onnx-community's (Kokoro-82M-v1.0-ONNX,
+             commit 1939ad2a8e416c0acfeecc08a694d14ef25f2231), unchanged.
   Copyright hexgrad. Licensed under the Apache License, Version 2.0 (below).
 
 Misaki grapheme-to-phoneme frontend and dictionaries
