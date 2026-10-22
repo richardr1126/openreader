@@ -19,7 +19,7 @@
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, rename, rm, stat, unlink } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, rmdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
 import { resolveWorkerPath } from '../../worker-paths';
@@ -247,11 +247,46 @@ export async function ensureKokoroAssetFiles(options: {
   await downloadKokoroAssetFiles(options);
 }
 
+const prunedModelDirs = new Set<string>();
+
+/**
+ * Deletes everything under the model directory that no current component
+ * names: files a newer worker stopped using or moved, and partial downloads
+ * left by a crash. Files are replaced in place when a pin changes, so this is
+ * all that can accumulate. Runs inside the serial download queue, where no
+ * `.tmp` is in flight.
+ */
+async function pruneKokoroAssetFiles(modelDir: string): Promise<void> {
+  const keep = new Set(KOKORO_COMPONENTS.flatMap((component) => component.files.map((file) => file.path)));
+  const visit = async (relative: string): Promise<boolean> => {
+    const entries = await readdir(path.join(modelDir, relative), { withFileTypes: true }).catch(() => null);
+    if (!entries) return false;
+    let empty = true;
+    for (const entry of entries) {
+      const child = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        if (await visit(child)) await rmdir(path.join(modelDir, child)).catch(() => undefined);
+        else empty = false;
+      } else if (keep.has(child)) {
+        empty = false;
+      } else {
+        await unlink(path.join(modelDir, child)).catch(() => undefined);
+      }
+    }
+    return empty;
+  };
+  await visit('');
+}
+
 async function downloadKokoroAssetFiles(
   options: NonNullable<Parameters<typeof ensureKokoroAssetFiles>[0]>,
   verified = new Set<string>(),
 ): Promise<void> {
   const modelDir = options.modelDir ?? KOKORO_MODEL_DIR;
+  if (!prunedModelDirs.has(modelDir)) {
+    prunedModelDirs.add(modelDir);
+    await pruneKokoroAssetFiles(modelDir);
+  }
   const components = options.components && !options.selection
     ? options.components
     : selectedComponents(options.components ?? KOKORO_COMPONENTS, options.selection);
@@ -486,6 +521,7 @@ export async function kokoroAssetStatus(modelDir = KOKORO_MODEL_DIR): Promise<Ko
 export async function removeKokoroAssetFiles(modelDir = KOKORO_MODEL_DIR): Promise<void> {
   if (download) throw new KokoroDownloadInProgressError();
   verifiedAssets.clear();
+  prunedModelDirs.delete(modelDir);
   await rm(modelDir, { recursive: true, force: true });
 }
 

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { ModelDownloadProgress } from '../../src/inference/model-download';
@@ -246,6 +246,23 @@ describe('on-demand Kokoro downloads', () => {
     await removeKokoroAssetFiles();
     expect(await kokoroAssetStatus()).toHaveLength(3);
     expect((await kokoroAssetStatus()).every((component) => component.installedBytes === 0)).toBe(true);
+  });
+
+  test('deletes files no current component names, keeping installed ones', async () => {
+    const write = async (name: string, body: string) => {
+      await mkdir(path.dirname(path.join(KOKORO_MODEL_DIR, name)), { recursive: true });
+      await writeFile(path.join(KOKORO_MODEL_DIR, name), body);
+    };
+    const stale = ['onnx/model_quantized.onnx', 'voices/old_voice.bin', 'voices/af_heart.bin.tmp', 'legacy/g2p/xx.tsv'];
+    for (const name of stale) await write(name, 'stale');
+    await write('voices/af_heart.bin', 'asset:voices/af_heart.bin');
+
+    await ensureKokoroAssets(undefined, { voices: ['af_heart'], language: 'us' });
+    for (const name of [...stale, 'legacy']) {
+      await expect(stat(path.join(KOKORO_MODEL_DIR, name))).rejects.toThrow();
+    }
+    expect(requestedPaths()).not.toContain('voices/af_heart.bin');
+    expect(await readFile(path.join(KOKORO_MODEL_DIR, 'voices/af_heart.bin'), 'utf8')).toBe('asset:voices/af_heart.bin');
   });
 
   test('rejects unknown voice ids before downloading anything', async () => {
