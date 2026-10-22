@@ -16,7 +16,7 @@ import {
 import {
   ensureKokoroAssetFiles,
   KOKORO_COMPONENTS,
-  KOKORO_LETTER_TO_SOUND_PATH,
+  kokoroLetterToSoundPath,
   kokoroAssetStatus,
   removeKokoroAssetFiles,
 } from '../../src/inference/kokoro/model-files';
@@ -194,10 +194,11 @@ describe('local Kokoro model files', () => {
   });
 
   test('ships the letter-to-sound rules with the worker', async () => {
-    const rules = await readFile(KOKORO_LETTER_TO_SOUND_PATH);
-    expect(createHash('sha256').update(rules).digest('hex')).toBe(
-      '14e0911c6c92ea134c5ae830f89b69038ab9dbca5662896d012394f30309fbf2',
-    );
+    const sha256 = async (british: boolean) => createHash('sha256')
+      .update(await readFile(kokoroLetterToSoundPath(british)))
+      .digest('hex');
+    expect(await sha256(false)).toBe('14e0911c6c92ea134c5ae830f89b69038ab9dbca5662896d012394f30309fbf2');
+    expect(await sha256(true)).toBe('09059ce11cb3e5663df7eea2dc124995d7db9759e87bf6a27405c76de350f41b');
     const downloaded = KOKORO_COMPONENTS.flatMap((component) => component.files.map((entry) => entry.path));
     expect(downloaded.some((entry) => entry.includes('letter_to_sound'))).toBe(false);
   });

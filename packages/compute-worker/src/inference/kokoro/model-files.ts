@@ -9,7 +9,7 @@
  * playback SSE.
  *
  * The letter-to-sound rules have no upstream home, so they ship with the
- * worker in `assets/` instead (see `KOKORO_LETTER_TO_SOUND_PATH`).
+ * worker in `assets/` instead (see `kokoroLetterToSoundPath`).
  *
  * To work offline, place the files at their paths under the model directory
  * before first use (for example the iOS Misaki `Resources` dictionaries copied
@@ -37,11 +37,13 @@ const KOKORO_ONNX_BASE_URL =
 const MISAKI_DATA_BASE_URL =
   'https://raw.githubusercontent.com/hexgrad/misaki/e820629b96334db28227df37f280e4836d46fadb/misaki/data';
 /**
- * Letter-to-sound rules induced from the Misaki dictionaries by the OpenReader
- * iOS tooling. They have no upstream to download from, so the worker bundles
- * them (2.3 MB).
+ * Letter-to-sound rules induced from each dialect's Misaki dictionaries by the
+ * OpenReader iOS tooling. They have no upstream to download from, so the
+ * worker bundles them (2.3 MB American, 2.4 MB British).
  */
-export const KOKORO_LETTER_TO_SOUND_PATH = resolveWorkerPath('inference', 'kokoro', 'assets', 'letter_to_sound.tsv');
+export function kokoroLetterToSoundPath(british: boolean): string {
+  return resolveWorkerPath('inference', 'kokoro', 'assets', british ? 'letter_to_sound_gb.tsv' : 'letter_to_sound.tsv');
+}
 
 export const KOKORO_MODEL_DIR = path.join(DOCSTORE_DIR, 'model', 'kokoro-82m');
 /**

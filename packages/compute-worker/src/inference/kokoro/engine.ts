@@ -16,7 +16,7 @@ import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import type { ModelDownloadProgressHandler } from '../model-download';
 import {
   ensureKokoroAssets,
-  KOKORO_LETTER_TO_SOUND_PATH,
+  kokoroLetterToSoundPath,
   KOKORO_MODEL_FILE,
   KOKORO_SAMPLE_RATE,
   KOKORO_VOICE_SHA256,
@@ -193,7 +193,6 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
     executionMode: 'sequential',
   });
 
-  let letterToSound: Promise<LetterToSound> | null = null;
   const dialects = new Map<boolean, Promise<G2P>>();
   const voices = new Map<string, Promise<Float32Array>>();
 
@@ -202,12 +201,11 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
     g2p(british) {
       let pending = dialects.get(british);
       if (!pending) {
-        letterToSound ??= readFile(KOKORO_LETTER_TO_SOUND_PATH, 'utf8').then((tsv) => new LetterToSound(tsv));
         const dialect = british ? 'gb' : 'us';
         pending = Promise.all([
           readFile(at(`misaki/${dialect}_gold.json`), 'utf8'),
           readFile(at(`misaki/${dialect}_silver.json`), 'utf8'),
-          letterToSound,
+          readFile(kokoroLetterToSoundPath(british), 'utf8').then((tsv) => new LetterToSound(tsv)),
         ]).then(([gold, silver, lts]) => new G2P({
           lexicon: new Lexicon({ british, data: { gold: JSON.parse(gold), silver: JSON.parse(silver) }, letterToSound: lts }),
           // Kokoro's own pipeline drops unknown words rather than reading a marker.

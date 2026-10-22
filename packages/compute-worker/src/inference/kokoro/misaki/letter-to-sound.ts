@@ -11,7 +11,9 @@
  */
 
 /** Vowels that can carry stress; `ᵻ` and `ᵊ` are reduced and never marked. */
-const STRESSABLE = new Set(Array.from('AIOWYiuæɑɔɛɜɪʊʌ'));
+const STRESSABLE = new Set(Array.from('AIOQWYaiuæɑɒɔɛɜɪʊʌ'));
+/** The full vowel a reduced one stands for when it has to carry the stress. */
+const UNREDUCED: Record<string, string> = { 'ə': 'ʌ', 'ᵻ': 'ɪ', 'ᵊ': 'ʌ' };
 const ASCII_LETTER = /^[a-z]$/;
 
 export class LetterToSound {
@@ -69,9 +71,17 @@ export class LetterToSound {
     }
 
     const phonemes = Array.from(bare);
-    const syllables = phonemes.filter((phoneme) => STRESSABLE.has(phoneme)).length;
-    // No vowel means no pronounceable word; initialisms have their own path.
-    if (syllables === 0) return null;
+    let syllables = phonemes.filter((phoneme) => STRESSABLE.has(phoneme)).length;
+    if (syllables === 0) {
+      // A short word can come out with only a reduced vowel ("va" is `və`,
+      // "chan" `ʧən`); it still has a syllable, so give it the full vowel. No
+      // vowel at all means no pronounceable word; initialisms have their own
+      // path.
+      const reduced = phonemes.findIndex((phoneme) => Object.hasOwn(UNREDUCED, phoneme));
+      if (reduced < 0) return null;
+      phonemes[reduced] = UNREDUCED[phonemes[reduced]!]!;
+      syllables = 1;
+    }
 
     let pattern: string | undefined;
     for (let length = 6; length >= 0; length -= 1) {

@@ -22,9 +22,10 @@ Misaki grapheme-to-phoneme frontend and dictionaries
   The us/gb gold and silver dictionaries are downloaded unmodified from
   upstream Misaki.
 
-Letter-to-sound rules (letter_to_sound.tsv, bundled here) and their TypeScript reader
+Letter-to-sound rules (letter_to_sound.tsv and letter_to_sound_gb.tsv,
+bundled here) and their TypeScript reader
   From the OpenReader iOS app (MIT, notice below). The rules are induced from
-  the Apache-2.0 Misaki dictionaries above. Nothing in them, or in any code
+  the Apache-2.0 Misaki dictionaries above, one table per dialect. Nothing in them, or in any code
   here, derives from espeak or espeak-ng; no GPL phonemizer is linked,
   bundled, depended on, or transcribed.
 

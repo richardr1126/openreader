@@ -5,7 +5,7 @@
  *   pnpm exec tsx packages/compute-worker/scripts/kokoro-g2p-fixture.ts <data-dir>
  *
  * `<data-dir>` holds the full us_gold.json, us_silver.json, gb_gold.json,
- * gb_silver.json and letter_to_sound.tsv. Every sentence in
+ * gb_silver.json, letter_to_sound.tsv and letter_to_sound_gb.tsv. Every sentence in
  * `tests/fixtures/kokoro-g2p/sentences.json` is phonemized against the full
  * data while each dictionary and rule-table read is recorded; the fixture is
  * every source entry those reads could have reached.
@@ -30,7 +30,7 @@ const sentences = JSON.parse(readFileSync(path.join(fixtureDir, 'sentences.json'
 };
 
 const read = (name: string) => readFileSync(path.join(dataDir, name), 'utf8');
-const ltsSource = read('letter_to_sound.tsv');
+const ltsSources = { us: read('letter_to_sound.tsv'), gb: read('letter_to_sound_gb.tsv') };
 
 const touched = new Map<Map<unknown, unknown>, Set<unknown>>();
 const originalGet = Map.prototype.get;
@@ -58,14 +58,14 @@ function recording<T>(run: () => T): T {
   }
 }
 
-const lts = new LetterToSound(ltsSource);
+const lts = { us: new LetterToSound(ltsSources.us), gb: new LetterToSound(ltsSources.gb) };
 type Internals = { golds: Map<string, GoldValue>; silvers: Map<string, string> };
 type LtsInternals = { skeleton: Map<string, string>[]; stressPatterns: Map<string, string>[] };
 
 function subsetFor(dialect: 'us' | 'gb', extra: string[]) {
   const gold = JSON.parse(read(`${dialect}_gold.json`)) as Record<string, GoldValue>;
   const silver = JSON.parse(read(`${dialect}_silver.json`)) as Record<string, string>;
-  const lexicon = new Lexicon({ british: dialect === 'gb', data: { gold, silver }, letterToSound: lts });
+  const lexicon = new Lexicon({ british: dialect === 'gb', data: { gold, silver }, letterToSound: lts[dialect] });
   const g2p = new G2P({ lexicon });
   recording(() => {
     for (const sentence of [...sentences[dialect], ...extra]) g2p.phonemize(sentence);
@@ -94,30 +94,35 @@ function subsetFor(dialect: 'us' | 'gb', extra: string[]) {
 const us = subsetFor('us', []);
 const gb = subsetFor('gb', []);
 recording(() => {
-  for (const word of sentences.lts) lts.guess(word);
+  for (const word of sentences.lts) lts.us.guess(word);
 });
 
-const ltsInternals = lts as unknown as LtsInternals;
-const ltsLines: string[] = [];
-for (const line of ltsSource.split('\n')) {
-  if (!line) continue;
-  const [kind, key] = line.split('\t');
-  if (kind === 'maxw') {
-    ltsLines.push(line);
-    continue;
+function ltsSubset(dialect: 'us' | 'gb'): string[] {
+  const internals = lts[dialect] as unknown as LtsInternals;
+  const lines: string[] = [];
+  for (const line of ltsSources[dialect].split('\n')) {
+    if (!line) continue;
+    const [kind, key] = line.split('\t');
+    if (kind === 'maxw') {
+      lines.push(line);
+      continue;
+    }
+    const level = Number.parseInt(kind!.slice(1), 10);
+    const table = kind!.startsWith('s') ? internals.skeleton[level] : internals.stressPatterns[level];
+    if (table && touched.get(table as Map<unknown, unknown>)?.has(key)) lines.push(line);
   }
-  const level = Number.parseInt(kind!.slice(1), 10);
-  const table = kind!.startsWith('s') ? ltsInternals.skeleton[level] : ltsInternals.stressPatterns[level];
-  if (table && touched.get(table as Map<unknown, unknown>)?.has(key)) ltsLines.push(line);
+  return lines;
 }
+const ltsLines = { us: ltsSubset('us'), gb: ltsSubset('gb') };
 
 mkdirSync(fixtureDir, { recursive: true });
 writeFileSync(path.join(fixtureDir, 'us_gold.json'), `${JSON.stringify(us.gold)}\n`);
 writeFileSync(path.join(fixtureDir, 'us_silver.json'), `${JSON.stringify(us.silver)}\n`);
 writeFileSync(path.join(fixtureDir, 'gb_gold.json'), `${JSON.stringify(gb.gold)}\n`);
 writeFileSync(path.join(fixtureDir, 'gb_silver.json'), `${JSON.stringify(gb.silver)}\n`);
-writeFileSync(path.join(fixtureDir, 'letter_to_sound.tsv'), `${ltsLines.join('\n')}\n`);
+writeFileSync(path.join(fixtureDir, 'letter_to_sound.tsv'), `${ltsLines.us.join('\n')}\n`);
+writeFileSync(path.join(fixtureDir, 'letter_to_sound_gb.tsv'), `${ltsLines.gb.join('\n')}\n`);
 console.log(
   `us gold ${Object.keys(us.gold).length}, us silver ${Object.keys(us.silver).length}, `
-  + `gb gold ${Object.keys(gb.gold).length}, gb silver ${Object.keys(gb.silver).length}, lts ${ltsLines.length} lines`,
+  + `gb gold ${Object.keys(gb.gold).length}, gb silver ${Object.keys(gb.silver).length}, lts ${ltsLines.us.length}/${ltsLines.gb.length} lines`,
 );

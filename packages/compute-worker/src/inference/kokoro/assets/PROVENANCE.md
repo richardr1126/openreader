@@ -15,9 +15,13 @@ These were already in the Swift sources and are kept unchanged. The iOS
 - An intra-word hyphen is tagged `HYPH`, so compounds are not read with a pause.
 - Symbols the lexicon can name (`&`, `%`, `+`, `@`) get past the punctuation
   branch.
-- A failed lookup is retried with diacritics folded ("café").
+- A failed lookup is retried with diacritics folded ("café"), and with the
+  few Latin letters that have none spelled out ("ß" as "ss").
 - A unit abbreviation after a number is expanded ("5 km").
-- A word that no dictionary holds goes to `LetterToSound` instead of espeak.
+- A known word with a contracted auxiliary ("should've", "that'll") is read
+  as the word plus the ending, where spaCy would have split it upstream.
+- A word that no dictionary holds goes to `LetterToSound` instead of espeak,
+  spelled the same folded way, with rules for the voice's own dialect.
 
 ## Made in this port
 

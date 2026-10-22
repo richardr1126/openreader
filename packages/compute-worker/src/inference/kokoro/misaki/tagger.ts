@@ -127,12 +127,50 @@ function wordTags(text: string): Array<{ start: number; end: number; tags: Set<s
   return terms;
 }
 
-/** Penn-style tag for one word, from compromise's tags for the term under it. */
-export function mapWordTag(word: string, tags: ReadonlySet<string> | null): string {
+const DEMONSTRATIVES = new Set(['this', 'that', 'these', 'those']);
+const PHRASE_STARTS = ['Determiner', 'Pronoun', 'ProperNoun', 'Person'];
+const PARTICLES = new Set(['in', 'on', 'out', 'up', 'off', 'down', 'over']);
+
+/**
+ * Penn-style tag for one word, from compromise's tags for the term under it
+ * and, for "that", the term after it.
+ */
+export function mapWordTag(
+  word: string,
+  tags: ReadonlySet<string> | null,
+  next: ReadonlySet<string> | null = null,
+): string {
   if (Object.hasOwn(CURRENCIES, word)) return '$';
   if (word === '#') return '#';
   if (/\p{N}/u.test(word)) return 'CD';
   if (tags !== null) {
+    // The lexicon stresses "that" only as `DT`, spaCy's tag for a
+    // demonstrative ("take ðˈæt"), and not as `IN`, a conjunction ("afraid
+    // ðæt the police"). compromise calls the demonstrative a `Pronoun` and
+    // the conjunction a `Determiner`, so both came out backwards. Its
+    // `Determiner` is the conjunction when a new phrase follows; otherwise it
+    // is still the demonstrative ("that black girl", "do that"). Treating a
+    // verb after it as a relative ("countries that recognize") scored worse
+    // against Kokoro's pipeline, so a relative stays stressed.
+    const lower = word.toLowerCase();
+    if (DEMONSTRATIVES.has(lower) && tags.has('Pronoun')) return 'DT';
+    if (lower === 'that' && tags.has('Determiner') && PHRASE_STARTS.some((tag) => next?.has(tag))) {
+      return 'IN';
+    }
+    // compromise has tags for these that the chain below never reaches. Left
+    // to fall through they came out `NN` or `NFP`, which silences "There's".
+    if (tags.has('There')) return 'EX';
+    if (tags.has('Negative')) return 'RB';
+    // Lower-case "a" is the article wherever compromise puts it ("a few" is a
+    // `Value`, "a lot" a noun); as anything but `DT` Lexicon reads the letter A.
+    // A capital "A" can still be the letter ("plan A").
+    if (word === 'a' || word === 'an') return 'DT';
+    // compromise finds phrasal verbs too eagerly ("stay in Boston") and can
+    // even call "in" a noun ("keys in the car"). A noun phrase after it means
+    // a preposition; otherwise it is a particle ("give in to").
+    if (tags.has('Particle') || (PARTICLES.has(lower) && tags.has('Noun'))) {
+      return PHRASE_STARTS.some((tag) => next?.has(tag)) ? 'IN' : 'RP';
+    }
     if (tags.has('Pronoun')) return 'PRP';
     if (tags.has('Determiner')) return 'DT';
     if (tags.has('Preposition')) return word.toLowerCase() === 'to' ? 'TO' : 'IN';
@@ -165,7 +203,8 @@ export function mapWordTag(word: string, tags: ReadonlySet<string> | null): stri
       return 'NN';
     }
   }
-  return Array.from(word).every((c) => LETTER.test(c)) ? 'NN' : 'NFP';
+  // A contraction is still a word: `NFP` is punctuation, which Lexicon silences.
+  return Array.from(word).every((c) => LETTER.test(c) || APOSTROPHES.has(c)) ? 'NN' : 'NFP';
 }
 
 /** Tag for a span that is a single punctuation or symbol character. */
@@ -204,7 +243,9 @@ export function tagText(text: string, abbreviations: ReadonlySet<string>): Tagge
     }
     while (termIndex < terms.length && terms[termIndex]!.end <= span.start) termIndex += 1;
     const term = terms[termIndex];
-    const tags = term !== undefined && term.start < span.end ? term.tags : null;
-    return { ...span, tag: mapWordTag(piece, tags) };
+    const covered = term !== undefined && term.start < span.end;
+    const tags = covered ? term.tags : null;
+    const next = covered ? (terms[termIndex + 1]?.tags ?? null) : null;
+    return { ...span, tag: mapWordTag(piece, tags, next) };
   });
 }
