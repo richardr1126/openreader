@@ -47,6 +47,18 @@ describe('deriveChapters', () => {
     ]);
   });
 
+  it('names a run by its first new title when a repeated heading leads it', () => {
+    const outline = epubTocOutline([
+      { id: 't', href: 'cover.xhtml#title', label: 'The Wonderful Wizard of Oz' },
+      { id: 'c', href: 'cover.xhtml#contents', label: 'Contents' },
+      { id: 'h', href: 'ch1.xhtml#title', label: 'The Wonderful Wizard of Oz' },
+      { id: '1', href: 'ch1.xhtml#start', label: 'Chapter I The Cyclone' },
+      { id: '2', href: 'ch2.xhtml', label: 'Chapter II The Council' },
+    ]);
+    expect(deriveChapters(book, outline, 'Oz').map((chapter) => chapter.title))
+      .toEqual(['The Wonderful Wizard of Oz', 'Chapter I The Cyclone', 'Chapter II The Council']);
+  });
+
   it('infers EPUB chapters from resources when there is no outline', () => {
     expect(deriveChapters(book, [], 'Oz').map((chapter) => chapter.title))
       .toEqual(['Chapter 1', 'Chapter I', 'Chapter II', 'More.']);

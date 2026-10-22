@@ -52,7 +52,5 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
   const contents = page.getByRole('dialog', { name: 'Contents' });
   await expect(contents).toBeInViewport({ ratio: 1 });
-  const chapters = contents.getByRole('list', { name: 'Chapters' }).getByRole('button');
-  await expect(chapters.nth(3)).toHaveText('Chapter II The Council with the Munchkins');
-  await expect(chapters.nth(2)).toHaveAttribute('aria-current', 'true');
+  await expect(contents.locator('[aria-current="true"]')).toHaveText('Chapter I The Cyclone');
 });
