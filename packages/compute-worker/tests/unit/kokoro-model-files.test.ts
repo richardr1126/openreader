@@ -57,7 +57,7 @@ afterAll(async () => {
 });
 
 describe('on-demand Kokoro downloads', () => {
-  const baselinePaths = [KOKORO_MODEL_FILE, 'voices/af_heart.bin', 'misaki/us_gold.json', 'misaki/us_silver.json'];
+  const baselinePaths = [KOKORO_MODEL_FILE, 'voices/af_heart.bin', 'g2p/en-us.tsv', 'misaki/us_gold.json', 'misaki/us_silver.json'];
   const bytesFor = (paths: string[]) => paths.reduce((sum, name) => sum + Buffer.byteLength(`asset:${name}`), 0);
 
   test('default setup downloads only the baseline and becomes ready without optional assets', async () => {
@@ -68,7 +68,7 @@ describe('on-demand Kokoro downloads', () => {
     const productionBytes = baselinePaths.reduce((sum, name) => (
       sum + originalMetadata[files.findIndex((file) => file.path === name)]!.size
     ), 0);
-    expect(productionBytes).toBe(332_322_617);
+    expect(productionBytes).toBe(334_628_908);
 
     await ensureKokoroAssets((event) => { progress.push(event); });
     expect(requestedPaths()).toEqual(baselinePaths);
@@ -79,8 +79,8 @@ describe('on-demand Kokoro downloads', () => {
   });
 
   test.each([
-    { language: 'us' as const, voice: 'af_heart', data: ['misaki/us_gold.json', 'misaki/us_silver.json'] },
-    { language: 'gb' as const, voice: 'bf_emma', data: ['misaki/gb_gold.json', 'misaki/gb_silver.json'] },
+    { language: 'us' as const, voice: 'af_heart', data: ['g2p/en-us.tsv', 'misaki/us_gold.json', 'misaki/us_silver.json'] },
+    { language: 'gb' as const, voice: 'bf_emma', data: ['g2p/en-gb.tsv', 'misaki/gb_gold.json', 'misaki/gb_silver.json'] },
     { language: 'es' as const, voice: 'ef_dora', data: ['g2p/es.tsv'] },
     { language: 'hi' as const, voice: 'hf_alpha', data: ['g2p/hi.tsv'] },
     { language: 'it' as const, voice: 'if_sara', data: ['g2p/it.tsv'] },
@@ -106,7 +106,7 @@ describe('on-demand Kokoro downloads', () => {
   test('fetches each blend member once and only the explicit pronunciation language', async () => {
     await ensureKokoroAssets(undefined, { voices: ['af_heart', 'bf_emma', 'af_heart'], language: 'us' });
     expect(requestedPaths()).toEqual([
-      KOKORO_MODEL_FILE, 'voices/af_heart.bin', 'voices/bf_emma.bin', 'misaki/us_gold.json', 'misaki/us_silver.json',
+      KOKORO_MODEL_FILE, 'voices/af_heart.bin', 'voices/bf_emma.bin', 'g2p/en-us.tsv', 'misaki/us_gold.json', 'misaki/us_silver.json',
     ]);
   });
 
@@ -114,7 +114,7 @@ describe('on-demand Kokoro downloads', () => {
     await ensureKokoroAssets(undefined, {});
     expect(requestedPaths()).toEqual([KOKORO_MODEL_FILE]);
     await ensureKokoroAssets(undefined, { language: 'gb' });
-    expect(requestedPaths()).toEqual([KOKORO_MODEL_FILE, 'misaki/gb_gold.json', 'misaki/gb_silver.json']);
+    expect(requestedPaths()).toEqual([KOKORO_MODEL_FILE, 'g2p/en-gb.tsv', 'misaki/gb_gold.json', 'misaki/gb_silver.json']);
   });
 
   test('adds newly requested voices and languages to the same cache', async () => {
@@ -133,10 +133,10 @@ describe('on-demand Kokoro downloads', () => {
       ensureKokoroAssets(progress),
     ]);
     const paths = requestedPaths();
-    expect(paths).toHaveLength(6);
-    expect(new Set(paths).size).toBe(6);
-    expect(paths.slice(0, 4)).toEqual([
-      KOKORO_MODEL_FILE, 'voices/af_heart.bin', 'misaki/us_gold.json', 'misaki/us_silver.json',
+    expect(paths).toHaveLength(7);
+    expect(new Set(paths).size).toBe(7);
+    expect(paths.slice(0, 5)).toEqual([
+      KOKORO_MODEL_FILE, 'voices/af_heart.bin', 'g2p/en-us.tsv', 'misaki/us_gold.json', 'misaki/us_silver.json',
     ]);
     const last = progress.mock.calls.at(-1)![0] as ModelDownloadProgress;
     const status = await kokoroAssetStatus();
@@ -146,7 +146,7 @@ describe('on-demand Kokoro downloads', () => {
     const warm = vi.fn();
     await ensureKokoroAssets(warm);
     expect(warm).not.toHaveBeenCalled();
-    expect(fetchImpl).toHaveBeenCalledTimes(6);
+    expect(fetchImpl).toHaveBeenCalledTimes(7);
   });
 
   test('keeps baseline readiness separate from optional installed bytes', async () => {
@@ -189,12 +189,12 @@ describe('on-demand Kokoro downloads', () => {
     await ensureKokoroAssets(undefined, { voices: ['if_sara'], language: 'it' });
     await ensureKokoroAssets(undefined, { voices: ['bf_emma'], language: 'gb' });
     const british = await kokoroAssetStatus();
-    expect(british[2]!.totalBytes).toBe(bytesFor(['misaki/gb_gold.json', 'misaki/gb_silver.json']));
+    expect(british[2]!.totalBytes).toBe(bytesFor(['g2p/en-gb.tsv', 'misaki/gb_gold.json', 'misaki/gb_silver.json']));
     await ensureKokoroAssets(undefined, { voices: ['af_heart'], language: 'us' });
     const american = await kokoroAssetStatus();
-    expect(american[2]!.totalBytes).toBe(bytesFor(['misaki/us_gold.json', 'misaki/us_silver.json']));
+    expect(american[2]!.totalBytes).toBe(bytesFor(['g2p/en-us.tsv', 'misaki/us_gold.json', 'misaki/us_silver.json']));
     expect(american.reduce((sum, component) => sum + component.installedBytes, 0)).toBe(
-      bytesFor([...baselinePaths, 'voices/bf_emma.bin', 'misaki/gb_gold.json', 'misaki/gb_silver.json', 'voices/if_sara.bin', 'g2p/it.tsv']),
+      bytesFor([...baselinePaths, 'voices/bf_emma.bin', 'g2p/en-gb.tsv', 'misaki/gb_gold.json', 'misaki/gb_silver.json', 'voices/if_sara.bin', 'g2p/it.tsv']),
     );
   });
 
@@ -276,7 +276,7 @@ describe('on-demand Kokoro downloads', () => {
     await removeKokoroAssetFiles();
     fetchImpl.mockClear();
     await ensureKokoroAssets(undefined, { voices: ['af_heart'], language: 'us' });
-    expect(requestedPaths()).toHaveLength(4);
+    expect(requestedPaths()).toHaveLength(5);
   });
 
   test('cancels active and queued requests, then permits a clean retry', async () => {

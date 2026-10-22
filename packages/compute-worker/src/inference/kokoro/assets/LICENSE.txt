@@ -8,7 +8,7 @@ size and SHA-256 before loading it.
 Kokoro-82M model weights and voice packs
   Upstream:  https://huggingface.co/hexgrad/Kokoro-82M (Apache-2.0)
   ONNX export: https://huggingface.co/richardr1126/Kokoro-82M-OpenReader
-             commit 7ba0e746c661aaed852ed0252800ba63db3f1375, onnx/ (Apache-2.0)
+             commit 72e618ac6494b23866bdf9574a3ca6070063f51c, onnx/ (Apache-2.0)
              The model is exported from the upstream checkpoint with its
              per-token durations as a second output (packaging/kokoro-onnx);
              the voice packs are onnx-community's (Kokoro-82M-v1.0-ONNX,
@@ -26,10 +26,11 @@ Misaki grapheme-to-phoneme frontend and dictionaries
   The us/gb gold and silver dictionaries are downloaded unmodified from
   upstream Misaki.
 
-Letter-to-sound rules (letter_to_sound.tsv and letter_to_sound_gb.tsv,
-bundled here) and their TypeScript reader
-  From the OpenReader iOS app (MIT, notice below). The rules are induced from
-  the Apache-2.0 Misaki dictionaries above, one table per dialect. Nothing in them, or in any code
+English letter-to-sound rules (g2p/en-us.tsv and g2p/en-gb.tsv) and their
+TypeScript reader
+  From the OpenReader iOS app (MIT, notice below), downloaded from the shared
+  model repository above. The rules are induced from the Apache-2.0 Misaki
+  dictionaries above, one table per dialect. Nothing in them, or in any code
   here, derives from espeak or espeak-ng; no GPL phonemizer is linked,
   bundled, depended on, or transcribed.
 

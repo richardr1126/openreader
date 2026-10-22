@@ -8,9 +8,6 @@
  * Whisper and PDF models use, so it reaches the reader over the existing
  * playback SSE.
  *
- * The letter-to-sound rules have no upstream home, so they ship with the
- * worker in `assets/` instead (see `kokoroLetterToSoundPath`).
- *
  * To work offline, place the files at their paths under the model directory
  * before first use (for example the iOS Misaki `Resources` dictionaries copied
  * to `misaki/`); anything already present and matching its checksum is used
@@ -22,7 +19,6 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readdir, rename, rm, rmdir, stat, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { DOCSTORE_DIR } from '../../infrastructure/platform';
-import { resolveWorkerPath } from '../../worker-paths';
 import {
   downloadModelArtifact,
   type ModelComponentProgress,
@@ -34,24 +30,15 @@ import type { LearnedLanguage } from './misaki/romance-numbers';
 /**
  * richardr1126/Kokoro-82M-OpenReader (Apache-2.0), pinned: Kokoro-82M exported
  * with its per-token durations as a second output, which give word timings
- * (`packaging/kokoro-onnx`), and the Spanish, Hindi, Italian and Portuguese G2P
- * tables. The voices are onnx-community's, byte for byte.
+ * (`packaging/kokoro-onnx`), and each language's G2P table. The voices are
+ * onnx-community's, byte for byte.
  */
 const KOKORO_REPO_URL =
-  'https://huggingface.co/richardr1126/Kokoro-82M-OpenReader/resolve/ee9a26d2886e5a60953de169a2c944fa327e71f8';
+  'https://huggingface.co/richardr1126/Kokoro-82M-OpenReader/resolve/72e618ac6494b23866bdf9574a3ca6070063f51c';
 const KOKORO_ONNX_BASE_URL = `${KOKORO_REPO_URL}/onnx`;
 /** hexgrad/misaki (Apache-2.0) at the commit misaki 0.9.4's dictionaries were last changed. */
 const MISAKI_DATA_BASE_URL =
   'https://raw.githubusercontent.com/hexgrad/misaki/e820629b96334db28227df37f280e4836d46fadb/misaki/data';
-/**
- * Letter-to-sound rules induced from each dialect's Misaki dictionaries by the
- * OpenReader iOS tooling. They have no upstream to download from, so the
- * worker bundles them (2.3 MB American, 2.4 MB British).
- */
-export function kokoroLetterToSoundPath(british: boolean): string {
-  return resolveWorkerPath('inference', 'kokoro', 'assets', british ? 'letter_to_sound_gb.tsv' : 'letter_to_sound.tsv');
-}
-
 export const KOKORO_MODEL_DIR = path.join(DOCSTORE_DIR, 'model', 'kokoro-82m');
 /**
  * Full precision. On Apple M4 the int8 `model_quantized.onnx` (92 MB) ran at a
@@ -108,13 +95,17 @@ export const KOKORO_VOICE_SHA256: Record<string, string> = {
   pm_santa: '8b012db3185778afe2e45a62cbad69db73021774fe68dda634bcc748a982eede',
 };
 
+export type KokoroLanguage = 'us' | 'gb' | LearnedLanguage;
+
 /**
- * Where the G2P table for Spanish, Hindi, Italian or Brazilian Portuguese lives under
- * the model directory. Each is learned from Kokoro's own espeak-ng readings by
- * the OpenReader iOS `tools/learned-g2p`; no espeak code or data ships.
+ * Where a language's G2P table lives under the model directory. English's are
+ * letter-to-sound rules for words the Misaki dictionaries lack, learned from
+ * those dictionaries; the others are whole tables learned from Kokoro's own
+ * espeak-ng readings. Both come from the OpenReader iOS tooling, and no espeak
+ * code or data ships.
  */
-export function kokoroLearnedG2PFile(language: LearnedLanguage): string {
-  return `g2p/${language}.tsv`;
+export function kokoroG2PTableFile(language: KokoroLanguage): string {
+  return `g2p/${language === 'us' || language === 'gb' ? `en-${language}` : language}.tsv`;
 }
 
 interface KokoroFile {
@@ -136,9 +127,9 @@ const misakiFile = (name: string, size: number, sha256: string): KokoroFile => (
   sha256,
 });
 
-const learnedFile = (language: LearnedLanguage, size: number, sha256: string): KokoroFile => ({
-  path: kokoroLearnedG2PFile(language),
-  url: `${KOKORO_REPO_URL}/${kokoroLearnedG2PFile(language)}`,
+const tableFile = (language: KokoroLanguage, size: number, sha256: string): KokoroFile => ({
+  path: kokoroG2PTableFile(language),
+  url: `${KOKORO_REPO_URL}/${kokoroG2PTableFile(language)}`,
   size,
   sha256,
 });
@@ -165,10 +156,12 @@ export const KOKORO_COMPONENTS: readonly KokoroComponent[] = [
   {
     name: 'Pronunciation data',
     files: [
-      learnedFile('es', 184_339, 'eff1f115e9c082ea6889a295e7fb658e81b4af298d2c54722389391d90bef21e'),
-      learnedFile('hi', 163_591, '562797a685ab7148bc6fdff745a7142ab4b27b2471b270747ae6303e8212c0de'),
-      learnedFile('it', 363_007, '78a266c9172507fa53c069048fddb2ff05de676d4c73d91ce1f9dfb886ecbd48'),
-      learnedFile('pt-br', 586_315, '6aae16e69e46269be8ca8c759fd9e7c9e1e24dbf2c322e68b2063810943573e6'),
+      tableFile('us', 2_306_291, '14e0911c6c92ea134c5ae830f89b69038ab9dbca5662896d012394f30309fbf2'),
+      tableFile('gb', 2_395_237, '09059ce11cb3e5663df7eea2dc124995d7db9759e87bf6a27405c76de350f41b'),
+      tableFile('es', 184_339, 'eff1f115e9c082ea6889a295e7fb658e81b4af298d2c54722389391d90bef21e'),
+      tableFile('hi', 163_591, '562797a685ab7148bc6fdff745a7142ab4b27b2471b270747ae6303e8212c0de'),
+      tableFile('it', 363_007, '78a266c9172507fa53c069048fddb2ff05de676d4c73d91ce1f9dfb886ecbd48'),
+      tableFile('pt-br', 586_315, '6aae16e69e46269be8ca8c759fd9e7c9e1e24dbf2c322e68b2063810943573e6'),
       misakiFile('us_gold.json', 3_000_469, 'dc414872a49a28ae6c141463d502fd945f3b2fde040484fdc47d00cc4612686f'),
       misakiFile('us_silver.json', 3_099_517, 'de8f67be911bb6c659187b4a65fd966b6a30e56350e0f790d763210b053ac475'),
       misakiFile('gb_gold.json', 2_838_552, '29e62f4b60261c88f7f3c2c7811ca3825978948090b72d2b27d565b729282f71'),
@@ -185,7 +178,7 @@ export interface KokoroAssetSelection {
   /** Individual voice ids, including every member of a blend. Omitted means none. */
   voices?: readonly string[];
   /** The language used to phonemize the request (the first voice's for a blend). */
-  language?: 'us' | 'gb' | LearnedLanguage;
+  language?: KokoroLanguage;
 }
 
 function selectedComponents(
@@ -202,15 +195,16 @@ function selectedComponents(
     paths.add(`voices/${voice}.bin`);
   }
   const language = selection.language;
-  if (language === 'us' || language === 'gb') {
-    paths.add(`misaki/${language}_gold.json`);
-    paths.add(`misaki/${language}_silver.json`);
-  } else if (language) {
-    const file = kokoroLearnedG2PFile(language);
+  if (language) {
+    const file = kokoroG2PTableFile(language);
     if (!KOKORO_COMPONENTS.some((component) => component.files.some((entry) => entry.path === file))) {
       throw new Error(`Local Kokoro has no pronunciation data for "${language}"`);
     }
     paths.add(file);
+  }
+  if (language === 'us' || language === 'gb') {
+    paths.add(`misaki/${language}_gold.json`);
+    paths.add(`misaki/${language}_silver.json`);
   }
   return components.map((component) => ({
     ...component,

@@ -67,6 +67,7 @@ writeFileSync(path.join(fake.modelDir, 'g2p', 'hi.tsv'), [
 for (const name of ['us_gold.json', 'us_silver.json']) {
   copyFileSync(path.join(fixtureDir, name), path.join(fake.modelDir, 'misaki', name));
 }
+copyFileSync(path.join(fixtureDir, 'letter_to_sound.tsv'), path.join(fake.modelDir, 'g2p', 'en-us.tsv'));
 // Every value in row r is r, so a run's style vector names the row it used.
 const pack = new Float32Array(510 * STYLE_DIM);
 for (let row = 0; row < 510; row += 1) pack.fill(row, row * STYLE_DIM, (row + 1) * STYLE_DIM);

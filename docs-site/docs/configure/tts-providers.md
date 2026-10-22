@@ -43,7 +43,7 @@ The default provider for new users is set in [Instance Settings](./instance-sett
 
 For a Kokoro provider, the card at the top of **Providers** shows whether its voice data is downloaded. From there you can download it ahead of time, cancel a download, or remove the data. With several worker replicas, the card manages only the replica that answers.
 
-On a fresh installation, **Download** prepares the model, the default `af_heart` voice, and US pronunciation data (about 317 MB). It joins any download already running and reuses any complete installed voice. Other voice packs and language pronunciation data download on first use; a blend downloads each selected voice pack and uses its first voice's language. Once any supported voice and its pronunciation data are complete, the card shows Ready. Missing optional languages do not make it partly downloaded. The downloaded size and Remove confirmation include all installed voice and pronunciation data.
+On a fresh installation, **Download** prepares the model, the default `af_heart` voice, and US pronunciation data (about 319 MB). It joins any download already running and reuses any complete installed voice. Other voice packs and language pronunciation data download on first use; a blend downloads each selected voice pack and uses its first voice's language. Once any supported voice and its pronunciation data are complete, the card shows Ready. Missing optional languages do not make it partly downloaded. The downloaded size and Remove confirmation include all installed voice and pronunciation data.
 
 Pronunciation uses a built-in port of Misaki without espeak, so a few abbreviations (for example `St.`) are skipped rather than read.
 

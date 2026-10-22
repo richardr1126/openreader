@@ -18,14 +18,14 @@ import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import type { ModelDownloadProgressHandler } from '../model-download';
 import {
   ensureKokoroAssets,
-  kokoroLetterToSoundPath,
   KOKORO_MODEL_FILE,
   KOKORO_SAMPLE_RATE,
   KOKORO_VOICE_SHA256,
   kokoroAssetPath,
-  kokoroLearnedG2PFile,
+  kokoroG2PTableFile,
   removeKokoroAssetFiles,
   type KokoroAssetSelection,
+  type KokoroLanguage,
 } from './model-files';
 import { G2P } from './misaki/g2p';
 import { LearnedG2P } from './misaki/learned-g2p';
@@ -297,7 +297,6 @@ export function encodeWav(samples: Float32Array, sampleRate = KOKORO_SAMPLE_RATE
   return wav;
 }
 
-type KokoroLanguage = 'us' | 'gb' | LearnedLanguage;
 
 /** Kokoro names a voice for its language: `af_heart` is American, `ef_dora` Spanish. */
 const VOICE_LANGUAGES: Record<string, KokoroLanguage> = { a: 'us', b: 'gb', e: 'es', h: 'hi', i: 'it', p: 'pt-br' };
@@ -338,7 +337,7 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
     const [gold, silver, rules] = await Promise.all([
       readFile(at(`misaki/${dialect}_gold.json`), 'utf8'),
       readFile(at(`misaki/${dialect}_silver.json`), 'utf8'),
-      readFile(kokoroLetterToSoundPath(british), 'utf8'),
+      readFile(at(kokoroG2PTableFile(dialect)), 'utf8'),
     ]);
     return new G2P({
       lexicon: new Lexicon({
@@ -351,7 +350,7 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
     });
   };
   const learned = async (language: LearnedLanguage): Promise<Phonemizer> =>
-    new LearnedG2P(language, await readFile(at(kokoroLearnedG2PFile(language)), 'utf8'));
+    new LearnedG2P(language, await readFile(at(kokoroG2PTableFile(language)), 'utf8'));
 
   return {
     session,

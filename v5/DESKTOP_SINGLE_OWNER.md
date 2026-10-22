@@ -258,7 +258,7 @@ change. Removing the pack clears download readiness.
 ### Desktop first run
 
 A fresh desktop install must have a voice without an account or key, and must
-not make reading wait on a 317 MB download.
+not make reading wait on a 319 MB download.
 
 - **Seed.** The shell passes `RUNTIME_SEED_JSON` with one provider, `kokoro`
   (`kokoro-local`). As the only enabled provider it is the implicit default. The
