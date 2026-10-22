@@ -189,8 +189,8 @@ importers:
         specifier: ^12.11.1
         version: 12.11.1
       dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
+        specifier: ^18.0.8
+        version: 18.0.8
       pg:
         specifier: ^8.23.1
         version: 8.23.1
@@ -274,8 +274,8 @@ importers:
         specifier: ^12.11.1
         version: 12.11.1
       dotenv:
-        specifier: ^17.4.2
-        version: 17.4.2
+        specifier: ^18.0.8
+        version: 18.0.8
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@types/better-sqlite3@7.6.13)(@types/pg@8.23.1)(better-sqlite3@12.11.1)(kysely@0.28.18)(pg@8.23.1)
@@ -2576,10 +2576,6 @@ packages:
   domutils@4.0.2:
     resolution: {integrity: sha512-qI4JLRKnSzqFqr7hAlS5xQDusBCjKSEG4t4+7aNrIQMHBcsC2TGEhuyABJdYkgSewL57PNLYEiibY2iPKhKpaA==}
     engines: {node: '>=20.19.0'}
-
-  dotenv@17.4.2:
-    resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
-    engines: {node: '>=12'}
 
   dotenv@18.0.8:
     resolution: {integrity: sha512-2KDeoFoK/zRtcnbunCDlLG5VWVMcyqeQc6iK65o231nfNAcuGrKoqUQfJFUtBI+QlShk5HKIHxwebBtUl3rEfA==}
@@ -6912,8 +6908,6 @@ snapshots:
       dom-serializer: 3.1.1
       domelementtype: 3.0.0
       domhandler: 6.0.1
-
-  dotenv@17.4.2: {}
 
   dotenv@18.0.8: {}
 
