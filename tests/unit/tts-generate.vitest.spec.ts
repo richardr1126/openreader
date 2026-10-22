@@ -169,6 +169,62 @@ describe('speech-sdk request resolution', () => {
       })).rejects.toThrow('Expected "provider/model"');
     }
   });
+
+  test.each([
+    ['openai/gpt-4o-mini-tts', 'alloy'],
+    ['google/gemini-2.5-flash-preview-tts', 'Kore'],
+    ['mistral/voxtral-mini-tts', 'default'],
+    ['fish-audio/s1', 'default'],
+    ['minimax/speech-02-hd', 'default'],
+    ['murf/gen2', 'default'],
+    ['inworld/inworld-tts-1', 'Ashley'],
+    ['smallest-ai/lightning', 'default'],
+  ])('%s reaches the provider instead of rejecting the output format', async (model, voice) => {
+    const fetchMock = vi.fn(async (_input: unknown, _init?: unknown) => new Response(
+      JSON.stringify({ error: { message: 'stop after the request' } }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const error = await generateTTSBuffer({
+        text: 'output format check',
+        voice,
+        speed: 1,
+        model,
+        provider: 'speech-sdk',
+        apiKey: 'test-key',
+      }, undefined, { ttsUpstreamMaxRetries: 0 } as never).catch((caught: unknown) => caught);
+      expect(String(error)).not.toContain('Explicit output format');
+      expect(fetchMock).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('provider request text', () => {
+  test('drops private-use glyphs such as Word symbol-font bullets', async () => {
+    const fetchMock = vi.fn(async (_input: unknown, _init?: unknown) => new Response(
+      JSON.stringify({ error: { message: 'stop after the request' } }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      await expect(generateTTSBuffer({
+        text: '\tTables, lists and footnotes.',
+        voice: 'af_bella',
+        speed: 1,
+        model: 'hexgrad/Kokoro-82M',
+        provider: 'deepinfra',
+        apiKey: 'test-key',
+      })).rejects.toThrow();
+      const [input, init] = fetchMock.mock.calls[0];
+      const body = input instanceof Request ? await input.text() : String((init as RequestInit).body);
+      expect(JSON.parse(body).input).toBe('\tTables, lists and footnotes.');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('OpenAI-compatible base URL', () => {

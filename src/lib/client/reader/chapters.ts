@@ -107,20 +107,31 @@ function runsOf(segments: readonly ChapterSegment[]): Run[] {
   return runs;
 }
 
-type Mark = { run: number; title: string; depth: number };
+type Mark = { run: number; title: string; depth: number; repeated: boolean };
 
 function marksFrom(outline: readonly OutlineEntry[], runs: Run[]): Mark[] {
   const marks: Mark[] = [];
+  const seenTitles = new Set<string>();
   for (const entry of outline) {
     const title = entry.title.trim();
     if (!title) continue;
+    const key = title.replace(/\s+/g, ' ').toLowerCase();
+    const repeated = seenTitles.has(key);
+    seenTitles.add(key);
     const run = runs.findIndex((candidate) => targetMatchesRun(entry.target, candidate));
     // Entries pointing where no text came from are dropped rather than snapped
     // to a neighbour; several entries on one run collapse to the first.
     if (run < 0) continue;
+    const mark = { run, title, depth: Math.max(0, Math.floor(entry.depth)), repeated };
     const last = marks[marks.length - 1];
+    // A repeated title (a book's title heading again before Chapter I) does not
+    // name a run that a later entry names for the first time.
+    if (last && run === last.run && last.repeated && !repeated) {
+      marks[marks.length - 1] = mark;
+      continue;
+    }
     if (last && run <= last.run) continue;
-    marks.push({ run, title, depth: Math.max(0, Math.floor(entry.depth)) });
+    marks.push(mark);
   }
   // Rank surviving depths so dropped parent entries do not leave orphan indents.
   const levels = Array.from(new Set(marks.map((mark) => mark.depth))).sort((a, b) => a - b);

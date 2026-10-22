@@ -45,4 +45,12 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
     if (!container || !frame) return Number.POSITIVE_INFINITY;
     return Math.abs(container.height - frame.height);
   }).toBeLessThanOrEqual(1);
+
+  // Following the book's own contents link selects that chapter for playback.
+  await book.getByRole('link', { name: 'Chapter I. The Cyclone', exact: true }).click();
+  await expect(book.getByRole('heading', { name: /^Chapter I\b/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Open contents', exact: true }).click();
+  const contents = page.getByRole('dialog', { name: 'Contents' });
+  await expect(contents).toBeInViewport({ ratio: 1 });
+  await expect(contents.locator('[aria-current="true"]')).toHaveText('Chapter I The Cyclone');
 });

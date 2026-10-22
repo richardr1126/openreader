@@ -9,6 +9,8 @@ const config: Config = {
 
   future: {
     v4: true,
+    // v4 turns on the Rspack/SWC bundler from 3.10, which needs @docusaurus/faster.
+    faster: false,
   },
 
   url: 'https://docs.openreader.richardr.dev',

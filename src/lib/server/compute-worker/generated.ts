@@ -326,7 +326,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             sessionId: string;
-                            session: unknown | null;
+                            session: unknown | (never | null);
                             operation: {
                                 opId: string;
                                 subject: {
@@ -908,7 +908,8 @@ export interface paths {
                         "application/json": {
                             sessionId: string;
                             canceled: boolean;
-                            status: ("queued" | "running" | "succeeded" | "failed" | "canceled") | null;
+                            /** @enum {string|null} */
+                            status: "queued" | "running" | "succeeded" | "failed" | "canceled" | null;
                         };
                     };
                 };

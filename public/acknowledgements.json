@@ -74,7 +74,7 @@
     {
       "name": "Electron",
       "versions": [
-        "44.5.0"
+        "44.9.3"
       ],
       "kind": "binary",
       "license": "MIT",
@@ -165,13 +165,29 @@
       ]
     },
     {
+      "name": "@acemir/cssom",
+      "kind": "npm",
+      "license": "MIT",
+      "role": "CSS Object Model implementation and CSS parser",
+      "url": "acemir/CSSOM",
+      "versions": [
+        "0.9.32"
+      ],
+      "copyright": [
+        "Copyright (c) Nikita Vasilyev"
+      ],
+      "textIds": [
+        "8793aa4141de"
+      ]
+    },
+    {
       "name": "@aws-sdk/checksums",
       "kind": "npm",
       "license": "Apache-2.0",
       "role": "Checksum algorithms and flexible checksums middleware for the AWS SDK",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/checksums",
       "versions": [
-        "3.1000.29"
+        "3.1001.5"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -187,7 +203,7 @@
       "role": "AWS SDK for JavaScript S3 Client for Node.js, Browser and React Native",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/clients/client-s3",
       "versions": [
-        "3.1118.0"
+        "3.1155.0"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -203,7 +219,7 @@
       "role": "Core functions & classes shared by multiple AWS SDK clients.",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/core",
       "versions": [
-        "3.977.9"
+        "3.978.5"
       ],
       "copyright": [
         "Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -219,7 +235,7 @@
       "role": "AWS credential provider that sources credentials from known environment variables",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-env",
       "versions": [
-        "3.972.70"
+        "3.972.76"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -235,7 +251,7 @@
       "role": "AWS credential provider for containers and HTTP sources",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-http",
       "versions": [
-        "3.972.72"
+        "3.972.78"
       ],
       "notice": "By AWS SDK for JavaScript Team.",
       "copyright": [],
@@ -248,7 +264,7 @@
       "role": "AWS credential provider that sources credentials from ~/.aws/credentials and ~/.aws/config",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-ini",
       "versions": [
-        "3.973.15"
+        "3.973.21"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -264,7 +280,7 @@
       "role": "AWS credential provider that sources credentials from aws login cached tokens",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-login",
       "versions": [
-        "3.972.77"
+        "3.972.83"
       ],
       "notice": "By AWS SDK for JavaScript Team.",
       "copyright": [],
@@ -277,7 +293,7 @@
       "role": "AWS credential provider that sources credentials from a Node.JS environment. ",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-node",
       "versions": [
-        "3.972.81"
+        "3.972.88"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -293,7 +309,7 @@
       "role": "AWS credential provider that sources credential_process from ~/.aws/credentials and ~/.aws/config",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-process",
       "versions": [
-        "3.972.70"
+        "3.972.76"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -309,7 +325,7 @@
       "role": "AWS credential provider that exchanges a resolved SSO login token file for temporary AWS credentials",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-sso",
       "versions": [
-        "3.973.14"
+        "3.973.20"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -325,7 +341,7 @@
       "role": "AWS credential provider that calls STS assumeRole for temporary AWS credentials",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-web-identity",
       "versions": [
-        "3.972.76"
+        "3.972.82"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -340,7 +356,7 @@
       "license": "Apache-2.0",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/middleware-sdk-s3",
       "versions": [
-        "3.972.75"
+        "3.972.81"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -356,7 +372,7 @@
       "role": "Nested clients for AWS SDK packages.",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/nested-clients",
       "versions": [
-        "3.997.44"
+        "3.997.50"
       ],
       "notice": "By AWS SDK for JavaScript Team.",
       "copyright": [],
@@ -368,7 +384,7 @@
       "license": "Apache-2.0",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/s3-request-presigner",
       "versions": [
-        "3.1118.0"
+        "3.1155.0"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -383,7 +399,7 @@
       "license": "Apache-2.0",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/signature-v4-multi-region",
       "versions": [
-        "3.996.46"
+        "3.996.49"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -399,7 +415,7 @@
       "role": "A collection of token providers",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/token-providers",
       "versions": [
-        "3.1116.0"
+        "3.1155.0"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -415,7 +431,7 @@
       "role": "Types for the AWS SDK",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/types",
       "versions": [
-        "3.974.5"
+        "3.975.0"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -431,7 +447,7 @@
       "role": "XML utilities for the AWS SDK",
       "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/xml-builder",
       "versions": [
-        "3.972.40"
+        "3.972.41"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -462,7 +478,7 @@
       "role": "babel's modular runtime helpers",
       "url": "https://babel.dev/docs/en/next/babel-runtime",
       "versions": [
-        "7.29.7"
+        "7.29.10"
       ],
       "copyright": [
         "Copyright (c) 2014-present Sebastian McKenzie and other contributors"
@@ -478,7 +494,7 @@
       "role": "The most comprehensive authentication framework for TypeScript.",
       "url": "https://www.better-auth.com",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -494,7 +510,7 @@
       "role": "Drizzle adapter for Better Auth",
       "url": "https://www.better-auth.com/docs/adapters/drizzle",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -510,7 +526,7 @@
       "role": "Kysely adapter for Better Auth",
       "url": "https://www.better-auth.com/docs/adapters/kysely",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -526,7 +542,7 @@
       "role": "Memory adapter for Better Auth",
       "url": "https://www.better-auth.com",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -542,7 +558,7 @@
       "role": "Mongo adapter for Better Auth",
       "url": "https://www.better-auth.com/docs/adapters/mongodb",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -558,7 +574,7 @@
       "role": "Prisma adapter for Better Auth",
       "url": "https://www.better-auth.com/docs/adapters/prisma",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -574,7 +590,7 @@
       "role": "Telemetry package for Better Auth",
       "url": "https://www.better-auth.com",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -603,7 +619,8 @@
       "license": "MIT",
       "url": "https://github.com/better-auth/better-fetch",
       "versions": [
-        "1.3.1"
+        "1.3.1",
+        "1.3.2"
       ],
       "copyright": [
         "Copyright (c) Bereket Engida"
@@ -619,7 +636,23 @@
       "role": "Build and manage the AJV instances for the fastify framework",
       "url": "https://github.com/fastify/ajv-compiler#readme",
       "versions": [
-        "4.0.6"
+        "4.0.7"
+      ],
+      "copyright": [
+        "Copyright (c) 2022-present The Fastify team <https://github.com/fastify/fastify#team>"
+      ],
+      "textIds": [
+        "1847e0e06981"
+      ]
+    },
+    {
+      "name": "@fastify/deepmerge",
+      "kind": "npm",
+      "license": "MIT",
+      "role": "Merges the enumerable properties of two or more objects deeply.",
+      "url": "https://github.com/fastify/deepmerge#readme",
+      "versions": [
+        "3.2.2"
       ],
       "copyright": [
         "Copyright (c) 2022-present The Fastify team <https://github.com/fastify/fastify#team>"
@@ -635,10 +668,10 @@
       "role": "A small utility, used by Fastify itself, for generating consistent error objects across your codebase and plugins.",
       "url": "https://github.com/fastify/fastify-error#readme",
       "versions": [
-        "4.2.0"
+        "4.2.1"
       ],
       "copyright": [
-        "Copyright (c) 2020 Fastify"
+        "Copyright (c) 2020-present The Fastify team <https://github.com/fastify/fastify#team>"
       ],
       "textIds": [
         "1847e0e06981"
@@ -651,7 +684,7 @@
       "role": "Build and manage the fast-json-stringify instances for the fastify framework",
       "url": "https://github.com/fastify/fast-json-stringify-compiler#readme",
       "versions": [
-        "5.1.0"
+        "5.1.1"
       ],
       "copyright": [
         "Copyright (c) 2022-present The Fastify team <https://github.com/fastify/fastify#team>"
@@ -667,7 +700,7 @@
       "role": "Parse HTTP X-Forwarded-For header",
       "url": "https://github.com/fastify/forwarded#readme",
       "versions": [
-        "3.0.2"
+        "3.1.2"
       ],
       "copyright": [
         "Copyright (c) 2014-2017 Douglas Christopher Wilson",
@@ -684,10 +717,10 @@
       "role": "Builds a logical conjunction (AND) of multiple JSON schemas",
       "url": "https://github.com/fastify/merge-json-schemas#readme",
       "versions": [
-        "0.2.1"
+        "0.2.2"
       ],
       "copyright": [
-        "Copyright (c) 2024 Fastify"
+        "Copyright (c) 2024-present The Fastify team <https://github.com/fastify/fastify#team>"
       ],
       "textIds": [
         "1847e0e06981"
@@ -700,14 +733,14 @@
       "role": "Determine the address of a proxied request",
       "url": "https://github.com/fastify/proxy-addr#readme",
       "versions": [
-        "5.1.0"
+        "5.1.2"
       ],
       "copyright": [
         "Copyright (c) 2014-2016 Douglas Christopher Wilson",
-        "Copyright (c) 2021-present The Fastify team"
+        "Copyright (c) 2021-present The Fastify team <https://github.com/fastify/fastify#team>"
       ],
       "textIds": [
-        "27292f39170b"
+        "1847e0e06981"
       ]
     },
     {
@@ -717,7 +750,7 @@
       "role": "Serve Swagger/OpenAPI documentation for Fastify, supporting dynamic generation",
       "url": "https://github.com/fastify/fastify-swagger#readme",
       "versions": [
-        "9.8.1"
+        "9.9.2"
       ],
       "copyright": [
         "Copyright (c) 2017-present The Fastify team <https://github.com/fastify/fastify#team>"
@@ -869,7 +902,7 @@
       "role": "Prebuilt sharp for use with macOS 64-bit ARM",
       "url": "https://sharp.pixelplumbing.com",
       "versions": [
-        "0.35.3"
+        "0.35.5"
       ],
       "notice": "By Lovell Fuller.",
       "copyright": [],
@@ -884,7 +917,7 @@
       "role": "Prebuilt libvips and dependencies for use with sharp on macOS 64-bit ARM",
       "url": "https://sharp.pixelplumbing.com",
       "versions": [
-        "1.3.2"
+        "1.3.4"
       ],
       "notice": "By Lovell Fuller.",
       "copyright": [],
@@ -897,7 +930,7 @@
       "role": "Internationalized calendar, date, and time manipulation utilities",
       "url": "https://github.com/adobe/react-spectrum/tree/main/packages/@internationalized/date",
       "versions": [
-        "3.12.3"
+        "3.12.4"
       ],
       "copyright": [
         "Copyright 2019 Adobe"
@@ -913,7 +946,7 @@
       "role": "Internationalized number formatting and parsing utilities",
       "url": "https://github.com/adobe/react-spectrum",
       "versions": [
-        "3.6.7"
+        "3.6.9"
       ],
       "copyright": [
         "Copyright 2019 Adobe"
@@ -961,7 +994,7 @@
       "role": "MP3 encoder extension for Mediabunny, based on LAME.",
       "url": "https://mediabunny.dev/guide/extensions/mp3-encoder",
       "versions": [
-        "1.55.2"
+        "1.62.0"
       ],
       "notice": "By Vanilagy.",
       "copyright": [],
@@ -1144,7 +1177,7 @@
       "role": "Next.js dotenv file loading",
       "url": "https://github.com/vercel/next.js",
       "versions": [
-        "15.5.24"
+        "15.5.28"
       ],
       "notice": "By Next.js Team.",
       "copyright": [],
@@ -1156,7 +1189,7 @@
       "license": "MIT",
       "url": "https://github.com/vercel/next.js",
       "versions": [
-        "15.5.24"
+        "15.5.28"
       ],
       "copyright": [],
       "textIds": []
@@ -1168,7 +1201,7 @@
       "role": "Audited & minimal JS implementation of Salsa20, ChaCha and AES",
       "url": "https://paulmillr.com/noble/",
       "versions": [
-        "2.3.0"
+        "2.4.0"
       ],
       "copyright": [
         "Copyright (c) 2022 Paul Miller (https://paulmillr.com)",
@@ -1185,7 +1218,7 @@
       "role": "Audited & minimal 0-dependency JS implementation of SHA, RIPEMD, BLAKE, HMAC, HKDF, PBKDF & Scrypt",
       "url": "https://paulmillr.com/noble/",
       "versions": [
-        "2.3.0"
+        "2.4.0"
       ],
       "copyright": [
         "Copyright (c) 2022 Paul Miller (https://paulmillr.com)"
@@ -1201,7 +1234,7 @@
       "role": "Entity parser for XML, HTML, External entites with security and NCR control",
       "url": "https://github.com/nodable/val-parsers",
       "versions": [
-        "3.0.0"
+        "3.1.0"
       ],
       "notice": "By Amit Gupta.",
       "copyright": [],
@@ -1333,7 +1366,7 @@
       "role": "Spectrum UI components in React",
       "url": "https://github.com/adobe/react-spectrum",
       "versions": [
-        "3.36.1"
+        "3.37.0"
       ],
       "copyright": [
         "Copyright 2019 Adobe"
@@ -1348,7 +1381,7 @@
       "license": "Apache-2.0",
       "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/core",
       "versions": [
-        "3.33.3"
+        "3.36.2"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -1380,7 +1413,7 @@
       "role": "Provides a way to make requests",
       "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/fetch-http-handler",
       "versions": [
-        "5.7.2"
+        "5.8.0"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -1396,7 +1429,7 @@
       "role": "Provides a way to make requests",
       "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/node-http-handler",
       "versions": [
-        "4.11.3"
+        "4.12.1"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -1412,7 +1445,7 @@
       "role": "A standalone implementation of the AWS Signature V4 request signing algorithm",
       "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/signature-v4",
       "versions": [
-        "5.7.3"
+        "5.7.4"
       ],
       "copyright": [
         "Copyright 2018-2020 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -1427,7 +1460,7 @@
       "license": "Apache-2.0",
       "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/types",
       "versions": [
-        "4.17.2"
+        "4.19.0"
       ],
       "copyright": [
         "Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved."
@@ -1508,7 +1541,7 @@
       "role": "The framework agnostic core that powers TanStack Query",
       "url": "https://tanstack.com/query",
       "versions": [
-        "5.102.4"
+        "5.104.5"
       ],
       "copyright": [
         "Copyright (c) 2021-present Tanner Linsley"
@@ -1524,7 +1557,7 @@
       "role": "Hooks for managing, caching and syncing asynchronous and remote data in React",
       "url": "https://tanstack.com/query",
       "versions": [
-        "5.102.4"
+        "5.104.5"
       ],
       "copyright": [
         "Copyright (c) 2021-present Tanner Linsley"
@@ -1540,7 +1573,7 @@
       "role": "Headless UI for virtualizing scrollable elements in React",
       "url": "https://tanstack.com/virtual",
       "versions": [
-        "3.14.10"
+        "3.14.21"
       ],
       "copyright": [
         "Copyright (c) 2021-present Tanner Linsley"
@@ -1556,7 +1589,7 @@
       "role": "Headless UI for virtualizing scrollable elements in TS/JS + Frameworks",
       "url": "https://tanstack.com/virtual",
       "versions": [
-        "3.17.8"
+        "3.19.6"
       ],
       "copyright": [
         "Copyright (c) 2021-present Tanner Linsley"
@@ -1700,7 +1733,7 @@
       "role": "TypeScript definitions for react",
       "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react",
       "versions": [
-        "19.2.18"
+        "19.3.0"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -1733,7 +1766,7 @@
       "role": "A structuredClone polyfill",
       "url": "https://github.com/ungap/structured-clone#readme",
       "versions": [
-        "1.3.3"
+        "1.4.0"
       ],
       "copyright": [
         "Copyright (c) 2021, Andrea Giammarchi, @WebReflection"
@@ -1809,7 +1842,7 @@
       "role": "Javascript implementation of zip for nodejs with support for electron original-fs. Allows user to create or extract zip files both in memory or to/from disk",
       "url": "https://github.com/cthackers/adm-zip",
       "versions": [
-        "0.6.0"
+        "0.6.1"
       ],
       "copyright": [
         "Copyright (c) 2012 Another-D-Mention Software and other contributors"
@@ -1858,7 +1891,7 @@
       "url": "chalk/ansi-regex",
       "versions": [
         "5.0.1",
-        "6.3.0"
+        "6.4.0"
       ],
       "copyright": [
         "Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)",
@@ -2005,7 +2038,7 @@
       "role": "Asynchronous bootstrapping of Node applications",
       "url": "https://github.com/fastify/avvio#readme",
       "versions": [
-        "9.3.0"
+        "9.3.1"
       ],
       "copyright": [
         "Copyright (c) 2016-2020 Matteo Collina",
@@ -2022,7 +2055,7 @@
       "role": "Bridging the gap between buffers and typed arrays",
       "url": "https://github.com/holepunchto/b4a#readme",
       "versions": [
-        "1.8.1"
+        "1.9.0"
       ],
       "notice": "By Holepunch.",
       "copyright": [],
@@ -2069,7 +2102,7 @@
       "role": "Event emitters for JavaScript",
       "url": "https://github.com/holepunchto/bare-events#readme",
       "versions": [
-        "2.9.1"
+        "2.9.2"
       ],
       "notice": "By Holepunch.",
       "copyright": [],
@@ -2084,7 +2117,7 @@
       "role": "Native file system operations for Bare",
       "url": "https://github.com/holepunchto/bare-fs#readme",
       "versions": [
-        "4.8.1"
+        "4.8.4"
       ],
       "notice": "By Holepunch.",
       "copyright": [],
@@ -2099,7 +2132,7 @@
       "role": "Path manipulation library for JavaScript",
       "url": "https://github.com/holepunchto/bare-path#readme",
       "versions": [
-        "3.1.1"
+        "3.1.2"
       ],
       "copyright": [
         "Copyright 2023 Holepunch Inc",
@@ -2117,7 +2150,7 @@
       "role": "Streaming data for JavaScript",
       "url": "https://github.com/holepunchto/bare-stream#readme",
       "versions": [
-        "2.13.3"
+        "2.13.4"
       ],
       "notice": "By Holepunch.",
       "copyright": [],
@@ -2132,7 +2165,7 @@
       "role": "WHATWG URL implementation for JavaScript",
       "url": "https://github.com/holepunchto/bare-url",
       "versions": [
-        "2.5.2"
+        "2.5.5"
       ],
       "notice": "By Holepunch.",
       "copyright": [],
@@ -2163,7 +2196,7 @@
       "role": "The most comprehensive authentication framework for TypeScript.",
       "url": "https://better-auth.com",
       "versions": [
-        "1.7.1"
+        "1.7.2"
       ],
       "copyright": [
         "Copyright (c) 2024 - present, Bereket Engida"
@@ -2274,7 +2307,7 @@
       "role": "Brace expansion as known from sh/bash",
       "url": "https://github.com/juliangruber/brace-expansion",
       "versions": [
-        "2.1.4"
+        "2.1.7"
       ],
       "copyright": [
         "Copyright (c) 2013 Julian Gruber <julian@juliangruber.com>"
@@ -2323,7 +2356,7 @@
       "role": "A smaller version of caniuse-db, with only the essentials!",
       "url": "browserslist/caniuse-lite",
       "versions": [
-        "1.0.30001810"
+        "1.0.30001818"
       ],
       "notice": "By Ben Briggs.",
       "copyright": [],
@@ -2473,9 +2506,9 @@
       "kind": "npm",
       "license": "MIT",
       "role": "CmpStr is a lightweight, fast and well performing package for calculating string similarity",
-      "url": "https://github.com/komed3/cmpstr",
+      "url": "https://komed3.github.io/cmpstr",
       "versions": [
-        "3.3.0"
+        "3.4.0"
       ],
       "copyright": [
         "Copyright (c) 2023-2026 Paul Köhler (komed3)"
@@ -2569,12 +2602,12 @@
       "kind": "npm",
       "license": "MIT",
       "role": "modest natural language processing",
-      "url": "https://github.com/spencermountain/compromise",
+      "url": "https://compromise.cool",
       "versions": [
-        "14.17.0"
+        "14.19.0"
       ],
       "copyright": [
-        "Copyright (c) 2019 Spencer Kelly"
+        "Copyright (c) 2026 Spencer Kelly"
       ],
       "textIds": [
         "62b9b932cf5e"
@@ -2587,7 +2620,7 @@
       "role": "HTTP server cookie parsing and serialization",
       "url": "jshttp/cookie",
       "versions": [
-        "1.1.1"
+        "2.0.1"
       ],
       "copyright": [
         "Copyright (c) 2012-2014 Roman Shtylman <shtylman@gmail.com>",
@@ -2604,7 +2637,7 @@
       "role": "Standard library",
       "url": "https://core-js.io",
       "versions": [
-        "3.50.0"
+        "3.51.0"
       ],
       "copyright": [
         "Copyright (c) 2013–2025 Denis Pushkarev (zloirock.ru)",
@@ -2708,22 +2741,6 @@
       ],
       "textIds": [
         "90540526fc6c"
-      ]
-    },
-    {
-      "name": "cssom",
-      "kind": "npm",
-      "license": "MIT",
-      "role": "CSS Object Model implementation and CSS parser",
-      "url": "NV/CSSOM",
-      "versions": [
-        "0.5.0"
-      ],
-      "copyright": [
-        "Copyright (c) Nikita Vasilyev"
-      ],
-      "textIds": [
-        "8793aa4141de"
       ]
     },
     {
@@ -3045,7 +3062,7 @@
       "role": "Drizzle ORM package for SQL databases",
       "url": "https://orm.drizzle.team",
       "versions": [
-        "0.45.2"
+        "0.45.4"
       ],
       "notice": "By Drizzle Team.",
       "copyright": [],
@@ -3071,10 +3088,10 @@
       "role": "neato compression of key-value data",
       "url": "https://github.com/spencermountain/efrt",
       "versions": [
-        "2.7.0"
+        "2.9.0"
       ],
       "copyright": [
-        "Copyright (c) 2020 Spencer Kelly"
+        "Copyright (c) 2026 Spencer Kelly"
       ],
       "textIds": [
         "62b9b932cf5e"
@@ -3135,7 +3152,7 @@
       "versions": [
         "4.5.0",
         "7.0.1",
-        "8.0.0"
+        "8.1.0"
       ],
       "copyright": [
         "Copyright (c) Felix Böhm"
@@ -3407,7 +3424,7 @@
       "role": "A blazing fast deep object copier",
       "url": "https://github.com/planttheidea/fast-copy#readme",
       "versions": [
-        "4.0.4"
+        "4.2.0"
       ],
       "copyright": [
         "Copyright (c) 2025 Tony Quetano"
@@ -3473,7 +3490,7 @@
       "role": "Stringify your JSON at max speed",
       "url": "https://github.com/fastify/fast-json-stringify#readme",
       "versions": [
-        "7.0.1"
+        "7.1.2"
       ],
       "copyright": [
         "Copyright (c) 2016-present Matteo Collina",
@@ -3539,8 +3556,8 @@
       "role": "Dependency-free RFC 3986 URI toolbox",
       "url": "https://github.com/fastify/fast-uri",
       "versions": [
-        "3.1.6",
-        "4.1.3"
+        "3.1.9",
+        "4.2.3"
       ],
       "copyright": [
         "Copyright (c) 2011-2021, Gary Court until https://github.com/garycourt/uri-js/commit/a1acf730b4bba3f1097c9f52e7d9d3aba8cdcaae",
@@ -3573,7 +3590,7 @@
       "role": "Validate XML, Parse XML, Build XML without C/C++ based libraries",
       "url": "https://github.com/NaturalIntelligence/fast-xml-parser",
       "versions": [
-        "5.11.0"
+        "5.11.2"
       ],
       "copyright": [
         "Copyright (c) 2017 Amit Kumar Gupta"
@@ -3589,7 +3606,7 @@
       "role": "Fast and low overhead web framework, for Node.js",
       "url": "https://fastify.dev/",
       "versions": [
-        "5.12.1"
+        "5.12.7"
       ],
       "copyright": [
         "Copyright (c) 2016-present The Fastify team <https://github.com/fastify/fastify#team>"
@@ -3605,7 +3622,7 @@
       "role": "Plugin helper for Fastify",
       "url": "https://github.com/fastify/fastify-plugin#readme",
       "versions": [
-        "6.0.0"
+        "6.0.1"
       ],
       "copyright": [
         "Copyright (c) 2017-present The Fastify team <https://github.com/fastify/fastify#team>"
@@ -3621,7 +3638,7 @@
       "role": "Fast, in memory work queue",
       "url": "https://github.com/mcollina/fastq#readme",
       "versions": [
-        "1.20.1"
+        "1.20.3"
       ],
       "copyright": [
         "Copyright (c) 2015-2020, Matteo Collina <matteo.collina@gmail.com>"
@@ -3669,7 +3686,7 @@
       "role": "Crazy fast http radix based router",
       "url": "https://github.com/delvedor/find-my-way#readme",
       "versions": [
-        "9.9.0"
+        "9.10.0"
       ],
       "copyright": [
         "Copyright (c) 2017-2019 Tomas Della Vedova"
@@ -3820,22 +3837,6 @@
       ],
       "textIds": [
         "3589b6b3545d"
-      ]
-    },
-    {
-      "name": "grad-school",
-      "kind": "npm",
-      "license": "MIT",
-      "role": "graph logic and traversal",
-      "url": "https://github.com/spencermountain/grounder#readme",
-      "versions": [
-        "0.0.5"
-      ],
-      "copyright": [
-        "Copyright (c) 2021 spencer kelly"
-      ],
-      "textIds": [
-        "1847e0e06981"
       ]
     },
     {
@@ -4257,7 +4258,7 @@
       "role": "JWA, JWS, JWE, JWT, JWK, JWKS for Node.js, Browser, Cloudflare Workers, Deno, Bun, and other Web-interoperable runtimes",
       "url": "https://github.com/panva/jose",
       "versions": [
-        "6.2.10"
+        "6.2.13"
       ],
       "copyright": [
         "Copyright (c) 2018 Filip Skokan"
@@ -4305,10 +4306,10 @@
       "role": "JSON schema reference resolver",
       "url": "https://github.com/fastify/json-schema-ref-resolver#readme",
       "versions": [
-        "3.0.0"
+        "3.0.1"
       ],
       "copyright": [
-        "Copyright (c) 2023 Fastify"
+        "Copyright (c) 2023-present The Fastify team <https://github.com/fastify/fastify#team>"
       ],
       "textIds": [
         "1847e0e06981"
@@ -4353,7 +4354,7 @@
       "role": "Create, read and edit .zip files with JavaScript http://stuartk.com/jszip",
       "url": "https://github.com/Stuk/jszip",
       "versions": [
-        "3.10.1"
+        "3.10.2"
       ],
       "copyright": [
         "Copyright (c) 2009-2016 Stuart Knightley, David Duponchel, Franz Buchinger, António Afonso"
@@ -4369,7 +4370,7 @@
       "role": "Type safe SQL query builder",
       "url": "https://kysely.dev",
       "versions": [
-        "0.28.17"
+        "0.28.18"
       ],
       "copyright": [
         "Copyright (c) 2022 Sami Koskimäki"
@@ -4417,12 +4418,12 @@
       "role": "Fake HTTP injection library",
       "url": "https://github.com/fastify/light-my-request#readme",
       "versions": [
-        "6.6.0"
+        "6.8.0"
       ],
       "copyright": [
-        "Copyright (c) 2017 The Fastify Team",
+        "Copyright (c) 2012-2014, Walmart",
         "Copyright (c) 2012-2017, Project contributors",
-        "Copyright (c) 2012-2014, Walmart"
+        "Copyright (c) 2017-present The Fastify team <https://github.com/fastify/fastify#team>"
       ],
       "textIds": [
         "f472e566a553"
@@ -4435,7 +4436,7 @@
       "role": "A triple-linked lists based DOM implementation",
       "url": "https://github.com/WebReflection/linkedom#readme",
       "versions": [
-        "0.18.13"
+        "0.18.14"
       ],
       "copyright": [
         "Copyright (c) 2021, Andrea Giammarchi, @WebReflection"
@@ -4516,7 +4517,7 @@
       "role": "A cache object that deletes the least-recently-used items.",
       "url": "ssh://git@github.com/isaacs/node-lru-cache",
       "versions": [
-        "11.5.2"
+        "11.5.3"
       ],
       "notice": "By Isaac Z. Schlueter.",
       "copyright": [],
@@ -4624,7 +4625,7 @@
       "role": "mdast utility to find and replace text in a tree",
       "url": "syntax-tree/mdast-util-find-and-replace",
       "versions": [
-        "3.0.2"
+        "3.0.3"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -4640,7 +4641,7 @@
       "role": "mdast utility to parse markdown",
       "url": "syntax-tree/mdast-util-from-markdown",
       "versions": [
-        "2.0.3"
+        "2.1.0"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -4704,10 +4705,10 @@
       "role": "mdast extension to parse and serialize GFM strikethrough",
       "url": "syntax-tree/mdast-util-gfm-strikethrough",
       "versions": [
-        "2.0.0"
+        "2.0.1"
       ],
       "copyright": [
-        "Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com>"
+        "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
       ],
       "textIds": [
         "af6d4e4f1bb6"
@@ -4833,7 +4834,7 @@
       "role": "mdast utility to serialize markdown",
       "url": "syntax-tree/mdast-util-to-markdown",
       "versions": [
-        "2.1.2"
+        "2.2.0"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -4865,7 +4866,7 @@
       "role": "Pure TypeScript media toolkit for reading, writing, and converting media files, directly in the browser.",
       "url": "https://mediabunny.dev/",
       "versions": [
-        "1.55.2"
+        "1.62.0"
       ],
       "notice": "By Vanilagy.",
       "copyright": [],
@@ -4896,7 +4897,7 @@
       "role": "small commonmark compliant markdown parser with positional info and concrete tokens",
       "url": "https://github.com/micromark/micromark/tree/main/packages/micromark",
       "versions": [
-        "4.0.2"
+        "4.0.3"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -4912,7 +4913,7 @@
       "role": "The CommonMark markdown constructs",
       "url": "https://github.com/micromark/micromark/tree/main/packages/micromark-core-commonmark",
       "versions": [
-        "2.0.3"
+        "2.0.4"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -4992,7 +4993,7 @@
       "role": "micromark extension to support GFM tables",
       "url": "micromark/micromark-extension-gfm-table",
       "versions": [
-        "2.1.1"
+        "2.1.2"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -5072,7 +5073,7 @@
       "role": "micromark factory to parse markdown space (found in lots of places)",
       "url": "https://github.com/micromark/micromark/tree/main/packages/micromark-factory-space",
       "versions": [
-        "2.0.1"
+        "2.1.0"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -5210,6 +5211,22 @@
       ]
     },
     {
+      "name": "micromark-util-edit-map",
+      "kind": "npm",
+      "license": "MIT",
+      "role": "micromark utility to batch changes to lists of events",
+      "url": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-edit-map",
+      "versions": [
+        "1.0.0"
+      ],
+      "copyright": [
+        "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
+      ],
+      "textIds": [
+        "af6d4e4f1bb6"
+      ]
+    },
+    {
       "name": "micromark-util-encode",
       "kind": "npm",
       "license": "MIT",
@@ -5328,7 +5345,7 @@
       "role": "micromark utility with a couple of typescript types",
       "url": "https://github.com/micromark/micromark/tree/main/packages/micromark-util-types",
       "versions": [
-        "2.0.2"
+        "2.0.3"
       ],
       "copyright": [
         "Copyright (c) Titus Wormer <tituswormer@gmail.com>"
@@ -5440,7 +5457,7 @@
       "role": "A tiny (116 bytes), secure URL-friendly unique string ID generator",
       "url": "ai/nanoid",
       "versions": [
-        "3.3.18"
+        "3.3.20"
       ],
       "copyright": [
         "Copyright 2017 Andrey Sitnik <andrey@sitnik.ru>",
@@ -5454,10 +5471,10 @@
       "name": "nanostores",
       "kind": "npm",
       "license": "MIT",
-      "role": "A tiny (372 bytes) state manager for React/Preact/Vue/Svelte with many atomic tree-shakable stores",
+      "role": "A tiny (351 bytes) state manager for React/Preact/Vue/Svelte with many atomic tree-shakable stores",
       "url": "nanostores/nanostores",
       "versions": [
-        "1.5.2"
+        "1.5.5"
       ],
       "copyright": [
         "Copyright 2020 Andrey Sitnik <andrey@sitnik.es>",
@@ -5490,7 +5507,7 @@
       "role": "The React Framework",
       "url": "https://nextjs.org",
       "versions": [
-        "15.5.24"
+        "15.5.28"
       ],
       "copyright": [
         "Copyright (c) 2025 Vercel, Inc."
@@ -5522,7 +5539,7 @@
       "role": "Get the Node ABI for a given target and runtime, and vice versa.",
       "url": "https://github.com/electron/node-abi#readme",
       "versions": [
-        "3.95.0"
+        "3.100.0"
       ],
       "copyright": [
         "Copyright (c) 2016 Lukas Geiger"
@@ -5650,7 +5667,7 @@
       "role": "ONNXRuntime JavaScript API library",
       "url": "https://github.com/Microsoft/onnxruntime",
       "versions": [
-        "1.29.0"
+        "1.30.0"
       ],
       "notice": "By fs-eire.",
       "copyright": [],
@@ -5663,7 +5680,7 @@
       "role": "ONNXRuntime Node.js binding",
       "url": "https://github.com/Microsoft/onnxruntime",
       "versions": [
-        "1.29.0"
+        "1.30.0"
       ],
       "notice": "By fs-eire.",
       "copyright": [],
@@ -5708,7 +5725,7 @@
       "role": "Retry a promise-returning or async function",
       "url": "sindresorhus/p-retry",
       "versions": [
-        "8.0.0"
+        "8.0.1"
       ],
       "copyright": [
         "Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"
@@ -5861,7 +5878,7 @@
       "role": "PostgreSQL client - pure javascript & libpq with the same API",
       "url": "https://github.com/brianc/node-postgres",
       "versions": [
-        "8.23.0"
+        "8.23.1"
       ],
       "copyright": [
         "Copyright (c) 2010 - 2021 Brian Carlson"
@@ -5877,7 +5894,7 @@
       "role": "A socket implementation that can run on Cloudflare Workers using native TCP connections.",
       "url": "https://github.com/brianc/node-postgres",
       "versions": [
-        "1.4.0"
+        "1.4.1"
       ],
       "copyright": [
         "Copyright (c) 2010 - 2021 Brian Carlson"
@@ -5893,7 +5910,7 @@
       "role": "Functions for dealing with a PostgreSQL connection string",
       "url": "https://github.com/brianc/node-postgres/tree/master/packages/pg-connection-string",
       "versions": [
-        "2.14.0"
+        "2.14.1"
       ],
       "copyright": [
         "Copyright (c) 2014 Iced Development"
@@ -5941,7 +5958,7 @@
       "role": "The postgres client/server binary protocol, implemented in TypeScript",
       "url": "https://github.com/brianc/node-postgres",
       "versions": [
-        "1.16.0"
+        "1.16.1"
       ],
       "copyright": [
         "Copyright (c) 2010 - 2021 Brian Carlson"
@@ -5999,10 +6016,10 @@
       "role": "super fast, all natural json logger",
       "url": "https://getpino.io",
       "versions": [
-        "10.3.1"
+        "10.4.0"
       ],
       "copyright": [
-        "Copyright (c) 2016-2025 Matteo Collina, David Mark Clements and the Pino contributors listed at <https://github.com/pinojs/pino#the-team> and in the README file."
+        "Copyright (c) 2016-present Matteo Collina, David Mark Clements and the Pino contributors listed at <https://github.com/pinojs/pino#the-team> and in the README file."
       ],
       "textIds": [
         "62b9b932cf5e"
@@ -6031,7 +6048,7 @@
       "role": "Prettifier for Pino log lines",
       "url": "https://github.com/pinojs/pino-pretty#readme",
       "versions": [
-        "13.1.3"
+        "13.2.0"
       ],
       "copyright": [
         "Copyright (c) 2019 the Pino team listed at https://github.com/pinojs/pino#the-team"
@@ -6063,7 +6080,7 @@
       "role": "Email parser for Node.js and browser environments",
       "url": "https://postal-mime.postalsys.com",
       "versions": [
-        "2.7.5"
+        "2.7.6"
       ],
       "copyright": [
         "Copyright (c) 2021-2025 Andris Reinman"
@@ -6079,7 +6096,7 @@
       "role": "Tool for transforming styles with JS plugins",
       "url": "https://postcss.org/",
       "versions": [
-        "8.5.26"
+        "8.5.31"
       ],
       "copyright": [
         "Copyright 2013 Andrey Sitnik <andrey@sitnik.es>",
@@ -6206,12 +6223,10 @@
       "role": "A small utility for creating warnings and emitting them.",
       "url": "https://github.com/fastify/fastify-warning#readme",
       "versions": [
-        "4.0.1",
-        "5.1.0"
+        "5.1.1"
       ],
       "copyright": [
-        "Copyright (c) 2020-present The Fastify team <https://github.com/fastify/fastify#team>",
-        "Copyright (c) Fastify"
+        "Copyright (c) 2020-present The Fastify team <https://github.com/fastify/fastify#team>"
       ],
       "textIds": [
         "1847e0e06981"
@@ -6307,7 +6322,7 @@
       "role": "React is a JavaScript library for building user interfaces.",
       "url": "https://react.dev/",
       "versions": [
-        "19.2.8"
+        "19.3.1"
       ],
       "copyright": [
         "Copyright (c) Meta Platforms, Inc. and affiliates."
@@ -6323,7 +6338,7 @@
       "role": "Spectrum UI components in React",
       "url": "https://github.com/adobe/react-spectrum",
       "versions": [
-        "3.51.0"
+        "3.53.1"
       ],
       "copyright": [
         "Copyright 2019 Adobe"
@@ -6371,7 +6386,7 @@
       "role": "React package for working with the DOM.",
       "url": "https://react.dev/",
       "versions": [
-        "19.2.8"
+        "19.3.1"
       ],
       "copyright": [
         "Copyright (c) Meta Platforms, Inc. and affiliates."
@@ -6403,7 +6418,7 @@
       "role": "Smoking hot React Notifications. Lightweight, customizable and beautiful by default.",
       "url": "timolins/react-hot-toast",
       "versions": [
-        "2.6.0"
+        "2.6.1"
       ],
       "copyright": [
         "Copyright (c) 2020 Timo Lins"
@@ -6467,7 +6482,7 @@
       "role": "Spectrum UI components in React",
       "url": "https://github.com/adobe/react-spectrum",
       "versions": [
-        "3.49.0"
+        "3.51.0"
       ],
       "copyright": [
         "Copyright 2019 Adobe"
@@ -6485,7 +6500,7 @@
       "versions": [
         "2.3.8",
         "3.6.2",
-        "4.7.0"
+        "4.8.0"
       ],
       "copyright": [
         "Copyright Node.js contributors. All rights reserved.",
@@ -6518,7 +6533,6 @@
       "role": "Keep require and import consistent after bundling or transpiling",
       "url": "https://github.com/pinojs/real-require",
       "versions": [
-        "0.2.0",
         "1.0.0"
       ],
       "copyright": [
@@ -6647,7 +6661,7 @@
       "role": "Node.js library for the Resend API",
       "url": "https://github.com/resend/resend-node#readme",
       "versions": [
-        "6.28.0"
+        "6.34.1"
       ],
       "copyright": [
         "Copyright (c) 2023 Plus Five Five, Inc."
@@ -6663,7 +6677,7 @@
       "role": "Tokenizes a string that represents a regular expression.",
       "url": "https://github.com/fent/ret.js",
       "versions": [
-        "0.5.0"
+        "0.5.1"
       ],
       "copyright": [
         "Copyright (C) 2011 by fent"
@@ -6744,7 +6758,7 @@
       "role": "detect possibly catastrophic, exponential-time regular expressions",
       "url": "https://github.com/fastify/safe-regex2",
       "versions": [
-        "5.1.1"
+        "5.1.2"
       ],
       "copyright": [
         "Copyright (c) 2019-present The Fastify team <https://github.com/fastify/fastify#team>"
@@ -6776,7 +6790,7 @@
       "role": "Cooperative scheduler for the browser environment.",
       "url": "https://react.dev/",
       "versions": [
-        "0.27.0"
+        "0.28.0"
       ],
       "copyright": [
         "Copyright (c) Meta Platforms, Inc. and affiliates."
@@ -6792,14 +6806,14 @@
       "role": "JSON parse with prototype poisoning protection",
       "url": "https://github.com/fastify/secure-json-parse#readme",
       "versions": [
-        "4.1.0"
+        "4.1.1"
       ],
       "copyright": [
         "Copyright (c) 2019, Sideway Inc, and project contributors",
-        "Copyright (c) 2019-present The Fastify team"
+        "Copyright (c) 2019-present The Fastify team <https://github.com/fastify/fastify#team>"
       ],
       "textIds": [
-        "744ee2a38046"
+        "9885d3902692"
       ]
     },
     {
@@ -6841,8 +6855,7 @@
       "role": "Parses set-cookie headers into objects",
       "url": "https://github.com/nfriedly/set-cookie-parser",
       "versions": [
-        "2.7.2",
-        "3.1.2"
+        "3.2.1"
       ],
       "copyright": [
         "Copyright (c) 2015 Nathan Friedly <nathan@nfriedly.com> (http://nfriedly.com/)"
@@ -6874,7 +6887,7 @@
       "role": "High performance Node.js image processing, the fastest module to resize JPEG, PNG, WebP, GIF, AVIF and TIFF images",
       "url": "https://sharp.pixelplumbing.com",
       "versions": [
-        "0.35.3"
+        "0.35.5"
       ],
       "notice": "By Lovell Fuller.",
       "copyright": [],
@@ -6971,7 +6984,8 @@
       "role": "Extremely fast utf8 only stream implementation",
       "url": "https://github.com/pinojs/sonic-boom#readme",
       "versions": [
-        "4.2.1"
+        "4.2.1",
+        "5.0.2"
       ],
       "copyright": [
         "Copyright (c) 2017 Matteo Collina"
@@ -6987,7 +7001,7 @@
       "role": "Generates and consumes source maps",
       "url": "https://github.com/7rulnik/source-map-js",
       "versions": [
-        "1.2.1"
+        "1.2.2"
       ],
       "copyright": [
         "Copyright (c) 2009-2011, Mozilla Foundation and contributors"
@@ -7035,7 +7049,7 @@
       "role": "Standard Webhooks for TypeScript",
       "url": "https://github.com/standard-webhooks/standard-webhooks/tree/main/libraries/javascript",
       "versions": [
-        "1.0.0"
+        "1.1.1"
       ],
       "notice": "By Standard Webhooks.",
       "copyright": [],
@@ -7153,7 +7167,7 @@
       "role": "Parse String to Number based on configuration",
       "url": "https://github.com/NaturalIntelligence/strnum",
       "versions": [
-        "2.4.2"
+        "2.5.1"
       ],
       "copyright": [
         "Copyright (c) 2021 Natural Intelligence"
@@ -7217,10 +7231,10 @@
       "role": "learn transformations between two sets of words",
       "url": "https://github.com/spencermountain/suffix-thumb",
       "versions": [
-        "5.0.3"
+        "6.0.0"
       ],
       "copyright": [
-        "Copyright (c) 2016 Spencer Kelly"
+        "Copyright (c) 2026 Spencer Kelly"
       ],
       "textIds": [
         "62b9b932cf5e"
@@ -7266,7 +7280,7 @@
       "url": "https://github.com/mafintosh/tar-stream",
       "versions": [
         "2.2.0",
-        "3.2.1"
+        "3.2.2"
       ],
       "copyright": [
         "Copyright (c) 2014 Mathias Buus"
@@ -7597,9 +7611,9 @@
       "kind": "npm",
       "license": "MIT",
       "role": "Backwards compatible shim for React's useSyncExternalStore. Works with any React that supports hooks.",
-      "url": "https://github.com/facebook/react",
+      "url": "https://github.com/react/react",
       "versions": [
-        "1.6.0"
+        "1.7.0"
       ],
       "copyright": [
         "Copyright (c) Meta Platforms, Inc. and affiliates."
@@ -7760,7 +7774,7 @@
       "role": "JavaScript parser and stringifier for YAML",
       "url": "https://eemeli.org/yaml/",
       "versions": [
-        "2.9.0"
+        "2.9.1"
       ],
       "copyright": [
         "Copyright Eemeli Aro <eemeli@gmail.com>"
@@ -7792,7 +7806,7 @@
       "role": "TypeScript-first schema declaration and validation library with static type inference",
       "url": "https://zod.dev",
       "versions": [
-        "4.4.3"
+        "4.6.7"
       ],
       "copyright": [
         "Copyright (c) 2025 Colin McDonnell"
@@ -7826,7 +7840,6 @@
     "1847e0e06981": "MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "1a9975c75cfc": "# Blue Oak Model License\n\nVersion 1.0.0\n\n## Purpose\n\nThis license gives everyone as much permission to work with\nthis software as possible, while protecting contributors\nfrom liability.\n\n## Acceptance\n\nIn order to receive this license, you must agree to its\nrules.  The rules of this license are both obligations\nunder that agreement and conditions to your license.\nYou must not do anything with this software that triggers\na rule that you cannot or will not follow.\n\n## Copyright\n\nEach contributor licenses you to do everything with this\nsoftware that would otherwise infringe that contributor's\ncopyright in it.\n\n## Notices\n\nYou must ensure that everyone who gets a copy of\nany part of this software from you, with or without\nchanges, also gets the text of this license or a link to\n<https://blueoakcouncil.org/license/1.0.0>.\n\n## Excuse\n\nIf anyone notifies you in writing that you have not\ncomplied with [Notices](#notices), you can keep your\nlicense by taking all practical steps to comply within 30\ndays after the notice.  If you do not do so, your license\nends immediately.\n\n## Patent\n\nEach contributor licenses you to do everything with this\nsoftware that would otherwise infringe any patent claims\nthey can license or become able to license.\n\n## Reliability\n\nNo contributor can revoke this license.\n\n## No Liability\n\n***As far as the law allows, this software comes as is,\nwithout any warranty or condition, and no contributor\nwill be liable to anyone for any damages related to this\nsoftware or this license, under any kind of legal claim.***",
     "21a2121221d2": "Permission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
-    "27292f39170b": "MIT License\n\nThe Fastify team members are listed at https://github.com/fastify/fastify#team.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "283ea6cc2997": "Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n\n   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.\n\n      \"License\" shall mean the terms and conditions for use, reproduction,\n      and distribution as defined by Sections 1 through 9 of this document.\n\n      \"Licensor\" shall mean the copyright owner or entity authorized by\n      the copyright owner that is granting the License.\n\n      \"Legal Entity\" shall mean the union of the acting entity and all\n      other entities that control, are controlled by, or are under common\n      control with that entity. For the purposes of this definition,\n      \"control\" means (i) the power, direct or indirect, to cause the\n      direction or management of such entity, whether by contract or\n      otherwise, or (ii) ownership of fifty percent (50%) or more of the\n      outstanding shares, or (iii) beneficial ownership of such entity.\n\n      \"You\" (or \"Your\") shall mean an individual or Legal Entity\n      exercising permissions granted by this License.\n\n      \"Source\" form shall mean the preferred form for making modifications,\n      including but not limited to software source code, documentation\n      source, and configuration files.\n\n      \"Object\" form shall mean any form resulting from mechanical\n      transformation or translation of a Source form, including but\n      not limited to compiled object code, generated documentation,\n      and conversions to other media types.\n\n      \"Work\" shall mean the work of authorship, whether in Source or\n      Object form, made available under the License, as indicated by a\n      copyright notice that is included in or attached to the work\n      (an example is provided in the Appendix below).\n\n      \"Derivative Works\" shall mean any work, whether in Source or Object\n      form, that is based on (or derived from) the Work and for which the\n      editorial revisions, annotations, elaborations, or other modifications\n      represent, as a whole, an original work of authorship. For the purposes\n      of this License, Derivative Works shall not include works that remain\n      separable from, or merely link (or bind by name) to the interfaces of,\n      the Work and Derivative Works thereof.\n\n      \"Contribution\" shall mean any work of authorship, including\n      the original version of the Work and any modifications or additions\n      to that Work or Derivative Works thereof, that is intentionally\n      submitted to Licensor for inclusion in the Work by the copyright owner\n      or by an individual or Legal Entity authorized to submit on behalf of\n      the copyright owner. For the purposes of this definition, \"submitted\"\n      means any form of electronic, verbal, or written communication sent\n      to the Licensor or its representatives, including but not limited to\n      communication on electronic mailing lists, source code control systems,\n      and issue tracking systems that are managed by, or on behalf of, the\n      Licensor for the purpose of discussing and improving the Work, but\n      excluding communication that is conspicuously marked or otherwise\n      designated in writing by the copyright owner as \"Not a Contribution.\"\n\n      \"Contributor\" shall mean Licensor and any individual or Legal Entity\n      on behalf of whom a Contribution has been received by Licensor and\n      subsequently incorporated within the Work.\n\n   2. Grant of Copyright License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      copyright license to reproduce, prepare Derivative Works of,\n      publicly display, publicly perform, sublicense, and distribute the\n      Work and such Derivative Works in Source or Object form.\n\n   3. Grant of Patent License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      (except as stated in this section) patent license to make, have made,\n      use, offer to sell, sell, import, and otherwise transfer the Work,\n      where such license applies only to those patent claims licensable\n      by such Contributor that are necessarily infringed by their\n      Contribution(s) alone or by combination of their Contribution(s)\n      with the Work to which such Contribution(s) was submitted. If You\n      institute patent litigation against any entity (including a\n      cross-claim or counterclaim in a lawsuit) alleging that the Work\n      or a Contribution incorporated within the Work constitutes direct\n      or contributory patent infringement, then any patent licenses\n      granted to You under this License for that Work shall terminate\n      as of the date such litigation is filed.\n\n   4. Redistribution. You may reproduce and distribute copies of the\n      Work or Derivative Works thereof in any medium, with or without\n      modifications, and in Source or Object form, provided that You\n      meet the following conditions:\n\n      (a) You must give any other recipients of the Work or\n          Derivative Works a copy of this License; and\n\n      (b) You must cause any modified files to carry prominent notices\n          stating that You changed the files; and\n\n      (c) You must retain, in the Source form of any Derivative Works\n          that You distribute, all copyright, patent, trademark, and\n          attribution notices from the Source form of the Work,\n          excluding those notices that do not pertain to any part of\n          the Derivative Works; and\n\n      (d) If the Work includes a \"NOTICE\" text file as part of its\n          distribution, then any Derivative Works that You distribute must\n          include a readable copy of the attribution notices contained\n          within such NOTICE file, excluding those notices that do not\n          pertain to any part of the Derivative Works, in at least one\n          of the following places: within a NOTICE text file distributed\n          as part of the Derivative Works; within the Source form or\n          documentation, if provided along with the Derivative Works; or,\n          within a display generated by the Derivative Works, if and\n          wherever such third-party notices normally appear. The contents\n          of the NOTICE file are for informational purposes only and\n          do not modify the License. You may add Your own attribution\n          notices within Derivative Works that You distribute, alongside\n          or as an addendum to the NOTICE text from the Work, provided\n          that such additional attribution notices cannot be construed\n          as modifying the License.\n\n      You may add Your own copyright statement to Your modifications and\n      may provide additional or different license terms and conditions\n      for use, reproduction, or distribution of Your modifications, or\n      for any such Derivative Works as a whole, provided Your use,\n      reproduction, and distribution of the Work otherwise complies with\n      the conditions stated in this License.\n\n   5. Submission of Contributions. Unless You explicitly state otherwise,\n      any Contribution intentionally submitted for inclusion in the Work\n      by You to the Licensor shall be under the terms and conditions of\n      this License, without any additional terms or conditions.\n      Notwithstanding the above, nothing herein shall supersede or modify\n      the terms of any separate license agreement you may have executed\n      with Licensor regarding such Contributions.\n\n   6. Trademarks. This License does not grant permission to use the trade\n      names, trademarks, service marks, or product names of the Licensor,\n      except as required for reasonable and customary use in describing the\n      origin of the Work and reproducing the content of the NOTICE file.\n\n   7. Disclaimer of Warranty. Unless required by applicable law or\n      agreed to in writing, Licensor provides the Work (and each\n      Contributor provides its Contributions) on an \"AS IS\" BASIS,\n      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n      implied, including, without limitation, any warranties or conditions\n      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n      PARTICULAR PURPOSE. You are solely responsible for determining the\n      appropriateness of using or redistributing the Work and assume any\n      risks associated with Your exercise of permissions under this License.\n\n   8. Limitation of Liability. In no event and under no legal theory,\n      whether in tort (including negligence), contract, or otherwise,\n      unless required by applicable law (such as deliberate and grossly\n      negligent acts) or agreed to in writing, shall any Contributor be\n      liable to You for damages, including any direct, indirect, special,\n      incidental, or consequential damages of any character arising as a\n      result of this License or out of the use or inability to use the\n      Work (including but not limited to damages for loss of goodwill,\n      work stoppage, computer failure or malfunction, or any and all\n      other commercial damages or losses), even if such Contributor\n      has been advised of the possibility of such damages.\n\n   9. Accepting Warranty or Additional Liability. While redistributing\n      the Work or Derivative Works thereof, You may choose to offer,\n      and charge a fee for, acceptance of support, warranty, indemnity,\n      or other liability obligations and/or rights consistent with this\n      License. However, in accepting such obligations, You may act only\n      on Your own behalf and on Your sole responsibility, not on behalf\n      of any other Contributor, and only if You agree to indemnify,\n      defend, and hold each Contributor harmless for any liability\n      incurred by, or claims asserted against, such Contributor by reason\n      of your accepting any such warranty or additional liability.\n\n   END OF TERMS AND CONDITIONS\n\n   APPENDIX: How to apply the Apache License to your work.\n\n      To apply the Apache License to your work, attach the following\n      boilerplate notice, with the fields enclosed by brackets \"[]\"\n      replaced with your own identifying information. (Don't include\n      the brackets!)  The text should be enclosed in the appropriate\n      comment syntax for the file format. We also recommend that a\n      file or class name and description of purpose be included on the\n      same \"printed page\" as the copyright notice for easier\n      identification within third-party archives.\n\n   Copyright [yyyy] [name of copyright owner]\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n       http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.",
     "28c3947823bd": "(The MIT License)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of this software\nand associated documentation files (the 'Software'), to deal in the Software without restriction,\nincluding without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,\nand/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all copies or substantial\nportions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT\nLIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nWHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
     "294f62211663": "Permission to use, copy, modify, and/or distribute this software for any purpose\nwith or without fee is hereby granted, provided that the above copyright notice\nand this permission notice appear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH\nREGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND\nFITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,\nINDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS\nOF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER\nTORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF\nTHIS SOFTWARE.",
@@ -7856,7 +7869,6 @@
     "70f2a82a1ce8": "All rights reserved.\n\nMIT License\n\nPermission is hereby granted, free of charge, to any person\nobtaining a copy of this software and associated documentation\nfiles (the \"Software\"), to deal in the Software without\nrestriction, including without limitation the rights to use,\ncopy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the\nSoftware is furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nDistributions of all or part of the Software intended to be used\nby the recipients as they would use the unmodified Software,\ncontaining modifications that substantially alter, remove, or\ndisable functionality of the Software, outside of the documented\nconfiguration mechanisms provided by the Software, shall be\nmodified such that the Original Author's bug reporting email\naddresses and urls are either replaced with the contact information\nof the parties responsible for the changes, or removed entirely.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES\nOF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT\nHOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nWHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR\nOTHER DEALINGS IN THE SOFTWARE.\n\nExcept where noted, this license applies to any and all software\nprograms and associated documentation files created by the\nOriginal Author, when distributed with the Software.",
     "72aba634340b": "Based on Underscore.js, copyright Jeremy Ashkenas,\nDocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>\n\nThis software consists of voluntary contributions made by many\nindividuals. For exact contribution history, see the revision history\navailable at https://github.com/lodash/lodash\n\nThe following license applies to all parts of this software except as\ndocumented below:\n\n====\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n====\n\ncode is defined as all source code displayed within the prose of the\ndocumentation.\n\nCC0: http://creativecommons.org/publicdomain/zero/1.0/\n\n====\n\nFiles located in the node_modules and vendor directories are externally\nmaintained libraries used by this software which have their own\nlicenses; we recommend you read them, as their terms may differ from the\nterms above.",
     "72c6b6e62e76": "The MIT License (MIT)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the “Software”), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
-    "744ee2a38046": "All rights reserved.\n\nThe Fastify team members are listed at https://github.com/fastify/fastify#team.\n\nThe complete list of contributors can be found at:\n- https://github.com/hapijs/bourne/graphs/contributors\n- https://github.com/fastify/secure-json-parse/graphs/contributors\n\nRedistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
     "797ba0e4d687": "Third-party notices for the local Kokoro provider\n=================================================\n\nThis directory ships no model data. The compute worker downloads the files\nbelow on first use into DOCSTORE_DIR/model/kokoro-82m and verifies each one's\nsize and SHA-256 before loading it.\n\nKokoro-82M model weights and voice packs\n  Upstream:  https://huggingface.co/hexgrad/Kokoro-82M (Apache-2.0)\n  ONNX export: https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX\n             commit 1939ad2a8e416c0acfeecc08a694d14ef25f2231 (Apache-2.0)\n\nMisaki grapheme-to-phoneme frontend and dictionaries\n  Upstream:  https://github.com/hexgrad/misaki\n             commit e820629b96334db28227df37f280e4836d46fadb (Apache-2.0)\n  Swift port: https://github.com/mweinbach/kokoro-swift\n             commit 20bf04c506e913ff129d7d2229398180ba24c690 (Apache-2.0)\n  The TypeScript in ../misaki/ is a port of the Swift port as vendored and\n  modified by the OpenReader iOS app. Modifications are listed in\n  PROVENANCE.md beside this file, per section 4(b) of the licence below.\n  The us/gb gold and silver dictionaries are downloaded unmodified from\n  upstream Misaki.\n\nLetter-to-sound rules (letter_to_sound.tsv, bundled here) and their TypeScript reader\n  From the OpenReader iOS app (MIT, notice below). The rules are induced from\n  the Apache-2.0 Misaki dictionaries above. Nothing in them, or in any code\n  here, derives from espeak or espeak-ng; no GPL phonemizer is linked,\n  bundled, depended on, or transcribed.\n\ncompromise (npm, part-of-speech tags for the Misaki port)\n  https://github.com/spencermountain/compromise, MIT. Its licence ships with\n  the other npm licences in /licenses.\n\n-------------------------------------------------------------------------------\nOpenReader iOS (letter-to-sound rules and reader)\n\nMIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n-------------------------------------------------------------------------------\nApache License 2.0 (Kokoro-82M, its ONNX export, Misaki, kokoro-swift)\n\n                                 Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n\n   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.\n\n      \"License\" shall mean the terms and conditions for use, reproduction,\n      and distribution as defined by Sections 1 through 9 of this document.\n\n      \"Licensor\" shall mean the copyright owner or entity authorized by\n      the copyright owner that is granting the License.\n\n      \"Legal Entity\" shall mean the union of the acting entity and all\n      other entities that control, are controlled by, or are under common\n      control with that entity. For the purposes of this definition,\n      \"control\" means (i) the power, direct or indirect, to cause the\n      direction or management of such entity, whether by contract or\n      otherwise, or (ii) ownership of fifty percent (50%) or more of the\n      outstanding shares, or (iii) beneficial ownership of such entity.\n\n      \"You\" (or \"Your\") shall mean an individual or Legal Entity\n      exercising permissions granted by this License.\n\n      \"Source\" form shall mean the preferred form for making modifications,\n      including but not limited to software source code, documentation\n      source, and configuration files.\n\n      \"Object\" form shall mean any form resulting from mechanical\n      transformation or translation of a Source form, including but\n      not limited to compiled object code, generated documentation,\n      and conversions to other media types.\n\n      \"Work\" shall mean the work of authorship, whether in Source or\n      Object form, made available under the License, as indicated by a\n      copyright notice that is included in or attached to the work\n      (an example is provided in the Appendix below).\n\n      \"Derivative Works\" shall mean any work, whether in Source or Object\n      form, that is based on (or derived from) the Work and for which the\n      editorial revisions, annotations, elaborations, or other modifications\n      represent, as a whole, an original work of authorship. For the purposes\n      of this License, Derivative Works shall not include works that remain\n      separable from, or merely link (or bind by name) to the interfaces of,\n      the Work and Derivative Works thereof.\n\n      \"Contribution\" shall mean any work of authorship, including\n      the original version of the Work and any modifications or additions\n      to that Work or Derivative Works thereof, that is intentionally\n      submitted to Licensor for inclusion in the Work by the copyright owner\n      or by an individual or Legal Entity authorized to submit on behalf of\n      the copyright owner. For the purposes of this definition, \"submitted\"\n      means any form of electronic, verbal, or written communication sent\n      to the Licensor or its representatives, including but not limited to\n      communication on electronic mailing lists, source code control systems,\n      and issue tracking systems that are managed by, or on behalf of, the\n      Licensor for the purpose of discussing and improving the Work, but\n      excluding communication that is conspicuously marked or otherwise\n      designated in writing by the copyright owner as \"Not a Contribution.\"\n\n      \"Contributor\" shall mean Licensor and any individual or Legal Entity\n      on behalf of whom a Contribution has been received by Licensor and\n      subsequently incorporated within the Work.\n\n   2. Grant of Copyright License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      copyright license to reproduce, prepare Derivative Works of,\n      publicly display, publicly perform, sublicense, and distribute the\n      Work and such Derivative Works in Source or Object form.\n\n   3. Grant of Patent License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      (except as stated in this section) patent license to make, have made,\n      use, offer to sell, sell, import, and otherwise transfer the Work,\n      where such license applies only to those patent claims licensable\n      by such Contributor that are necessarily infringed by their\n      Contribution(s) alone or by combination of their Contribution(s)\n      with the Work to which such Contribution(s) was submitted. If You\n      institute patent litigation against any entity (including a\n      cross-claim or counterclaim in a lawsuit) alleging that the Work\n      or a Contribution incorporated within the Work constitutes direct\n      or contributory patent infringement, then any patent licenses\n      granted to You under this License for that Work shall terminate\n      as of the date such litigation is filed.\n\n   4. Redistribution. You may reproduce and distribute copies of the\n      Work or Derivative Works thereof in any medium, with or without\n      modifications, and in Source or Object form, provided that You\n      meet the following conditions:\n\n      (a) You must give any other recipients of the Work or\n          Derivative Works a copy of this License; and\n\n      (b) You must cause any modified files to carry prominent notices\n          stating that You changed the files; and\n\n      (c) You must retain, in the Source form of any Derivative Works\n          that You distribute, all copyright, patent, trademark, and\n          attribution notices from the Source form of the Work,\n          excluding those notices that do not pertain to any part of\n          the Derivative Works; and\n\n      (d) If the Work includes a \"NOTICE\" text file as part of its\n          distribution, then any Derivative Works that You distribute must\n          include a readable copy of the attribution notices contained\n          within such NOTICE file, excluding those notices that do not\n          pertain to any part of the Derivative Works, in at least one\n          of the following places: within a NOTICE text file distributed\n          as part of the Derivative Works; within the Source form or\n          documentation, if provided along with the Derivative Works; or,\n          within a display generated by the Derivative Works, if and\n          wherever such third-party notices normally appear. The contents\n          of the NOTICE file are for informational purposes only and\n          do not modify the License. You may add Your own attribution\n          notices within Derivative Works that You distribute, alongside\n          or as an addendum to the NOTICE text from the Work, provided\n          that such additional attribution notices cannot be construed\n          as modifying the License.\n\n      You may add Your own copyright statement to Your modifications and\n      may provide additional or different license terms and conditions\n      for use, reproduction, or distribution of Your modifications, or\n      for any such Derivative Works as a whole, provided Your use,\n      reproduction, and distribution of the Work otherwise complies with\n      the conditions stated in this License.\n\n   5. Submission of Contributions. Unless You explicitly state otherwise,\n      any Contribution intentionally submitted for inclusion in the Work\n      by You to the Licensor shall be under the terms and conditions of\n      this License, without any additional terms or conditions.\n      Notwithstanding the above, nothing herein shall supersede or modify\n      the terms of any separate license agreement you may have executed\n      with Licensor regarding such Contributions.\n\n   6. Trademarks. This License does not grant permission to use the trade\n      names, trademarks, service marks, or product names of the Licensor,\n      except as required for reasonable and customary use in describing the\n      origin of the Work and reproducing the content of the NOTICE file.\n\n   7. Disclaimer of Warranty. Unless required by applicable law or\n      agreed to in writing, Licensor provides the Work (and each\n      Contributor provides its Contributions) on an \"AS IS\" BASIS,\n      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n      implied, including, without limitation, any warranties or conditions\n      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n      PARTICULAR PURPOSE. You are solely responsible for determining the\n      appropriateness of using or redistributing the Work and assume any\n      risks associated with Your exercise of permissions under this License.\n\n   8. Limitation of Liability. In no event and under no legal theory,\n      whether in tort (including negligence), contract, or otherwise,\n      unless required by applicable law (such as deliberate and grossly\n      negligent acts) or agreed to in writing, shall any Contributor be\n      liable to You for damages, including any direct, indirect, special,\n      incidental, or consequential damages of any character arising as a\n      result of this License or out of the use or inability to use the\n      Work (including but not limited to damages for loss of goodwill,\n      work stoppage, computer failure or malfunction, or any and all\n      other commercial damages or losses), even if such Contributor\n      has been advised of the possibility of such damages.\n\n   9. Accepting Warranty or Additional Liability. While redistributing\n      the Work or Derivative Works thereof, You may choose to offer,\n      and charge a fee for, acceptance of support, warranty, indemnity,\n      or other liability obligations and/or rights consistent with this\n      License. However, in accepting such obligations, You may act only\n      on Your own behalf and on Your sole responsibility, not on behalf\n      of any other Contributor, and only if You agree to indemnify,\n      defend, and hold each Contributor harmless for any liability\n      incurred by, or claims asserted against, such Contributor by reason\n      of your accepting any such warranty or additional liability.\n\n   END OF TERMS AND CONDITIONS\n\n   APPENDIX: How to apply the Apache License to your work.\n\n      To apply the Apache License to your work, attach the following\n      boilerplate notice, with the fields enclosed by brackets \"[]\"\n      replaced with your own identifying information. (Don't include\n      the brackets!)  The text should be enclosed in the appropriate\n      comment syntax for the file format. We also recommend that a\n      file or class name and description of purpose be included on the\n      same \"printed page\" as the copyright notice for easier\n      identification within third-party archives.\n\n   Copyright [yyyy] [name of copyright owner]\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n       http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.",
     "79d0fc447160": "This is free and unencumbered software released into the public domain.\n\nAnyone is free to copy, modify, publish, use, compile, sell, or\ndistribute this software, either in source code form or as a compiled\nbinary, for any purpose, commercial or non-commercial, and by any\nmeans.\n\nIn jurisdictions that recognize copyright laws, the author or authors\nof this software dedicate any and all copyright interest in the\nsoftware to the public domain. We make this dedication for the benefit\nof the public at large and to the detriment of our heirs and\nsuccessors. We intend this dedication to be an overt act of\nrelinquishment in perpetuity of all present and future rights to this\nsoftware under copyright law.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR\nOTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,\nARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR\nOTHER DEALINGS IN THE SOFTWARE.\n\nFor more information, please refer to <http://unlicense.org>",
     "7fb46adff902": "Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n\n   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.\n\n      \"License\" shall mean the terms and conditions for use, reproduction,\n      and distribution as defined by Sections 1 through 9 of this document.\n\n      \"Licensor\" shall mean the copyright owner or entity authorized by\n      the copyright owner that is granting the License.\n\n      \"Legal Entity\" shall mean the union of the acting entity and all\n      other entities that control, are controlled by, or are under common\n      control with that entity. For the purposes of this definition,\n      \"control\" means (i) the power, direct or indirect, to cause the\n      direction or management of such entity, whether by contract or\n      otherwise, or (ii) ownership of fifty percent (50%) or more of the\n      outstanding shares, or (iii) beneficial ownership of such entity.\n\n      \"You\" (or \"Your\") shall mean an individual or Legal Entity\n      exercising permissions granted by this License.\n\n      \"Source\" form shall mean the preferred form for making modifications,\n      including but not limited to software source code, documentation\n      source, and configuration files.\n\n      \"Object\" form shall mean any form resulting from mechanical\n      transformation or translation of a Source form, including but\n      not limited to compiled object code, generated documentation,\n      and conversions to other media types.\n\n      \"Work\" shall mean the work of authorship, whether in Source or\n      Object form, made available under the License, as indicated by a\n      copyright notice that is included in or attached to the work\n      (an example is provided in the Appendix below).\n\n      \"Derivative Works\" shall mean any work, whether in Source or Object\n      form, that is based on (or derived from) the Work and for which the\n      editorial revisions, annotations, elaborations, or other modifications\n      represent, as a whole, an original work of authorship. For the purposes\n      of this License, Derivative Works shall not include works that remain\n      separable from, or merely link (or bind by name) to the interfaces of,\n      the Work and Derivative Works thereof.\n\n      \"Contribution\" shall mean any work of authorship, including\n      the original version of the Work and any modifications or additions\n      to that Work or Derivative Works thereof, that is intentionally\n      submitted to Licensor for inclusion in the Work by the copyright owner\n      or by an individual or Legal Entity authorized to submit on behalf of\n      the copyright owner. For the purposes of this definition, \"submitted\"\n      means any form of electronic, verbal, or written communication sent\n      to the Licensor or its representatives, including but not limited to\n      communication on electronic mailing lists, source code control systems,\n      and issue tracking systems that are managed by, or on behalf of, the\n      Licensor for the purpose of discussing and improving the Work, but\n      excluding communication that is conspicuously marked or otherwise\n      designated in writing by the copyright owner as \"Not a Contribution.\"\n\n      \"Contributor\" shall mean Licensor and any individual or Legal Entity\n      on behalf of whom a Contribution has been received by Licensor and\n      subsequently incorporated within the Work.\n\n   2. Grant of Copyright License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      copyright license to reproduce, prepare Derivative Works of,\n      publicly display, publicly perform, sublicense, and distribute the\n      Work and such Derivative Works in Source or Object form.\n\n   3. Grant of Patent License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      (except as stated in this section) patent license to make, have made,\n      use, offer to sell, sell, import, and otherwise transfer the Work,\n      where such license applies only to those patent claims licensable\n      by such Contributor that are necessarily infringed by their\n      Contribution(s) alone or by combination of their Contribution(s)\n      with the Work to which such Contribution(s) was submitted. If You\n      institute patent litigation against any entity (including a\n      cross-claim or counterclaim in a lawsuit) alleging that the Work\n      or a Contribution incorporated within the Work constitutes direct\n      or contributory patent infringement, then any patent licenses\n      granted to You under this License for that Work shall terminate\n      as of the date such litigation is filed.\n\n   4. Redistribution. You may reproduce and distribute copies of the\n      Work or Derivative Works thereof in any medium, with or without\n      modifications, and in Source or Object form, provided that You\n      meet the following conditions:\n\n      (a) You must give any other recipients of the Work or\n          Derivative Works a copy of this License; and\n\n      (b) You must cause any modified files to carry prominent notices\n          stating that You changed the files; and\n\n      (c) You must retain, in the Source form of any Derivative Works\n          that You distribute, all copyright, patent, trademark, and\n          attribution notices from the Source form of the Work,\n          excluding those notices that do not pertain to any part of\n          the Derivative Works; and\n\n      (d) If the Work includes a \"NOTICE\" text file as part of its\n          distribution, then any Derivative Works that You distribute must\n          include a readable copy of the attribution notices contained\n          within such NOTICE file, excluding those notices that do not\n          pertain to any part of the Derivative Works, in at least one\n          of the following places: within a NOTICE text file distributed\n          as part of the Derivative Works; within the Source form or\n          documentation, if provided along with the Derivative Works; or,\n          within a display generated by the Derivative Works, if and\n          wherever such third-party notices normally appear. The contents\n          of the NOTICE file are for informational purposes only and\n          do not modify the License. You may add Your own attribution\n          notices within Derivative Works that You distribute, alongside\n          or as an addendum to the NOTICE text from the Work, provided\n          that such additional attribution notices cannot be construed\n          as modifying the License.\n\n      You may add Your own copyright statement to Your modifications and\n      may provide additional or different license terms and conditions\n      for use, reproduction, or distribution of Your modifications, or\n      for any such Derivative Works as a whole, provided Your use,\n      reproduction, and distribution of the Work otherwise complies with\n      the conditions stated in this License.\n\n   5. Submission of Contributions. Unless You explicitly state otherwise,\n      any Contribution intentionally submitted for inclusion in the Work\n      by You to the Licensor shall be under the terms and conditions of\n      this License, without any additional terms or conditions.\n      Notwithstanding the above, nothing herein shall supersede or modify\n      the terms of any separate license agreement you may have executed\n      with Licensor regarding such Contributions.\n\n   6. Trademarks. This License does not grant permission to use the trade\n      names, trademarks, service marks, or product names of the Licensor,\n      except as required for reasonable and customary use in describing the\n      origin of the Work and reproducing the content of the NOTICE file.\n\n   7. Disclaimer of Warranty. Unless required by applicable law or\n      agreed to in writing, Licensor provides the Work (and each\n      Contributor provides its Contributions) on an \"AS IS\" BASIS,\n      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n      implied, including, without limitation, any warranties or conditions\n      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n      PARTICULAR PURPOSE. You are solely responsible for determining the\n      appropriateness of using or redistributing the Work and assume any\n      risks associated with Your exercise of permissions under this License.\n\n   8. Limitation of Liability. In no event and under no legal theory,\n      whether in tort (including negligence), contract, or otherwise,\n      unless required by applicable law (such as deliberate and grossly\n      negligent acts) or agreed to in writing, shall any Contributor be\n      liable to You for damages, including any direct, indirect, special,\n      incidental, or consequential damages of any character arising as a\n      result of this License or out of the use or inability to use the\n      Work (including but not limited to damages for loss of goodwill,\n      work stoppage, computer failure or malfunction, or any and all\n      other commercial damages or losses), even if such Contributor\n      has been advised of the possibility of such damages.\n\n   9. Accepting Warranty or Additional Liability. While redistributing\n      the Work or Derivative Works thereof, You may choose to offer,\n      and charge a fee for, acceptance of support, warranty, indemnity,\n      or other liability obligations and/or rights consistent with this\n      License. However, in accepting such obligations, You may act only\n      on Your own behalf and on Your sole responsibility, not on behalf\n      of any other Contributor, and only if You agree to indemnify,\n      defend, and hold each Contributor harmless for any liability\n      incurred by, or claims asserted against, such Contributor by reason\n      of your accepting any such warranty or additional liability.",
@@ -7870,6 +7882,7 @@
     "8d8eafa559f1": "Permission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
     "90540526fc6c": "All rights reserved.\n\nRedistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:\n\nRedistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.\n\nRedistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.\n\nTHIS IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS,\nEVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
     "92abc5cac565": "MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
+    "9885d3902692": "All rights reserved.\n\nThe complete list of contributors can be found at:\n- https://github.com/hapijs/bourne/graphs/contributors\n- https://github.com/fastify/secure-json-parse/graphs/contributors\n\nRedistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.\n\n3. Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
     "99e99e397f14": "MIT License\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.",
     "9ff562631a04": "Apache License\nVersion 2.0, January 2004\nhttp://www.apache.org/licenses/\n\nTERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n1. Definitions.\n\n\"License\" shall mean the terms and conditions for use, reproduction, and\ndistribution as defined by Sections 1 through 9 of this document.\n\n\"Licensor\" shall mean the copyright owner or entity authorized by the copyright\nowner that is granting the License.\n\n\"Legal Entity\" shall mean the union of the acting entity and all other entities\nthat control, are controlled by, or are under common control with that entity.\nFor the purposes of this definition, \"control\" means (i) the power, direct or\nindirect, to cause the direction or management of such entity, whether by\ncontract or otherwise, or (ii) ownership of fifty percent (50%) or more of the\noutstanding shares, or (iii) beneficial ownership of such entity.\n\n\"You\" (or \"Your\") shall mean an individual or Legal Entity exercising\npermissions granted by this License.\n\n\"Source\" form shall mean the preferred form for making modifications, including\nbut not limited to software source code, documentation source, and configuration\nfiles.\n\n\"Object\" form shall mean any form resulting from mechanical transformation or\ntranslation of a Source form, including but not limited to compiled object code,\ngenerated documentation, and conversions to other media types.\n\n\"Work\" shall mean the work of authorship, whether in Source or Object form, made\navailable under the License, as indicated by a copyright notice that is included\nin or attached to the work (an example is provided in the Appendix below).\n\n\"Derivative Works\" shall mean any work, whether in Source or Object form, that\nis based on (or derived from) the Work and for which the editorial revisions,\nannotations, elaborations, or other modifications represent, as a whole, an\noriginal work of authorship. For the purposes of this License, Derivative Works\nshall not include works that remain separable from, or merely link (or bind by\nname) to the interfaces of, the Work and Derivative Works thereof.\n\n\"Contribution\" shall mean any work of authorship, including the original version\nof the Work and any modifications or additions to that Work or Derivative Works\nthereof, that is intentionally submitted to Licensor for inclusion in the Work\nby the copyright owner or by an individual or Legal Entity authorized to submit\non behalf of the copyright owner. For the purposes of this definition,\n\"submitted\" means any form of electronic, verbal, or written communication sent\nto the Licensor or its representatives, including but not limited to\ncommunication on electronic mailing lists, source code control systems, and\nissue tracking systems that are managed by, or on behalf of, the Licensor for\nthe purpose of discussing and improving the Work, but excluding communication\nthat is conspicuously marked or otherwise designated in writing by the copyright\nowner as \"Not a Contribution.\"\n\n\"Contributor\" shall mean Licensor and any individual or Legal Entity on behalf\nof whom a Contribution has been received by Licensor and subsequently\nincorporated within the Work.\n\n2. Grant of Copyright License.\n\nSubject to the terms and conditions of this License, each Contributor hereby\ngrants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,\nirrevocable copyright license to reproduce, prepare Derivative Works of,\npublicly display, publicly perform, sublicense, and distribute the Work and such\nDerivative Works in Source or Object form.\n\n3. Grant of Patent License.\n\nSubject to the terms and conditions of this License, each Contributor hereby\ngrants to You a perpetual, worldwide, non-exclusive, no-charge, royalty-free,\nirrevocable (except as stated in this section) patent license to make, have\nmade, use, offer to sell, sell, import, and otherwise transfer the Work, where\nsuch license applies only to those patent claims licensable by such Contributor\nthat are necessarily infringed by their Contribution(s) alone or by combination\nof their Contribution(s) with the Work to which such Contribution(s) was\nsubmitted. If You institute patent litigation against any entity (including a\ncross-claim or counterclaim in a lawsuit) alleging that the Work or a\nContribution incorporated within the Work constitutes direct or contributory\npatent infringement, then any patent licenses granted to You under this License\nfor that Work shall terminate as of the date such litigation is filed.\n\n4. Redistribution.\n\nYou may reproduce and distribute copies of the Work or Derivative Works thereof\nin any medium, with or without modifications, and in Source or Object form,\nprovided that You meet the following conditions:\n\nYou must give any other recipients of the Work or Derivative Works a copy of\nthis License; and\nYou must cause any modified files to carry prominent notices stating that You\nchanged the files; and\nYou must retain, in the Source form of any Derivative Works that You distribute,\nall copyright, patent, trademark, and attribution notices from the Source form\nof the Work, excluding those notices that do not pertain to any part of the\nDerivative Works; and\nIf the Work includes a \"NOTICE\" text file as part of its distribution, then any\nDerivative Works that You distribute must include a readable copy of the\nattribution notices contained within such NOTICE file, excluding those notices\nthat do not pertain to any part of the Derivative Works, in at least one of the\nfollowing places: within a NOTICE text file distributed as part of the\nDerivative Works; within the Source form or documentation, if provided along\nwith the Derivative Works; or, within a display generated by the Derivative\nWorks, if and wherever such third-party notices normally appear. The contents of\nthe NOTICE file are for informational purposes only and do not modify the\nLicense. You may add Your own attribution notices within Derivative Works that\nYou distribute, alongside or as an addendum to the NOTICE text from the Work,\nprovided that such additional attribution notices cannot be construed as\nmodifying the License.\nYou may add Your own copyright statement to Your modifications and may provide\nadditional or different license terms and conditions for use, reproduction, or\ndistribution of Your modifications, or for any such Derivative Works as a whole,\nprovided Your use, reproduction, and distribution of the Work otherwise complies\nwith the conditions stated in this License.\n\n5. Submission of Contributions.\n\nUnless You explicitly state otherwise, any Contribution intentionally submitted\nfor inclusion in the Work by You to the Licensor shall be under the terms and\nconditions of this License, without any additional terms or conditions.\nNotwithstanding the above, nothing herein shall supersede or modify the terms of\nany separate license agreement you may have executed with Licensor regarding\nsuch Contributions.\n\n6. Trademarks.\n\nThis License does not grant permission to use the trade names, trademarks,\nservice marks, or product names of the Licensor, except as required for\nreasonable and customary use in describing the origin of the Work and\nreproducing the content of the NOTICE file.\n\n7. Disclaimer of Warranty.\n\nUnless required by applicable law or agreed to in writing, Licensor provides the\nWork (and each Contributor provides its Contributions) on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied,\nincluding, without limitation, any warranties or conditions of TITLE,\nNON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE. You are\nsolely responsible for determining the appropriateness of using or\nredistributing the Work and assume any risks associated with Your exercise of\npermissions under this License.\n\n8. Limitation of Liability.\n\nIn no event and under no legal theory, whether in tort (including negligence),\ncontract, or otherwise, unless required by applicable law (such as deliberate\nand grossly negligent acts) or agreed to in writing, shall any Contributor be\nliable to You for damages, including any direct, indirect, special, incidental,\nor consequential damages of any character arising as a result of this License or\nout of the use or inability to use the Work (including but not limited to\ndamages for loss of goodwill, work stoppage, computer failure or malfunction, or\nany and all other commercial damages or losses), even if such Contributor has\nbeen advised of the possibility of such damages.\n\n9. Accepting Warranty or Additional Liability.\n\nWhile redistributing the Work or Derivative Works thereof, You may choose to\noffer, and charge a fee for, acceptance of support, warranty, indemnity, or\nother liability obligations and/or rights consistent with this License. However,\nin accepting such obligations, You may act only on Your own behalf and on Your\nsole responsibility, not on behalf of any other Contributor, and only if You\nagree to indemnify, defend, and hold each Contributor harmless for any liability\nincurred by, or claims asserted against, such Contributor by reason of your\naccepting any such warranty or additional liability.\n\nEND OF TERMS AND CONDITIONS\n\nAPPENDIX: How to apply the Apache License to your work\n\nTo apply the Apache License to your work, attach the following boilerplate\nnotice, with the fields enclosed by brackets \"[]\" replaced with your own\nidentifying information. (Don't include the brackets!) The text should be\nenclosed in the appropriate comment syntax for the file format. We also\nrecommend that a file or class name and description of purpose be included on\nthe same \"printed page\" as the copyright notice for easier identification within\nthird-party archives.\n\n   Copyright [yyyy] [name of copyright owner]\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n     http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.",
     "9fffb31b899c": "(The MIT License)\n\nPermission is hereby granted, free of charge, to any person\nobtaining a copy of this software and associated documentation\nfiles (the \"Software\"), to deal in the Software without\nrestriction, including without limitation the rights to use,\ncopy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the\nSoftware is furnished to do so, subject to the following\nconditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES\nOF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT\nHOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,\nWHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR\nOTHER DEALINGS IN THE SOFTWARE.",

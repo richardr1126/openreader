@@ -31,7 +31,7 @@ beforeAll(async () => {
     );
     create table account (
       id text primary key, account_id text not null, provider_id text not null,
-      issuer text not null, user_id text not null references user(id) on delete cascade,
+      user_id text not null references user(id) on delete cascade,
       access_token text, refresh_token text, id_token text,
       access_token_expires_at integer, refresh_token_expires_at integer,
       scope text, password text, created_at integer not null, updated_at integer not null
@@ -70,11 +70,11 @@ describe('first administrator bootstrap', () => {
       expect(users[0]).toMatchObject({
         email: 'owner@example.test', is_admin: 0, admin_source: 'bootstrap', access_status: 'active', email_verified: 0,
       });
-      const account = database.prepare('select account_id, provider_id, issuer, password from account').get() as {
-        account_id: string; provider_id: string; issuer: string; password: string;
+      const account = database.prepare('select account_id, provider_id, password from account').get() as {
+        account_id: string; provider_id: string; password: string;
       };
       expect(account.account_id).toBe(users[0].id);
-      expect(account).toMatchObject({ provider_id: 'credential', issuer: 'local:credential' });
+      expect(account.provider_id).toBe('credential');
       expect(await verifyPassword({ hash: account.password, password: 'first-boot-secret-2026' })).toBe(true);
       expect(database.prepare('select count(*) as value from admin_settings where key = ?').get('initialAdminBootstrapped'))
         .toEqual({ value: 1 });

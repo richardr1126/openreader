@@ -7,3 +7,5 @@ node_modules
 **/node_modules
 docstore
 packages/compute-worker/dist
+.pnpm-store
+desktop/dist

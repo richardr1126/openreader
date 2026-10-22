@@ -41,33 +41,4 @@ declare global {
   interface Navigator {
     globalPrivacyControl?: boolean;
   }
-  interface Window {
-    va?: {
-      disable?: () => void;
-      enable?: () => void;
-    } | ((...args: unknown[]) => void);
-  }
-}
-
-/**
- * Opt-out of Vercel Analytics.
- * This sets the flag that @vercel/analytics respects.
- */
-export function disableAnalytics() {
-  if (typeof window === 'undefined') return;
-  const va = window.va;
-  if (va && typeof va === 'object' && typeof va.disable === 'function') {
-    va.disable();
-  }
-}
-
-/**
- * Re-enable Vercel Analytics (Opt-in).
- */
-export function enableAnalytics() {
-  if (typeof window === 'undefined') return;
-  const va = window.va;
-  if (va && typeof va === 'object' && typeof va.enable === 'function') {
-    va.enable();
-  }
 }

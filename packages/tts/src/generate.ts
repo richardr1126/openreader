@@ -359,6 +359,10 @@ export function extractReplicateAudioUrl(output: unknown): string | null {
   return extractReplicateAudioUrlFromValue(output, new Set<object>());
 }
 
+// Private-use code points are font-specific glyphs (Word's Symbol/Wingdings
+// bullets) with no pronunciation; some providers reject the whole request.
+const PRIVATE_USE_CHARACTERS = /\p{Co}/gu;
+
 function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const provider = input.provider || 'openai';
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
@@ -388,7 +392,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
     : undefined;
 
   return {
-    text: input.text,
+    text: input.text.replace(PRIVATE_USE_CHARACTERS, ''),
     voice: normalizedVoice,
     speed,
     format,
@@ -690,6 +694,25 @@ const SPEECH_SDK_PROVIDER_FACTORIES: Record<string, SpeechSdkModelFactory> = {
   'smallest-ai': createSmallestAI,
 };
 
+const SPEECH_SDK_MP3_OUTPUT = { format: 'mp3' } as const;
+
+/**
+ * Ask for MP3 only when the SDK can produce it, by the same test the SDK
+ * applies: a native MP3 mode or a decodable PCM/WAV mode. Providers that only
+ * emit compressed audio reject an explicit format; their native audio is
+ * normalized to MP3 afterwards like every other provider's.
+ */
+function speechSdkOutput(resolved: ResolvedModel): typeof SPEECH_SDK_MP3_OUTPUT | undefined {
+  const { provider, modelId } = resolved;
+  try {
+    return provider.resolveOutputFormat?.(modelId, SPEECH_SDK_MP3_OUTPUT) || provider.getStitchOptions?.(modelId)
+      ? SPEECH_SDK_MP3_OUTPUT
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function runSpeechSdkRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
@@ -720,11 +743,12 @@ async function runSpeechSdkRequest(
   const onAbort = () => timeoutController.abort();
   signal.addEventListener('abort', onAbort, { once: true });
   try {
+    const resolved = factory({ apiKey: request.apiKey || undefined })(modelId);
     const result = await generateSpeech({
-      model: factory({ apiKey: request.apiKey || undefined })(modelId),
+      model: resolved,
       text: request.text,
       voice: voice as string,
-      output: { format: 'mp3' },
+      output: speechSdkOutput(resolved),
       maxRetries: upstreamSettings.ttsUpstreamMaxRetries,
       abortSignal: timeoutController.signal,
     });
