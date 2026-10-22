@@ -25,6 +25,14 @@ These were already in the Swift sources and are kept unchanged. The iOS
 
 ## Made in this port
 
+- **Hindi.** The shared learned frontend also reads Hindi, with spelling rules
+  applied to Unicode code points so vowel signs and conjuncts match the offline
+  trainer. The original text, including Devanagari digits and danda, remains in
+  tokens for highlighting. Numbers use lakh/crore grouping. The Hindi table is
+  learned from the Tatoeba Hindi export, excluding the held-out parity corpus,
+  with Kokoro 0.9.4's reference readings. Like the Spanish, Italian and Portuguese
+  tables, it is downloaded separately and attributed to Tatoeba under CC BY 2.0 FR.
+
 - **Tagging.** Node has no `NLTagger`. `tagger.ts` splits words the way the
   Swift code expects and asks `compromise` (MIT) for each word's part of speech,
   mapped to Penn tags by character offset. compromise's own tokens are not

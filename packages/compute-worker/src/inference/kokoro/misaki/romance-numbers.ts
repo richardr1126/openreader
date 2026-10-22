@@ -1,6 +1,7 @@
 /**
  * Numbers for the languages `LearnedG2P` reads: Spanish, Italian and
- * Brazilian Portuguese. Port of the OpenReader iOS `RomanceNumbers`.
+ * Brazilian Portuguese, plus Hindi's Indian numbering system. Port of the
+ * OpenReader iOS `RomanceNumbers`.
  *
  * A number becomes groups below 1000, which the table holds as Kokoro's own
  * pipeline (espeak-ng) reads them, and the words between them: scales,
@@ -10,7 +11,7 @@
  * write them.
  */
 
-export type LearnedLanguage = 'es' | 'it' | 'pt-br';
+export type LearnedLanguage = 'es' | 'it' | 'pt-br' | 'hi';
 
 /** A group below 1000, read from the table, or a word. */
 export type NumberPart = number | string;
@@ -83,7 +84,42 @@ const PORTUGUESE: Words = {
   },
 };
 
-const LANGUAGES: Record<LearnedLanguage, Words> = { es: SPANISH, it: ITALIAN, 'pt-br': PORTUGUESE };
+const LANGUAGES: Record<Exclude<LearnedLanguage, 'hi'>, Words> = { es: SPANISH, it: ITALIAN, 'pt-br': PORTUGUESE };
+
+/** Normalize digits for reading, keeping the caller's original token text. */
+export function normalizeHindiDigits(token: string): string {
+  return token.replace(/[०-९]/gu, (digit) => String(digit.codePointAt(0)! - 0x0966));
+}
+
+function hindiCardinal(digits: string): NumberPart[] {
+  if (digits.length > 1 && digits.startsWith('0')) return Array.from(digits, Number);
+  if (digits.length > 15) return Array.from(digits, Number);
+  const n = Number(digits);
+  if (n < 1000) return [n];
+  const out: NumberPart[] = [];
+  let rest = n;
+  for (const [size, word] of [[10_000_000, 'करोड़'], [100_000, 'लाख'], [1000, 'हज़ार']] as const) {
+    const count = Math.floor(rest / size);
+    rest %= size;
+    if (count) out.push(...hindiCardinal(String(count)), word);
+  }
+  if (rest) out.push(rest);
+  return out;
+}
+
+function hindiParts(token: string): NumberPart[] | null {
+  const normalized = normalizeHindiDigits(token);
+  const match = /^(\d+(?:,\d+)*(?:\.\d+)?)([%°]?)$/u.exec(normalized);
+  if (!match) return null;
+  const [, value, suffix] = match;
+  const [integer, fraction] = value!.split('.');
+  if (integer!.includes(',') && !/^(?:\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})$/u.test(integer!)) return null;
+  const out = hindiCardinal(integer!.replaceAll(',', ''));
+  if (fraction !== undefined) out.push('दशमलव', ...Array.from(fraction, Number));
+  if (suffix === '%') out.push('प्रतिशत');
+  if (suffix === '°') out.push('डिग्री');
+  return out;
+}
 
 function belowMillion(words: Words, n: number): NumberPart[] {
   if (n < 1000) return [n];
@@ -120,6 +156,7 @@ const NUMBER = /^(\d+(?:[.,]\d+)*)([º°ª%]?)$/u;
  * reads (dates, times and other mixed tokens are split by the caller first).
  */
 export function numberParts(language: LearnedLanguage, token: string): NumberPart[] | null {
+  if (language === 'hi') return hindiParts(token);
   const match = NUMBER.exec(token);
   if (!match) return null;
   const words = LANGUAGES[language];

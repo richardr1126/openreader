@@ -3,6 +3,7 @@ import { MP3_ENCODER_DELAY_SEC } from '@openreader/tts/audio-format';
 import type { TtsPlaybackSegmentMetadata, TtsPlaybackStorage } from '../../src/playback/storage';
 
 const mocks = vi.hoisted(() => ({
+  prepareKokoro: vi.fn(async () => undefined),
   generateTTSBuffer: vi.fn(async () => Buffer.from('provider-mp3')),
   synthesizeKokoro: vi.fn(async () => ({
     wav: Buffer.from('kokoro-wav'),
@@ -25,7 +26,7 @@ vi.mock('@openreader/tts/segments', async (importOriginal) => ({
   probeAudioDurationMsFromBuffer: vi.fn(async () => 1_000),
 }));
 vi.mock('../../src/inference/kokoro/engine', () => ({
-  prepareKokoro: vi.fn(async () => undefined),
+  prepareKokoro: mocks.prepareKokoro,
   synthesizeKokoro: mocks.synthesizeKokoro,
 }));
 vi.mock('../../src/inference/runtime', () => ({ runWhisperAlignmentFromAudioBuffer: mocks.runAlignment }));
@@ -53,6 +54,7 @@ describe('local Kokoro segment timing', () => {
     let sidecar: TtsPlaybackSegmentMetadata | null = null;
     const writes: TtsPlaybackSegmentMetadata[] = [];
     const putAudioObject = vi.fn(async () => undefined);
+    const onModelDownloadProgress = vi.fn();
     const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
     await generateExplicitTtsPlaybackSegments({
       request: {
@@ -75,12 +77,16 @@ describe('local Kokoro segment timing', () => {
         getScopeEpoch: async () => 0,
       } } as unknown as TtsPlaybackStorage,
       synthesisTimeoutMs: 30_000,
+      onModelDownloadProgress,
     });
 
     expect(mocks.synthesizeKokoro).toHaveBeenCalledWith(
       { text: 'Hello, world.', voice: 'af_heart', speed: 1.2 },
       expect.any(AbortSignal),
+      onModelDownloadProgress,
     );
+    expect(mocks.prepareKokoro).toHaveBeenCalledWith(onModelDownloadProgress, 'af_heart');
+    expect(mocks.prepareKokoro.mock.invocationCallOrder[0]).toBeLessThan(mocks.synthesizeKokoro.mock.invocationCallOrder[0]!);
     expect(mocks.generateTTSBuffer).not.toHaveBeenCalled();
     expect(putAudioObject).toHaveBeenCalledWith(expect.any(String), Buffer.from('kokoro-mp3'));
     expect(mocks.runAlignment).not.toHaveBeenCalled();

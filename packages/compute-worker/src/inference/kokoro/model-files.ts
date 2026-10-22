@@ -34,11 +34,11 @@ import type { LearnedLanguage } from './misaki/romance-numbers';
 /**
  * richardr1126/Kokoro-82M-OpenReader (Apache-2.0), pinned: Kokoro-82M exported
  * with its per-token durations as a second output, which give word timings
- * (`packaging/kokoro-onnx`), and the Spanish, Italian and Portuguese G2P
+ * (`packaging/kokoro-onnx`), and the Spanish, Hindi, Italian and Portuguese G2P
  * tables. The voices are onnx-community's, byte for byte.
  */
 const KOKORO_REPO_URL =
-  'https://huggingface.co/richardr1126/Kokoro-82M-OpenReader/resolve/3e137489b6614060e3184c110cb0d1bd7678989c';
+  'https://huggingface.co/richardr1126/Kokoro-82M-OpenReader/resolve/ba35f2fa858c3ee47bff817abfc759844e542f92';
 const KOKORO_ONNX_BASE_URL = `${KOKORO_REPO_URL}/onnx`;
 /** hexgrad/misaki (Apache-2.0) at the commit misaki 0.9.4's dictionaries were last changed. */
 const MISAKI_DATA_BASE_URL =
@@ -64,7 +64,7 @@ const KOKORO_MODEL_URL = `${KOKORO_ONNX_BASE_URL}/model.onnx`;
 export const KOKORO_SAMPLE_RATE = 24_000;
 
 const VOICE_BYTES = 510 * 256 * 4;
-/** The voices of the languages the worker can phonemize: English, Spanish, Italian, Brazilian Portuguese. */
+/** The voices of the languages the worker can phonemize: English, Spanish, Hindi, Italian, Brazilian Portuguese. */
 export const KOKORO_VOICE_SHA256: Record<string, string> = {
   af_alloy: 'c4a6b876047fd7fb472edf4ebd63cfac7c3b958a7cae7c106e8f038ca6308c45',
   af_aoede: '4a004c33430762e2461eedb2013fad808ef4ab3121f5300f554476caf58d8361',
@@ -97,6 +97,10 @@ export const KOKORO_VOICE_SHA256: Record<string, string> = {
   ef_dora: 'f66ec66bd295acb18372e37008533a9a3228483ccd294e7538d5d9294ac9a532',
   em_alex: '27809e9eafdcbcfff90a3016c697568676531de2a2c39cee29c96c7bd6b83e95',
   em_santa: 'ad43b774e1ca24d05c6161297d8aeb770ac3d29bb95daf516727af5f7d543683',
+  hf_alpha: '040be6a4425411cc01fda5fd06693c76bfa78572632852bc8cda9c99232ffb56',
+  hf_beta: 'cd83ae0bb9b2e4e4fb92b4973bd8d1822ca0036d3c498bf4fc89aa8e33917cc7',
+  hm_omega: 'b02d9222d9ed00ce26b302173a862c2c93f96cc40b5c422b8d14910b9ff34137',
+  hm_psi: '644daf88ba8aeb7bd08950bbdcd4453bb280864e49dc4df93fabc6be32e03f37',
   if_sara: '409b69248798fcdc2542330c76953d230710f19b057e59cb82fdc3c4cf71265c',
   im_nicola: 'bc578e510d52a96d6940d46f12e96d7b3df00905dbea075113226d100e6e1ab0',
   pf_dora: '3da7b5b2d91847ebf5646f57631af6ececae3c29a89cd300f06edf9aa6cfe9ee',
@@ -105,7 +109,7 @@ export const KOKORO_VOICE_SHA256: Record<string, string> = {
 };
 
 /**
- * Where the G2P table for Spanish, Italian or Brazilian Portuguese lives under
+ * Where the G2P table for Spanish, Hindi, Italian or Brazilian Portuguese lives under
  * the model directory. Each is learned from Kokoro's own espeak-ng readings by
  * the OpenReader iOS `tools/learned-g2p`; no espeak code or data ships.
  */
@@ -162,6 +166,7 @@ export const KOKORO_COMPONENTS: readonly KokoroComponent[] = [
     name: 'Pronunciation data',
     files: [
       learnedFile('es', 184_339, 'eff1f115e9c082ea6889a295e7fb658e81b4af298d2c54722389391d90bef21e'),
+      learnedFile('hi', 163_537, '10741a70c44efd766dc795515bf3c888314a6301236b0c10b1c6440ddc1182ad'),
       learnedFile('it', 363_007, '78a266c9172507fa53c069048fddb2ff05de676d4c73d91ce1f9dfb886ecbd48'),
       learnedFile('pt-br', 586_315, '6aae16e69e46269be8ca8c759fd9e7c9e1e24dbf2c322e68b2063810943573e6'),
       misakiFile('us_gold.json', 3_000_469, 'dc414872a49a28ae6c141463d502fd945f3b2fde040484fdc47d00cc4612686f'),
@@ -174,6 +179,43 @@ export const KOKORO_COMPONENTS: readonly KokoroComponent[] = [
 
 export function kokoroAssetPath(relativePath: string, modelDir = KOKORO_MODEL_DIR): string {
   return path.join(modelDir, relativePath);
+}
+
+export interface KokoroAssetSelection {
+  /** Individual voice ids, including every member of a blend. Omitted means none. */
+  voices?: readonly string[];
+  /** The language used to phonemize the request (the first voice's for a blend). */
+  language?: 'us' | 'gb' | LearnedLanguage;
+}
+
+function selectedComponents(
+  components: readonly KokoroComponent[],
+  selection: KokoroAssetSelection = { voices: ['af_heart'], language: 'us' },
+): readonly KokoroComponent[] {
+  // Setup prepares one usable default voice. Other voices and languages are
+  // fetched when selected for synthesis; an empty selection loads only weights.
+  const paths = new Set<string>();
+  for (const voice of selection.voices ?? []) {
+    if (!Object.hasOwn(KOKORO_VOICE_SHA256, voice)) {
+      throw new Error(`Local Kokoro has no voice "${voice}"`);
+    }
+    paths.add(`voices/${voice}.bin`);
+  }
+  const language = selection.language;
+  if (language === 'us' || language === 'gb') {
+    paths.add(`misaki/${language}_gold.json`);
+    paths.add(`misaki/${language}_silver.json`);
+  } else if (language) {
+    const file = kokoroLearnedG2PFile(language);
+    if (!KOKORO_COMPONENTS.some((component) => component.files.some((entry) => entry.path === file))) {
+      throw new Error(`Local Kokoro has no pronunciation data for "${language}"`);
+    }
+    paths.add(file);
+  }
+  return components.map((component) => ({
+    ...component,
+    files: component.name === 'Model weights' ? component.files : component.files.filter((file) => paths.has(file.path)),
+  })).filter((component) => component.files.length > 0);
 }
 
 async function sha256OfFile(filePath: string): Promise<string> {
@@ -189,18 +231,30 @@ async function fileMatches(filePath: string, file: KokoroFile): Promise<boolean>
 }
 
 /**
- * Makes every Kokoro file present and verified. Files already in place are
- * checked rather than fetched again; a mismatch is replaced.
+ * Makes the selected Kokoro files present and verified (the default voice and
+ * US pronunciation when selection is omitted). Explicit components are used
+ * as supplied unless a selection is also given. Existing files are checked
+ * rather than fetched again; a mismatch is replaced.
  */
 export async function ensureKokoroAssetFiles(options: {
   modelDir?: string;
   components?: readonly KokoroComponent[];
+  selection?: KokoroAssetSelection;
   fetchImpl?: ModelFetch;
   onProgress?: ModelDownloadProgressHandler;
   signal?: AbortSignal;
 } = {}): Promise<void> {
+  await downloadKokoroAssetFiles(options);
+}
+
+async function downloadKokoroAssetFiles(
+  options: NonNullable<Parameters<typeof ensureKokoroAssetFiles>[0]>,
+  verified = new Set<string>(),
+): Promise<void> {
   const modelDir = options.modelDir ?? KOKORO_MODEL_DIR;
-  const components = options.components ?? KOKORO_COMPONENTS;
+  const components = options.components && !options.selection
+    ? options.components
+    : selectedComponents(options.components ?? KOKORO_COMPONENTS, options.selection);
   const states: ModelComponentProgress[] = components.map((component) => ({
     name: component.name,
     totalBytes: component.files.reduce((sum, file) => sum + file.size, 0),
@@ -212,7 +266,9 @@ export async function ensureKokoroAssetFiles(options: {
   const missing = await Promise.all(components.map(async (component) => {
     const absent: KokoroFile[] = [];
     for (const file of component.files) {
-      if (!(await fileMatches(kokoroAssetPath(file.path, modelDir), file))) absent.push(file);
+      if (verified.has(file.path)) continue;
+      if (await fileMatches(kokoroAssetPath(file.path, modelDir), file)) verified.add(file.path);
+      else absent.push(file);
     }
     return absent;
   }));
@@ -237,6 +293,7 @@ export async function ensureKokoroAssetFiles(options: {
     if (state.state === 'ready') continue;
     try {
       for (const file of missing[index]!) {
+        options.signal?.throwIfAborted();
         const target = kokoroAssetPath(file.path, modelDir);
         const tmp = `${target}.tmp`;
         await mkdir(path.dirname(target), { recursive: true });
@@ -263,6 +320,7 @@ export async function ensureKokoroAssetFiles(options: {
           throw new Error(`Local Kokoro file failed verification: ${file.path}`);
         }
         await rename(tmp, target);
+        verified.add(file.path);
         state.downloadedBytes = before + file.size;
       }
       state.state = 'ready';
@@ -275,32 +333,70 @@ export async function ensureKokoroAssetFiles(options: {
   }
 }
 
-let ready: Promise<void> | null = null;
+const verifiedAssets = new Set<string>();
+let downloadTail: Promise<void> = Promise.resolve();
+let waitingDownloads = 0;
 let download: AbortController | null = null;
 const listeners = new Set<ModelDownloadProgressHandler>();
 
-/** Shared by every caller: one download, progress fanned out to all waiting. */
-export async function ensureKokoroAssets(onProgress?: ModelDownloadProgressHandler): Promise<void> {
-  if (onProgress) listeners.add(onProgress);
+/**
+ * With no selection, joins an active download or reuses any usable installed
+ * voice; otherwise installs the model, af_heart and US pronunciation data.
+ * With a selection, ensures the model and only the requested voices/language.
+ * Requests share one serial download queue and verified files; a later language
+ * or voice never inherits an earlier request's incomplete readiness. Progress
+ * is fanned out to everyone waiting, and cancellation fails queued requests too.
+ */
+export async function ensureKokoroAssets(
+  onProgress?: ModelDownloadProgressHandler,
+  selection?: KokoroAssetSelection,
+): Promise<void> {
+  // Separate registrations even when two callers pass the same callback.
+  const listener: ModelDownloadProgressHandler | undefined = onProgress ? (progress) => onProgress(progress) : undefined;
+  if (listener) listeners.add(listener);
+  let enqueued = false;
   try {
-    if (!ready) {
-      const controller = new AbortController();
-      download = controller;
-      ready = ensureKokoroAssetFiles({
+    let components: readonly KokoroComponent[];
+    if (selection === undefined) {
+      if (download) {
+        await downloadTail;
+        return;
+      }
+      // Size-based inventory chooses a usable baseline but cannot prove file
+      // integrity. Send that baseline through normal checksum verification.
+      components = (await readKokoroAssetInventory(KOKORO_MODEL_DIR)).baseline;
+      // A demand request may have started while disk status was being read.
+      if (download) {
+        await downloadTail;
+        return;
+      }
+    } else {
+      components = selectedComponents(KOKORO_COMPONENTS, selection);
+    }
+    if (components.every((component) => component.files.every((file) => verifiedAssets.has(file.path)))) return;
+    const controller = download ??= new AbortController();
+    waitingDownloads += 1;
+    enqueued = true;
+    // A failed selection must not prevent a different request from trying. A
+    // shared cancel keeps this controller aborted until the queue drains.
+    const pending = downloadTail.catch(() => undefined).then(async () => {
+      controller.signal.throwIfAborted();
+      await downloadKokoroAssetFiles({
+        components,
         signal: controller.signal,
         onProgress: async (progress) => {
           await Promise.all([...listeners].map((listener) => listener(progress)));
         },
-      }).catch((error: unknown) => {
-        ready = null;
-        throw error;
-      }).finally(() => {
-        if (download === controller) download = null;
-      });
-    }
-    await ready;
+      }, verifiedAssets);
+    });
+    downloadTail = pending;
+    await pending;
   } finally {
-    if (onProgress) listeners.delete(onProgress);
+    if (listener) listeners.delete(listener);
+    if (enqueued) {
+      waitingDownloads -= 1;
+      if (waitingDownloads === 0) download = null;
+    }
   }
 }
 
@@ -316,34 +412,80 @@ export function isKokoroDownloading(): boolean {
 }
 
 export interface KokoroComponentStatus {
-  name: KokoroComponent['name'];
+  name: KokoroComponent['name'] | 'Additional voices' | 'Additional pronunciation data';
   totalBytes: number;
   installedBytes: number;
 }
 
 /**
- * What is on disk, by size alone: hashing 330 MB on every look would be slow,
- * and a file only reaches its final path after its checksum matched.
+ * The three required components describe one usable voice: prefer af_heart/US,
+ * otherwise the first complete voice in sorted id order. If none is complete,
+ * show the default baseline's missing files. Installed optional files are added
+ * as inventory components with equal total/installed bytes, so absent optional
+ * data never makes a usable installation partial and Remove counts all files.
+ * Sizes alone are checked here: files reach final paths only after verification.
  */
-export async function kokoroAssetStatus(modelDir = KOKORO_MODEL_DIR): Promise<KokoroComponentStatus[]> {
-  return Promise.all(KOKORO_COMPONENTS.map(async (component) => {
-    let installedBytes = 0;
+async function readKokoroAssetInventory(modelDir: string) {
+  const installed = new Set<string>();
+  await Promise.all(KOKORO_COMPONENTS.map(async (component) => {
     for (const file of component.files) {
       const info = await stat(kokoroAssetPath(file.path, modelDir)).catch(() => null);
-      if (info?.size === file.size) installedBytes += file.size;
+      if (info?.size === file.size) installed.add(file.path);
+    }
+  }));
+  const complete = (components: readonly KokoroComponent[]) =>
+    components.every((component) => component.files.every((file) => installed.has(file.path)));
+  let baseline = selectedComponents(KOKORO_COMPONENTS);
+  if (!complete(baseline)) {
+    const languages: Record<string, KokoroAssetSelection['language']> = {
+      a: 'us', b: 'gb', e: 'es', i: 'it', p: 'pt-br', h: 'hi',
+    };
+    for (const voice of Object.keys(KOKORO_VOICE_SHA256).sort()) {
+      const language = languages[voice[0]!];
+      if (!language || !installed.has(`voices/${voice}.bin`)) continue;
+      const candidate = selectedComponents(KOKORO_COMPONENTS, { voices: [voice], language });
+      if (complete(candidate)) {
+        baseline = candidate;
+        break;
+      }
+    }
+  }
+  return { installed, baseline };
+}
+
+/** Size-based status; ensuring assets separately verifies the chosen baseline. */
+export async function kokoroAssetStatus(modelDir = KOKORO_MODEL_DIR): Promise<KokoroComponentStatus[]> {
+  const { installed, baseline } = await readKokoroAssetInventory(modelDir);
+  const inventory = KOKORO_COMPONENTS.map((component, index) => {
+    const required = baseline[index]!.files;
+    const requiredPaths = new Set(required.map((file) => file.path));
+    let installedBytes = 0;
+    let additionalBytes = 0;
+    for (const file of component.files) {
+      if (!installed.has(file.path)) continue;
+      if (requiredPaths.has(file.path)) installedBytes += file.size;
+      else additionalBytes += file.size;
     }
     return {
-      name: component.name,
-      totalBytes: component.files.reduce((sum, file) => sum + file.size, 0),
-      installedBytes,
+      baseline: {
+        name: component.name,
+        totalBytes: required.reduce((sum, file) => sum + file.size, 0),
+        installedBytes,
+      },
+      additional: additionalBytes > 0 ? [{
+        name: component.name === 'Voice pack' ? 'Additional voices' as const : 'Additional pronunciation data' as const,
+        totalBytes: additionalBytes,
+        installedBytes: additionalBytes,
+      }] : [],
     };
-  }));
+  });
+  return [...inventory.map((component) => component.baseline), ...inventory.flatMap((component) => component.additional)];
 }
 
 /** Deletes the downloaded files. The caller makes sure nothing is reading them. */
 export async function removeKokoroAssetFiles(modelDir = KOKORO_MODEL_DIR): Promise<void> {
   if (download) throw new KokoroDownloadInProgressError();
-  ready = null;
+  verifiedAssets.clear();
   await rm(modelDir, { recursive: true, force: true });
 }
 

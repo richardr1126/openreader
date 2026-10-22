@@ -4,7 +4,7 @@
  * repository (`tools/g2p-parity`), which owns the corpus and the reference.
  *
  *   pnpm exec tsx packages/compute-worker/scripts/kokoro-g2p-parity.ts \
- *     <data-dir> <corpus.tsv> <us|gb|es|it|pt-br> <out.jsonl>
+ *     <data-dir> <corpus.tsv> <us|gb|es|hi|it|pt-br> <out.jsonl>
  *
  * For English, `<data-dir>` holds the full Misaki dictionaries
  * (`DOCSTORE_DIR/model/kokoro-82m/misaki` after a first download, or the iOS
@@ -25,9 +25,9 @@ import type { LearnedLanguage } from '../src/inference/kokoro/misaki/romance-num
 import { kokoroLetterToSoundPath } from '../src/inference/kokoro/model-files';
 
 const [dataDir, corpusPath, language, outPath] = process.argv.slice(2);
-const LEARNED = ['es', 'it', 'pt-br'];
+const LEARNED = ['es', 'it', 'pt-br', 'hi'];
 if (!dataDir || !corpusPath || !language || !['us', 'gb', ...LEARNED].includes(language) || !outPath) {
-  console.error('usage: kokoro-g2p-parity.ts <data-dir> <corpus.tsv> <us|gb|es|it|pt-br> <out.jsonl>');
+  console.error('usage: kokoro-g2p-parity.ts <data-dir> <corpus.tsv> <us|gb|es|hi|it|pt-br> <out.jsonl>');
   process.exit(1);
 }
 

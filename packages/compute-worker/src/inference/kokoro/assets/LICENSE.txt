@@ -37,6 +37,15 @@ compromise (npm, part-of-speech tags for the Misaki port)
   https://github.com/spencermountain/compromise, MIT. Its licence ships with
   the other npm licences in /licenses.
 
+Learned pronunciation tables (Spanish, Hindi, Italian, Brazilian Portuguese)
+  Text source: Tatoeba Project and its contributors, https://tatoeba.org
+  Licence: CC BY 2.0 FR, https://creativecommons.org/licenses/by/2.0/fr/
+  Learned offline from Kokoro's reference readings of Tatoeba sentences by
+  OpenReader's tools/learned-g2p. Downloaded from the shared model repository's
+  g2p/ directory; these tables contain no espeak code or dictionary files.
+  Source exports, held-out evaluation and modifications are recorded in
+  PROVENANCE.md and the model repository's g2p/README.md.
+
 -------------------------------------------------------------------------------
 OpenReader iOS (letter-to-sound rules and reader)
 

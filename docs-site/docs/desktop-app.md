@@ -27,7 +27,7 @@ You are signed in automatically as the app's only owner. There are no passwords,
 
 ## Voices
 
-A fresh install is set up with **Kokoro (local)**, which runs Kokoro-82M on your computer with no API key. On first launch, the app asks you to either download its voices (about 342 MB) or set up a voice service. You can keep reading while the voices download. To remove the voices later, or download them again, use the Kokoro card in **Settings → Providers**.
+A fresh install is set up with **Kokoro (local)**, which runs Kokoro-82M on your computer with no API key. On first launch, the app asks you to either download the model, default voice and US pronunciation data (about 317 MB) or set up a voice service. You can keep reading while they download. Other voice packs and language pronunciation data download only when first used. To remove the downloaded data later, or download it again, use the Kokoro card in **Settings → Providers**.
 
 Kokoro (local) is English only. For other languages or voices, add a cloud provider or a self-hosted server in the same place; see [TTS Providers](./configure/tts-providers).
 

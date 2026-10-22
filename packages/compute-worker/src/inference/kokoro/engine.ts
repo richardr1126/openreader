@@ -2,7 +2,7 @@
  * Kokoro-82M on onnxruntime-node, in the worker process.
  *
  * Text goes through the Misaki port for English and the learned tables for
- * Spanish, Italian and Portuguese (no espeak, no GPL phonemizer), is split
+ * Spanish, Hindi, Italian and Portuguese (no espeak, no GPL phonemizer), is split
  * into model-sized chunks exactly as Kokoro's own `KPipeline` splits it, and
  * each chunk is one ONNX run. The model returns each phoneme's frame count
  * beside the audio, which gives the word timings without a second model. Runs are serialized through one queue: the
@@ -25,6 +25,7 @@ import {
   kokoroAssetPath,
   kokoroLearnedG2PFile,
   removeKokoroAssetFiles,
+  type KokoroAssetSelection,
 } from './model-files';
 import { G2P } from './misaki/g2p';
 import { LearnedG2P } from './misaki/learned-g2p';
@@ -299,7 +300,7 @@ export function encodeWav(samples: Float32Array, sampleRate = KOKORO_SAMPLE_RATE
 type KokoroLanguage = 'us' | 'gb' | LearnedLanguage;
 
 /** Kokoro names a voice for its language: `af_heart` is American, `ef_dora` Spanish. */
-const VOICE_LANGUAGES: Record<string, KokoroLanguage> = { a: 'us', b: 'gb', e: 'es', i: 'it', p: 'pt-br' };
+const VOICE_LANGUAGES: Record<string, KokoroLanguage> = { a: 'us', b: 'gb', e: 'es', h: 'hi', i: 'it', p: 'pt-br' };
 
 function kokoroVoiceLanguage(voice: string): KokoroLanguage {
   const language = VOICE_LANGUAGES[voice[0]!];
@@ -378,8 +379,11 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
   };
 }
 
-async function getRuntime(onModelDownloadProgress?: ModelDownloadProgressHandler): Promise<KokoroRuntime> {
-  await ensureKokoroAssets(onModelDownloadProgress);
+async function getRuntime(
+  onModelDownloadProgress?: ModelDownloadProgressHandler,
+  selection?: KokoroAssetSelection,
+): Promise<KokoroRuntime> {
+  await ensureKokoroAssets(onModelDownloadProgress, selection);
   runtime ??= loadRuntime().catch((error: unknown) => {
     runtime = null;
     throw error;
@@ -388,8 +392,12 @@ async function getRuntime(onModelDownloadProgress?: ModelDownloadProgressHandler
 }
 
 /** Downloads and loads the model ahead of the first segment. */
-export async function prepareKokoro(onModelDownloadProgress?: ModelDownloadProgressHandler): Promise<void> {
-  await getRuntime(onModelDownloadProgress);
+export async function prepareKokoro(onModelDownloadProgress?: ModelDownloadProgressHandler, voice?: string): Promise<void> {
+  const blend = voice ? parseVoiceBlend(voice) : undefined;
+  await getRuntime(onModelDownloadProgress, blend ? {
+    voices: blend.map((entry) => entry.voice),
+    language: kokoroVoiceLanguage(blend[0]!.voice),
+  } : undefined);
 }
 
 let queueTail: Promise<unknown> = Promise.resolve();
@@ -443,7 +451,10 @@ export async function synthesizeKokoro(
   onModelDownloadProgress?: ModelDownloadProgressHandler,
 ): Promise<KokoroSynthesis> {
   const blend = parseVoiceBlend(request.voice);
-  const kokoro = await getRuntime(onModelDownloadProgress);
+  const kokoro = await getRuntime(onModelDownloadProgress, {
+    voices: blend.map((entry) => entry.voice),
+    language: kokoroVoiceLanguage(blend[0]!.voice),
+  });
   signal?.throwIfAborted();
   // A blend speaks its first voice's language.
   const [g2p, packs] = await Promise.all([

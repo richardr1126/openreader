@@ -59,6 +59,11 @@ const fixtureDir = path.resolve(process.cwd(), 'packages/compute-worker/tests/fi
 fake.modelDir = mkdtempSync(path.join(tmpdir(), 'openreader-kokoro-engine-'));
 mkdirSync(path.join(fake.modelDir, 'misaki'));
 mkdirSync(path.join(fake.modelDir, 'voices'));
+mkdirSync(path.join(fake.modelDir, 'g2p'));
+writeFileSync(path.join(fake.modelDir, 'g2p', 'hi.tsv'), [
+  'maxw\t1', 'scalars\t1', 'vowels\ta ə',
+  'w\tनमस्ते\tnəmˈʌsteː', 'w\tदुनिया\tdˈʊnɪjˌaː', 'n\t123\tˈeːksˈɔː tˈeːis',
+].join('\n'));
 for (const name of ['us_gold.json', 'us_silver.json']) {
   copyFileSync(path.join(fixtureDir, name), path.join(fake.modelDir, 'misaki', name));
 }
@@ -66,6 +71,7 @@ for (const name of ['us_gold.json', 'us_silver.json']) {
 const pack = new Float32Array(510 * STYLE_DIM);
 for (let row = 0; row < 510; row += 1) pack.fill(row, row * STYLE_DIM, (row + 1) * STYLE_DIM);
 writeFileSync(path.join(fake.modelDir, 'voices', 'af_heart.bin'), Buffer.from(pack.buffer));
+writeFileSync(path.join(fake.modelDir, 'voices', 'hf_alpha.bin'), Buffer.from(pack.buffer));
 
 afterAll(() => rmSync(fake.modelDir, { recursive: true, force: true }));
 
@@ -79,6 +85,14 @@ beforeEach(() => {
 const longText = Array.from({ length: 40 }, () => 'The cat sat on the mat.').join(' ');
 
 describe('local Kokoro synthesis', () => {
+  test('uses Hindi data and preserves native words in the model timings', async () => {
+    const { words, wav } = await synthesizeKokoro({ text: 'नमस्ते दुनिया १२३।', voice: 'hf_alpha', speed: 1 });
+    expect(words.map((word) => word.word)).toEqual(['नमस्ते', 'दुनिया', '१२३।']);
+    expect(words.every((word) => word.end > word.start)).toBe(true);
+    expect(words.at(-1)!.end).toBeLessThanOrEqual((wav.length - 44) / 2 / 24000);
+    const { ensureKokoroAssets } = await import('../../src/inference/kokoro/model-files');
+    expect(ensureKokoroAssets).toHaveBeenCalledWith(undefined, { voices: ['hf_alpha'], language: 'hi' });
+  });
   test('runs the model once per chunk with the voice row for its length and returns WAV', async () => {
     const { wav } = await synthesizeKokoro({ text: 'The cat sat on the mat.', voice: 'af_heart', speed: 1.25 });
 

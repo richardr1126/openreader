@@ -130,6 +130,14 @@ describe('multilingual language utilities', () => {
     })).toEqual([]);
   });
 
+  test('accepts local Hindi voices and rejects an English voice for Hindi text', () => {
+    const input = { model: 'kokoro-82m', providerType: 'kokoro-local', configuredLanguage: 'auto', documentLanguage: 'hi' } as const;
+    expect(getTtsLanguageCompatibilityWarnings({ ...input, voice: 'hf_alpha' })).toEqual([]);
+    expect(getTtsLanguageCompatibilityWarnings({ ...input, voice: 'af_heart' })).toEqual([
+      'Selected Kokoro voice is American English, but the document is Hindi. Select a Hindi voice.',
+    ]);
+  });
+
   test.each([null, undefined, '', 'auto', 'not_a_language', 'und'])('does not assume English for unknown document language %s', (documentLanguage) => {
     expect(getTtsLanguageCompatibilityWarnings({
       model: 'kokoro', configuredLanguage: 'auto', documentLanguage, voice: 'jf_alpha',

@@ -245,7 +245,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     // reporting progress, rather than inside a segment's synthesis timeout.
     // The shared download keeps going if this run is cancelled.
     try {
-      await abortable(prepareKokoro(input.onModelDownloadProgress), input.signal);
+      await abortable(prepareKokoro(input.onModelDownloadProgress, effectiveSettings.voice), input.signal);
     } catch (error) {
       if (input.signal?.aborted) return;
       throw error;
@@ -297,7 +297,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         text: segment.text,
         voice: effectiveSettings.voice,
         speed: effectiveSettings.nativeSpeed,
-      }, signal);
+      }, signal, input.onModelDownloadProgress);
       const audioBuffer = await normalizeToMp3(wav, signal, {
         provider: requestCreds.providerType,
         model: effectiveSettings.ttsModel,

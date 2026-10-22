@@ -112,9 +112,9 @@ export const KOKORO_DEFAULT_VOICES = [
 ] as const;
 /**
  * The voices the local engine downloads: English (American `a*`, British
- * `b*`), Spanish `e*`, Italian `i*` and Brazilian Portuguese `p*`.
+ * `b*`), Spanish `e*`, Hindi `h*`, Italian `i*` and Brazilian Portuguese `p*`.
  */
-export const KOKORO_LOCAL_VOICES = KOKORO_DEFAULT_VOICES.filter((voice) => /^[abeip][fm]_/.test(voice));
+export const KOKORO_LOCAL_VOICES = KOKORO_DEFAULT_VOICES.filter((voice) => /^[abehip][fm]_/.test(voice));
 export const ORPHEUS_DEFAULT_VOICES = ['tara', 'leah', 'jess', 'leo', 'dan', 'mia', 'zac'] as const;
 export const SESAME_DEFAULT_VOICES = ['conversational_a', 'conversational_b', 'read_speech_a', 'read_speech_b', 'read_speech_c', 'read_speech_d', 'none'] as const;
 

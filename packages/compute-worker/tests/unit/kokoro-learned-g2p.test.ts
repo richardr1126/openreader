@@ -68,6 +68,15 @@ describe('learned G2P', () => {
 });
 
 describe('romance numbers', () => {
+  test('Hindi uses lakh and crore, Indian grouping and Devanagari digits', () => {
+    expect(numberParts('hi', '१,२३,४५६')).toEqual([1, 'लाख', 23, 'हज़ार', 456]);
+    expect(numberParts('hi', '123,456')).toEqual([1, 'लाख', 23, 'हज़ार', 456]);
+    expect(numberParts('hi', '10000000')).toEqual([1, 'करोड़']);
+    expect(numberParts('hi', '३.०५%')).toEqual([3, 'दशमलव', 0, 5, 'प्रतिशत']);
+    expect(numberParts('hi', '३०°')).toEqual([30, 'डिग्री']);
+    expect(numberParts('hi', '०१२३')).toEqual([0, 1, 2, 3]);
+    expect(numberParts('hi', '1,23')).toBeNull();
+  });
   test('a dot between groups of three is a thousands separator, a comma the decimal point', () => {
     expect(numberParts('es', '3.628.800')).toEqual([3, 'millones', 628, 'mil', 800]);
     expect(numberParts('es', '3,05')).toEqual([3, 'coma', 0, 5]);
@@ -96,5 +105,42 @@ describe('romance numbers', () => {
   test('leaves mixed tokens to the caller', () => {
     expect(numberParts('es', '10:30')).toBeNull();
     expect(numberParts('es', 'abc')).toBeNull();
+  });
+});
+
+describe('Hindi learned G2P', () => {
+  const hindi = [
+    'maxw\t1', 'scalars\t1', 'vowels\ta i',
+    's1\t|क|\tk', 's1\t|ि|\ti', 's1\t|त|\tt', 's1\t|ा|\ta', 's1\t|ब|\tb',
+    't0\t|2\t10', 'n\t123\tˈeːksˈɔː tˈeːis', 'n\t1\tˈeːk', 'n\t2\tdˈoː', 'n\t3\ttˈiːn',
+  ].join('\n');
+
+  test('applies spelling rules to code points including vowel signs', () => {
+    expect(new LetterToSound(hindi).guess('किताब')).toBe('kˈitab');
+  });
+
+  test('restores a table-declared vowel after an aspirated consonant instead of dropping a word', () => {
+    const rules = ['maxw\t1', 'vowels\tʌ', 'fallback_vowel\tʌ', 's1\t|स|\tsʰ', 's1\t|ख|\tkʰ', 's1\t|त|\tt'].join('\n');
+    expect(new LetterToSound(rules).guess('सखत')).toBe('sʰˈʌkʰt');
+  });
+
+  test('reads quoted Hindi words without losing their surface text', () => {
+    const tokens = new LearnedG2P('hi', hindi).phonemize("'किताब'").tokens;
+    expect(tokens.map((token) => token.text).join('')).toBe("'किताब'");
+    expect(tokens.find((token) => token.text === 'किताब')?.phonemes).toBe('kˈitab');
+  });
+
+  test('does not drop punctuation-separated words beside a number', () => {
+    const tokens = new LearnedG2P('hi', hindi).phonemize('किताब/किताब१२३').tokens;
+    expect(tokens[0]?.text).toBe('किताब/किताब१२३');
+    expect(tokens[0]?.phonemes).toBe('kˈitab kˈitab ˈeːksˈɔː tˈeːis');
+    expect(new LearnedG2P('hi', hindi).phonemize('१,२३').tokens[0]?.phonemes).toBe('ˈeːk dˈoː tˈiːn');
+  });
+
+  test('preserves native digits and danda for word offsets', () => {
+    const tokens = new LearnedG2P('hi', hindi).phonemize('किताब १२३।').tokens;
+    expect(tokens.map(({ text, phonemes, whitespace }) => [text, phonemes, whitespace])).toEqual([
+      ['किताब', 'kˈitab', ' '], ['१२३', 'ˈeːksˈɔː tˈeːis', ''], ['।', '', ''],
+    ]);
   });
 });

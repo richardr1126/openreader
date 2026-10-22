@@ -115,7 +115,7 @@ describe('local Kokoro model files', () => {
         expect(entry.sha256, entry.path).toMatch(/^[0-9a-f]{64}$/);
       }
     }
-    expect(KOKORO_COMPONENTS.find((component) => component.name === 'Voice pack')?.files).toHaveLength(36);
+    expect(KOKORO_COMPONENTS.find((component) => component.name === 'Voice pack')?.files).toHaveLength(40);
   });
 
   test('reports each component through download, verification and ready, then starts warm in silence', async () => {

@@ -34,10 +34,13 @@ export class LetterToSound {
    */
   private readonly stressable: Set<string>;
   private readonly english: boolean;
+  /** A table may restore a vowel when learned deletion leaves only consonants. */
+  private readonly fallbackVowel: string | null;
 
   constructor(tsv: string) {
     let vowels: string[] | null = null;
     let width = 5;
+    let fallbackVowel: string | null = null;
     const skeleton = Array.from({ length: 8 }, () => new Map<string, string>());
     const stress = Array.from({ length: 8 }, () => new Map<string, string>());
     for (const line of tsv.split('\n')) {
@@ -45,6 +48,10 @@ export class LetterToSound {
       const first = line.indexOf('\t');
       if (first < 0) continue;
       const kind = line.slice(0, first);
+      if (kind === 'fallback_vowel') {
+        fallbackVowel = line.slice(first + 1) || null;
+        continue;
+      }
       if (kind === 'maxw') {
         width = Number.parseInt(line.slice(first + 1), 10) || 5;
         continue;
@@ -67,6 +74,7 @@ export class LetterToSound {
     this.stressPatterns = stress;
     this.stressable = vowels ? new Set(vowels) : ENGLISH_STRESSABLE;
     this.english = vowels === null;
+    this.fallbackVowel = fallbackVowel;
   }
 
   /**
@@ -98,15 +106,22 @@ export class LetterToSound {
     const phonemes = phonemeSymbols(bare);
     let syllables = phonemes.filter((phoneme) => this.stressable.has(phoneme)).length;
     if (syllables === 0) {
-      if (!this.english) return null;
-      // A short word can come out with only a reduced vowel ("va" is `və`,
-      // "chan" `ʧən`); it still has a syllable, so give it the full vowel. No
-      // vowel at all means no pronounceable word; initialisms have their own
-      // path.
-      const reduced = phonemes.findIndex((phoneme) => Object.hasOwn(UNREDUCED, phoneme));
-      if (reduced < 0) return null;
-      phonemes[reduced] = UNREDUCED[phonemes[reduced]!]!;
-      syllables = 1;
+      if (!this.english) {
+        if (!this.fallbackVowel || phonemes.length === 0) return null;
+        let index = 1;
+        while (index < phonemes.length && ['ʰ', 'ʲ', 'ː'].includes(phonemes[index]!)) index += 1;
+        phonemes.splice(index, 0, this.fallbackVowel);
+        syllables = 1;
+      } else {
+        // A short word can come out with only a reduced vowel ("va" is `və`,
+        // "chan" `ʧən`); it still has a syllable, so give it the full vowel. No
+        // vowel at all means no pronounceable word; initialisms have their own
+        // path.
+        const reduced = phonemes.findIndex((phoneme) => Object.hasOwn(UNREDUCED, phoneme));
+        if (reduced < 0) return null;
+        phonemes[reduced] = UNREDUCED[phonemes[reduced]!]!;
+        syllables = 1;
+      }
     }
 
     let pattern: string | undefined;

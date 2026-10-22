@@ -11,7 +11,7 @@ API keys stay on the server, encrypted (see [How saved keys are protected](./adm
 
 | Type | What it is | Needs |
 | --- | --- | --- |
-| **Kokoro** | Kokoro-82M running inside the compute worker. English (28 American and British voices), Spanish, Italian and Brazilian Portuguese (8 voices); voices can be blended. | Nothing; voice data (about 342 MB) downloads the first time it speaks. |
+| **Kokoro** | Kokoro-82M running inside the compute worker. English (28 American and British voices), Spanish, Hindi, Italian and Brazilian Portuguese (12 voices); voices can be blended. | Nothing; the model and selected voice's pronunciation data download the first time it speaks. |
 | **Custom OpenAI-like** | Any server with an OpenAI-compatible speech endpoint, such as Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI or Supertonic. | Base URL; API key if the server requires one. |
 | **OpenAI** | OpenAI's speech API (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`). | API key. |
 | **Replicate** | Hosted models on Replicate, from a built-in list or any model ID. | API key. |
@@ -42,6 +42,8 @@ The default provider for new users is set in [Instance Settings](./instance-sett
 ### Kokoro voice data
 
 For a Kokoro provider, the card at the top of **Providers** shows whether its voice data is downloaded. From there you can download it ahead of time, cancel a download, or remove the data. With several worker replicas, the card manages only the replica that answers.
+
+On a fresh installation, **Download** prepares the model, the default `af_heart` voice, and US pronunciation data (about 317 MB). It joins any download already running and reuses any complete installed voice. Other voice packs and language pronunciation data download on first use; a blend downloads each selected voice pack and uses its first voice's language. Once any supported voice and its pronunciation data are complete, the card shows Ready. Missing optional languages do not make it partly downloaded. The downloaded size and Remove confirmation include all installed voice and pronunciation data.
 
 Pronunciation uses a built-in port of Misaki without espeak, so a few abbreviations (for example `St.`) are skipped rather than read.
 

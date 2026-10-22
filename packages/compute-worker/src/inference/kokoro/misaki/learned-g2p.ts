@@ -1,6 +1,6 @@
 /**
  * G2P for the Kokoro languages its own pipeline reads through espeak-ng:
- * Spanish, Italian and Brazilian Portuguese. Port of the OpenReader iOS
+ * Spanish, Hindi, Italian and Brazilian Portuguese. Port of the OpenReader iOS
  * `LearnedG2P`; Apache-2.0, see ../assets/LICENSE.txt.
  *
  * espeak-ng is GPL-3 and does not ship. Each language's table is learned
@@ -13,12 +13,13 @@
  */
 
 import { LetterToSound, phonemeSymbols } from './letter-to-sound';
-import { numberParts, type LearnedLanguage } from './romance-numbers';
+import { normalizeHindiDigits, numberParts, type LearnedLanguage } from './romance-numbers';
 import { createToken, type MToken } from './token';
 
 const PRIMARY = 'ˈ';
 const SECONDARY = 'ˌ';
 const PUNCTUATION = new Set(Array.from('.,!?;:"“”«»()[]—–-…¿¡'));
+const HINDI_PUNCTUATION = new Set([...PUNCTUATION, ...Array.from("।॥'‘’")]);
 /** An acronym of up to this many letters is spelled, as espeak spells "ONU". */
 const SPELLED_LENGTH = 3;
 const VOWEL_LETTERS = /[aeiouáéíóúàèìòùâêôãõ]/u;
@@ -67,15 +68,16 @@ interface Piece {
   whitespace: string;
 }
 
-function pieces(text: string): Piece[] {
+function pieces(text: string, language: LearnedLanguage): Piece[] {
   const out: Piece[] = [];
+  const punctuation = language === 'hi' ? HINDI_PUNCTUATION : PUNCTUATION;
   const clean = text.normalize('NFC').replace(/\p{Cf}/gu, '');
   for (const match of clean.matchAll(/(\S+)(\s*)/gu)) {
     const chars = Array.from(match[1]!);
     let start = 0;
     let end = chars.length;
-    while (start < end && PUNCTUATION.has(chars[start]!)) start += 1;
-    while (end > start && PUNCTUATION.has(chars[end - 1]!)) end -= 1;
+    while (start < end && punctuation.has(chars[start]!)) start += 1;
+    while (end > start && punctuation.has(chars[end - 1]!)) end -= 1;
     out.push({
       lead: chars.slice(0, start).join(''),
       core: chars.slice(start, end).join(''),
@@ -117,7 +119,7 @@ export class LearnedG2P {
   }
 
   phonemize(text: string): { tokens: MToken[] } {
-    const all = pieces(text);
+    const all = pieces(text, this.language);
     const words: Array<{ piece: Piece; phonemes: string; pauseBefore: boolean; pauseAfter: boolean }> = [];
     let pause = true;
     for (const piece of all) {
@@ -145,7 +147,7 @@ export class LearnedG2P {
     let wordIndex = 0;
     for (const piece of all) {
       const trail = Array.from(piece.trail);
-      for (const mark of piece.lead) tokens.push(createToken({ text: mark, tag: '', whitespace: '', phonemes: mark }));
+      for (const mark of piece.lead) tokens.push(createToken({ text: mark, tag: '', whitespace: '', phonemes: this.punctuation(mark) }));
       if (piece.core) {
         tokens.push(createToken({
           text: piece.core,
@@ -159,7 +161,7 @@ export class LearnedG2P {
         text: mark,
         tag: '',
         whitespace: index === trail.length - 1 ? piece.whitespace : '',
-        phonemes: mark,
+        phonemes: this.punctuation(mark),
       })));
     }
     return { tokens };
@@ -168,6 +170,10 @@ export class LearnedG2P {
   private firstUnit(phonemes: string): string {
     const first = units(phonemes)[0];
     return first ? first.mark + first.symbol : PAUSE;
+  }
+
+  private punctuation(mark: string): string {
+    return this.language === 'hi' && (mark === '।' || mark === '॥') ? '' : mark;
   }
 
   /** One onset rule, the first coda rule that exists, then clause-final stress. */
@@ -196,7 +202,13 @@ export class LearnedG2P {
 
   /** A piece's reading: its words, and any numbers in it spelled out. */
   private read(core: string): string {
-    if (!/\d/u.test(core)) return this.word(keyOf(core));
+    if (this.language === 'hi') core = normalizeHindiDigits(core);
+    if (!/\d/u.test(core)) {
+      const reading = this.word(keyOf(core));
+      if (reading || this.language !== 'hi') return reading;
+      // Mixed words such as a domain name still have speakable runs.
+      return [...core.matchAll(/[\p{L}\p{M}]+/gu)].map(([word]) => this.word(keyOf(word))).filter(Boolean).join(' ');
+    }
     const parts: string[] = [];
     for (const [part] of core.matchAll(NUMBER_PARTS)) {
       const numbers = numberParts(this.language, part);
@@ -204,8 +216,13 @@ export class LearnedG2P {
         parts.push(...numbers.map((item) => (typeof item === 'number' ? this.numbers.get(item) ?? '' : this.word(item))));
         continue;
       }
-      const letters = part.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '');
-      if (letters) parts.push(this.word(keyOf(letters)));
+      // A malformed grouping must not erase the digits from the audio.
+      if (this.language === 'hi' && /^\d/u.test(part)) {
+        parts.push(...Array.from(part).filter((digit) => /\d/u.test(digit)).map((digit) => this.numbers.get(Number(digit)) ?? ''));
+        continue;
+      }
+      const letters = part.replace(/^[^\p{L}\p{M}]+|[^\p{L}\p{M}]+$/gu, '');
+      if (letters) parts.push(this.language === 'hi' ? this.read(letters) : this.word(keyOf(letters)));
     }
     return parts.filter(Boolean).join(' ');
   }
