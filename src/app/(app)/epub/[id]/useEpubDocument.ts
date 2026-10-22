@@ -10,7 +10,7 @@ import {
   type RefObject,
 } from 'react';
 
-import type { Book, NavItem, Rendition } from 'epubjs';
+import type { Book, Contents, NavItem, Rendition } from 'epubjs';
 
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
@@ -461,9 +461,19 @@ export function useEpubDocument(
     const requestFromRendered = () => commitLocation(rendition.location);
     const requestFromRelocated = (location: unknown) => commitLocation(location ?? rendition.location);
 
+    // EPUB.js follows in-book links (a contents page, footnotes) itself, so the
+    // jump is marked as manual navigation before its relocation commits.
+    const markLinkNavigation = () => {
+      if (renditionRef.current === rendition) placementIntentRef.current = 'manual';
+    };
+    const watchLinks = (contents: Contents) => contents?.on('linkClicked', markLinkNavigation);
+    const current = rendition.getContents() as unknown as Contents | Contents[];
+    (Array.isArray(current) ? current : [current]).forEach(watchLinks);
+    rendition.hooks.content.register(watchLinks);
     rendition.on('rendered', requestFromRendered);
     rendition.on('relocated', requestFromRelocated);
     renditionEventsCleanupRef.current = () => {
+      rendition.hooks.content.deregister(watchLinks);
       rendition.off('rendered', requestFromRendered);
       rendition.off('relocated', requestFromRelocated);
     };
