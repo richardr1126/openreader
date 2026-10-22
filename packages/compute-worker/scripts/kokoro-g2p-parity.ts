@@ -6,10 +6,10 @@
  *   pnpm exec tsx packages/compute-worker/scripts/kokoro-g2p-parity.ts \
  *     <data-dir> <corpus.tsv> <us|gb|es|hi|it|pt-br> <out.jsonl>
  *
- * For English, `<data-dir>` holds the full Misaki dictionaries and the
- * dialect's letter-to-sound rules, `letter_to_sound.tsv` or
- * `letter_to_sound_gb.tsv` (the iOS `Resources`). For the other languages it holds the
- * `LearnedG2P` tables, `<language>.tsv`. Each line of
+ * `<data-dir>` is laid out as the worker downloads Kokoro: the Misaki
+ * dictionaries under `misaki/` and the letter-to-sound and `LearnedG2P` tables
+ * under `g2p/`. The worker's Kokoro model directory is one; the iOS
+ * `Tests/PronunciationData/Pronunciation` holds the English files. Each line of
  * the output is `{"id", "phonemes"}`, the phonemes joined exactly as the
  * engine joins a chunk's tokens.
  */
@@ -21,6 +21,7 @@ import { LearnedG2P } from '../src/inference/kokoro/misaki/learned-g2p';
 import { LetterToSound } from '../src/inference/kokoro/misaki/letter-to-sound';
 import { Lexicon } from '../src/inference/kokoro/misaki/lexicon';
 import type { LearnedLanguage } from '../src/inference/kokoro/misaki/romance-numbers';
+import { kokoroG2PTableFile, type KokoroLanguage } from '../src/inference/kokoro/model-files';
 
 const [dataDir, corpusPath, language, outPath] = process.argv.slice(2);
 const LEARNED = ['es', 'it', 'pt-br', 'hi'];
@@ -29,14 +30,15 @@ if (!dataDir || !corpusPath || !language || !['us', 'gb', ...LEARNED].includes(l
   process.exit(1);
 }
 
-const read = (name: string) => JSON.parse(readFileSync(path.join(dataDir, name), 'utf8'));
+const read = (name: string) => readFileSync(path.join(dataDir, name), 'utf8');
+const table = read(kokoroG2PTableFile(language as KokoroLanguage));
 const g2p = LEARNED.includes(language)
-  ? new LearnedG2P(language as LearnedLanguage, readFileSync(path.join(dataDir, `${language}.tsv`), 'utf8'))
+  ? new LearnedG2P(language as LearnedLanguage, table)
   : new G2P({
     lexicon: new Lexicon({
       british: language === 'gb',
-      data: { gold: read(`${language}_gold.json`), silver: read(`${language}_silver.json`) },
-      letterToSound: new LetterToSound(readFileSync(path.join(dataDir, language === 'gb' ? 'letter_to_sound_gb.tsv' : 'letter_to_sound.tsv'), 'utf8')),
+      data: { gold: JSON.parse(read(`misaki/${language}_gold.json`)), silver: JSON.parse(read(`misaki/${language}_silver.json`)) },
+      letterToSound: new LetterToSound(table),
     }),
     unk: '',
   });
