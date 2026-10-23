@@ -30,7 +30,7 @@ OpenReader is a [pnpm](https://pnpm.io/) workspace written in TypeScript. The ar
 
 ## TTS providers
 
-`packages/tts` uses the [OpenAI SDK](https://github.com/openai/openai-node) for OpenAI, DeepInfra and OpenAI-compatible servers, the [Replicate](https://replicate.com/) client, and [Speech SDK](https://www.npmjs.com/package/@speech-sdk/core) for its hosted services.
+`packages/tts` uses the [OpenAI SDK](https://github.com/openai/openai-node) for OpenAI, DeepInfra and OpenAI-compatible servers, and the [Replicate](https://replicate.com/) client.
 
 ## Compute worker
 

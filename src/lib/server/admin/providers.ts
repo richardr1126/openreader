@@ -13,7 +13,6 @@ export const BUILT_IN_PROVIDER_IDS: readonly TtsProviderId[] = [
   'replicate',
   'deepinfra',
   'openai',
-  'speech-sdk',
   'kokoro-local',
 ];
 

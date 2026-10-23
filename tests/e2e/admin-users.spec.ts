@@ -40,9 +40,12 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await page.getByRole('radio', { name: 'All', exact: true }).click();
 
   await page.getByRole('button', { name: 'Providers', exact: true }).first().click();
+  await expect(page.getByRole('switch', { name: 'Offer Kokoro-82M to users' })).toBeVisible();
   await page.getByRole('button', { name: 'Add provider' }).click();
-  const providerDialog = page.getByRole('dialog', { name: 'New provider' });
-  await providerDialog.getByPlaceholder('https://your-tts-host/v1').fill('http://127.0.0.1:9/v1');
+  await page.getByRole('dialog', { name: 'Add provider' })
+    .getByRole('button', { name: /^OpenAI-compatible server/ }).click();
+  const providerDialog = page.getByRole('dialog', { name: 'Add OpenAI-compatible server' });
+  await providerDialog.getByRole('textbox', { name: 'Base URL' }).fill('http://127.0.0.1:9/v1');
   await providerDialog.getByRole('button', { name: 'Check', exact: true }).click();
   const providerChecks = providerDialog.getByRole('list', { name: 'Provider check results' });
   await expect(providerChecks.getByRole('listitem').filter({ hasText: 'Connection' })).toContainText('Could not reach 127.0.0.1:9');

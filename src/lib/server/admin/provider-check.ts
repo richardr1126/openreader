@@ -38,7 +38,7 @@ export interface ProviderCheckDeps {
 const PROBE_TIMEOUT_MS = 10_000;
 const SPEECH_TIMEOUT_MS = 35_000;
 const SAMPLE_TEXT = 'This is a quick provider check.';
-const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'speech-sdk'];
+const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate'];
 
 function hostOf(url: string): string {
   try {
@@ -87,9 +87,8 @@ async function checkConnection(
   deps: ProviderCheckDeps,
   signal: AbortSignal,
 ): Promise<ProviderCheckItem | null> {
-  // Speech SDK routes to many vendors with no shared endpoint, and the local
-  // Kokoro provider has no endpoint at all; the speech sample covers both.
-  if (draft.providerType === 'speech-sdk' || draft.providerType === 'kokoro-local') return null;
+  // The local Kokoro provider has no endpoint; the speech sample covers it.
+  if (draft.providerType === 'kokoro-local') return null;
   const item = (status: ProviderCheckItem['status'], detail: string): ProviderCheckItem => ({
     id: 'connection',
     label: 'Connection',

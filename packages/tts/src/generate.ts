@@ -1,30 +1,10 @@
 import OpenAI from 'openai';
 import Replicate from 'replicate';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
-import { generateSpeech } from '@speech-sdk/core';
-import type { ResolvedModel } from '@speech-sdk/core/types';
-import {
-  createCartesia,
-  createDeepgram,
-  createElevenLabs,
-  createFal,
-  createFishAudio,
-  createGoogle,
-  createHume,
-  createInworld,
-  createMiniMax,
-  createMistral,
-  createMurf,
-  createOpenAI,
-  createResemble,
-  createSmallestAI,
-  createXai,
-} from '@speech-sdk/core/providers';
 import {
   isBuiltInTtsProviderId,
   KOKORO_LOCAL_MODEL,
   REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-  speechSdkProviderPrefix,
 } from './provider-catalog';
 import { defaultBaseUrlForProviderType, resolveTtsProviderModelPolicy } from './provider-policy';
 import {
@@ -368,7 +348,6 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
   const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
     : provider === 'replicate' && !input.model ? REPLICATE_KOKORO_82M_VERSIONED_MODEL
-    : provider === 'speech-sdk' && !input.model ? 'openai/gpt-4o-mini-tts'
     : provider === 'kokoro-local' ? KOKORO_LOCAL_MODEL
     : input.model;
   const model = (rawModel ?? 'gpt-4o-mini-tts') as SpeechCreateParams['model'];
@@ -379,7 +358,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   });
 
   const normalizedVoice = (
-    (providerType === 'replicate' || providerType === 'speech-sdk' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
+    (providerType === 'replicate' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
       ? input.voice.split('+')[0].trim()
       : input.voice
   ) as string;
@@ -674,91 +653,6 @@ async function runReplicateRequest(
   });
 }
 
-type SpeechSdkModelFactory = (config: { apiKey?: string }) => (modelId?: string) => ResolvedModel;
-
-const SPEECH_SDK_PROVIDER_FACTORIES: Record<string, SpeechSdkModelFactory> = {
-  openai: createOpenAI,
-  elevenlabs: createElevenLabs,
-  cartesia: createCartesia,
-  hume: createHume,
-  deepgram: createDeepgram,
-  google: createGoogle,
-  inworld: createInworld,
-  minimax: createMiniMax,
-  'fish-audio': createFishAudio,
-  murf: createMurf,
-  resemble: createResemble,
-  'fal-ai': createFal,
-  mistral: createMistral,
-  xai: createXai,
-  'smallest-ai': createSmallestAI,
-};
-
-const SPEECH_SDK_MP3_OUTPUT = { format: 'mp3' } as const;
-
-/**
- * Ask for MP3 only when the SDK can produce it, by the same test the SDK
- * applies: a native MP3 mode or a decodable PCM/WAV mode. Providers that only
- * emit compressed audio reject an explicit format; their native audio is
- * normalized to MP3 afterwards like every other provider's.
- */
-function speechSdkOutput(resolved: ResolvedModel): typeof SPEECH_SDK_MP3_OUTPUT | undefined {
-  const { provider, modelId } = resolved;
-  try {
-    return provider.resolveOutputFormat?.(modelId, SPEECH_SDK_MP3_OUTPUT) || provider.getStitchOptions?.(modelId)
-      ? SPEECH_SDK_MP3_OUTPUT
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function runSpeechSdkRequest(
-  request: ResolvedServerTTSRequest,
-  signal: AbortSignal,
-  upstreamSettings: ResolvedTtsUpstreamRuntimeSettings,
-): Promise<Buffer> {
-  const model = request.model as string;
-  const prefix = speechSdkProviderPrefix(model);
-  const modelId = model.slice(prefix.length + 1);
-  if (!prefix || !modelId) {
-    throw new Error(`Invalid Speech SDK model "${model}". Expected "provider/model".`);
-  }
-
-  const factory = SPEECH_SDK_PROVIDER_FACTORIES[prefix];
-  if (!factory) {
-    throw new Error(
-      `Unknown Speech SDK provider prefix "${prefix}". Use "provider/model" with one of: ${Object.keys(SPEECH_SDK_PROVIDER_FACTORIES).join(', ')}.`
-    );
-  }
-
-  // 'default' is the placeholder voice for providers without a static voice
-  // list; omit it so the provider's own default applies.
-  const voice = request.voice === 'default' ? undefined : request.voice;
-
-  // Overall budget across the SDK's internal retries, mirroring the timeout
-  // the OpenAI-compatible path configures on its client.
-  const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), upstreamSettings.ttsUpstreamTimeoutMs);
-  const onAbort = () => timeoutController.abort();
-  signal.addEventListener('abort', onAbort, { once: true });
-  try {
-    const resolved = factory({ apiKey: request.apiKey || undefined })(modelId);
-    const result = await generateSpeech({
-      model: resolved,
-      text: request.text,
-      voice: voice as string,
-      output: speechSdkOutput(resolved),
-      maxRetries: upstreamSettings.ttsUpstreamMaxRetries,
-      abortSignal: timeoutController.signal,
-    });
-    return Buffer.from(result.audio.uint8Array);
-  } finally {
-    clearTimeout(timeoutId);
-    signal.removeEventListener('abort', onAbort);
-  }
-}
-
 function runLocalRequest(request: ResolvedServerTTSRequest, signal: AbortSignal): Promise<Buffer> {
   if (!localSynthesizer) {
     throw new Error('The local Kokoro provider runs only in the compute worker');
@@ -776,9 +670,7 @@ async function runProviderRequest(
     ? await runLocalRequest(request, signal)
     : request.provider === 'replicate'
       ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
-      : request.provider === 'speech-sdk'
-        ? await runSpeechSdkRequest(request, signal, upstreamSettings)
-        : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
+      : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
   const providerMs = Date.now() - providerStartedAt;
 
   // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;

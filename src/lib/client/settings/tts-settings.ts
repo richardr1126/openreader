@@ -57,7 +57,7 @@ export function resolveTtsSettingsViewModel({
 }: ResolveTtsSettingsViewModelOptions): TtsSettingsViewModel {
   const sharedOptions: ProviderPickerOption[] = sharedProviders.map((entry) => ({
     id: entry.slug,
-    name: `${entry.displayName} (shared)`,
+    name: entry.displayName,
     providerType: entry.providerType,
   }));
   const providers = sharedOptions;

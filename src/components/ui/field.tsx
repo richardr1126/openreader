@@ -11,17 +11,26 @@ import { Switch } from './switch';
 export function Field({
   label,
   hint,
+  action,
   className,
   children,
 }: {
   label?: string;
   hint?: string;
+  /** A small link or button on the label's line, such as "Get a key". */
+  action?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
+  const labelElement = label ? <label className="block text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</label> : null;
   return (
     <div className={cn('space-y-1', className)}>
-      {label ? <label className="block text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</label> : null}
+      {action ? (
+        <div className="flex items-center justify-between gap-3">
+          {labelElement}
+          <span className="text-xs">{action}</span>
+        </div>
+      ) : labelElement}
       {children}
       {hint ? <p className="text-[11px] text-faint">{hint}</p> : null}
     </div>

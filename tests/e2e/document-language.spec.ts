@@ -24,7 +24,7 @@ test('Kokoro warnings follow the document across the player, settings, export, a
     await enterAnonymousLibrary(page);
     await page.goto('/app/settings?section=api');
     await page.getByRole('button', { name: 'Provider', exact: true }).click();
-    await page.getByRole('option', { name: `${providerName} (shared)`, exact: true }).click();
+    await page.getByRole('option', { name: providerName, exact: true }).click();
     await page.getByRole('button', { name: 'af_heart', exact: true }).click();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByText('Voice settings saved', { exact: true })).toBeVisible();

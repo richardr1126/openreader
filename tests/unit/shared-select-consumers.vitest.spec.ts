@@ -7,7 +7,7 @@ const STANDARD_SELECT_CONSUMERS = [
   'src/components/documents/DocumentSettings.tsx',
   'src/components/admin/AdminFeaturesPanel.tsx',
   'src/components/admin/ComputeLimitsEditor.tsx',
-  'src/components/admin/AdminProvidersPanel.tsx',
+  'src/components/admin/ProviderEditorDialog.tsx',
 ];
 
 describe('shared Select consumers', () => {

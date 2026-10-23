@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ChatBubbleIcon, CubeIcon, ServerStackIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { InlineButton, Input, RangeInput, RowIcon, SaveBar, Section, Select, SelectOptionDetail, SettingRow, Textarea } from '@/components/ui';
+import { ProviderSelect } from '@/components/providers/ProviderSelect';
 import { SELECTION_PREVIEW_KEY, VoicePicker, VoicePreviewButton, type VoicePickerPreview } from '@/components/player/VoicePicker';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
@@ -262,17 +263,10 @@ export function ProviderSettingsPanel({
               No shared provider is configured. Ask an admin to add one.
             </p>
           ) : (
-            <Select
+            <ProviderSelect
               aria-label="Provider"
-              value={selectedProvider!}
+              value={selectedProvider}
               options={viewModel.providers}
-              getOptionKey={(provider) => provider.id}
-              renderValue={(provider) => provider.name}
-              renderOption={(provider, { selected }) => (
-                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                  {provider.name}
-                </span>
-              )}
               onChange={(provider) => {
                 const defaults = resolveProviderDefaults({
                   providerRef: provider.id,

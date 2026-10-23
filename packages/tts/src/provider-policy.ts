@@ -62,7 +62,6 @@ export function defaultModelForProviderType(providerType: TtsProviderId): string
   if (providerType === 'openai') return 'tts-1';
   if (providerType === 'deepinfra') return 'hexgrad/Kokoro-82M';
   if (providerType === 'replicate') return REPLICATE_KOKORO_82M_VERSIONED_MODEL;
-  if (providerType === 'speech-sdk') return 'openai/gpt-4o-mini-tts';
   if (providerType === 'kokoro-local') return KOKORO_LOCAL_MODEL;
   return 'kokoro';
 }
@@ -76,7 +75,6 @@ export function defaultBaseUrlForProviderType(providerType: TtsProviderId): stri
 export function defaultVoiceForProviderType(providerType: TtsProviderId): string {
   if (providerType === 'openai') return 'alloy';
   if (providerType === 'deepinfra') return 'af_bella';
-  if (providerType === 'speech-sdk') return 'alloy';
   if (providerType === 'kokoro-local') return 'af_heart';
   return 'af_sarah';
 }

@@ -823,7 +823,7 @@ Final large-file decisions (generated client code remains excluded):
 
 | File | Lines | Decision |
 |---|---:|---|
-| `packages/tts/src/generate.ts` | 911 | Follow up by extracting Replicate, Speech SDK, and OpenAI-compatible adapters from cache/retry orchestration; keep behavior together until adapter-specific contract tests protect that move |
+| `packages/tts/src/generate.ts` | 911 | Follow up by extracting Replicate and OpenAI-compatible adapters from cache/retry orchestration; keep behavior together until adapter-specific contract tests protect that move |
 | `packages/compute-worker/src/inference/whisper/align.ts` | 908 | Keep; ONNX model lifecycle, mel preprocessing, decoding, and alignment share one algorithmic state/invariant set |
 | `src/hooks/audio/useTtsPlayback.ts` | 754 | Keep; it is the single audio/session/seek state machine and was already reduced to that owner in Step 4 |
 | `src/lib/client/pdf.ts` | 732 | Follow up by splitting PDF.js runtime/worker selection from DOM highlight rendering, preserving the new Safari 18 build-selection coverage |
