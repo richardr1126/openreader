@@ -61,7 +61,7 @@ test('favorites and reader appearance persist with independent book inheritance'
   await expect(settings.getByText('Use global', { exact: true })).toHaveCount(0);
   const highlightSection = settings.locator('section').filter({ has: page.getByRole('heading', { name: 'Highlight appearance', exact: true }) });
   const highlightHeight = (await highlightSection.boundingBox())!.height;
-  await settings.getByRole('button', { name: 'Ocean', exact: true }).click();
+  await settings.getByRole('radio', { name: 'Ocean', exact: true }).click();
   await expect(text).toHaveCSS('--reader-word-color', '#2563eb');
   expect((await highlightSection.boundingBox())!.height).toBe(highlightHeight);
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
