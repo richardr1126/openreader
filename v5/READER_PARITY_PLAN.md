@@ -82,6 +82,9 @@ without a SQL migration. Appearance saves update the existing ready reader
 snapshot and never re-bootstrap audio. Speech-only saves preserve current
 presentation settings. The web controls reuse the existing grouped setting
 rows, selectors and color picker, without an enclosing card around the groups.
+Per-field inheritance resets are small inline icons beside controls on both
+platforms; section resets live in the headers. Showing an override must not
+add a row or increase the control/section height.
 Batch validation: 1,425 Vitest tests and all 55 Chromium/WebKit Playwright
 cases pass, including both consolidated playback journeys. The production
 build and route/compute/install-profile boundary checks pass. Native build

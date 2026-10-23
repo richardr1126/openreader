@@ -193,6 +193,7 @@ export function ToggleRow({
 
 type RangeFieldProps = {
   label: string;
+  action?: ReactNode;
   value: number;
   min: number;
   max: number;
@@ -205,6 +206,7 @@ type RangeFieldProps = {
 
 export function RangeField({
   label,
+  action,
   value,
   min,
   max,
@@ -222,9 +224,12 @@ export function RangeField({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
         <label htmlFor={inputId} className="text-sm font-medium text-foreground">{label}</label>
-        <span className={cn(valueWidth, 'text-sm text-right text-soft tabular-nums')}>
-          {formatter(value)}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn(valueWidth, 'text-sm text-right text-soft tabular-nums')}>
+            {formatter(value)}
+          </span>
+          {action}
+        </div>
       </div>
       <RangeInput
         id={inputId}
