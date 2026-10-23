@@ -77,19 +77,18 @@ function Stepper({ label, value, min, max, step, suffix = '', onChange }: {
 
 /**
  * Label on the left and a fixed-width control column on the right: every control shares the right edge, and
- * each kind (`wide` selects/segments, steppers) shares a left edge. `lead` sits just outside the column's
- * left edge; `trail` (the book-scope reset slot) just outside its right. On narrow panels `wide` controls
- * drop under the label; steppers stay beside it.
+ * each kind (`wide` selects/segments, steppers) shares a left edge. `actions` (reset icons) follow the label
+ * text; `lead` sits just outside the column's left edge. On narrow panels `wide` controls drop under the
+ * label; steppers stay beside it.
  */
-function Row({ label, wide = false, lead, trail, children }: {
-  label: string; wide?: boolean; lead?: ReactNode; trail?: ReactNode; children: ReactNode;
+function Row({ label, wide = false, actions, lead, children }: {
+  label: string; wide?: boolean; actions?: ReactNode; lead?: ReactNode; children: ReactNode;
 }) {
   return <div className={`flex items-center justify-between gap-x-4 gap-y-2 ${wide ? 'flex-wrap' : ''}`}>
-    <span className="min-w-0 text-sm font-medium text-foreground">{label}</span>
+    <span className="flex min-w-0 items-center gap-1 text-sm font-medium text-foreground">{label}{actions}</span>
     <div className={`ml-auto flex items-center gap-2 ${wide ? 'w-full sm:w-auto' : ''}`}>
       {lead}
       <div className={`flex min-w-0 items-center gap-2 ${wide ? 'flex-1 sm:w-72 sm:flex-none' : 'w-40'}`}>{children}</div>
-      {trail}
     </div>
   </div>;
 }
@@ -143,30 +142,27 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       setError(e instanceof Error ? e.message : 'Could not save reader appearance.');
     } finally { setBusy(false); }
   }
-  function inherit(kind: 'typography' | 'highlightAppearance', key: keyof Values) {
+  /** Book scope: shown beside a row's label while it overrides any of `keys`; clears them all. */
+  const resetField = (kind: 'typography' | 'highlightAppearance', keys: (keyof Values)[], label: string) => {
     const own = kind === 'typography' ? ownTypography : ownHighlights;
-    const next = { ...own }; delete (next as Partial<Values>)[key];
-    setPending({ ...pending, [kind]: next });
-  }
-  const resetField = (kind: 'typography' | 'highlightAppearance', key: keyof Values) => scope === 'book'
-    ? <span className="inline-flex h-5 w-5 shrink-0">
-      {Object.hasOwn(kind === 'typography' ? ownTypography : ownHighlights, key)
-        ? <ResetIcon label={`Use global ${key}`} onClick={() => inherit(kind, key)} /> : null}
-    </span> : null;
+    if (scope !== 'book' || !keys.some((key) => Object.hasOwn(own, key))) return null;
+    return <ResetIcon label={label} onClick={() => {
+      const next = { ...own }; for (const key of keys) delete (next as Partial<Values>)[key];
+      setPending({ ...pending, [kind]: next });
+    }} />;
+  };
   const typographyChanged = scope === 'book' ? Object.keys(ownTypography).length > 0 : JSON.stringify(ownTypography) !== JSON.stringify(DEFAULT_TYPOGRAPHY);
   const highlightsChanged = scope === 'book' ? Object.keys(ownHighlights).length > 0 : JSON.stringify(ownHighlights) !== JSON.stringify(DEFAULT_HIGHLIGHT_APPEARANCE);
   const change = (kind: 'typography' | 'highlightAppearance', patch: Partial<Values>) => {
     setPending({ ...pending, [kind]: { ...pending[kind], ...patch } });
   };
-  // Book scope reserves the reset slot on every row so controls share one right edge.
-  const slot = scope === 'book' ? <span aria-hidden className="w-5 shrink-0" /> : null;
   const stepper = (key: keyof typeof TYPOGRAPHY_RANGES) => {
     const [min, max, step] = TYPOGRAPHY_RANGES[key];
     return <Stepper label={labels[key]} value={draft[key]} min={min} max={max} step={step}
       suffix={key === 'sizePercent' || key === 'readingWidth' ? '%' : key === 'lineMultiplier' ? '×' : 'em'}
       onChange={(value) => change('typography', { [key]: value })} />;
   };
-  const numberRow = (key: keyof typeof TYPOGRAPHY_RANGES) => <Row label={labels[key]} key={key} trail={resetField('typography', key)}>{stepper(key)}</Row>;
+  const numberRow = (key: keyof typeof TYPOGRAPHY_RANGES) => <Row label={labels[key]} key={key} actions={resetField('typography', [key], `Use global ${key}`)}>{stepper(key)}</Row>;
   const fontStyle = (value: string) => ({ fontFamily: READER_FONT_FAMILIES[value as ReaderTypography['fontFamily']] || undefined });
 
   return <fieldset disabled={busy || (scope === 'book' && !book)} className="min-w-0 space-y-5">
@@ -182,7 +178,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           {PREVIEW_PARAGRAPHS.map((text) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>{text}</p>)}
         </div>
       </div>
-      <Row label="Font family" wide trail={resetField('typography', 'fontFamily')}>
+      <Row label="Font family" wide actions={resetField('typography', ['fontFamily'], 'Use global fontFamily')}>
         <div className="min-w-0 flex-1"><Select aria-label="Font family" disabled={busy} buttonClassName="h-9 rounded-full py-0 pl-3.5 text-xs font-medium"
           value={SELECT_OPTIONS.fontFamily.find((option) => option.value === draft.fontFamily)} options={SELECT_OPTIONS.fontFamily}
           renderValue={(option) => <span style={fontStyle(option.value)}>{option.label}</span>}
@@ -190,7 +186,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           onChange={({ value }) => change('typography', { fontFamily: value as ReaderTypography['fontFamily'] })} /></div>
       </Row>
       {numberRow('sizePercent')}
-      <Row label="Spacing" wide trail={slot}>
+      <Row label="Spacing" wide>
         <SegmentedControl ariaLabel="Spacing presets" className={segmentedClass(3)}
           value={SPACING_PRESETS.find((preset) => draft.lineMultiplier === preset.lineMultiplier && draft.paragraphSpacing === preset.paragraphSpacing && draft.letterSpacing === preset.letterSpacing)?.label ?? ''}
           onChange={(label) => { const { lineMultiplier, paragraphSpacing, letterSpacing } = SPACING_PRESETS.find((option) => option.label === label)!; change('typography', { lineMultiplier, paragraphSpacing, letterSpacing }); }}
@@ -199,13 +195,13 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       {numberRow('lineMultiplier')}
       {numberRow('paragraphSpacing')}
       {numberRow('letterSpacing')}
-      <Row label="Width" wide trail={slot}>
+      <Row label="Width" wide>
         <SegmentedControl ariaLabel="Reading width presets" className={segmentedClass(3)}
           value={String(draft.readingWidth)} onChange={(value) => change('typography', { readingWidth: Number(value) })}
           options={WIDTH_PRESETS.map(({ label, value }) => ({ value: String(value), label: segmentLabel(<LinesGlyph centered widths={[value, value, value * 0.7]} />, label) }))} />
       </Row>
       {numberRow('readingWidth')}
-      <Row label="Alignment" wide trail={resetField('typography', 'alignment')}>
+      <Row label="Alignment" wide actions={resetField('typography', ['alignment'], 'Use global alignment')}>
         <SegmentedControl ariaLabel="Alignment" value={draft.alignment} className={segmentedClass(3)} onChange={(value) => change('typography', { alignment: value })}
           options={SELECT_OPTIONS.alignment.map((option) => ({ value: option.value as ReaderTypography['alignment'],
             label: segmentLabel(<LinesGlyph widths={option.value === 'justify' ? [100, 100, 100] : [100, 60, 100]} />, option.value === 'default' ? 'Default' : option.label) }))} />
@@ -214,7 +210,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
     <Section title="Highlight appearance" variant="group" action={highlightsChanged &&
       <ResetIcon label={scope === 'book' ? 'Use global highlights' : 'Reset highlight appearance'} onClick={() => setPending({ ...pending, highlightAppearance: scope === 'book' ? {} : DEFAULT_HIGHLIGHT_APPEARANCE })} />}>
       <div><p aria-label="Highlight preview" className="rounded-md px-3 py-2 text-sm text-foreground" style={{ backgroundColor: highlightBackground(draft, 'segment') }}>Read at your own pace, <span className="rounded-sm" style={{ backgroundColor: highlightBackground(draft, 'word') }}>word</span> by word.</p></div>
-      <Row label="Preset" wide trail={slot}>
+      <Row label="Preset" wide>
         <SegmentedControl ariaLabel="Highlight presets" className={segmentedClass(4)}
           value={Object.entries(HIGHLIGHT_PRESETS).find(([, preset]) => Object.entries(preset).every(([key, value]) => draft[key as keyof HighlightAppearance] === value))?.[0] ?? ''}
           onChange={(name) => change('highlightAppearance', HIGHLIGHT_PRESETS[name])}
@@ -224,16 +220,16 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       {(['segment', 'word'] as const).map((layer) => {
         const colorKey = `${layer}Color` as const, opacityKey = `${layer}Opacity` as const;
         const title = layer === 'segment' ? 'Segment' : 'Word';
-        // Color controls sit left of the column so the opacity stepper lines up with the typography steppers.
-        const color = <>
-          <span className="inline-flex h-5 w-5 shrink-0">{draft[colorKey] !== 'theme' && <button type="button" aria-label={`Use theme ${layer} color`} title="Use theme color"
+        const actions = <>
+          {draft[colorKey] !== 'theme' && <button type="button" aria-label={`Use theme ${layer} color`} title="Use theme color"
             className="inline-flex h-5 w-5 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            onClick={() => change('highlightAppearance', { [colorKey]: 'theme' })}><PaletteIcon className="h-3 w-3" aria-hidden /></button>}</span>
-          <ColorPicker label={title} field="accent" value={draft[colorKey] === 'theme' ? '#ef4444' : draft[colorKey]}
-            onChange={(next) => change('highlightAppearance', { [colorKey]: next })} />
-          {resetField('highlightAppearance', colorKey)}
+            onClick={() => change('highlightAppearance', { [colorKey]: 'theme' })}><PaletteIcon className="h-3 w-3" aria-hidden /></button>}
+          {resetField('highlightAppearance', [colorKey, opacityKey], `Use global ${layer} highlight`)}
         </>;
-        return <Row label={title} key={layer} lead={color} trail={resetField('highlightAppearance', opacityKey)}>
+        // The swatch sits left of the column so the opacity stepper lines up with the typography steppers.
+        const color = <ColorPicker label={title} field="accent" value={draft[colorKey] === 'theme' ? '#ef4444' : draft[colorKey]}
+          onChange={(next) => change('highlightAppearance', { [colorKey]: next })} />;
+        return <Row label={title} key={layer} actions={actions} lead={color}>
           <Stepper label={`${title} opacity`} value={Math.round(draft[opacityKey] * 100)} min={0} max={100} step={1} suffix="%" onChange={(value) => change('highlightAppearance', { [opacityKey]: value / 100 })} />
         </Row>;
       })}

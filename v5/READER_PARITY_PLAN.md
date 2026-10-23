@@ -82,9 +82,10 @@ without a SQL migration. Appearance saves update the existing ready reader
 snapshot and never re-bootstrap audio. Speech-only saves preserve current
 presentation settings. The web controls reuse the existing grouped setting
 rows, selectors and color picker, without an enclosing card around the groups.
-Per-field inheritance resets are small inline icons beside controls on both
-platforms; section resets live in the headers. Showing an override must not
-add a row or increase the control/section height.
+Per-field inheritance resets are small icons right after the row label on both
+platforms, with no reserved space when absent; a highlight layer's reset clears
+its color and opacity together. Section resets live in the headers. Showing an
+override must not add a row or increase the control/section height.
 Typography uses compact numeric controls, visual spacing/width choices and a
 live reading sample. Spacing, reading-width, alignment and (web) highlight presets
 all use the platform segmented control (web `SegmentedControl`, SwiftUI
