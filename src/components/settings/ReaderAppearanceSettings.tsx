@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Section, Select, SettingRow, SegmentedControl } from '@/components/ui';
 import { ColorPicker } from '@/components/ColorPicker';
 import { PaletteIcon, RefreshIcon, TextCursorIcon } from '@/components/icons/Icons';
@@ -21,7 +21,21 @@ const TYPE_OPTIONS = {
   fontFamily: ['default', 'serif', 'sans', 'rounded', 'mono'],
   alignment: ['default', 'left', 'justify'],
 };
-const SELECT_OPTIONS = Object.fromEntries(Object.entries(TYPE_OPTIONS).map(([key, values]) => [key,
+const SPACING_PRESETS = [
+  { label: 'Compact', lineMultiplier: 1.2, paragraphSpacing: 0.75, letterSpacing: 0 },
+  { label: 'Balanced', lineMultiplier: 1.5, paragraphSpacing: 1, letterSpacing: 0 },
+  { label: 'Open', lineMultiplier: 1.9, paragraphSpacing: 1.5, letterSpacing: 0.03 },
+] as const;
+const WIDTH_PRESETS = [{ label: 'Compact', value: 60 }, { label: 'Balanced', value: 80 }, { label: 'Full', value: 100 }] as const;
+const PREVIEW_PARAGRAPHS = [
+  'The afternoon light fell across the page. There was time to pause, and room for the story to unfold.',
+  'Outside, the street had gone quiet. A kettle ticked as it cooled, and somewhere a door closed softly, the way doors do when no one wants to be the reason for a sound.',
+  'She turned the page and kept going. The chapter was longer than she remembered, but the words came easily now, one sentence leaning into the next.',
+  'By the time she looked up, the window had turned from gold to blue. The tea beside her had gone cold hours ago, a thin ring left on the saucer where she had set it down without thinking. Somewhere below, a neighbor was practicing scales on an old piano, missing the same note each time and starting over with a patience she almost envied.',
+  'She marked the page with the corner of an envelope and stood to stretch. The room smelled of paper and rain. On the shelf, the rest of the series waited in a neat row, their spines faded unevenly from years of the same afternoon sun, and she let her hand rest on the next one for a moment before deciding it could wait until morning.',
+  'It could not wait until morning. She carried it back to the chair, folded her legs beneath her, and opened to the first page, where a map of an invented coastline was drawn in faint brown ink, every harbor named, every lighthouse marked with a small careful star.',
+];
+const SELECT_OPTIONS =Object.fromEntries(Object.entries(TYPE_OPTIONS).map(([key, values]) => [key,
   values.map((value) => ({ value, label: value === 'default' ? 'Default / publisher' : value === 'justify' ? 'Justified' : value.charAt(0).toUpperCase() + value.slice(1) })),
 ])) as Record<keyof typeof TYPE_OPTIONS, { value: string; label: string }[]>;
 
@@ -57,9 +71,14 @@ function CompactNumber({ label, value, min, max, step, suffix = '', onChange }: 
   </div>;
 }
 
-function WidthSample({ width }: { width: number }) {
-  return <span className="flex w-10 flex-col items-center gap-0.5" aria-hidden>{[0, 1, 2].map((line) => <span key={line} className="h-px bg-current opacity-70" style={{ width: `${width * (line === 2 ? 0.7 : 1)}%` }} />)}</span>;
+/** Three-line glyph shared by the preset segments; each preset varies gap or line widths. */
+function LinesGlyph({ gap = 2, widths = [100, 100, 100], centered = false }: { gap?: number; widths?: readonly number[]; centered?: boolean }) {
+  return <span aria-hidden className={`flex w-4 shrink-0 flex-col ${centered ? 'items-center' : 'items-start'}`} style={{ gap }}>
+    {widths.map((width, line) => <span key={line} className="h-px bg-current" style={{ width: `${width}%` }} />)}
+  </span>;
 }
+
+const segmentLabel = (glyph: ReactNode, text: string) => <span className="inline-flex items-center justify-center gap-2">{glyph}{text}</span>;
 
 export function ReaderAppearanceSettings({ scope = 'global', showTypography = true }: {
   scope?: 'global' | 'book'; showTypography?: boolean;
@@ -129,10 +148,10 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       <ResetIcon label={scope === 'book' ? 'Use global typography' : 'Reset typography'} onClick={() => void save('typography', DEFAULT_TYPOGRAPHY, scope === 'book')} />}>
       <div aria-label="Typography preview" role="region" className="overflow-hidden text-foreground">
         <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-wide text-faint"><span>Reading preview</span><span>Live</span></div>
-        <div role="article" aria-label="Reading sample" className="mx-auto h-44 overflow-hidden" style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || 'Georgia, serif',
+        {/* Taller on wide screens so a real page of text shows; the fade marks the clip as intentional. */}
+        <div role="article" aria-label="Reading sample" className="mx-auto h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,black_75%,transparent)] sm:h-60 lg:h-80" style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || 'Georgia, serif',
           fontSize: `${14 * draft.sizePercent / 100}px`, lineHeight: draft.lineMultiplier, letterSpacing: `${draft.letterSpacing}em`, textAlign: draft.alignment === 'default' ? 'start' : draft.alignment }}>
-          <p style={{ marginBottom: `${draft.paragraphSpacing}em` }}>The afternoon light fell across the page. There was time to pause, and room for the story to unfold.</p>
-          <p>One more paragraph, at your own pace.</p>
+          {PREVIEW_PARAGRAPHS.map((text) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>{text}</p>)}
         </div>
       </div>
       <div>
@@ -140,7 +159,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           <div className="flex items-center gap-1.5"><div className="min-w-0 flex-1"><Select aria-label="Font family" disabled={busy}
             value={SELECT_OPTIONS.fontFamily.find((option) => option.value === draft.fontFamily)} options={SELECT_OPTIONS.fontFamily}
             renderValue={(option) => <span style={{ fontFamily: READER_FONT_FAMILIES[option.value as ReaderTypography['fontFamily']] || undefined }}>{option.label}</span>}
-            renderOption={(option) => <span className="flex items-center justify-between gap-4" style={{ fontFamily: READER_FONT_FAMILIES[option.value as ReaderTypography['fontFamily']] || undefined }}><span>{option.label}</span><span aria-hidden className="text-base">Aa</span></span>}
+            renderOption={(option) => <span className="flex items-center justify-between gap-4" style={{ fontFamily: READER_FONT_FAMILIES[option.value as ReaderTypography['fontFamily']] || undefined }}><span>{option.label}</span><span aria-hidden className="text-[1rem]">Aa</span></span>}
             onChange={({ value }) => change('typography', { fontFamily: value as ReaderTypography['fontFamily'] })} /></div>
             {resetField('typography', 'fontFamily')}</div>
         </SettingRow>
@@ -148,30 +167,25 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       {number('sizePercent')}
       <div className="space-y-2">
         <span className="text-sm font-medium">Spacing</span>
-        <div role="group" aria-label="Spacing presets" className="flex gap-1.5">
-          {[
-            { label: 'Compact', lineMultiplier: 1.2, paragraphSpacing: 0.75, letterSpacing: 0 },
-            { label: 'Balanced', lineMultiplier: 1.5, paragraphSpacing: 1, letterSpacing: 0 },
-            { label: 'Open', lineMultiplier: 1.9, paragraphSpacing: 1.5, letterSpacing: 0.03 },
-          ].map(({ label, ...preset }, index) => <Button key={label} size="sm" variant="ghost" className="flex-1 gap-2"
-            aria-pressed={draft.lineMultiplier === preset.lineMultiplier && draft.paragraphSpacing === preset.paragraphSpacing && draft.letterSpacing === preset.letterSpacing}
-            onClick={() => change('typography', preset)}><span aria-hidden className="flex w-4 flex-col" style={{ gap: index + 1 }}>{[0, 1, 2].map((line) => <span key={line} className="h-px bg-current" />)}</span>{label}</Button>)}
-        </div>
+        <SegmentedControl ariaLabel="Spacing presets" className="grid-cols-3"
+          value={SPACING_PRESETS.find((preset) => draft.lineMultiplier === preset.lineMultiplier && draft.paragraphSpacing === preset.paragraphSpacing && draft.letterSpacing === preset.letterSpacing)?.label ?? ''}
+          onChange={(label) => { const { lineMultiplier, paragraphSpacing, letterSpacing } = SPACING_PRESETS.find((option) => option.label === label)!; change('typography', { lineMultiplier, paragraphSpacing, letterSpacing }); }}
+          options={SPACING_PRESETS.map(({ label }, index) => ({ value: label, label: segmentLabel(<LinesGlyph gap={index + 1} />, label) }))} />
       </div>
       {number('lineMultiplier')}
       {number('paragraphSpacing')}
       {number('letterSpacing')}
       <div className="space-y-2">
         {number('readingWidth')}
-        <div role="group" aria-label="Reading width presets" className="flex gap-1.5">
-          {[[60, 'Compact'], [80, 'Balanced'], [100, 'Full']] .map(([value, label]) => <Button key={value} size="sm" className="flex-1 gap-2" variant={draft.readingWidth === value ? 'secondary' : 'ghost'}
-            aria-pressed={draft.readingWidth === value} onClick={() => change('typography', { readingWidth: Number(value) })}><WidthSample width={Number(value)} />{label}</Button>)}
-        </div>
+        <SegmentedControl ariaLabel="Reading width presets" className="grid-cols-3"
+          value={String(draft.readingWidth)} onChange={(value) => change('typography', { readingWidth: Number(value) })}
+          options={WIDTH_PRESETS.map(({ label, value }) => ({ value: String(value), label: segmentLabel(<LinesGlyph centered widths={[value, value, value * 0.7]} />, label) }))} />
       </div>
       <div className="space-y-2">
         <div className="flex items-center justify-between"><span className="text-sm font-medium">Alignment</span>{resetField('typography', 'alignment')}</div>
         <SegmentedControl ariaLabel="Alignment" value={draft.alignment} className="grid-cols-3" onChange={(value) => change('typography', { alignment: value })}
-          options={SELECT_OPTIONS.alignment.map((option) => ({ value: option.value as ReaderTypography['alignment'], label: <span className="inline-flex items-center gap-2"><span aria-hidden className="flex w-4 flex-col gap-0.5">{[0, 1, 2].map((line) => <span key={line} className="h-px bg-current" style={{ width: option.value === 'justify' || line !== 1 ? '100%' : '60%' }} />)}</span>{option.value === 'default' ? 'Default' : option.label}</span> }))} />
+          options={SELECT_OPTIONS.alignment.map((option) => ({ value: option.value as ReaderTypography['alignment'],
+            label: segmentLabel(<LinesGlyph widths={option.value === 'justify' ? [100, 100, 100] : [100, 60, 100]} />, option.value === 'default' ? 'Default' : option.label) }))} />
       </div>
     </Section>}
     <Section title="Highlight appearance" variant="group" action={highlightsChanged &&
@@ -181,7 +195,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
         {Object.entries(HIGHLIGHT_PRESETS).map(([name, preset]) => {
           const selected = Object.entries(preset).every(([key, value]) => draft[key as keyof HighlightAppearance] === value);
           return <button type="button" key={name} aria-pressed={selected}
-            className={`flex min-w-0 flex-col items-center gap-1.5 rounded-lg border py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${selected ? 'border-current bg-surface' : 'border-transparent hover:bg-surface'}`}
+            className={`flex min-w-0 flex-col items-center gap-1.5 rounded-lg border py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${selected ? 'border-accent bg-accent-wash' : 'border-transparent hover:bg-accent-wash'}`}
             onClick={() => change('highlightAppearance', preset)}><span aria-hidden className="rounded px-3 py-1 text-sm" style={{ backgroundColor: highlightBackground(preset, 'word') }}>Aa</span>{name}</button>;
         })}
       </div>

@@ -86,7 +86,10 @@ Per-field inheritance resets are small inline icons beside controls on both
 platforms; section resets live in the headers. Showing an override must not
 add a row or increase the control/section height.
 Typography uses compact numeric controls, visual spacing/width choices and a
-live reading sample. Highlight settings lead with a live preview and four color
+live reading sample. Spacing, reading-width and alignment presets all use the
+platform segmented control (web `SegmentedControl`, SwiftUI segmented
+`Picker`); a custom value selects no segment. The reading sample grows with
+the display (taller box, multi-paragraph passage, faded clip). Highlight settings lead with a live preview and four color
 samples with selected states; each layer has one color and opacity control,
 without duplicate intensity preset buttons. Native preset labels fit narrow
 phone layouts.

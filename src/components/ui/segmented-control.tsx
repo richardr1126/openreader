@@ -61,6 +61,9 @@ export function SegmentedControl<T extends string>({
     }
   };
 
+  // A value outside the options (e.g. custom spacing) selects nothing; keep the group tabbable.
+  const hasActive = options.some((option) => option.value === value);
+
   return (
     <div role="radiogroup" aria-label={ariaLabel} className={cn(segmentedGroupClass, className)}>
       {options.map((option, index) => {
@@ -72,7 +75,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             role="radio"
             aria-checked={active}
-            tabIndex={active ? 0 : -1}
+            tabIndex={active || (!hasActive && index === 0) ? 0 : -1}
             onClick={() => onChange(option.value)}
             onKeyDown={(event) => handleKeyDown(event, index)}
             className={segmentedButtonClass(active)}

@@ -30,7 +30,7 @@ test('favorites and reader appearance persist with independent book inheritance'
   await page.getByRole('button', { name: 'Increase text size', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Text size', exact: true })).toHaveValue('105');
   await expect.poll(() => sample.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeCloseTo(14.7, 3);
-  await page.getByRole('group', { name: 'Spacing presets', exact: true }).getByRole('button', { name: 'Open', exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Spacing presets', exact: true }).getByRole('radio', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Line spacing', exact: true })).toHaveValue('1.9');
   await expect(page.getByRole('spinbutton', { name: 'Paragraph spacing', exact: true })).toHaveValue('1.5');
   await expect(page.getByRole('spinbutton', { name: 'Letter spacing', exact: true })).toHaveValue('0.03');
