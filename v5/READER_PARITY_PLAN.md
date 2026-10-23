@@ -72,9 +72,14 @@ schema deployment before distribution; see the Swift architecture document.
 ## Current checkpoint
 
 The completed baseline is committed on the paired integration branches. The
-typography and voice-favorites contracts are complete. Voice favorites is in
-implementation in its paired worktrees; typography's per-book storage and
-CloudKit additions are awaiting the owner's schema decision.
+typography and voice-favorites contracts are complete. The owner approved global and per-book
+typography, one optional Swift typography override field, and additive CloudKit
+fields for typography and voice favorites. Product UI implementation is pending.
+The bounded Swift persistence/sync foundation is complete and integrated on
+`codex/reader-parity`, after a successful native build and full package suite.
+The implementation was developed on `codex/reader-preferences`. Native builds
+and simulator checks remain serialized. No new typography controls, renderer
+styling, favorites buttons, or favorites filters are implemented yet.
 
 The accepted favorite identity on web is the structured tuple of resolved
 provider configuration reference, model ID, and voice ID. Serialize lookup keys
@@ -83,14 +88,43 @@ entries in the existing user preference JSON, independently of Apply/Save.
 On Swift, use the current voice-selection identity of source plus identifier;
 locale and catalog revision changes must not remove a favorite. The first
 increment uses UserDefaults, retains unavailable favorites, and changes neither
-selection nor playback when a star is toggled. CloudKit sync is pending the
-same owner decision as typography.
+selection nor playback when a star is toggled. Favorites also sync through the
+existing Swift speech-preference record, without changing the selected voice
+or triggering audio work when only favorites change. Existing CloudKit
+`modifiedAt` fields retain their original voice/theme meaning. Separate optional
+journal clocks track typography and favorites uploads, so a later unrelated
+clock cannot hide an offline edit.
 
 Typography proposes seven settings: font family, size, line spacing, paragraph
 spacing, letter spacing, reading width, and alignment. Untouched settings must
 preserve current reader appearance and publisher styles; percentage controls
 must not silently replace the existing baseline widths or Dynamic Type sizing.
-Global settings use existing preference storage. The proposed Swift per-book
+Global settings use existing preference storage. The Swift per-book
 storage is one optional `LibraryDocument.typographyOverrideData` field, with
 absence inheriting global preferences. New CloudKit typography fields and a
 favorites field require a separate Production deployment before distribution.
+Two-device CloudKit delivery and physical-device Now Playing artwork remain
+unverified; neither is established by simulator package tests.
+
+### Shared control contract
+
+| Setting | Default | Supported values |
+| --- | --- | --- |
+| Font family | Default/publisher | Default, serif, sans, rounded, mono; existing/system fonts only |
+| Text size | 100% | 75–160%, step 5% |
+| Line spacing | 1.5 | 1.1–2.2, step 0.1 |
+| Paragraph spacing | 1 em | 0.25–2 em, step 0.25 |
+| Letter spacing | 0 em | 0–0.12 em, step 0.01 |
+| Reading width | 100% of current baseline | 40–100%, step 10%; preserve native Dynamic Type and existing widths |
+| Alignment | Default/publisher | Default, left, justified |
+
+Per-book fields inherit independently from global preferences and can be reset
+individually. Untouched EPUB settings preserve publisher styles. Layout
+measurement and rendered typography must agree so reflow retains the logical
+location and active word/segment mappings.
+
+Favorites belong in the existing shared voice picker on each platform:
+`VoicePicker` on web (reader sidebar and provider settings) and `VoiceSetupView`
+on Swift (onboarding, global settings, and book settings). Stars are independent
+of row selection, preview, downloads, and Apply/Save. Filtering composes with
+search/language availability and always provides a way to return to all voices.
