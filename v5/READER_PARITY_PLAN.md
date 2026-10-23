@@ -6,13 +6,13 @@ library or settings synchronization.
 
 ## Integration and ownership
 
-- `codex/reader-parity` is the integration branch in both repositories. Main is
-  unchanged. Each feature gets a matching branch and separate worktree in each
-  repository, based on this integration branch.
+- Continue directly on the existing `codex/reader-parity` branch in each
+  repository. Do not create a branch/worktree for every feature. Main remains
+  unchanged until the owner requests integration there.
 - One feature implementer owns both platforms, its focused tests, and its
-  documentation. Independent features can proceed in parallel. No concurrent
-  writers share a checkout. Feature branches integrate serially after review;
-  later branches incorporate the accepted baseline before resolving overlaps.
+  documentation. Complete one feature increment at a time, with one writer per
+  repository. Independent read-only reviews can run in parallel. Checkpoint
+  verified changes as cohesive commits on these existing branches.
 - Integration review owns persistent identities, schema and sync decisions,
   reading-location mapping, audio timing and canonical cache behavior,
   credentials, and provider execution boundaries. UI and ordinary feature code
@@ -35,6 +35,9 @@ library or settings synchronization.
   of the existing word-highlight preference. Visible controls say “segment.”
 - Swift Now Playing artwork uses the existing book cover, bounds its retained
   image, and rejects stale results after switching books.
+- Swift typography and voice-favorites persistence/sync foundation: global
+  defaults, optional per-book typography overrides, reset/inheritance, stable
+  favorite identities, and independent sync clocks. UI and rendering remain.
 
 The baseline passed the full web unit and Chromium/WebKit suites, production
 build and boundary checks, plus the Swift build and test suite. Real reader
@@ -47,15 +50,15 @@ schema deployment before distribution; see the Swift architecture document.
 
 | Order | Work | Implementation scope and review boundary |
 | --- | --- | --- |
-| 1, parallel | Typography | Matching EPUB and flowing-text controls for fonts, size, spacing, margins/width, and alignment. Reuse current settings and fonts. Review persistence and logical-location preservation before implementation. No PDF typography. Branch: `codex/reader-typography`. |
-| 1, parallel | Voice favorites | Favorite/unfavorite and a favorites filter in existing voice pickers. Stable provider/model/voice identity, persistence, and unavailable-voice behavior come first. Favoriting never changes playback, downloads, or the current Apply workflow. Branch: `codex/voice-favorites`. |
-| 2 | Highlight appearance | Colors, opacity, and presets using the independent word/segment layers. Start after typography integrates because renderer and settings ownership overlaps. Keep timing and cursor ownership unchanged. |
-| 3 | Manual browsing and follow controls | Review cursor/playback separation first; delegate reader controls and navigation against that contract. Preserve canonical playback identity and existing readiness events. |
-| 4 | Citation and bracket handling | Define source-to-spoken mapping and cache implications before preference UI. Text transformations must not invalidate word highlighting or stored progress silently. |
-| 5 | Added web pauses | Establish the actual pause contract before implementation. Swift's existing controls refer to generated-piece and reader-block boundaries; these are not guaranteed sentence and paragraph boundaries. No Swift pause redesign is currently requested. |
-| 6 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
-| 7 | FishAudio | The only requested new provider. Implement both platforms after the provider contract exists; review credential handling and execution boundaries. |
-| 8 | Optional queued voice changes | Preserve current Apply. Add a distinct queue option after specifying its interaction with generated audio, timeline reuse, and current playback. |
+| 1 | Voice favorites | Implemented in both shared pickers: independent favorite buttons, filtering and persistence. Web uses synced user preferences; Swift uses the existing iCloud speech record. |
+| 2 | Typography | Global/per-book controls and EPUB/flowing-text rendering implemented on both platforms. Preserve publisher defaults, Dynamic Type and playback identity. PDF page typography is unchanged. |
+| 3 | Highlight appearance | Global/per-book segment and word colors, opacity, presets, inheritance/reset implemented. Swift adds the approved optional storage field and independent iCloud clock. Production schema deployment and two-device verification remain owner follow-ups. |
+| 4 | Manual browsing and follow controls | Review cursor/playback separation first; implement reader controls and navigation against that contract. Preserve canonical playback identity and existing readiness events. |
+| 5 | Citation and bracket handling | Define source-to-spoken mapping and cache implications before preference UI. Text transformations must not invalidate word highlighting or stored progress silently. |
+| 6 | Added web pauses | Establish the actual pause contract before implementation. Swift's existing controls refer to generated-piece and reader-block boundaries; these are not guaranteed sentence and paragraph boundaries. No Swift pause redesign is currently requested. |
+| 7 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
+| 8 | FishAudio | The only requested new provider. Implement both platforms after the provider contract exists; review credential handling and execution boundaries. |
+| 9 | Optional queued voice changes | Preserve current Apply. Add a distinct queue option after specifying its interaction with generated audio, timeline reuse, and current playback. |
 
 ## Explicitly deferred or excluded
 
@@ -71,15 +74,21 @@ schema deployment before distribution; see the Swift architecture document.
 
 ## Current checkpoint
 
-The completed baseline is committed on the paired integration branches. The
-typography and voice-favorites contracts are complete. The owner approved global and per-book
-typography, one optional Swift typography override field, and additive CloudKit
-fields for typography and voice favorites. Product UI implementation is pending.
-The bounded Swift persistence/sync foundation is complete and integrated on
-`codex/reader-parity`, after a successful native build and full package suite.
-The implementation was developed on `codex/reader-preferences`. Native builds
-and simulator checks remain serialized. No new typography controls, renderer
-styling, favorites buttons, or favorites filters are implemented yet.
+The completed baseline is committed on the paired integration branches. Items
+1–3 are now implemented there. The owner approved global/per-book typography
+and highlight appearance with iCloud sync, including their optional SwiftData
+fields and additive CloudKit fields. Web uses existing preference/document JSON
+without a SQL migration. Appearance saves update the existing ready reader
+snapshot and never re-bootstrap audio. Speech-only saves preserve current
+presentation settings. The web controls reuse the existing grouped setting
+rows, selectors and color picker, without an enclosing card around the groups.
+Batch validation: 1,425 Vitest tests and all 55 Chromium/WebKit Playwright
+cases pass, including both consolidated playback journeys. The production
+build and route/compute/install-profile boundary checks pass. Native build
+and all 392 package tests pass. Visible checks covered shared picker favorites,
+global preference reload, book font inheritance/reset, native preset previews,
+flowing-text font changes and EPUB reflow at 125% with the cursor unchanged.
+Two-device iCloud delivery and Production schema deployment remain unverified.
 
 The accepted favorite identity on web is the structured tuple of resolved
 provider configuration reference, model ID, and voice ID. Serialize lookup keys

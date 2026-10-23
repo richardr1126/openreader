@@ -389,7 +389,8 @@ test('anonymous user controls playback across every accepted document journey', 
   await voiceButton.click();
   const voicePanel = page.getByRole('dialog', { name: 'Voice', exact: true });
   await expect(voicePanel.getByRole('heading', { name: 'Voice', exact: true })).toBeVisible();
-  const alternativeVoiceRow = voicePanel.locator('button[aria-pressed="false"]').first();
+  const alternativeVoiceRow = voicePanel.getByRole('group').getByRole('button', { pressed: false })
+    .filter({ hasText: /\S/ }).first();
   const alternativeVoice = (await alternativeVoiceRow.textContent())?.trim();
   expect(alternativeVoice).toBeTruthy();
   await alternativeVoiceRow.click();

@@ -5,6 +5,7 @@ import type { Book, NavItem, Rendition } from 'epubjs';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
 import { hardenEpubSection } from '@/lib/client/epub/epub-section-hardening';
@@ -126,7 +127,10 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   } = useTTSHighlight();
   const { epubTheme, epubWordHighlightEnabled } = useConfig();
   const [activeRendition, setActiveRendition] = useState<Rendition>();
-  useEPUBTheme(epubTheme, activeRendition);
+  const { typography } = useReaderAppearance();
+  useEPUBTheme(epubTheme, activeRendition, typography, () => {
+    void refreshRenderedPlacement({ preservePlaybackCursor: true });
+  });
   const containerRef = useRef<HTMLDivElement>(null);
   const { isResizing, setIsResizing, dimensions } = useEPUBResize(containerRef);
 

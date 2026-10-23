@@ -1,4 +1,5 @@
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import type { ReaderTypography, HighlightAppearance } from '@/lib/shared/reader-appearance';
 
 export interface DocumentSettings {
   schemaVersion: 1;
@@ -12,6 +13,8 @@ export interface DocumentSettings {
    * and for any field left out, the book follows the user's default.
    */
   voiceOverride?: DocumentVoiceOverride;
+  typography?: Partial<ReaderTypography>;
+  highlightAppearance?: Partial<HighlightAppearance>;
 }
 
 export interface DocumentVoiceOverride {

@@ -1,9 +1,9 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { CheckIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
+import { CheckIcon, HeartIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
-import { IconButton, Input, cn } from '@/components/ui';
+import { Button, IconButton, Input, cn } from '@/components/ui';
 import type { VoicePreviewState } from '@/hooks/audio/useVoicePreview';
 import {
   groupVoices,
@@ -62,6 +62,7 @@ export function VoicePicker({
   groupByLanguage,
   preview,
   notices,
+  favorites,
 }: {
   voices: string[];
   /** The voice string: one id, or a Kokoro blend. */
@@ -72,10 +73,16 @@ export function VoicePicker({
   preview: VoicePickerPreview;
   /** Warnings shown between the search field and the list. */
   notices?: ReactNode;
+  favorites?: { voices: Set<string>; toggle: (voice: string) => Promise<void>; available: boolean };
 }) {
   const [query, setQuery] = useState('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
   const selectedVoices = selectedVoicesFor(value, voices, pickPolicy);
-  const groups = useMemo(() => groupVoices(voices, query, groupByLanguage), [voices, query, groupByLanguage]);
+  const groups = useMemo(() => groupVoices(
+    favoritesOnly ? voices.filter((voice) => favorites?.voices.has(voice)) : voices,
+    query, groupByLanguage,
+  ), [voices, query, groupByLanguage, favoritesOnly, favorites?.voices]);
   const previewError = preview.state.phase === 'error' ? preview.state : null;
 
   const pick = (voiceId: string) => {
@@ -85,7 +92,7 @@ export function VoicePicker({
 
   return (
     <div className="space-y-2">
-      <Input
+      <div className="flex items-center gap-2"><Input
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
@@ -93,6 +100,10 @@ export function VoicePicker({
         aria-label="Search voices"
         controlSize="sm"
       />
+      {favorites?.available && <Button size="sm" variant={favoritesOnly ? 'primary' : 'secondary'}
+        aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(!favoritesOnly)}>Favorites</Button>}
+      </div>
+      {favoriteError && <p role="alert" className="text-xs text-warning">{favoriteError}</p>}
       {notices}
       {previewError && (
         <p role="status" className="text-xs text-warning">{previewError.message}</p>
@@ -100,7 +111,10 @@ export function VoicePicker({
       {voices.length === 0 ? (
         <p className="py-2 text-sm text-soft">No voices are available for this model.</p>
       ) : groups.length === 0 ? (
-        <p className="py-2 text-sm text-soft">No voices match “{query.trim()}”.</p>
+        <div className="space-y-2 py-2 text-sm text-soft">
+          <p>{favoritesOnly && !query.trim() ? 'No favorite voices for this model.' : `No voices match “${query.trim()}”.`}</p>
+          {favoritesOnly && <Button size="sm" onClick={() => setFavoritesOnly(false)}>Show all voices</Button>}
+        </div>
       ) : (
         <div className="space-y-3 pt-1">
           {groups.map((group) => (
@@ -134,6 +148,17 @@ export function VoicePicker({
                         <span className="truncate">{voiceId}</span>
                         {selected ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden /> : null}
                       </button>
+                      {favorites?.available && !(groupByLanguage && voiceId.includes('+')) && (
+                        <IconButton size="sm" aria-pressed={favorites.voices.has(voiceId)}
+                          aria-label={favorites.voices.has(voiceId) ? `Remove ${voiceId} from favorites` : `Favorite ${voiceId}`}
+                          className={favorites.voices.has(voiceId) ? 'text-accent' : 'text-faint'}
+                          onClick={() => {
+                            setFavoriteError(null);
+                            void favorites.toggle(voiceId).catch(() => setFavoriteError('Could not save favorites. Please try again.'));
+                          }}>
+                          <HeartIcon className="h-4 w-4" fill={favorites.voices.has(voiceId) ? 'currentColor' : 'none'} />
+                        </IconButton>
+                      )}
                     </li>
                   );
                 })}

@@ -5,6 +5,7 @@ import {
 } from '@/types/document-settings';
 import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import { normalizeLanguageTag } from '@openreader/tts/language';
+import { normalizeTypographyOverride, normalizeHighlightOverride } from './reader-appearance';
 
 function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
   if (!Array.isArray(value)) return [...(DEFAULT_DOCUMENT_SETTINGS.pdf?.skipBlockKinds ?? [])];
@@ -65,6 +66,18 @@ export function mergeDocumentSettings(
         : [...(defaults.pdf?.skipBlockKinds ?? [])],
     },
     ...(voiceOverride ? { voiceOverride } : {}),
+    ...(rec.typography ? { typography: normalizeTypographyOverride(rec.typography) } : {}),
+    ...(rec.highlightAppearance ? { highlightAppearance: normalizeHighlightOverride(rec.highlightAppearance) } : {}),
+  };
+}
+
+/** Omitted presentation fields are preserved for speech-only and older clients.
+ * An explicit empty object resets a book to global inheritance. */
+export function preserveDocumentAppearance(incoming: DocumentSettings, previous: DocumentSettings): DocumentSettings {
+  return {
+    ...incoming,
+    ...(incoming.typography === undefined && previous.typography !== undefined ? { typography: previous.typography } : {}),
+    ...(incoming.highlightAppearance === undefined && previous.highlightAppearance !== undefined ? { highlightAppearance: previous.highlightAppearance } : {}),
   };
 }
 

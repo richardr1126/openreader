@@ -3,7 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documentSettings } from '@openreader/database/schema';
 import { resolveOwnedDocumentAccess } from '@/lib/server/documents/access';
-import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import { mergeDocumentSettings, preserveDocumentAppearance } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
 import { coerceTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
@@ -88,7 +88,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
     if (scope instanceof Response) return scope;
 
     const body = (await req.json().catch(() => null)) as { settings?: unknown; clientUpdatedAtMs?: unknown } | null;
-    const incoming = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, body?.settings ?? null);
+    let incoming = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, body?.settings ?? null);
     const clientUpdatedAtMs = normalizeClientUpdatedAtMs(body?.clientUpdatedAtMs);
 
     const existingRows = await db
@@ -104,6 +104,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
       .limit(1);
 
     const existing = existingRows[0];
+    incoming = preserveDocumentAppearance(incoming, parseStored(existing?.dataJson));
     const existingUpdatedAt = Number(existing?.clientUpdatedAtMs ?? 0);
     if (existing && clientUpdatedAtMs < existingUpdatedAt) {
       return NextResponse.json({

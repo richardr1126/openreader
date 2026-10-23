@@ -140,7 +140,9 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         // A failed save rolls back here instead of throwing, so the restart
         // still reacquires the plan and clears processing.
         try {
-          await putDocumentSettings(documentId, next);
+          // The audio controller's snapshot does not own live font/color edits.
+          // Omit those fields so the server preserves their latest values.
+          await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined });
         } catch (error) {
           console.error('Could not save book voice:', error);
           setReaderSettings(previous);

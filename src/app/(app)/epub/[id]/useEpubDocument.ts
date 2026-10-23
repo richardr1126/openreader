@@ -15,6 +15,7 @@ import type { Book, Contents, NavItem, Rendition } from 'epubjs';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { useEPUBHighlighting } from '@/hooks/epub/useEPUBHighlighting';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { useEPUBLocationController } from '@/hooks/epub/useEPUBLocationController';
 import {
   shouldPreserveEpubPlaybackCursor,
@@ -162,6 +163,7 @@ export function useEpubDocument(
     highlightWordIndex,
     setRenderedTextMaps,
   } = useEPUBHighlighting({
+    appearance: useReaderAppearance().highlights,
     epubHighlightEnabled,
     epubWordHighlightEnabled,
     renderedTextMapsRef,

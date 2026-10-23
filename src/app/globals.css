@@ -450,12 +450,16 @@ h1, h2, h3, h4, h5, h6 {
    Highlight API. They must not change box metrics: inline padding shifted the
    following text (and could rewrap the line) on every word advance. */
 .openreader-html-highlight-sentence {
-  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  background-color: color-mix(in srgb, var(--reader-segment-color, var(--accent)) calc(var(--reader-segment-opacity, 0.22) * 100%), transparent);
   border-radius: 2px;
 }
 .openreader-html-highlight-word {
-  background-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background-color: color-mix(in srgb, var(--reader-word-color, var(--accent)) calc(var(--reader-word-opacity, 0.55) * 100%), transparent);
   border-radius: 2px;
+}
+
+.html-container p {
+  margin-block: var(--reader-paragraph-spacing, 1.25em);
 }
 
 /* Static prism gradient divider (no animation) */

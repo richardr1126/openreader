@@ -1,6 +1,8 @@
 import { SYNCED_PREFERENCE_KEYS, type SyncedPreferencesPatch } from '@/types/user-state';
 import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@openreader/tts/provider-catalog';
 import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
+import { normalizeFavoriteVoices } from '@/lib/shared/voice-favorites';
+import { normalizeTypography, normalizeHighlightAppearance } from '@/lib/shared/reader-appearance';
 
 // Dropped on write. `iosBetaBannerDismissed` belonged to the first iOS banner;
 // retiring it shows the current banner again to users who dismissed the old one.
@@ -131,6 +133,15 @@ export function sanitizePreferencesPatch(
         break;
       case 'savedVoices':
         out[key] = sanitizeSavedVoices(value);
+        break;
+      case 'favoriteVoices':
+        out[key] = normalizeFavoriteVoices(value);
+        break;
+      case 'readerTypography':
+        out[key] = normalizeTypography(value);
+        break;
+      case 'highlightAppearance':
+        out[key] = normalizeHighlightAppearance(value);
         break;
       case 'documentListState':
         if (isRecord(value)) {

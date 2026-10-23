@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { ColorPicker } from '@/components/ColorPicker';
+import { ReaderAppearanceSettings } from './ReaderAppearanceSettings';
 import { CheckIcon, MoonIcon, SunIcon } from '@/components/icons/Icons';
 import { ChoiceTile, IconButton } from '@/components/ui';
 import {
@@ -223,6 +224,7 @@ export function AppearanceSettingsPanel() {
 
       <ThemeGroup label="Light" icon={<SunIcon className="h-3.5 w-3.5" aria-hidden />} themes={lightThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
       <ThemeGroup label="Dark" icon={<MoonIcon className="h-3.5 w-3.5" aria-hidden />} themes={darkThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
+      <ReaderAppearanceSettings />
     </div>
   );
 }

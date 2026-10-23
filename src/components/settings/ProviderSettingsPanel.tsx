@@ -11,6 +11,7 @@ import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useSharedProviders } from '@/hooks/useSharedProviders';
 import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
 import { useVoicePreview } from '@/hooks/audio/useVoicePreview';
+import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
 import { formatModelSpeed } from '@/lib/client/tts/voice-draft';
 import { MODEL_SPEED_MAX, MODEL_SPEED_MIN } from '@/lib/shared/document-settings';
 import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
@@ -96,6 +97,7 @@ export function ProviderSettingsPanel({
     modelValue,
   );
   const shownVoice = localVoice || availableVoices[0] || '';
+  const favorites = useVoiceFavorites(viewModel.selectedProviderRef, modelValue);
   // A saved blend (e.g. Kokoro "a(0.5)+b(0.5)") is kept as its own option.
   const voiceOptions = shownVoice && !availableVoices.includes(shownVoice)
     ? [shownVoice, ...availableVoices]
@@ -371,6 +373,7 @@ export function ProviderSettingsPanel({
           <p className="text-xs text-soft">Loading voices…</p>
         ) : (
           <VoicePicker
+            favorites={favorites}
             voices={voiceOptions}
             value={shownVoice}
             onChange={setLocalVoice}

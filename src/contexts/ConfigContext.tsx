@@ -30,6 +30,9 @@ interface ConfigContextType {
   ttsModel: string;
   ttsInstructions: string;
   savedVoices: SavedVoices;
+  favoriteVoices: AppConfigValues['favoriteVoices'];
+  readerTypography: AppConfigValues['readerTypography'];
+  highlightAppearance: AppConfigValues['highlightAppearance'];
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
   /** Saves several keys in one request, applied in the patch's key order. */
   updateConfig: (patch: Partial<AppConfigValues>) => Promise<void>;
@@ -105,6 +108,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       ttsInstructions: effectiveTtsInstructions,
       savedVoices: config.savedVoices,
       updateConfigKey,
+      favoriteVoices: config.favoriteVoices,
+      readerTypography: config.readerTypography,
+      highlightAppearance: config.highlightAppearance,
       updateConfig,
       isLoading,
       preferencesReady: !isSessionPending && query.isSuccess,

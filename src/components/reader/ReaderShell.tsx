@@ -25,6 +25,7 @@ import type {
 import type { ReaderDocument } from '@/types/documents';
 import type { ReaderType } from '@/types/user-state';
 import { ReaderHeader } from './ReaderHeader';
+import { ReaderAppearanceProvider } from '@/contexts/ReaderAppearanceContext';
 import { ReaderError, ReaderLoader, ReaderReplanStatus } from './ReaderLoader';
 
 export type ReaderRendererProps<T extends ReaderType> = {
@@ -279,6 +280,7 @@ export function ReaderShell<T extends ReaderType>({
         aria-hidden={!rendererReady}
       >
         <Fragment key={attemptKey}>
+          <ReaderAppearanceProvider settings={payload.settings} update={bootstrap.updatePresentation}>
           {children({
             payload,
             document: sourceDocument,
@@ -289,6 +291,7 @@ export function ReaderShell<T extends ReaderType>({
             onReady: handleReady,
             onError: handleError,
           })}
+          </ReaderAppearanceProvider>
         </Fragment>
       </div>
       {!rendererReady || rendererError ? (

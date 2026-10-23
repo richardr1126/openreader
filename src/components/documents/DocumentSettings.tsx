@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { ReaderAppearanceSettings } from '@/components/settings/ReaderAppearanceSettings';
 import { useConfig, ViewType } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
@@ -242,6 +243,8 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
             variant="plain"
           />
         </Section>
+
+        <ReaderAppearanceSettings scope="book" showTypography={!isPdfMode || !readerShowsLayout} />
 
         <Section title="Playback" variant="group">
           <RangeField

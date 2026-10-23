@@ -130,6 +130,16 @@ export function useReaderBootstrap(documentId: string | undefined) {
     await settingsMutation.mutateAsync(settings);
     await query.refetch({ throwOnError: true });
   }, [query, settingsMutation]);
+  // Presentation edits update the existing ready snapshot. Bootstrapping again
+  // would needlessly resolve audio work for a color or font change.
+  const updatePresentation = async (patch: Pick<DocumentSettings, 'typography' | 'highlightAppearance'>) => {
+    const current = queryClient.getQueryData<ReaderBootstrapResult>(key);
+    if (current?.status !== 'ready') throw new Error('Reader settings are not ready.');
+    const saved = await settingsMutation.mutateAsync({ ...current.payload.settings, ...patch });
+    queryClient.setQueryData<ReaderBootstrapResult>(key, (latest) => latest?.status === 'ready'
+      ? { ...latest, payload: { ...latest.payload, settings: saved.settings } }
+      : latest);
+  };
   const restart = useCallback((input: ReaderBootstrapRestart) => {
     const operationId = input.operationId.trim();
     if (!operationId) throw new Error('Reader restart requires an operation ID.');
@@ -191,6 +201,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
     retry,
     retryDocumentSource,
     updateSettings,
+    updatePresentation,
     scheduleProgress,
     enableProgressPersistence,
     disableProgressPersistence,

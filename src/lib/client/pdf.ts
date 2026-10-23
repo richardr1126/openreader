@@ -195,8 +195,8 @@ function highlightParsedBlockGeometry(
     highlight.className = 'pdf-text-highlight-overlay';
     highlight.dataset.testid = 'pdf-sentence-highlight';
     highlight.style.position = 'absolute';
-    highlight.style.backgroundColor = 'grey';
-    highlight.style.opacity = '0.4';
+    highlight.style.backgroundColor = 'var(--reader-segment-color, grey)';
+    highlight.style.opacity = 'var(--reader-segment-opacity, 0.4)';
     highlight.style.pointerEvents = 'none';
     highlight.style.zIndex = '1';
     highlight.style.left = `${left}px`;
@@ -544,8 +544,8 @@ export function highlightPattern(
           highlight.className = 'pdf-text-highlight-overlay';
           highlight.dataset.testid = 'pdf-sentence-highlight';
           highlight.style.position = 'absolute';
-          highlight.style.backgroundColor = 'grey';
-          highlight.style.opacity = '0.4';
+          highlight.style.backgroundColor = 'var(--reader-segment-color, grey)';
+          highlight.style.opacity = 'var(--reader-segment-opacity, 0.4)';
           highlight.style.pointerEvents = 'none';
           highlight.style.zIndex = '1';
           highlight.style.left = `${rect.left - pageRect.left}px`;
@@ -668,8 +668,8 @@ export function highlightWordIndex(
         const highlight = document.createElement('div');
         highlight.className = 'pdf-word-highlight-overlay';
         highlight.style.position = 'absolute';
-        highlight.style.backgroundColor = 'var(--accent)';
-        highlight.style.opacity = '0.4';
+        highlight.style.backgroundColor = 'var(--reader-word-color, var(--accent))';
+        highlight.style.opacity = 'var(--reader-word-opacity, 0.4)';
         highlight.style.pointerEvents = 'none';
         highlight.style.left = `${rect.left - pageRect.left}px`;
         highlight.style.top = `${rect.top - pageRect.top}px`;

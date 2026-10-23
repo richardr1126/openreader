@@ -178,11 +178,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
 
                 <div>
                   {runtimeConfig.enableTtsProvidersTab && activeSection === 'api' ? <ProviderSettingsPanel active /> : null}
-                  {activeSection === 'theme' ? (
-                    <div className="rounded-lg border border-line bg-surface p-4 sm:p-5">
-                      <AppearanceSettingsPanel />
-                    </div>
-                  ) : null}
+                  {activeSection === 'theme' ? <AppearanceSettingsPanel /> : null}
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
                   {activeSection === 'storage' ? <StorageSettingsPanel /> : null}
                   {activeSection === 'about' ? <AboutSettingsPanel /> : null}

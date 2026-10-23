@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useConfig } from '@/contexts/ConfigContext';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
+import { READER_FONT_FAMILIES } from '@/lib/shared/reader-appearance';
 import type { HtmlBlock } from '@openreader/tts/html-blocks';
 import {
   clearHtmlSentenceHighlight,
@@ -207,6 +209,7 @@ export function HTMLViewer({
 
   // Rendered once per block list: highlight and word updates re-render this
   // component often and must not re-render a whole book.
+  const { typography } = useReaderAppearance();
   const renderedBlocks = useMemo(() => (
     <div key={blockListId(blocks)}>
       {blocks.map((block) => (
@@ -231,7 +234,16 @@ export function HTMLViewer({
       <div ref={scrollRef} tabIndex={0} role="region" aria-label="Document text" className="flex-1 overflow-auto" data-testid="text-reader">
         <div
           ref={contentRef}
-          className="html-container prose prose-base min-w-full px-4 py-4"
+          className="html-container prose prose-base px-4 py-4 mx-auto"
+          style={{
+            maxWidth: 'none', width: `${typography.readingWidth}%`, minWidth: 'min(100%, 20rem)',
+            fontFamily: READER_FONT_FAMILIES[typography.fontFamily] || undefined,
+            fontSize: typography.sizePercent === 100 ? undefined : `${typography.sizePercent / 100}rem`,
+            lineHeight: typography.lineMultiplier === 1.5 ? undefined : typography.lineMultiplier,
+            letterSpacing: typography.letterSpacing ? `${typography.letterSpacing}em` : undefined,
+            textAlign: typography.alignment === 'default' ? undefined : typography.alignment,
+            '--reader-paragraph-spacing': typography.paragraphSpacing === 1 ? undefined : `${typography.paragraphSpacing}em`,
+          } as React.CSSProperties}
         >
           {renderedBlocks}
         </div>

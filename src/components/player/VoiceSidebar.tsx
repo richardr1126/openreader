@@ -19,6 +19,7 @@ import {
   type VoiceSettingsDraft,
 } from '@/lib/client/tts/voice-draft';
 import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
+import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
 
 /**
  * The reader's voice panel. Voice and model-speed picks are a draft: they
@@ -28,6 +29,7 @@ import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
  */
 export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const { providerRef, providerType, ttsModel, ttsInstructions } = useConfig();
+  const favorites = useVoiceFavorites(providerRef, ttsModel);
   const {
     voice: appliedVoice,
     voiceSpeed,
@@ -209,6 +211,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         >
           {/* Remounting on open starts each visit with an empty search. */}
           <VoicePicker
+            favorites={favorites}
             key={isOpen ? 'open' : 'closed'}
             voices={availableVoices}
             value={draft.voice}
