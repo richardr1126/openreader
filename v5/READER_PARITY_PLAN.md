@@ -71,7 +71,26 @@ schema deployment before distribution; see the Swift architecture document.
 
 ## Current checkpoint
 
-The completed baseline is committed on the paired integration branches. Separate
-paired worktrees are prepared for typography and voice favorites. Their first
-deliverable is a concrete contract grounded in existing code, including any
-storage approval needed, before a feature expands its implementation scope.
+The completed baseline is committed on the paired integration branches. The
+typography and voice-favorites contracts are complete. Voice favorites is in
+implementation in its paired worktrees; typography's per-book storage and
+CloudKit additions are awaiting the owner's schema decision.
+
+The accepted favorite identity on web is the structured tuple of resolved
+provider configuration reference, model ID, and voice ID. Serialize lookup keys
+as JSON tuples so IDs containing separators cannot collide. Persist structured
+entries in the existing user preference JSON, independently of Apply/Save.
+On Swift, use the current voice-selection identity of source plus identifier;
+locale and catalog revision changes must not remove a favorite. The first
+increment uses UserDefaults, retains unavailable favorites, and changes neither
+selection nor playback when a star is toggled. CloudKit sync is pending the
+same owner decision as typography.
+
+Typography proposes seven settings: font family, size, line spacing, paragraph
+spacing, letter spacing, reading width, and alignment. Untouched settings must
+preserve current reader appearance and publisher styles; percentage controls
+must not silently replace the existing baseline widths or Dynamic Type sizing.
+Global settings use existing preference storage. The proposed Swift per-book
+storage is one optional `LibraryDocument.typographyOverrideData` field, with
+absence inheriting global preferences. New CloudKit typography fields and a
+favorites field require a separate Production deployment before distribution.
