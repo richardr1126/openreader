@@ -45,6 +45,14 @@ export const MP3_FRAME_SAMPLES = 1152;
  */
 export const MP3_FRAME_DURATION_MS = (MP3_FRAME_SAMPLES / STREAM_AUDIO_PROFILE.sampleRateHz) * 1000;
 
+/**
+ * How much later {@link transcodeToMp3}'s output starts than its input: LAME's
+ * encoder delay (576 samples) plus the MP3 decoder's (529), measured with a
+ * click. The stream has no Xing/LAME header to tell a player to trim it, so
+ * timings measured on the source audio move by this much to match playback.
+ */
+export const MP3_ENCODER_DELAY_SEC = 1105 / STREAM_AUDIO_PROFILE.sampleRateHz;
+
 // MPEG-1 tables (we only ever parse our own STREAM_AUDIO_PROFILE output).
 const MPEG1_L3_BITRATES_KBPS = [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0];
 const MPEG1_SAMPLE_RATES_HZ = [44100, 48000, 32000, 0];

@@ -9,21 +9,27 @@ s3	^j|e|rr
 s3	^k|a|la	æ
 s3	al|a|di	ə
 s3	al|i|na	ə
+s3	ch|a|n$	ə
 s3	gg|i|ns	ə
 s3	ha|l|la	l
 s3	in|a|r$	ɑ
 s3	je|r|ry	ɛ
 s3	ll|a|n$	ə
 s4	^|b|j	bi
+s4	^|c|h	
 s4	^|g|a	ɡ
 s4	^|s|h	
 s4	a|g|g	
+s4	a|i|a	I
 s4	b|a|g	æ
+s4	b|e|j	ᵻ
+s4	c|h|a	ʧ
 s4	d|a|l	ᵊ
 s4	d|o|$	O
 s4	g|g|i	ɡ
 s4	h|a|l	æ
 s4	i|s|s	
+s4	j|a|i	A
 s4	j|a|n	æ
 s4	k|a|t	æ
 s4	l|e|n	l
@@ -31,6 +37,7 @@ s4	m|i|o	i
 s4	n|s|$	z
 s4	s|h|a	ʃ
 s4	z|e|l	ᵊ
+s5	|a|	ə
 s5	|b|	b
 s5	|c|	k
 s5	|d|	d
@@ -47,6 +54,7 @@ s5	|p|	p
 s5	|r|	ɹ
 s5	|s|	s
 s5	|t|	t
+s5	|v|	v
 s5	|x|	ks
 s5	|y|	i
 s5	|z|	z
@@ -54,10 +62,13 @@ t1	j|2	12
 t1	y|2	10
 t2	do|1	1
 t2	lk|1	1
+t2	va|1	1
+t3	aia|2	10
 t3	alf|1	1
 t3	iss|2	01
 t3	jan|1	1
 t4	adin|2	10
+t4	chan|1	1
 t4	erry|2	10
 t4	gins|1	1
 t4	inar|2	12

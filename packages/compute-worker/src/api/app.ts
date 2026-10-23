@@ -142,7 +142,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     requireEnv('TTS_PLAYBACK_TOKEN_SECRET');
   }
   // The model loads on the first local Kokoro request, not here.
-  registerLocalTtsSynthesizer((request, signal) => synthesizeKokoro(request, signal));
+  registerLocalTtsSynthesizer(async (request, signal) => (await synthesizeKokoro(request, signal)).wav);
   const natsUrl = requireEnv('NATS_URL');
   const timeoutConfig = getComputeTimeoutConfig();
 

@@ -28,7 +28,12 @@ vi.mock('onnxruntime-node', () => {
           speed: (feeds.speed!.data as Float32Array)[0]!,
         });
         await fake.onRun?.();
-        return { waveform: { data: new Float32Array(100).fill(0.5) } };
+        // Two frames for every token, and the audio those frames make.
+        const tokens = (feeds.input_ids!.data as BigInt64Array).length;
+        return {
+          waveform: { data: new Float32Array(tokens * 2 * 600).fill(0.5) },
+          duration: { data: new BigInt64Array(tokens).fill(BigInt(2)) },
+        };
       } finally {
         fake.active -= 1;
       }
@@ -54,13 +59,20 @@ const fixtureDir = path.resolve(process.cwd(), 'packages/compute-worker/tests/fi
 fake.modelDir = mkdtempSync(path.join(tmpdir(), 'openreader-kokoro-engine-'));
 mkdirSync(path.join(fake.modelDir, 'misaki'));
 mkdirSync(path.join(fake.modelDir, 'voices'));
+mkdirSync(path.join(fake.modelDir, 'g2p'));
+writeFileSync(path.join(fake.modelDir, 'g2p', 'hi.tsv'), [
+  'maxw\t1', 'scalars\t1', 'vowels\ta ə',
+  'w\tनमस्ते\tnəmˈʌsteː', 'w\tदुनिया\tdˈʊnɪjˌaː', 'n\t123\tˈeːksˈɔː tˈeːis',
+].join('\n'));
 for (const name of ['us_gold.json', 'us_silver.json']) {
   copyFileSync(path.join(fixtureDir, name), path.join(fake.modelDir, 'misaki', name));
 }
+copyFileSync(path.join(fixtureDir, 'letter_to_sound.tsv'), path.join(fake.modelDir, 'g2p', 'en-us.tsv'));
 // Every value in row r is r, so a run's style vector names the row it used.
 const pack = new Float32Array(510 * STYLE_DIM);
 for (let row = 0; row < 510; row += 1) pack.fill(row, row * STYLE_DIM, (row + 1) * STYLE_DIM);
 writeFileSync(path.join(fake.modelDir, 'voices', 'af_heart.bin'), Buffer.from(pack.buffer));
+writeFileSync(path.join(fake.modelDir, 'voices', 'hf_alpha.bin'), Buffer.from(pack.buffer));
 
 afterAll(() => rmSync(fake.modelDir, { recursive: true, force: true }));
 
@@ -74,8 +86,16 @@ beforeEach(() => {
 const longText = Array.from({ length: 40 }, () => 'The cat sat on the mat.').join(' ');
 
 describe('local Kokoro synthesis', () => {
+  test('uses Hindi data and preserves native words in the model timings', async () => {
+    const { words, wav } = await synthesizeKokoro({ text: 'नमस्ते दुनिया १२३।', voice: 'hf_alpha', speed: 1 });
+    expect(words.map((word) => word.word)).toEqual(['नमस्ते', 'दुनिया', '१२३।']);
+    expect(words.every((word) => word.end > word.start)).toBe(true);
+    expect(words.at(-1)!.end).toBeLessThanOrEqual((wav.length - 44) / 2 / 24000);
+    const { ensureKokoroAssets } = await import('../../src/inference/kokoro/model-files');
+    expect(ensureKokoroAssets).toHaveBeenCalledWith(undefined, { voices: ['hf_alpha'], language: 'hi' });
+  });
   test('runs the model once per chunk with the voice row for its length and returns WAV', async () => {
-    const wav = await synthesizeKokoro({ text: 'The cat sat on the mat.', voice: 'af_heart', speed: 1.25 });
+    const { wav } = await synthesizeKokoro({ text: 'The cat sat on the mat.', voice: 'af_heart', speed: 1.25 });
 
     expect(fake.runs).toHaveLength(1);
     const [run] = fake.runs;
@@ -87,15 +107,40 @@ describe('local Kokoro synthesis', () => {
     expect(run!.speed).toBe(1.25);
 
     expect(wav.toString('ascii', 0, 4)).toBe('RIFF');
-    expect(wav.readUInt32LE(40)).toBe(100 * 2);
+    expect(wav.readUInt32LE(40)).toBe(run!.ids.length * 2 * 600 * 2);
+  });
+
+  test('times each word from the frames of its own phonemes', async () => {
+    const { words } = await synthesizeKokoro({ text: 'The cat sat on the mat.', voice: 'af_heart', speed: 1 });
+
+    const frame = 600 / 24_000;
+    const [run] = fake.runs;
+    const phonemeCount = run!.ids.length - 2;
+    expect(words.map((word) => word.word)).toEqual(['The', 'cat', 'sat', 'on', 'the', 'mat.']);
+    // The leading pad token's two frames come before the first phoneme.
+    expect(words[0]!.start).toBeCloseTo(2 * frame);
+    // "mat." ends where its full stop, the last phoneme, begins.
+    expect(words.at(-1)!.end).toBeCloseTo(2 * phonemeCount * frame);
+    for (const [index, word] of words.entries()) {
+      expect(word.end).toBeGreaterThan(word.start);
+      // The space between two words belongs to neither.
+      if (index > 0) expect(word.start).toBeCloseTo(words[index - 1]!.end + 2 * frame);
+    }
   });
 
   test('splits long text into several runs, concatenated in order', async () => {
-    const wav = await synthesizeKokoro({ text: longText, voice: 'af_heart', speed: 1 });
+    const { wav, words } = await synthesizeKokoro({ text: longText, voice: 'af_heart', speed: 1 });
 
     expect(fake.runs.length).toBeGreaterThan(1);
     for (const run of fake.runs) expect(run.ids.length - 2).toBeLessThanOrEqual(510);
-    expect(wav.readUInt32LE(40)).toBe(fake.runs.length * 100 * 2);
+    const samples = fake.runs.reduce((sum, run) => sum + run.ids.length * 2 * 600, 0);
+    expect(wav.readUInt32LE(40)).toBe(samples * 2);
+    // Every word is timed, and a later run's words start after an earlier run's audio.
+    expect(words).toHaveLength(40 * 6);
+    for (let index = 1; index < words.length; index += 1) {
+      expect(words[index]!.start).toBeGreaterThan(words[index - 1]!.end);
+    }
+    expect(words.at(-1)!.end).toBeLessThan(samples / 24_000);
   });
 
   test('stops at the next chunk once cancelled', async () => {
@@ -123,9 +168,10 @@ describe('local Kokoro synthesis', () => {
   });
 
   test('turns text with nothing to say into a short valid clip without running the model', async () => {
-    const wav = await synthesizeKokoro({ text: '   ', voice: 'af_heart', speed: 1 });
+    const { wav, words } = await synthesizeKokoro({ text: '   ', voice: 'af_heart', speed: 1 });
 
     expect(fake.runs).toHaveLength(0);
     expect(wav.readUInt32LE(40)).toBe(2_400 * 2);
+    expect(words).toEqual([]);
   });
 });

@@ -225,7 +225,7 @@ describe('compute worker API routes', () => {
       operation: { opId: response.json().opId, subject: { kind: 'model_download' } },
     });
     expect(status.json().components.map((component: { name: string }) => component.name))
-      .toEqual(['Model weights', 'Voice pack', 'English pronunciation data']);
+      .toEqual(['Model weights', 'Voice pack', 'Pronunciation data']);
 
     const unknown = await runtime.app.inject({ method: 'GET', url: '/v1/models/other', headers: AUTH });
     expect(unknown.statusCode).toBe(400);

@@ -47,8 +47,13 @@
     "I saw Frodo today.",
     "Gandalf met Hermione and Katniss.",
     "Shallan, Dalinar and Kaladin arrived.",
-    "Mr. Baggins paid £3 on Jan. 5, 1984."
+    "Mr. Baggins paid £3 on Jan. 5, 1984.",
+    "I should've known.",
+    "That'll do.",
+    "What're you doing?",
+    "the prison in Béjaïa",
+    "the Großer park"
   ],
-  "gb": ["hello"],
-  "lts": ["frodo", "gandalf", "hermione", "katniss", "shallan", "dalinar", "bkzt", "zzz", "brrr", "hmm", "pbk", "xkcd", "bj", "zelenskyy", "mxyzptlk"]
+  "gb": ["hello", "That'll do.", "Tom met Rhodri."],
+  "lts": ["frodo", "gandalf", "hermione", "katniss", "shallan", "dalinar", "bkzt", "zzz", "brrr", "hmm", "pbk", "xkcd", "bj", "zelenskyy", "mxyzptlk", "chan", "va"]
 }

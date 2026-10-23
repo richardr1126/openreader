@@ -1,3 +1,4 @@
+import { MP3_ENCODER_DELAY_SEC, normalizeToMp3 } from '@openreader/tts/audio-format';
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import {
   buildTtsPlaybackAudioContentHash,
@@ -8,8 +9,9 @@ import {
   probeAudioDurationMsFromBuffer,
 } from '@openreader/tts/segments';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from '@openreader/tts/upstream-response';
-import { prepareKokoro } from '../../inference/kokoro/engine';
+import { prepareKokoro, synthesizeKokoro } from '../../inference/kokoro/engine';
 import { runWhisperAlignmentFromAudioBuffer } from '../../inference/runtime';
+import { mapWordsToSentenceOffsets } from '../../inference/whisper/timestamps';
 import { withTimeout } from '../../infrastructure/config';
 import type { TtsPlaybackStorage } from '../../playback/storage';
 import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
@@ -243,7 +245,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     // reporting progress, rather than inside a segment's synthesis timeout.
     // The shared download keeps going if this run is cancelled.
     try {
-      await abortable(prepareKokoro(input.onModelDownloadProgress), input.signal);
+      await abortable(prepareKokoro(input.onModelDownloadProgress, effectiveSettings.voice), input.signal);
     } catch (error) {
       if (input.signal?.aborted) return;
       throw error;
@@ -278,6 +280,54 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     await input.onAlignmentFailed?.().catch(() => undefined);
     return null;
   });
+
+  type SegmentAlignment = NonNullable<Awaited<ReturnType<typeof computeAlignment>>>;
+  /**
+   * Local Kokoro reports each word's timing from its own durations, so its
+   * segments arrive aligned; every other provider's audio is aligned by
+   * Whisper afterwards, in the ordered lane below.
+   */
+  const synthesize = async (
+    segment: (typeof normalized)[number],
+    signal: AbortSignal,
+  ): Promise<{ audioBuffer: Buffer; alignment: SegmentAlignment | null }> => {
+    if (requestCreds.providerType === 'kokoro-local') {
+      const startedAt = Date.now();
+      const { wav, words } = await synthesizeKokoro({
+        text: segment.text,
+        voice: effectiveSettings.voice,
+        speed: effectiveSettings.nativeSpeed,
+      }, signal, input.onModelDownloadProgress);
+      const audioBuffer = await normalizeToMp3(wav, signal, {
+        provider: requestCreds.providerType,
+        model: effectiveSettings.ttsModel,
+        textLength: segment.text.length,
+        providerMs: Date.now() - startedAt,
+      });
+      const heard = words.map((word) => ({
+        word: word.word,
+        start: word.start + MP3_ENCODER_DELAY_SEC,
+        end: word.end + MP3_ENCODER_DELAY_SEC,
+      }));
+      const alignment = heard.length > 0
+        ? { ...mapWordsToSentenceOffsets(segment.text, heard), sentenceIndex: segment.original.ordinal }
+        : null;
+      return { audioBuffer, alignment };
+    }
+    const audioBuffer = await generateTTSBuffer({
+      text: segment.text,
+      voice: effectiveSettings.voice,
+      speed: effectiveSettings.nativeSpeed,
+      format: 'mp3',
+      model: effectiveSettings.ttsModel,
+      instructions: effectiveSettings.ttsInstructions,
+      language: effectiveSettings.language,
+      provider: requestCreds.providerType,
+      apiKey: requestCreds.apiKey,
+      baseUrl: requestCreds.baseUrl ?? undefined,
+    }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs });
+    return { audioBuffer, alignment: null };
+  };
 
   type PendingAlignment = {
     segment: (typeof normalized)[number];
@@ -552,24 +602,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
             })
             : async () => undefined;
           let audioBuffer: Buffer;
+          let alignment: SegmentAlignment | null = null;
           try {
-            audioBuffer = await withAbortableTimeout(
-              (signal) => generateTTSBuffer({
-                text: segment.text,
-                voice: effectiveSettings.voice,
-                speed: effectiveSettings.nativeSpeed,
-                format: 'mp3',
-                model: effectiveSettings.ttsModel,
-                instructions: effectiveSettings.ttsInstructions,
-                language: effectiveSettings.language,
-                provider: requestCreds.providerType,
-                apiKey: requestCreds.apiKey,
-                baseUrl: requestCreds.baseUrl ?? undefined,
-              }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs }),
+            ({ audioBuffer, alignment } = await withAbortableTimeout(
+              (signal) => synthesize(segment, signal),
               input.synthesisTimeoutMs,
               'tts playback segment synthesis',
               input.signal ? AbortSignal.any([input.signal, slotLost.signal]) : slotLost.signal,
-            );
+            ));
           } finally {
             await releaseProvider().catch(() => undefined);
           }
@@ -590,11 +630,12 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           await persistSegmentMetadata(segment, 'completed', {
             audioKey,
             durationMs,
-            alignment: null,
+            alignment,
             updatedAt: Date.now(),
           }).catch(() => undefined);
           leaseSettled = true;
-          completedAlignment = {
+          // Audio that came with its timings needs no Whisper pass.
+          completedAlignment = alignment ? null : {
             segment,
             audio: audioBuffer,
             audioKey,

@@ -37,8 +37,8 @@ OpenReader is a [pnpm](https://pnpm.io/) workspace written in TypeScript. The ar
 - **Server**: [Fastify](https://fastify.dev/) 5 with an OpenAPI contract; the app's client is generated from it
 - **Jobs**: [NATS](https://nats.io/) JetStream work queues and key-value state
 - **Inference**: `onnxruntime-node` with `@huggingface/tokenizers`
-  - Speech: [Kokoro-82M](https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX), with a port of [Misaki](https://github.com/hexgrad/misaki) and [compromise](https://github.com/spencermountain/compromise) for pronunciation
-  - Word timing: timestamped [Whisper base](https://huggingface.co/onnx-community/whisper-base_timestamped) and [Whisper tiny.en](https://huggingface.co/onnx-community/whisper-tiny.en_timestamped)
+  - Speech: [Kokoro-82M](https://huggingface.co/richardr1126/Kokoro-82M-OpenReader), exported with its per-phoneme durations so local Kokoro times its own words, with a port of [Misaki](https://github.com/hexgrad/misaki) and [compromise](https://github.com/spencermountain/compromise) for English pronunciation, and tables learned from Kokoro's own readings of [Tatoeba](https://tatoeba.org) sentences for Spanish, Hindi, Italian and Brazilian Portuguese. Voice packs and pronunciation data download when their language is first used.
+  - Word timing for other providers: timestamped [Whisper base](https://huggingface.co/onnx-community/whisper-base_timestamped) and [Whisper tiny.en](https://huggingface.co/onnx-community/whisper-tiny.en_timestamped)
   - PDF layout: [PP-DocLayoutV3](https://huggingface.co/Bei0001/PP-DocLayoutV3-ONNX)
 - **Documents**: `pdfjs-dist` and `@napi-rs/canvas` to render pages, `fast-xml-parser` and `jszip` for EPUB, headless [LibreOffice](https://www.libreoffice.org/) for DOCX
 - **Audio**: [FFmpeg](https://ffmpeg.org/), a pinned LGPL build in published images and the desktop app (`packaging/ffmpeg`)

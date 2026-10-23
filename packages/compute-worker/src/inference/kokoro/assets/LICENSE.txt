@@ -7,8 +7,12 @@ size and SHA-256 before loading it.
 
 Kokoro-82M model weights and voice packs
   Upstream:  https://huggingface.co/hexgrad/Kokoro-82M (Apache-2.0)
-  ONNX export: https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX
-             commit 1939ad2a8e416c0acfeecc08a694d14ef25f2231 (Apache-2.0)
+  ONNX export: https://huggingface.co/richardr1126/Kokoro-82M-OpenReader
+             commit 72e618ac6494b23866bdf9574a3ca6070063f51c, onnx/ (Apache-2.0)
+             The model is exported from the upstream checkpoint with its
+             per-token durations as a second output (packaging/kokoro-onnx);
+             the voice packs are onnx-community's (Kokoro-82M-v1.0-ONNX,
+             commit 1939ad2a8e416c0acfeecc08a694d14ef25f2231), unchanged.
   Copyright hexgrad. Licensed under the Apache License, Version 2.0 (below).
 
 Misaki grapheme-to-phoneme frontend and dictionaries
@@ -22,15 +26,26 @@ Misaki grapheme-to-phoneme frontend and dictionaries
   The us/gb gold and silver dictionaries are downloaded unmodified from
   upstream Misaki.
 
-Letter-to-sound rules (letter_to_sound.tsv, bundled here) and their TypeScript reader
-  From the OpenReader iOS app (MIT, notice below). The rules are induced from
-  the Apache-2.0 Misaki dictionaries above. Nothing in them, or in any code
+English letter-to-sound rules (g2p/en-us.tsv and g2p/en-gb.tsv) and their
+TypeScript reader
+  From the OpenReader iOS app (MIT, notice below), downloaded from the shared
+  model repository above. The rules are induced from the Apache-2.0 Misaki
+  dictionaries above, one table per dialect. Nothing in them, or in any code
   here, derives from espeak or espeak-ng; no GPL phonemizer is linked,
   bundled, depended on, or transcribed.
 
 compromise (npm, part-of-speech tags for the Misaki port)
   https://github.com/spencermountain/compromise, MIT. Its licence ships with
   the other npm licences in /licenses.
+
+Learned pronunciation tables (Spanish, Hindi, Italian, Brazilian Portuguese)
+  Text source: Tatoeba Project and its contributors, https://tatoeba.org
+  Licence: CC BY 2.0 FR, https://creativecommons.org/licenses/by/2.0/fr/
+  Learned offline from Kokoro's reference readings of Tatoeba sentences by
+  OpenReader's tools/learned-g2p. Downloaded from the shared model repository's
+  g2p/ directory; these tables contain no espeak code or dictionary files.
+  Source exports, held-out evaluation and modifications are recorded in
+  PROVENANCE.md and the model repository's g2p/README.md.
 
 -------------------------------------------------------------------------------
 OpenReader iOS (letter-to-sound rules and reader)

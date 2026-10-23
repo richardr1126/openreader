@@ -487,7 +487,29 @@ export class Lexicon {
     if (ed[0] !== null) return ed;
     const ing = this.stemING(lookupWord, tag, stress ?? 0.5, ctx);
     if (ing[0] !== null) return ing;
-    return NONE;
+    return this.stemContraction(lookupWord, tag, stress, ctx);
+  }
+
+  /**
+   * A known word with a contracted auxiliary: "should've", "that'll",
+   * "what're". spaCy splits the ending off upstream; here the subtoken rules
+   * would break "should've" into "should'v" and the letter E. The endings
+   * read as upstream reads them: American "'ll" and "'d" from the dictionary,
+   * the rest through espeak, which stresses the word "'ve" and "'re" attach
+   * to as the dictionary's own "could've" does.
+   */
+  private stemContraction(word: string, tag: string | null, stress: number | null, ctx: TokenContext): LexiconResult {
+    const match = /^(.+)'(ve|ll|re|d)$/i.exec(word);
+    if (match === null) return NONE;
+    const ending = match[2]!.toLowerCase();
+    const [stemPhonemes, rating] = this.getWord(match[1]!, tag, stress, ctx);
+    if (stemPhonemes === null) return NONE;
+    if (ending === 'd') return [`${stemPhonemes}d`, rating];
+    if (ending === 'll') return [stemPhonemes + (this.british ? 'ᵊl' : 'əl'), rating];
+    const stressed = stemPhonemes.includes(PRIMARY_STRESS)
+      ? stemPhonemes
+      : stemPhonemes.replace(SECONDARY_STRESS, PRIMARY_STRESS);
+    return [stressed + (ending === 've' ? 'əv' : this.british ? 'ə' : 'əɹ'), rating];
   }
 
   static isCurrency(word: string): boolean {
@@ -677,7 +699,7 @@ export class Lexicon {
     // Before guessing from spelling, try the lexicon without diacritics:
     // "café" is absent and "cafe" present. Only after a straight lookup
     // failed, so nothing that already resolved can change.
-    const folded = word.normalize('NFD').replace(/\p{Mn}+/gu, '').normalize('NFC');
+    const folded = foldToAscii(word);
     if (folded !== word) {
       const [foldedPhonemes, foldedRating] = this.getWord(folded, token.tag, stress, ctx);
       if (foldedPhonemes !== null) {
@@ -686,17 +708,18 @@ export class Lexicon {
     }
 
     // Neither dictionary holds it. Guess from the spelling (where upstream
-    // calls espeak) rather than let the word vanish. A possessive on an
-    // unknown name keeps its ending through the known-word suffix rule.
-    let base = word;
+    // calls espeak) rather than let the word vanish, folded the same way so
+    // "Béjaïa" and "Großer" get a reading too. A possessive on an unknown name
+    // keeps its ending through the known-word suffix rule.
+    let base = folded;
     let reattach: ((stem: string) => string | null) | null = null;
-    const lowered = word.toLowerCase();
-    const length = chars(word).length;
+    const lowered = folded.toLowerCase();
+    const length = chars(folded).length;
     if (length > 2 && (lowered.endsWith("'s") || lowered.endsWith('’s'))) {
-      base = dropLast(word, 2);
+      base = dropLast(folded, 2);
       reattach = (stem) => this.pluralSuffix(stem);
     } else if (length > 1 && (lowered.endsWith("'") || lowered.endsWith('’'))) {
-      base = dropLast(word);
+      base = dropLast(folded);
     }
     const guessed = this.letterToSound?.guess(base) ?? null;
     const withEnding = guessed === null ? null : (reattach ? reattach(guessed) : guessed);
@@ -705,6 +728,21 @@ export class Lexicon {
     }
     return NONE;
   }
+}
+
+/**
+ * The spelling without diacritics, and with the few Latin letters that have
+ * none to remove spelled out ("ß" is "ss"), so a lookup or a guess has an
+ * English spelling to work from.
+ */
+const UNDECOMPOSED: Record<string, string> = { ß: 'ss', æ: 'ae', Æ: 'Ae', œ: 'oe', Œ: 'Oe', ø: 'o', Ø: 'O', ł: 'l', Ł: 'L' };
+
+function foldToAscii(word: string): string {
+  return word
+    .normalize('NFD')
+    .replace(/\p{Mn}+/gu, '')
+    .replace(/[ßæÆœŒøØłŁ]/gu, (letter) => UNDECOMPOSED[letter]!)
+    .normalize('NFC');
 }
 
 function parseIntOrZero(text: string): bigint {

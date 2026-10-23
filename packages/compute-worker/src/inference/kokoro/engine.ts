@@ -1,9 +1,11 @@
 /**
  * Kokoro-82M on onnxruntime-node, in the worker process.
  *
- * Text goes through the Misaki port (no espeak, no GPL phonemizer), is split
+ * Text goes through the Misaki port for English and the learned tables for
+ * Spanish, Hindi, Italian and Portuguese (no espeak, no GPL phonemizer), is split
  * into model-sized chunks exactly as Kokoro's own `KPipeline` splits it, and
- * each chunk is one ONNX run. Runs are serialized through one queue: the
+ * each chunk is one ONNX run. The model returns each phoneme's frame count
+ * beside the audio, which gives the word timings without a second model. Runs are serialized through one queue: the
  * model already uses every thread the worker gives ONNX, so running two at
  * once only makes both slower. onnxruntime cannot interrupt a run in
  * progress, so cancellation is checked before every chunk; a superseded
@@ -16,16 +18,20 @@ import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import type { ModelDownloadProgressHandler } from '../model-download';
 import {
   ensureKokoroAssets,
-  KOKORO_LETTER_TO_SOUND_PATH,
   KOKORO_MODEL_FILE,
   KOKORO_SAMPLE_RATE,
   KOKORO_VOICE_SHA256,
   kokoroAssetPath,
+  kokoroG2PTableFile,
   removeKokoroAssetFiles,
+  type KokoroAssetSelection,
+  type KokoroLanguage,
 } from './model-files';
 import { G2P } from './misaki/g2p';
+import { LearnedG2P } from './misaki/learned-g2p';
 import { LetterToSound } from './misaki/letter-to-sound';
 import { Lexicon } from './misaki/lexicon';
+import type { LearnedLanguage } from './misaki/romance-numbers';
 import type { MToken } from './misaki/token';
 
 /** Kokoro's phoneme vocabulary (hexgrad/Kokoro-82M config.json). */
@@ -54,6 +60,8 @@ const length = (text: string) => Array.from(text).length;
 export interface PhonemeChunk {
   text: string;
   phonemes: string;
+  /** The tokens `phonemes` was built from, in order. */
+  tokens: MToken[];
 }
 
 function tokensToPhonemes(tokens: MToken[]): string {
@@ -95,7 +103,7 @@ export function chunkTokens(tokens: MToken[]): PhonemeChunk[] {
       const split = waterfallLast(pending, nextCount);
       const head = pending.slice(0, split);
       const phonemes = tokensToPhonemes(head);
-      if (phonemes) chunks.push({ text: tokensToText(head), phonemes });
+      if (phonemes) chunks.push({ text: tokensToText(head), phonemes, tokens: head });
       pending = pending.slice(split);
       count = length(tokensToPhonemes(pending));
       if (pending.length === 0) next = next.trimStart();
@@ -104,20 +112,134 @@ export function chunkTokens(tokens: MToken[]): PhonemeChunk[] {
     count += length(next);
   }
   const phonemes = tokensToPhonemes(pending);
-  if (phonemes) chunks.push({ text: tokensToText(pending), phonemes });
+  if (phonemes) chunks.push({ text: tokensToText(pending), phonemes, tokens: pending });
   return chunks;
 }
 
-export function encodePhonemes(phonemes: string): BigInt64Array {
-  const ids = Array.from(phonemes)
-    .slice(0, KOKORO_MAX_PHONEMES)
-    .map((phoneme) => VOCAB[phoneme])
-    .filter((id): id is number => id !== undefined);
+/**
+ * Model ids between the two pad tokens, and for each id the index of the
+ * phoneme it came from. Phonemes outside the vocabulary are dropped, so the
+ * two positions differ after the first one.
+ */
+function encodeWithOffsets(phonemes: string): { ids: BigInt64Array; offsets: number[] } {
+  const offsets: number[] = [];
+  const ids: number[] = [];
+  Array.from(phonemes).slice(0, KOKORO_MAX_PHONEMES).forEach((phoneme, offset) => {
+    const id = VOCAB[phoneme];
+    if (id === undefined) return;
+    ids.push(id);
+    offsets.push(offset);
+  });
   const encoded = new BigInt64Array(ids.length + 2);
   ids.forEach((id, index) => {
     encoded[index + 1] = BigInt(id);
   });
-  return encoded;
+  return { ids: encoded, offsets };
+}
+
+export function encodePhonemes(phonemes: string): BigInt64Array {
+  return encodeWithOffsets(phonemes).ids;
+}
+
+/** At 24 kHz, one duration frame is this many samples of audio. */
+const SAMPLES_PER_FRAME = 600;
+const SPEAKABLE = /[\p{L}\p{N}]/u;
+
+/** A word of the input text and when it is spoken, in seconds. */
+export interface KokoroWordTiming {
+  word: string;
+  start: number;
+  end: number;
+}
+
+type TokenSpan = { startSample: number; endSample: number };
+
+/**
+ * Where each speakable token of `chunk` falls in its run's audio, from the
+ * model's own per-token frame counts. The vocoder renders exactly those
+ * frames, so these are the timings of the audio, not an estimate.
+ *
+ * `durations[0]` is the leading pad token, which has frames of its own; it is
+ * accumulated before the first phoneme rather than dropped, or every word
+ * would be early. Each token owns the phonemes `tokensToPhonemes` wrote for
+ * it, located by offset because out-of-vocabulary phonemes have no id.
+ */
+function tokenSpans(
+  chunk: PhonemeChunk,
+  offsets: number[],
+  durations: BigInt64Array,
+  baseSample: number,
+  spans: Map<MToken, TokenSpan>,
+): void {
+  // Each phoneme's start frame and frame count, by its offset in `phonemes`.
+  const frames = new Map<number, [start: number, count: number]>();
+  let frame = Number(durations[0] ?? 0);
+  offsets.forEach((offset, index) => {
+    const count = Number(durations[index + 1] ?? 0);
+    frames.set(offset, [frame, count]);
+    frame += count;
+  });
+
+  // Rebuild `tokensToPhonemes`'s output, remembering each token's range;
+  // its trim moves every range back by the whitespace it removed in front.
+  const ranges: Array<[MToken, number, number]> = [];
+  let joined = '';
+  for (const token of chunk.tokens) {
+    const from = length(joined);
+    joined += token.phonemes ?? '';
+    ranges.push([token, from, length(joined)]);
+    if (token.whitespace) joined += ' ';
+  }
+  const leading = length(joined) - length(joined.trimStart());
+
+  for (const [token, from, to] of ranges) {
+    if (!SPEAKABLE.test(token.text)) continue;
+    let first: number | null = null;
+    let last = 0;
+    for (let offset = from - leading; offset < to - leading; offset += 1) {
+      const timed = frames.get(offset);
+      if (!timed) continue;
+      first ??= timed[0];
+      last = timed[0] + timed[1];
+    }
+    if (first === null) continue;
+    spans.set(token, {
+      startSample: baseSample + first * SAMPLES_PER_FRAME,
+      endSample: baseSample + last * SAMPLES_PER_FRAME,
+    });
+  }
+}
+
+/**
+ * Joins tokens back into the text's own words: everything up to a token
+ * followed by whitespace, so "well-known" and "Richard's," are one word. A
+ * word runs from its first spoken phoneme to its last; punctuation is not
+ * part of it, and a word with no spoken phoneme has no timing.
+ */
+function wordTimings(tokens: MToken[], spans: Map<MToken, TokenSpan>): KokoroWordTiming[] {
+  const words: KokoroWordTiming[] = [];
+  let text = '';
+  let span: TokenSpan | null = null;
+  tokens.forEach((token, index) => {
+    text += token.text;
+    const own = spans.get(token);
+    if (own) {
+      span = span
+        ? { startSample: span.startSample, endSample: Math.max(span.endSample, own.endSample) }
+        : { ...own };
+    }
+    if (!token.whitespace && index < tokens.length - 1) return;
+    if (span) {
+      words.push({
+        word: text,
+        start: span.startSample / KOKORO_SAMPLE_RATE,
+        end: span.endSample / KOKORO_SAMPLE_RATE,
+      });
+    }
+    text = '';
+    span = null;
+  });
+  return words;
 }
 
 export interface VoiceWeight {
@@ -135,7 +257,7 @@ export function parseVoiceBlend(spec: string): VoiceWeight[] {
     const match = /^([a-z]{2}_[a-z0-9]+)(?:\(\s*([0-9]*\.?[0-9]+)\s*\))?$/i.exec(part);
     if (!match) throw new Error(`Local Kokoro cannot read the voice "${part}"`);
     const voice = match[1]!.toLowerCase();
-    if (!Object.hasOwn(KOKORO_VOICE_SHA256, voice)) throw new Error(`Local Kokoro has no English voice "${voice}"`);
+    if (!Object.hasOwn(KOKORO_VOICE_SHA256, voice)) throw new Error(`Local Kokoro has no voice "${voice}"`);
     return { voice, weight: match[2] === undefined ? 1 : Number(match[2]) };
   });
   if (voices.length === 0) throw new Error('Local Kokoro needs a voice');
@@ -175,9 +297,23 @@ export function encodeWav(samples: Float32Array, sampleRate = KOKORO_SAMPLE_RATE
   return wav;
 }
 
+
+/** Kokoro names a voice for its language: `af_heart` is American, `ef_dora` Spanish. */
+const VOICE_LANGUAGES: Record<string, KokoroLanguage> = { a: 'us', b: 'gb', e: 'es', h: 'hi', i: 'it', p: 'pt-br' };
+
+function kokoroVoiceLanguage(voice: string): KokoroLanguage {
+  const language = VOICE_LANGUAGES[voice[0]!];
+  if (!language) throw new Error(`Local Kokoro has no voice "${voice}"`);
+  return language;
+}
+
+interface Phonemizer {
+  phonemize(text: string): { tokens: MToken[] };
+}
+
 interface KokoroRuntime {
   session: ort.InferenceSession;
-  g2p(british: boolean): Promise<G2P>;
+  g2p(language: KokoroLanguage): Promise<Phonemizer>;
   voice(name: string): Promise<Float32Array>;
 }
 
@@ -193,28 +329,37 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
     executionMode: 'sequential',
   });
 
-  let letterToSound: Promise<LetterToSound> | null = null;
-  const dialects = new Map<boolean, Promise<G2P>>();
+  const languages = new Map<KokoroLanguage, Promise<Phonemizer>>();
   const voices = new Map<string, Promise<Float32Array>>();
+
+  const english = async (dialect: 'us' | 'gb'): Promise<Phonemizer> => {
+    const british = dialect === 'gb';
+    const [gold, silver, rules] = await Promise.all([
+      readFile(at(`misaki/${dialect}_gold.json`), 'utf8'),
+      readFile(at(`misaki/${dialect}_silver.json`), 'utf8'),
+      readFile(at(kokoroG2PTableFile(dialect)), 'utf8'),
+    ]);
+    return new G2P({
+      lexicon: new Lexicon({
+        british,
+        data: { gold: JSON.parse(gold), silver: JSON.parse(silver) },
+        letterToSound: new LetterToSound(rules),
+      }),
+      // Kokoro's own pipeline drops unknown words rather than reading a marker.
+      unk: '',
+    });
+  };
+  const learned = async (language: LearnedLanguage): Promise<Phonemizer> =>
+    new LearnedG2P(language, await readFile(at(kokoroG2PTableFile(language)), 'utf8'));
 
   return {
     session,
-    g2p(british) {
-      let pending = dialects.get(british);
+    g2p(language) {
+      let pending = languages.get(language);
       if (!pending) {
-        letterToSound ??= readFile(KOKORO_LETTER_TO_SOUND_PATH, 'utf8').then((tsv) => new LetterToSound(tsv));
-        const dialect = british ? 'gb' : 'us';
-        pending = Promise.all([
-          readFile(at(`misaki/${dialect}_gold.json`), 'utf8'),
-          readFile(at(`misaki/${dialect}_silver.json`), 'utf8'),
-          letterToSound,
-        ]).then(([gold, silver, lts]) => new G2P({
-          lexicon: new Lexicon({ british, data: { gold: JSON.parse(gold), silver: JSON.parse(silver) }, letterToSound: lts }),
-          // Kokoro's own pipeline drops unknown words rather than reading a marker.
-          unk: '',
-        }));
-        pending.catch(() => dialects.delete(british));
-        dialects.set(british, pending);
+        pending = language === 'us' || language === 'gb' ? english(language) : learned(language);
+        pending.catch(() => languages.delete(language));
+        languages.set(language, pending);
       }
       return pending;
     },
@@ -233,8 +378,11 @@ async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
   };
 }
 
-async function getRuntime(onModelDownloadProgress?: ModelDownloadProgressHandler): Promise<KokoroRuntime> {
-  await ensureKokoroAssets(onModelDownloadProgress);
+async function getRuntime(
+  onModelDownloadProgress?: ModelDownloadProgressHandler,
+  selection?: KokoroAssetSelection,
+): Promise<KokoroRuntime> {
+  await ensureKokoroAssets(onModelDownloadProgress, selection);
   runtime ??= loadRuntime().catch((error: unknown) => {
     runtime = null;
     throw error;
@@ -243,8 +391,12 @@ async function getRuntime(onModelDownloadProgress?: ModelDownloadProgressHandler
 }
 
 /** Downloads and loads the model ahead of the first segment. */
-export async function prepareKokoro(onModelDownloadProgress?: ModelDownloadProgressHandler): Promise<void> {
-  await getRuntime(onModelDownloadProgress);
+export async function prepareKokoro(onModelDownloadProgress?: ModelDownloadProgressHandler, voice?: string): Promise<void> {
+  const blend = voice ? parseVoiceBlend(voice) : undefined;
+  await getRuntime(onModelDownloadProgress, blend ? {
+    voices: blend.map((entry) => entry.voice),
+    language: kokoroVoiceLanguage(blend[0]!.voice),
+  } : undefined);
 }
 
 let queueTail: Promise<unknown> = Promise.resolve();
@@ -284,28 +436,40 @@ export interface KokoroSynthesisRequest {
   speed: number;
 }
 
-/** 24 kHz mono 16-bit WAV for `text`, or a rejection when `signal` aborts. */
+export interface KokoroSynthesis {
+  /** 24 kHz mono 16-bit WAV. */
+  wav: Buffer;
+  /** The text's words with when the WAV speaks them, from the model's durations. */
+  words: KokoroWordTiming[];
+}
+
+/** WAV and word timings for `text`, or a rejection when `signal` aborts. */
 export async function synthesizeKokoro(
   request: KokoroSynthesisRequest,
   signal?: AbortSignal,
   onModelDownloadProgress?: ModelDownloadProgressHandler,
-): Promise<Buffer> {
+): Promise<KokoroSynthesis> {
   const blend = parseVoiceBlend(request.voice);
-  const kokoro = await getRuntime(onModelDownloadProgress);
+  const kokoro = await getRuntime(onModelDownloadProgress, {
+    voices: blend.map((entry) => entry.voice),
+    language: kokoroVoiceLanguage(blend[0]!.voice),
+  });
   signal?.throwIfAborted();
-  const british = blend[0]!.voice.startsWith('b');
+  // A blend speaks its first voice's language.
   const [g2p, packs] = await Promise.all([
-    kokoro.g2p(british),
+    kokoro.g2p(kokoroVoiceLanguage(blend[0]!.voice)),
     Promise.all(blend.map((entry) => kokoro.voice(entry.voice))),
   ]);
   const voicePack = packs.length === 1 ? packs[0]! : blendVoices(packs, blend.map((entry) => entry.weight));
   const speed = Number.isFinite(request.speed) && request.speed > 0 ? request.speed : 1;
 
-  const chunks = chunkTokens(g2p.phonemize(request.text).tokens);
+  const tokens = g2p.phonemize(request.text).tokens;
+  const spans = new Map<MToken, TokenSpan>();
   const audio: Float32Array[] = [];
-  for (const chunk of chunks) {
+  let sampleCount = 0;
+  for (const chunk of chunkTokens(tokens)) {
     signal?.throwIfAborted();
-    const ids = encodePhonemes(chunk.phonemes);
+    const { ids, offsets } = encodeWithOffsets(chunk.phonemes);
     if (ids.length <= 2) continue;
     const row = Math.min(VOICE_ROWS - 1, Math.max(0, length(chunk.phonemes) - 1));
     const style = voicePack.slice(row * STYLE_DIM, (row + 1) * STYLE_DIM);
@@ -314,17 +478,19 @@ export async function synthesizeKokoro(
       style: new ort.Tensor('float32', style, [1, STYLE_DIM]),
       speed: new ort.Tensor('float32', new Float32Array([speed]), [1]),
     }), signal);
-    audio.push(output.waveform!.data as Float32Array);
+    const waveform = output.waveform!.data as Float32Array;
+    tokenSpans(chunk, offsets, output.duration!.data as BigInt64Array, sampleCount, spans);
+    audio.push(waveform);
+    sampleCount += waveform.length;
   }
   signal?.throwIfAborted();
 
   // Text with nothing speakable still yields a short, valid clip.
-  const sampleCount = audio.reduce((sum, part) => sum + part.length, 0) || Math.round(KOKORO_SAMPLE_RATE / 10);
-  const samples = new Float32Array(sampleCount);
+  const samples = new Float32Array(sampleCount || Math.round(KOKORO_SAMPLE_RATE / 10));
   let offset = 0;
   for (const part of audio) {
     samples.set(part, offset);
     offset += part.length;
   }
-  return encodeWav(samples);
+  return { wav: encodeWav(samples), words: wordTimings(tokens, spans) };
 }

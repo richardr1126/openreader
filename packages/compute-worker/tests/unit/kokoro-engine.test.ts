@@ -16,7 +16,6 @@ import {
 import {
   ensureKokoroAssetFiles,
   KOKORO_COMPONENTS,
-  KOKORO_LETTER_TO_SOUND_PATH,
   kokoroAssetStatus,
   removeKokoroAssetFiles,
 } from '../../src/inference/kokoro/model-files';
@@ -39,7 +38,7 @@ describe('local Kokoro voices', () => {
   });
 
   test('refuses voices it has not downloaded', () => {
-    expect(() => parseVoiceBlend('jf_alpha')).toThrow(/no English voice/);
+    expect(() => parseVoiceBlend('jf_alpha')).toThrow(/no voice/);
     expect(() => parseVoiceBlend('alloy')).toThrow(/cannot read/);
     expect(() => parseVoiceBlend('')).toThrow(/needs a voice/);
     expect(() => parseVoiceBlend('af_heart(0)')).toThrow(/more than zero/);
@@ -115,7 +114,7 @@ describe('local Kokoro model files', () => {
         expect(entry.sha256, entry.path).toMatch(/^[0-9a-f]{64}$/);
       }
     }
-    expect(KOKORO_COMPONENTS.find((component) => component.name === 'Voice pack')?.files).toHaveLength(28);
+    expect(KOKORO_COMPONENTS.find((component) => component.name === 'Voice pack')?.files).toHaveLength(40);
   });
 
   test('reports each component through download, verification and ready, then starts warm in silence', async () => {
@@ -193,12 +192,4 @@ describe('local Kokoro model files', () => {
     await expect(stat(dir)).rejects.toThrow();
   });
 
-  test('ships the letter-to-sound rules with the worker', async () => {
-    const rules = await readFile(KOKORO_LETTER_TO_SOUND_PATH);
-    expect(createHash('sha256').update(rules).digest('hex')).toBe(
-      '14e0911c6c92ea134c5ae830f89b69038ab9dbca5662896d012394f30309fbf2',
-    );
-    const downloaded = KOKORO_COMPONENTS.flatMap((component) => component.files.map((entry) => entry.path));
-    expect(downloaded.some((entry) => entry.includes('letter_to_sound'))).toBe(false);
-  });
 });

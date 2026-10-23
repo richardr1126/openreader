@@ -23,6 +23,7 @@ const fixtureDir = path.resolve(process.cwd(), 'packages/compute-worker/tests/fi
 const fixture = (name: string) => readFileSync(path.join(fixtureDir, name), 'utf8');
 
 const lts = new LetterToSound(fixture('letter_to_sound.tsv'));
+const britishLts = new LetterToSound(fixture('letter_to_sound_gb.tsv'));
 function createG2P(british = false): G2P {
   const dialect = british ? 'gb' : 'us';
   return new G2P({
@@ -32,7 +33,7 @@ function createG2P(british = false): G2P {
         gold: JSON.parse(fixture(`${dialect}_gold.json`)),
         silver: JSON.parse(fixture(`${dialect}_silver.json`)),
       },
-      letterToSound: lts,
+      letterToSound: british ? britishLts : lts,
     }),
   });
 }
@@ -91,6 +92,22 @@ describe('Misaki G2P', () => {
     expect(say('naïve café résumé')).toBe(say('naive cafe resume'));
     expect(say('naïve café résumé')).not.toContain(g2p.unk);
     expect(say('the cafe was open')).toContain('kæfˈA');
+  });
+
+  it('guesses a word spelled with letters outside ASCII', () => {
+    expect(say('the prison in Béjaïa')).toBe('ðə pɹˈɪzᵊn ɪn bᵻʤˈAIə');
+    expect(say('the Großer park')).toBe('ðə ɡɹˈOsəɹ pˈɑɹk');
+  });
+
+  it('reads a contracted auxiliary after a known word', () => {
+    expect(say("I should've known.")).toBe('ˌI ʃˈʊdəv nˈOn.');
+    expect(say("That'll do.")).toBe('ðˈætəl dˈu.');
+    expect(say("What're you doing?")).toBe('wˈʌtəɹ ju dˈuɪŋ?');
+    expect(createG2P(true).phonemize("That'll do.").phonemes).toBe('ðˈatᵊl dˈuː.');
+  });
+
+  it('guesses British vowels for a British voice', () => {
+    expect(createG2P(true).phonemize('Tom met Rhodri.').phonemes).toBe('tˈɒm mˈɛt ɹˈQdɹi.');
   });
 
   it('builds both dialects', () => {
@@ -171,6 +188,11 @@ describe('Misaki letter-to-sound', () => {
   it('leaves dictionary words untouched', () => {
     expect(say('the cafe was open')).toContain('kæfˈA');
     expect(say('He walked to the store.')).toBe('hˌi wˈɔkt tə ðə stˈɔɹ.');
+  });
+
+  it('gives a word whose only vowel is reduced the full vowel', () => {
+    expect(lts.guess('chan')).toBe('ʧˈʌn');
+    expect(lts.guess('va')).toBe('vˈʌ');
   });
 
   it('refuses the unpronounceable and invents nothing', () => {

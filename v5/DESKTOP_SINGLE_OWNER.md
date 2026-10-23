@@ -206,11 +206,11 @@ provider exists.
 
 Card: **Kokoro on this device** (server: **Kokoro on the compute worker**).
 
-- State line: *Not downloaded · about 336 MB*, *Downloading · 128 MB of 336.4 MB*,
-  *Partly downloaded*, *Downloaded · 336 MB* (with a Ready badge), or the failure
+- State line: *Not downloaded · about 316.9 MB*, *Downloading · 128 MB of 316.9 MB*,
+  *Partly downloaded*, *Downloaded · 316.9 MB* (with a Ready badge), or the failure
   reason (a cancel reads *The Kokoro download was canceled.*).
 - Components listed with progress while downloading: Model weights, Voice pack,
-  English pronunciation data. Each file is checked against a pinned size and
+  Pronunciation data. Each file is checked against a pinned size and
   SHA-256 before it is renamed into place.
 - Actions: **Download** (or **Resume download**), **Cancel** while running, then
   **Remove** behind a confirmation that names the reclaimable size.
@@ -228,10 +228,37 @@ Card: **Kokoro on this device** (server: **Kokoro on the compute worker**).
   `DOCSTORE_DIR/model/kokoro-82m`. With several replicas the card describes and
   changes only the replica that answers; the others download on first use.
 
+The worker download API is
+`ensureKokoroAssets(onProgress?, selection?: KokoroAssetSelection)`, where
+`KokoroAssetSelection` has `voices?: readonly string[]` and
+`language?: 'us' | 'gb' | LearnedLanguage`. A selection ensures the model plus
+only the named voice packs and the chosen language's pronunciation data. For a
+blend, pass every member's voice id and the first voice's language; voice ids do
+not implicitly select pronunciation languages. An empty selection prepares only
+the model. Omitting the selection joins an active download without adding files,
+or returns immediately if any usable voice is already installed. Otherwise it
+downloads the model, `af_heart`, and the US gold/silver pronunciation
+dictionaries: 332,322,617 bytes (316.9 MB in the UI).
+Other voice packs and language data download only when selected for synthesis.
+Overlapping selections and setup share a serial download queue, verified files,
+progress listeners and cancellation.
+
+Status is ready when the model and at least one complete voice/pronunciation
+pair are installed. It prefers the default `af_heart`/US baseline if complete,
+otherwise the first complete voice in sorted voice-id order. If none is
+complete, the three required components show the default baseline and its
+missing files. Thus Spanish-first (or another supported language) is ready
+without downloading US data. Installed files outside the chosen baseline are
+reported as **Additional voices** and **Additional pronunciation data** rows,
+whose total and installed bytes are equal. Missing optional files never make
+status partial. The existing component totals therefore include every installed
+optional file in the downloaded size and Remove confirmation without a schema
+change. Removing the pack clears download readiness.
+
 ### Desktop first run
 
 A fresh desktop install must have a voice without an account or key, and must
-not make reading wait on a 336 MB download.
+not make reading wait on a 319 MB download.
 
 - **Seed.** The shell passes `RUNTIME_SEED_JSON` with one provider, `kokoro`
   (`kokoro-local`). As the only enabled provider it is the implicit default. The

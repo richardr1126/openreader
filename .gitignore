@@ -61,3 +61,4 @@ next-env.d.ts
 .agents
 .codex
 .claude
+/packaging/kokoro-onnx/build/
