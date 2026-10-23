@@ -228,7 +228,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
 
         <Section title="Highlighting" variant="group">
           <ToggleRow
-            label="Highlight sentence"
+            label="Highlight segment"
             icon={<HighlighterIcon />}
             checked={highlight.sentence}
             onChange={(checked) => updateConfigKey(highlight.sentenceKey, checked)}
@@ -237,8 +237,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           <ToggleRow
             label="Highlight words"
             icon={<TextCursorIcon />}
-            checked={highlight.word && highlight.sentence}
-            disabled={!highlight.sentence}
+            checked={highlight.word}
             onChange={(checked) => updateConfigKey(highlight.wordKey, checked)}
             variant="plain"
           />

@@ -113,7 +113,7 @@ export function useEpubDocument(
     playbackSegments,
     skipToOrdinal,
   } = useTTS();
-  const { epubHighlightEnabled, readerShowsLayout } = useConfig();
+  const { epubHighlightEnabled, epubWordHighlightEnabled, readerShowsLayout } = useConfig();
 
   const currDocData = document.data;
   const currDocName = document.name;
@@ -163,6 +163,7 @@ export function useEpubDocument(
     setRenderedTextMaps,
   } = useEPUBHighlighting({
     epubHighlightEnabled,
+    epubWordHighlightEnabled,
     renderedTextMapsRef,
   });
 

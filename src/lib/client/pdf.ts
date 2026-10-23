@@ -112,6 +112,7 @@ let highlightPatternSeq = 0;
 type HighlightPatternOptions = {
   parsedDocument?: ParsedPdfDocument | null;
   locator?: TTSSegmentLocator | null;
+  paintSegment?: boolean;
   useBlockGeometryOnly?: boolean;
   language?: string;
 };
@@ -373,6 +374,11 @@ export function highlightPattern(
 ): boolean {
   const seq = ++highlightPatternSeq;
   clearHighlights();
+  lastSentencePattern = null;
+  lastSentenceWordToTokenRangeMap = null;
+  lastSentenceTokenWindow = null;
+  lastSpanNodes = [];
+  lastTokens = [];
 
   if (!pattern?.trim()) return false;
   const container = containerRef.current;
@@ -381,10 +387,10 @@ export function highlightPattern(
   const cleanPattern = pattern.trim().replace(/\s+/g, ' ');
   if (!cleanPattern) return false;
   lastSentencePattern = cleanPattern;
-  lastSentenceWordToTokenRangeMap = null;
-  lastSentenceTokenWindow = null;
   const parsedDocument = options?.parsedDocument ?? null;
   const locator = options?.locator ?? null;
+  const paintSegment = options?.paintSegment ?? true;
+  const useBlockGeometryOnly = paintSegment && options?.useBlockGeometryOnly;
 
   // Canonical path: parsed block locator is required for PDF sentence
   // highlighting. Avoid broad full-page text matching fallbacks.
@@ -395,7 +401,7 @@ export function highlightPattern(
   const spanNodes = collectSpanNodesForParsedBlock(container, parsedDocument, locator) ?? [];
 
   if (!spanNodes.length) {
-    if (options?.useBlockGeometryOnly) {
+    if (useBlockGeometryOnly) {
       return highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
     }
     return false;
@@ -424,7 +430,7 @@ export function highlightPattern(
   if (!tokens.length) return false;
   lastTokens = tokens;
 
-  if (options?.useBlockGeometryOnly) {
+  if (useBlockGeometryOnly) {
     lastSentenceTokenWindow = {
       start: 0,
       end: tokens.length - 1,
@@ -434,7 +440,8 @@ export function highlightPattern(
 
   const patternLen = cleanPattern.length;
 
-  // Core application of highlight logic once we know the best token window (if any)
+  // Resolve the segment's text ranges for readiness, scrolling, and word mapping.
+  // Segment background painting is optional and never owns that preparation.
   const applyHighlightFromTokens = (
     tokenMatch:
       | {
@@ -524,11 +531,13 @@ export function highlightPattern(
         range.setStart(textNode, startOffset);
         range.setEnd(textNode, endOffset);
 
+        const rects = Array.from(range.getClientRects());
+        scrollIntoViewRects.push(...rects);
+        if (!paintSegment) return;
+
         const highlightTarget = getOrCreateHighlightLayer(span);
         if (!highlightTarget) return;
-
         const { layer: highlightLayer, pageRect } = highlightTarget;
-        const rects = Array.from(range.getClientRects());
 
         rects.forEach((rect) => {
           const highlight = document.createElement('div');
@@ -544,8 +553,6 @@ export function highlightPattern(
           highlight.style.width = `${rect.width}px`;
           highlight.style.height = `${rect.height}px`;
           highlightLayer.appendChild(highlight);
-
-          scrollIntoViewRects.push(rect);
         });
       } catch {
         // If range creation fails for any reason, skip this segment

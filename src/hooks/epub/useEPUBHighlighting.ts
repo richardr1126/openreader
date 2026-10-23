@@ -30,6 +30,7 @@ const resolvePrimaryHighlightColor = (): string => {
 
 type UseEpubHighlightingParams = {
   epubHighlightEnabled: boolean;
+  epubWordHighlightEnabled: boolean;
   renderedTextMapsRef: MutableRefObject<EpubRenderedTextMap[]>;
 };
 
@@ -48,6 +49,7 @@ type UseEpubHighlightingResult = {
 
 export function useEPUBHighlighting({
   epubHighlightEnabled,
+  epubWordHighlightEnabled,
   renderedTextMapsRef,
 }: UseEpubHighlightingParams): UseEpubHighlightingResult {
   // Cache the per-segment word→region map so we don't re-align on every whisper
@@ -97,8 +99,9 @@ export function useEPUBHighlighting({
   // paint an intermediate frame on every sentence change.
   const highlightSegment = useCallback((segment: CanonicalTtsSegment | null | undefined) => {
     if (!epubHighlightEnabled) {
-      clearHighlights();
-      return true;
+      clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
+      return !epubWordHighlightEnabled || Boolean(segment &&
+        resolveVisibleSegmentRange(renderedTextMapsRef.current, segment));
     }
     const resolved = segment
       ? resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)
@@ -109,18 +112,18 @@ export function useEPUBHighlighting({
       'background-color: rgba(128, 128, 128, 0.32);',
       0,
     )) {
-      clearHighlights();
+      clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
       return false;
     }
     return true;
-  }, [clearHighlights, epubHighlightEnabled, paintHighlight, renderedTextMapsRef]);
+  }, [clearPaintedHighlight, epubHighlightEnabled, epubWordHighlightEnabled, paintHighlight, renderedTextMapsRef]);
 
   const highlightWordIndex = useCallback((
     alignment: TTSSentenceAlignment | undefined,
     wordIndex: number | null | undefined,
     segment: CanonicalTtsSegment | null | undefined
   ) => {
-    if (!epubHighlightEnabled) {
+    if (!epubWordHighlightEnabled) {
       clearWordHighlights();
       return;
     }
@@ -212,7 +215,7 @@ export function useEPUBHighlighting({
     clearWordHighlights();
   }, [
     clearWordHighlights,
-    epubHighlightEnabled,
+    epubWordHighlightEnabled,
     paintHighlight,
     renderedTextMapsRef,
   ]);
@@ -236,12 +239,16 @@ export function useEPUBHighlighting({
     highlightedDocumentsRef.current.clear();
   }, [clearHighlights, renderedTextMapsRef]);
 
-  // Clear any highlight annotations when feature is disabled.
+  // Each preference owns only its painted layer.
   useEffect(() => {
     if (!epubHighlightEnabled) {
-      clearHighlights();
+      clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
     }
-  }, [epubHighlightEnabled, clearHighlights]);
+  }, [epubHighlightEnabled, clearPaintedHighlight]);
+
+  useEffect(() => {
+    if (!epubWordHighlightEnabled) clearWordHighlights();
+  }, [epubWordHighlightEnabled, clearWordHighlights]);
 
   return {
     clearHighlights,

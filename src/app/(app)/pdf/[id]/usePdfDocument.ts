@@ -38,7 +38,6 @@ import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
 import type {
   TTSSentenceAlignment,
 } from '@/types/tts';
-import type { TTSSegmentLocator } from '@/types/client';
 import type { PDFDocument } from '@/types/documents';
 
 /**
@@ -62,16 +61,7 @@ export interface PdfDocumentState {
 
   // PDF functionality
   onDocumentLoadSuccess: (pdf: PDFDocumentProxy) => void;
-  highlightPattern: (
-    pattern: string,
-    containerRef: RefObject<HTMLDivElement>,
-    options?: {
-      parsedDocument?: ParsedPdfDocument | null;
-      locator?: TTSSegmentLocator | null;
-      useBlockGeometryOnly?: boolean;
-      language?: string;
-    },
-  ) => boolean;
+  highlightPattern: typeof highlightPattern;
   clearHighlights: () => void;
   clearWordHighlights: () => void;
   highlightWordIndex: (

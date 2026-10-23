@@ -124,7 +124,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     currentSentenceAlignment,
     currentWordIndex
   } = useTTSHighlight();
-  const { epubTheme, epubHighlightEnabled, epubWordHighlightEnabled } = useConfig();
+  const { epubTheme, epubWordHighlightEnabled } = useConfig();
   const [activeRendition, setActiveRendition] = useState<Rendition>();
   useEPUBTheme(epubTheme, activeRendition);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -196,7 +196,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   // Word-level highlight layered on top of the block highlight. A layout effect
   // so a sentence change commits both layers before the browser paints.
   useLayoutEffect(() => {
-    if (!epubHighlightEnabled || !epubWordHighlightEnabled) {
+    if (!epubWordHighlightEnabled) {
       clearWordHighlights();
       return;
     }
@@ -220,8 +220,8 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     currentWordIndex,
     currentSegment,
     currentSentenceAlignment,
-    epubHighlightEnabled,
     epubWordHighlightEnabled,
+    renderedTextRevision,
     clearWordHighlights,
     highlightWordIndex
   ]);

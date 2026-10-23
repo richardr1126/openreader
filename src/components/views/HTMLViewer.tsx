@@ -87,9 +87,9 @@ export function HTMLViewer({
   const highlightEnabled = readerType === 'pdf'
     ? config.pdfHighlightEnabled
     : readerType === 'epub' ? config.epubHighlightEnabled : config.htmlHighlightEnabled;
-  const wordHighlightEnabled = highlightEnabled && (readerType === 'pdf'
+  const wordHighlightEnabled = readerType === 'pdf'
     ? config.pdfWordHighlightEnabled
-    : readerType === 'epub' ? config.epubWordHighlightEnabled : config.htmlWordHighlightEnabled);
+    : readerType === 'epub' ? config.epubWordHighlightEnabled : config.htmlWordHighlightEnabled;
 
   const readySegmentRef = useRef<string | null>(null);
 
@@ -133,13 +133,13 @@ export function HTMLViewer({
     const container = contentRef.current;
     if (!container) return;
     clearHtmlSentenceHighlight();
-    if (highlightEnabled) {
+    if (highlightEnabled || wordHighlightEnabled) {
       // The owning block, plus the next one a sentence may run on into.
       const owner = currentBlockKey ? container.ownerDocument.getElementById(currentBlockKey) : null;
       const scope = owner && container.contains(owner)
         ? [owner, owner.nextElementSibling].filter((element): element is HTMLElement => element instanceof HTMLElement)
         : [];
-      if (!highlightHtmlSentence(container, currentSentence, resolvedLanguage, scope)) {
+      if (!highlightHtmlSentence(container, currentSentence, resolvedLanguage, scope, highlightEnabled)) {
         onError?.(new Error('The selected worker-plan segment did not map to the rendered text.'));
         return;
       }
@@ -152,6 +152,7 @@ export function HTMLViewer({
   }, [
     blocks,
     highlightEnabled,
+    wordHighlightEnabled,
     currentBlockKey,
     currentSentence,
     resolvedLanguage,
@@ -161,8 +162,7 @@ export function HTMLViewer({
     onReady,
   ]);
 
-  // Word highlight is layered inside the current sentence wrap. Same
-  // scheduling pattern as the sentence effect.
+  // Word paint uses the prepared segment region even when segment paint is off.
   useLayoutEffect(() => {
     if (!wordHighlightEnabled) {
       clearHtmlWordHighlight();
@@ -181,7 +181,16 @@ export function HTMLViewer({
     if (!container) return;
     highlightHtmlWord(container, currentSentenceAlignment, currentWordIndex);
   }, [
+    blocks,
+    highlightEnabled,
     wordHighlightEnabled,
+    currentBlockKey,
+    currentSentence,
+    resolvedLanguage,
+    playbackPlanReady,
+    playbackPlanSegmentCount,
+    onError,
+    onReady,
     currentSentenceAlignment,
     currentWordIndex,
   ]);

@@ -199,6 +199,14 @@ commit. A mapping or paint failure enters the shared render-error state. It does
 not reveal an unhighlighted reader, select segment zero implicitly, start a
 timer retry loop, or use a second renderer-specific highlighting mechanism.
 
+Segment and word visibility are independent presentation preferences. A word-only
+reader still resolves the selected segment's source range and word mapping as
+part of the surface commit, while omitting the segment background. EPUB keeps
+separate paint layers, PDF prepares its token window without requiring a segment
+overlay, and flowing text retains an unpainted region for word mapping and follow.
+Changing either preference does not alter audio timestamps, plan identity, or
+cached audio.
+
 ### Segment Audio
 
 Segment audio is content-addressed by text plus voice/model/settings/language and

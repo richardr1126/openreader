@@ -78,6 +78,41 @@ async function readEpubWordHighlight(page: Page) {
   });
 }
 
+async function setHighlightMode(page: Page, sentence: boolean, words: boolean) {
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Document settings', exact: true });
+  await expect(settings).toBeInViewport({ ratio: 1 });
+  for (const [name, enabled] of [['Highlight segment', sentence], ['Highlight words', words]] as const) {
+    const toggle = settings.getByRole('switch', { name, exact: true });
+    await expect(toggle).toBeEnabled();
+    if (await toggle.getAttribute('aria-checked') !== String(enabled)) await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', String(enabled));
+  }
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(settings).toBeHidden();
+}
+
+async function readEpubSegmentHighlightCount(page: Page) {
+  return page.frameLocator('iframe').locator('body').evaluate((body) => {
+    const view = body.ownerDocument.defaultView as (Window & {
+      CSS: typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } };
+    }) | null;
+    return view?.CSS.highlights?.get('openreader-epub-segment')?.size ?? 0;
+  });
+}
+
+async function verifyWordOnlyPlayback(page: Page, surface: 'html' | 'pdf') {
+  await setHighlightMode(page, false, true);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  const pause = page.getByRole('button', { name: 'Pause', exact: true });
+  await expect(pause).toBeVisible({ timeout: 60_000 });
+  const word = page.locator(surface === 'pdf' ? '.pdf-word-highlight-overlay' : '.openreader-html-highlight-word');
+  await expect(word.first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(surface === 'pdf' ? '.pdf-text-highlight-overlay' : '.openreader-html-highlight-sentence')).toHaveCount(0);
+  await pause.click();
+  await setHighlightMode(page, true, true);
+}
+
 async function countBlankEpubSegmentFrames(page: Page, durationMs: number) {
   return await page.frameLocator('iframe').locator('body').evaluate(async (body, duration) => {
     type HighlightRegistry = { get: (name: string) => { size: number } | undefined };
@@ -163,6 +198,20 @@ async function verifyEpubPlayback(page: Page) {
   // must not re-run rendered placement, which blanked the segment highlight
   // for several frames every few seconds.
   expect(await countBlankEpubSegmentFrames(page, 4_000)).toBe(0);
+
+  // Appearance switches retain the running audio and mapping while each paint
+  // layer is independently enabled or removed.
+  await setHighlightMode(page, false, true);
+  await expect.poll(() => readEpubSegmentHighlightCount(page)).toBe(0);
+  await expect.poll(() => readEpubWordHighlight(page)).not.toBe('');
+  await setHighlightMode(page, false, false);
+  await expect.poll(() => readEpubWordHighlight(page)).toBe('');
+  await setHighlightMode(page, true, false);
+  await expect.poll(() => readEpubSegmentHighlightCount(page)).toBeGreaterThan(0);
+  await expect.poll(() => readEpubWordHighlight(page)).toBe('');
+  await setHighlightMode(page, true, true);
+  await expect.poll(() => readEpubWordHighlight(page)).not.toBe('');
+  await expect(pauseButton).toBeVisible();
 
   await pauseButton.click();
   await expect(playButton).toBeVisible();
@@ -317,6 +366,7 @@ test('anonymous user controls playback across every accepted document journey', 
     page.getByRole('link', { name: 'multilingual-sample.txt', exact: true }),
     'multilingual-sample.txt',
   );
+  await verifyWordOnlyPlayback(page, 'html');
   await startAndCancelPlayback(page);
 
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
@@ -459,6 +509,7 @@ test('anonymous user controls playback across every accepted document journey', 
   await returnToLibrary(page);
 
   await openDocument(page, pdfLinks.nth(0), 'sample.pdf');
+  await verifyWordOnlyPlayback(page, 'pdf');
   await startAndCancelPlayback(page);
   await returnToLibrary(page);
 

@@ -248,7 +248,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   }, [clearHighlights, clearWordHighlights]);
 
   useEffect(() => {
-    if (!pdfHighlightEnabled || playbackPlanSegmentCount === 0) {
+    if ((!pdfHighlightEnabled && !pdfWordHighlightEnabled) || playbackPlanSegmentCount === 0) {
       clearHighlights();
       commitSurfacePart(surfaceKey, 'highlight');
       return;
@@ -295,10 +295,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
         currentSentence,
         containerRef as RefObject<HTMLDivElement>,
         {
-        parsedDocument,
-        locator: activeLocator,
-        useBlockGeometryOnly,
-        language: resolvedLanguage,
+          parsedDocument,
+          locator: activeLocator,
+          paintSegment: pdfHighlightEnabled,
+          useBlockGeometryOnly,
+          language: resolvedLanguage,
         },
       );
       if (seq !== sentenceHighlightSeqRef.current) return;
@@ -336,11 +337,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     reportSurfaceCommitError,
   ]);
 
-  // Word-level highlight layered on top of the block highlight
+  // Word highlighting uses the prepared segment mapping independently of its background.
   useEffect(() => {
     clearWordHighlightTimeouts();
 
-    if (!pdfHighlightEnabled || !pdfWordHighlightEnabled) {
+    if (!pdfWordHighlightEnabled) {
       clearWordHighlights();
       return;
     }
