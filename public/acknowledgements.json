@@ -981,21 +981,6 @@
       ]
     },
     {
-      "name": "@mediabunny/mp3-encoder",
-      "kind": "npm",
-      "license": "MPL-2.0",
-      "role": "MP3 encoder extension for Mediabunny, based on LAME.",
-      "url": "https://mediabunny.dev/guide/extensions/mp3-encoder",
-      "versions": [
-        "1.62.0"
-      ],
-      "notice": "By Vanilagy.",
-      "copyright": [],
-      "textIds": [
-        "86cf9656479f"
-      ]
-    },
-    {
       "name": "@microsoft/antissrf",
       "kind": "npm",
       "license": "MIT",
@@ -1435,22 +1420,6 @@
       ]
     },
     {
-      "name": "@speech-sdk/core",
-      "kind": "npm",
-      "license": "Apache-2.0",
-      "role": "Universal, cross-platform text-to-speech SDK with multi-provider support.",
-      "url": "https://github.com/Jellypod-Inc/speech-sdk",
-      "versions": [
-        "0.36.0"
-      ],
-      "copyright": [
-        "Copyright 2026 Jellypod, Inc."
-      ],
-      "textIds": [
-        "283ea6cc2997"
-      ]
-    },
-    {
       "name": "@stablelib/base64",
       "kind": "npm",
       "license": "MIT",
@@ -1571,38 +1540,6 @@
       "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/debug",
       "versions": [
         "4.1.13"
-      ],
-      "copyright": [
-        "Copyright (c) Microsoft Corporation."
-      ],
-      "textIds": [
-        "a3ca90324100"
-      ]
-    },
-    {
-      "name": "@types/dom-mediacapture-transform",
-      "kind": "npm",
-      "license": "MIT",
-      "role": "TypeScript definitions for dom-mediacapture-transform",
-      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/dom-mediacapture-transform",
-      "versions": [
-        "0.1.12"
-      ],
-      "copyright": [
-        "Copyright (c) Microsoft Corporation."
-      ],
-      "textIds": [
-        "a3ca90324100"
-      ]
-    },
-    {
-      "name": "@types/dom-webcodecs",
-      "kind": "npm",
-      "license": "MIT",
-      "role": "TypeScript definitions for dom-webcodecs",
-      "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/dom-webcodecs",
-      "versions": [
-        "0.1.13"
       ],
       "copyright": [
         "Copyright (c) Microsoft Corporation."
@@ -3915,22 +3852,6 @@
       ]
     },
     {
-      "name": "is-network-error",
-      "kind": "npm",
-      "license": "MIT",
-      "role": "Check if a value is a Fetch network error",
-      "url": "sindresorhus/is-network-error",
-      "versions": [
-        "1.3.2"
-      ],
-      "copyright": [
-        "Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"
-      ],
-      "textIds": [
-        "5f628e73f781"
-      ]
-    },
-    {
       "name": "is-plain-obj",
       "kind": "npm",
       "license": "MIT",
@@ -4581,21 +4502,6 @@
       ],
       "textIds": [
         "af6d4e4f1bb6"
-      ]
-    },
-    {
-      "name": "mediabunny",
-      "kind": "npm",
-      "license": "MPL-2.0",
-      "role": "Pure TypeScript media toolkit for reading, writing, and converting media files, directly in the browser.",
-      "url": "https://mediabunny.dev/",
-      "versions": [
-        "1.62.0"
-      ],
-      "notice": "By Vanilagy.",
-      "copyright": [],
-      "textIds": [
-        "86cf9656479f"
       ]
     },
     {
@@ -5407,22 +5313,6 @@
       ],
       "textIds": [
         "b801c8d677ef"
-      ]
-    },
-    {
-      "name": "p-retry",
-      "kind": "npm",
-      "license": "MIT",
-      "role": "Retry a promise-returning or async function",
-      "url": "sindresorhus/p-retry",
-      "versions": [
-        "8.0.1"
-      ],
-      "copyright": [
-        "Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"
-      ],
-      "textIds": [
-        "5f628e73f781"
       ]
     },
     {

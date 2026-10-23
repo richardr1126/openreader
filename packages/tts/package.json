@@ -30,7 +30,6 @@
     "./ffmpeg-bin": "./src/ffmpeg-bin.ts"
   },
   "dependencies": {
-    "@speech-sdk/core": "^0.36.0",
     "lru-cache": "^11.5.3",
     "openai": "^7.42.0",
     "pino": "^10.4.0",

@@ -17,6 +17,7 @@ import { PRIVACY_POLICY_UPDATED_AT_MS } from '@/lib/shared/privacy-policy';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { EMPTY_CLAIM_COUNTS, useClaimData } from '@/hooks/useClaimData';
 import type { ClaimableCounts } from '@/types/client';
+import { isLocalTtsProviderType } from '@openreader/tts/provider-catalog';
 
 type OnboardingFlowContextValue = {
   openChangelog: () => void;
@@ -46,7 +47,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const voicesLoading = offerVoices && (voices.isPending || sharedProvidersLoading);
   const voicesNeeded = offerVoices && Boolean(voices.status) && !voices.error
     && !voices.installed && !voices.downloading && !voices.status?.downloading
-    && !sharedProviders.some((provider) => provider.providerType !== 'kokoro-local');
+    && !sharedProviders.some((provider) => !isLocalTtsProviderType(provider.providerType));
   const voicesHandledRef = useRef(false);
   const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | 'voices' | null>(null);
   const [claimModalOwnerId, setClaimModalOwnerId] = useState<string | null>(null);

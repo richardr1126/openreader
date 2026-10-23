@@ -162,6 +162,13 @@
       "when": 1792662406145,
       "tag": "0022_drop_account_issuer",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1792711863002,
+      "tag": "0023_remove_speech_sdk_providers",
+      "breakpoints": true
     }
   ]
 }

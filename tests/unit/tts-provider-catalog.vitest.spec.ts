@@ -5,7 +5,6 @@ import {
   getDefaultVoices,
   providerSupportsCustomModel,
   resolveProviderModels,
-  speechSdkProviderPrefix,
   supportsNativeModelSpeed,
   supportsTtsInstructions,
 } from '@openreader/tts/provider-catalog';
@@ -52,23 +51,6 @@ describe('tts provider catalog', () => {
     expect(providerSupportsCustomModel('deepinfra')).toBe(true);
   });
 
-  test('resolves speech-sdk models, voices, and prefix parsing', () => {
-    expect(resolveProviderModels('speech-sdk').map((model) => model.id)).toContain('openai/gpt-4o-mini-tts');
-    expect(providerSupportsCustomModel('speech-sdk')).toBe(true);
-
-    expect(speechSdkProviderPrefix('elevenlabs/eleven_multilingual_v2')).toBe('elevenlabs');
-    // fal model ids are path-style, so only the first slash delimits the provider.
-    expect(speechSdkProviderPrefix('fal-ai/kokoro/american-english')).toBe('fal-ai');
-
-    expect(getDefaultVoices('speech-sdk', 'openai/gpt-4o-mini-tts')).toContain('sage');
-    expect(getDefaultVoices('speech-sdk', 'deepgram/aura-2')).toContain('thalia-en');
-    // Providers without a static voice list fall back to the provider default.
-    expect(getDefaultVoices('speech-sdk', 'mistral/voxtral-mini-tts-2603')).toEqual(['default']);
-
-    // Speed is applied client-side for speech-sdk so cached audio is speed-independent.
-    expect(supportsNativeModelSpeed('speech-sdk', 'openai/gpt-4o-mini-tts')).toBe(false);
-  });
-
   test('uses blocklist semantics for Replicate native speed support', () => {
     expect(supportsNativeModelSpeed('replicate', REPLICATE_KOKORO_82M_VERSIONED_MODEL)).toBe(true);
     expect(supportsNativeModelSpeed('replicate', 'acme/runtime-speed-model')).toBe(true);
@@ -78,7 +60,7 @@ describe('tts provider catalog', () => {
 
   test('keeps a real default-openai provider over the admin default', () => {
     const sharedProviders = [
-      { slug: 'gemini-31-flash-tts', providerType: 'speech-sdk' as const, defaultModel: 'google/gemini-3.1-flash-tts', defaultInstructions: null },
+      { slug: 'gemini-31-flash-tts', providerType: 'replicate' as const, defaultModel: 'google/gemini-3.1-flash-tts', defaultInstructions: null },
       { slug: 'default-openai', providerType: 'custom-openai' as const, defaultModel: 'supertonic-3', defaultInstructions: null },
     ];
     // The env-seeded provider is selectable; choosing it must not read back as the admin default.

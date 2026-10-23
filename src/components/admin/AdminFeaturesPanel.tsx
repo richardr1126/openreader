@@ -27,6 +27,7 @@ import { useDesktopUpdates } from '@/hooks/useDesktopUpdates';
 import {
   parseComputeLimitPolicyDocument,
 } from '@openreader/runtime-config/compute-limits';
+import { ProviderSelect } from '@/components/providers/ProviderSelect';
 import { ComputeLimitsEditor } from './ComputeLimitsEditor';
 
 type RuntimeConfigSource = 'json-seed' | 'env-seed' | 'admin' | 'default';
@@ -206,7 +207,7 @@ export function AdminFeaturesPanel({
   const providerOptions = useMemo<ProviderOption[]>(() => {
     return sharedProviders.map((entry) => ({
       id: entry.slug,
-      name: `${entry.displayName} (shared)`,
+      name: entry.displayName,
       providerType: entry.providerType,
     }));
   }, [sharedProviders]);
@@ -222,7 +223,7 @@ export function AdminFeaturesPanel({
   const effectiveSelectedProvider = currentSharedEntry
     ? {
       id: currentSharedEntry.slug,
-      name: `${currentSharedEntry.displayName} (shared)`,
+      name: currentSharedEntry.displayName,
       providerType: currentSharedEntry.providerType,
     } as ProviderOption
     : fallbackShared;
@@ -297,18 +298,11 @@ export function AdminFeaturesPanel({
           controlClassName="w-56"
         >
           {providerOptions.length > 0 ? (
-            <Select
+            <ProviderSelect
+              aria-label="Default provider"
               value={selectedProviderOption}
               onChange={handleProviderChange}
               options={providerOptions}
-              getOptionKey={(option) => option.id}
-              renderValue={(option) => option.name}
-              renderOption={(option, { selected }) => (
-                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                  {option.name}
-                </span>
-              )}
-              chevronClassName="h-4 w-4 text-muted"
             />
           ) : (
             <p className="text-xs text-soft">No shared providers yet. Add one first.</p>

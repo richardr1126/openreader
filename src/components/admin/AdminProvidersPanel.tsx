@@ -1,80 +1,45 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { DotsHorizontalIcon, PlusIcon } from '@/components/icons/Icons';
-import { providerSupportsCustomModel, resolveProviderModels, type TtsModelDefinition, type TtsProviderId, type TtsProviderType } from '@openreader/tts/provider-catalog';
-import { defaultBaseUrlForProviderType, defaultModelForProviderType, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
+import { isLocalTtsProviderType, KOKORO_LOCAL_MODEL } from '@openreader/tts/provider-catalog';
+import { defaultModelForProviderType } from '@openreader/tts/provider-policy';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import {
   Badge,
-  type BadgeTone,
-  Field,
-  ModalFrame,
-  ModalTitle,
-  ToggleRow,
-  Select,
-  SelectOptionDetail,
-  Button,
   IconButton,
-  Input,
-  Textarea,
-  MenuItemsSurface,
   MenuActionItem,
+  MenuItemsSurface,
   MenuRoot,
-  MenuTrigger,
   MenuTransition,
+  MenuTrigger,
+  Section,
 } from '@/components/ui';
+import { ProviderLogo } from '@/components/providers/provider-brands';
 import { queryKeys } from '@/lib/client/query-keys';
-import type { ProviderCheckItem, ProviderCheckStatus } from '@/lib/shared/provider-check';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { computeLocationPhrase } from '@/lib/shared/install-profile';
-import { LocalVoicesCard } from './LocalVoicesCard';
+import { LocalModelCard } from './LocalModelCard';
+import {
+  type AdminProviderMasked,
+  ProviderEditorDialog,
+  type ProviderEditorTarget,
+  uniqueSlug,
+} from './ProviderEditorDialog';
 
-type ProviderType = TtsProviderId;
-
-interface AdminProviderMasked {
-  id: string;
-  slug: string;
-  displayName: string;
-  providerType: ProviderType;
-  baseUrl: string | null;
-  apiKeyMask: string;
-  defaultModel: string | null;
-  defaultInstructions: string | null;
-  enabled: boolean;
-  createdAt: number;
-  updatedAt: number;
-}
-
-const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
-  { value: 'custom-openai', label: 'Custom OpenAI-like' },
-  { value: 'openai', label: 'OpenAI' },
-  { value: 'deepinfra', label: 'Deepinfra' },
-  { value: 'replicate', label: 'Replicate' },
-  { value: 'speech-sdk', label: 'Speech SDK' },
-  { value: 'kokoro-local', label: 'Kokoro' },
-];
-
-interface FormState {
-  slug: string;
-  displayName: string;
-  providerType: ProviderType;
-  baseUrl: string;
-  apiKey: string;
-  defaultModel: string;
-  defaultInstructions: string;
-  enabled: boolean;
-}
-
-const providerDefaultModel = defaultModelForProviderType;
 async function fetchDefaultProviderSlug(): Promise<string> {
   const res = await fetch('/api/admin/settings');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const data = (await res.json()) as { values?: { defaultTtsProvider?: unknown } };
   return typeof data.values?.defaultTtsProvider === 'string' ? data.values.defaultTtsProvider : '';
+}
+
+async function readError(res: Response): Promise<Error> {
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  return new Error(data.error || `HTTP ${res.status}`);
 }
 
 async function patchDefaultProviderSlug(slug: string): Promise<void> {
@@ -106,23 +71,38 @@ async function patchProviderEnabled(input: { id: string; enabled: boolean }): Pr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ enabled: input.enabled }),
   });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw await readError(res);
 }
 
-function createEmptyForm(): FormState {
-  return {
-    slug: '',
-    displayName: '',
-    providerType: 'custom-openai',
-    baseUrl: '',
-    apiKey: '',
-    defaultModel: providerDefaultModel('custom-openai'),
-    defaultInstructions: '',
-    enabled: true,
-  };
+/**
+ * Offering a local model turns its shared provider on, creating it the first
+ * time; withdrawing it turns every provider of that model off.
+ */
+async function setLocalModelOffered(input: {
+  offered: boolean;
+  rows: AdminProviderMasked[];
+  takenSlugs: ReadonlySet<string>;
+}): Promise<void> {
+  if (!input.offered) {
+    await Promise.all(input.rows.filter((row) => row.enabled).map((row) => patchProviderEnabled({ id: row.id, enabled: false })));
+    return;
+  }
+  if (input.rows.length > 0) {
+    await patchProviderEnabled({ id: input.rows[0].id, enabled: true });
+    return;
+  }
+  const res = await fetch('/api/admin/providers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      slug: uniqueSlug('kokoro', input.takenSlugs),
+      displayName: 'Kokoro',
+      providerType: 'kokoro-local',
+      defaultModel: KOKORO_LOCAL_MODEL,
+      enabled: true,
+    }),
+  });
+  if (!res.ok) throw await readError(res);
 }
 
 function baseUrlHost(value: string): string {
@@ -145,78 +125,14 @@ async function fetchAdminProviders(): Promise<AdminProviderMasked[]> {
   return data.providers;
 }
 
-async function upsertAdminProvider(input: {
-  editingId: string | null;
-  form: FormState;
-}): Promise<void> {
-  const isNew = input.editingId === '__new';
-  const body = {
-    slug: input.form.slug.trim(),
-    displayName: input.form.displayName.trim(),
-    providerType: input.form.providerType,
-    baseUrl: input.form.baseUrl.trim() || null,
-    ...(input.form.apiKey.length > 0 ? { apiKey: input.form.apiKey } : {}),
-    defaultModel: input.form.defaultModel.trim() || null,
-    defaultInstructions: input.form.defaultInstructions.trim() || null,
-    enabled: input.form.enabled,
-  };
-  const url = isNew ? '/api/admin/providers' : `/api/admin/providers/${input.editingId}`;
-  const res = await fetch(url, {
-    method: isNew ? 'POST' : 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-}
-
-const CHECK_BADGE: Record<ProviderCheckStatus, { tone: BadgeTone; label: string }> = {
-  ok: { tone: 'accent', label: 'OK' },
-  warn: { tone: 'foreground', label: 'Check' },
-  error: { tone: 'danger', label: 'Fix' },
-  skipped: { tone: 'muted', label: 'Skipped' },
-};
-
-async function checkAdminProvider(input: {
-  editingId: string | null;
-  form: FormState;
-}): Promise<ProviderCheckItem[]> {
-  const res = await fetch('/api/admin/providers/check', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      ...(input.editingId && input.editingId !== '__new' ? { providerId: input.editingId } : {}),
-      providerType: input.form.providerType,
-      baseUrl: input.form.baseUrl.trim(),
-      apiKey: input.form.apiKey,
-      defaultModel: input.form.defaultModel.trim(),
-      defaultInstructions: input.form.defaultInstructions.trim(),
-    }),
-  });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
-  return ((await res.json()) as { checks: ProviderCheckItem[] }).checks;
-}
-
 async function deleteAdminProvider(id: string): Promise<void> {
   const res = await fetch(`/api/admin/providers/${id}`, { method: 'DELETE' });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(data.error || `HTTP ${res.status}`);
-  }
+  if (!res.ok) throw await readError(res);
 }
 
 export function AdminProvidersPanel() {
-  const { installProfile, computeLocation } = useRuntimeConfig();
+  const { computeLocation } = useRuntimeConfig();
   const where = computeLocationPhrase(computeLocation);
-  // Kokoro runs wherever the compute worker does.
-  const providerTypeOptions = useMemo(() => PROVIDER_TYPE_OPTIONS.map((option) => (
-    option.value === 'kokoro-local' ? { ...option, label: `Kokoro (${where})` } : option
-  )), [where]);
   const { data: session } = useAuthSession();
   const sessionId = session?.user?.id ?? 'no-session';
   const adminProvidersQueryKey = queryKeys.admin(sessionId, 'providers');
@@ -224,13 +140,8 @@ export function AdminProvidersPanel() {
   const adminDefaultProviderQueryKey = queryKeys.admin(sessionId, 'default-provider');
   const sharedProvidersQueryKey = queryKeys.sharedProviders(sessionId);
   const queryClient = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(() => createEmptyForm());
-  const [customModelInput, setCustomModelInput] = useState('');
+  const [editorTarget, setEditorTarget] = useState<ProviderEditorTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AdminProviderMasked | null>(null);
-  // Results belong to the exact form they checked; any edit hides them.
-  const [checkResult, setCheckResult] = useState<{ key: string; items: ProviderCheckItem[] } | null>(null);
-  const checkKey = JSON.stringify({ editingId, form });
 
   const { data: providers = [], isPending: isLoading, error } = useQuery({
     queryKey: adminProvidersQueryKey,
@@ -255,66 +166,40 @@ export function AdminProvidersPanel() {
     toast.error('Failed to load default provider');
   }, [defaultProviderError]);
 
-  const saveMutation = useMutation({
-    mutationFn: upsertAdminProvider,
-    onSuccess: async (_data, variables) => {
-      toast.success(variables.editingId === '__new' ? 'Provider created' : 'Provider updated');
-      cancelEdit();
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
-        queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
-        queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
-        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
-      ]);
-    },
-    onError: (mutationError) => {
-      console.error('[AdminProvidersPanel] save failed:', mutationError);
-      toast.error((mutationError as Error).message || 'Save failed');
-    },
-  });
-
-  const checkMutation = useMutation({
-    mutationFn: checkAdminProvider,
-    onSuccess: (items, variables) => {
-      setCheckResult({ key: JSON.stringify(variables), items });
-    },
-    onError: (mutationError) => {
-      console.error('[AdminProvidersPanel] check failed:', mutationError);
-      toast.error((mutationError as Error).message || 'Check failed');
-    },
-  });
+  const refreshProviders = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
+    queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
+    queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
+    queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
+  ]);
+  const onMutationError = (action: string, fallback: string) => (mutationError: unknown) => {
+    console.error(`[AdminProvidersPanel] ${action} failed:`, mutationError);
+    toast.error((mutationError as Error).message || fallback);
+  };
 
   const deleteMutation = useMutation({
     mutationFn: deleteAdminProvider,
     onSuccess: async () => {
       toast.success('Provider deleted');
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
-        queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
-        queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
-        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
-      ]);
+      await refreshProviders();
     },
-    onError: (mutationError) => {
-      console.error('[AdminProvidersPanel] delete failed:', mutationError);
-      toast.error((mutationError as Error).message || 'Delete failed');
-    },
+    onError: onMutationError('delete', 'Delete failed'),
   });
   const toggleEnabledMutation = useMutation({
     mutationFn: patchProviderEnabled,
     onSuccess: async (_data, vars) => {
       toast.success(vars.enabled ? 'Provider enabled' : 'Provider disabled');
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: adminProvidersQueryKey }),
-        queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey }),
-        queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
-        queryClient.invalidateQueries({ queryKey: sharedProvidersQueryKey }),
-      ]);
+      await refreshProviders();
     },
-    onError: (mutationError) => {
-      console.error('[AdminProvidersPanel] toggle enabled failed:', mutationError);
-      toast.error((mutationError as Error).message || 'Update failed');
+    onError: onMutationError('toggle enabled', 'Update failed'),
+  });
+  const localOfferMutation = useMutation({
+    mutationFn: setLocalModelOffered,
+    onSuccess: async (_data, vars) => {
+      toast.success(vars.offered ? 'Kokoro is offered to users' : 'Kokoro is no longer offered');
+      await refreshProviders();
     },
+    onError: onMutationError('local model toggle', 'Update failed'),
   });
   const setDefaultMutation = useMutation({
     mutationFn: patchDefaultProviderSlug,
@@ -325,50 +210,14 @@ export function AdminProvidersPanel() {
         queryClient.invalidateQueries({ queryKey: adminDefaultProviderQueryKey }),
       ]);
     },
-    onError: (mutationError) => {
-      console.error('[AdminProvidersPanel] set default failed:', mutationError);
-      toast.error((mutationError as Error).message || 'Failed to set default');
-    },
+    onError: onMutationError('set default', 'Failed to set default'),
   });
 
-  const startCreate = () => {
-    setForm(createEmptyForm());
-    setCustomModelInput('');
-    setEditingId('__new');
-  };
-
-  const startEdit = (provider: AdminProviderMasked) => {
-    setForm({
-      slug: provider.slug,
-      displayName: provider.displayName,
-      providerType: provider.providerType,
-      baseUrl: provider.baseUrl ?? '',
-      apiKey: '',
-      defaultModel: provider.defaultModel ?? providerDefaultModel(provider.providerType),
-      defaultInstructions: provider.defaultInstructions ?? '',
-      enabled: provider.enabled,
-    });
-    setCustomModelInput('');
-    setEditingId(provider.id);
-  };
-
-  function cancelEdit() {
-    setCheckResult(null);
-    setEditingId(null);
-    setForm(createEmptyForm());
-    setCustomModelInput('');
-  }
-
-  const runCheck = () => {
-    if (checkMutation.isPending) return;
-    checkMutation.mutate({ editingId, form });
-  };
-  const visibleChecks = checkResult?.key === checkKey ? checkResult.items : null;
-
-  const submit = () => {
-    if (saveMutation.isPending) return;
-    saveMutation.mutate({ editingId, form });
-  };
+  const takenSlugs = useMemo(() => new Set(providers.map((p) => p.slug)), [providers]);
+  const localRows = providers.filter((p) => p.providerType === 'kokoro-local');
+  const externalProviders = providers.filter((p) => !isLocalTtsProviderType(p.providerType));
+  const localOffered = localRows.some((row) => row.enabled);
+  const localDefault = localRows.some((row) => row.slug === defaultProviderSlug);
 
   const confirmDelete = () => {
     const target = deleteTarget;
@@ -384,75 +233,41 @@ export function AdminProvidersPanel() {
     setDefaultMutation.mutate(slug);
   };
 
-  const isEditingExisting = editingId !== null && editingId !== '__new';
-  const editingProvider = isEditingExisting
-    ? providers.find((p) => p.id === editingId)
-    : undefined;
-  const submitDisabled =
-    saveMutation.isPending ||
-    !form.slug.trim() ||
-    !form.displayName.trim();
-
-  const selectedProviderType =
-    providerTypeOptions.find((opt) => opt.value === form.providerType)
-    ?? providerTypeOptions[0];
-  const modelDefinitions: TtsModelDefinition[] = useMemo(
-    () => resolveProviderModels(form.providerType, {
-      apiKey: form.apiKey,
-    }),
-    [form.providerType, form.apiKey],
-  );
-  const supportsCustomModel = providerSupportsCustomModel(form.providerType);
-  const modelIsPreset = modelDefinitions.some((model) => model.id === form.defaultModel);
-  const selectedModelId = modelIsPreset
-    ? form.defaultModel
-    : supportsCustomModel
-      ? 'custom'
-      : modelDefinitions[0]?.id ?? '';
-  const selectedModelDefinition = modelDefinitions.find((model) => model.id === selectedModelId);
-  const modelSupportsInstructions = useCallback((model: string, providerType: TtsProviderType = form.providerType) => resolveTtsProviderModelPolicy({
-    providerRef: form.slug,
-    providerType,
-    model,
-  }).supportsInstructions, [form.slug, form.providerType]);
-  const baseUrlPlaceholder = form.providerType === 'custom-openai'
-    ? 'https://your-tts-host/v1'
-    : defaultBaseUrlForProviderType(form.providerType);
-  const shouldShowBaseUrl = form.providerType === 'custom-openai';
-  const shouldShowInstructions = modelSupportsInstructions(form.defaultModel);
-
-  useEffect(() => {
-    if (!supportsCustomModel) {
-      if (customModelInput) setCustomModelInput('');
-      return;
-    }
-    if (!modelIsPreset && form.defaultModel && customModelInput !== form.defaultModel) {
-      setCustomModelInput(form.defaultModel);
-    }
-    if (modelIsPreset && customModelInput) {
-      setCustomModelInput('');
-    }
-  }, [supportsCustomModel, modelIsPreset, form.defaultModel, customModelInput]);
-
-  useEffect(() => {
-    if (modelSupportsInstructions(form.defaultModel)) return;
-    if (!form.defaultInstructions) return;
-    setForm((prev) => ({ ...prev, defaultInstructions: '' }));
-  }, [form.defaultModel, form.defaultInstructions, form.providerType, form.slug, modelSupportsInstructions]);
-
   const rowActionsDisabled = deleteMutation.isPending || toggleEnabledMutation.isPending || setDefaultMutation.isPending;
 
   return (
-    <div className="space-y-3">
-      {(installProfile === 'desktop' || providers.some((p) => p.providerType === 'kokoro-local')) && <LocalVoicesCard />}
-      <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid">
+    <div className="space-y-6">
+      <Section title="Local models" variant="group" subtitle={`Run ${where} with no account or key.`}>
         {isLoading ? (
-          <ProvidersListSkeleton />
-        ) : providers.length === 0 ? (
-          <p className="px-3 py-3 text-sm text-soft">No shared providers yet</p>
+          <ProvidersListSkeleton rows={1} />
         ) : (
-          providers.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-3 py-2.5">
+          <LocalModelCard
+            where={where}
+            offered={localOffered}
+            isDefault={localDefault}
+            busy={localOfferMutation.isPending || setDefaultMutation.isPending}
+            onOfferChange={(offered) => {
+              if (!localOfferMutation.isPending) localOfferMutation.mutate({ offered, rows: localRows, takenSlugs });
+            }}
+            onSetDefault={() => {
+              const row = localRows.find((candidate) => candidate.enabled);
+              if (row) setDefault(row.slug);
+            }}
+          />
+        )}
+      </Section>
+
+      <Section title="External providers" variant="group">
+        {isLoading ? (
+          <ProvidersListSkeleton rows={2} />
+        ) : externalProviders.length === 0 ? (
+          <p className="text-sm text-soft">No external providers yet</p>
+        ) : (
+          externalProviders.map((p) => (
+            <div key={p.id} className="flex items-center gap-3">
+              <span className={p.enabled ? undefined : 'opacity-50'}>
+                <ProviderLogo providerType={p.providerType} />
+              </span>
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <span className={`truncate text-sm font-medium ${p.enabled ? 'text-foreground' : 'text-soft'}`}>{p.displayName}</span>
@@ -460,7 +275,7 @@ export function AdminProvidersPanel() {
                   {!p.enabled && <Badge tone="muted">Disabled</Badge>}
                 </div>
                 <div className="mt-0.5 truncate font-mono text-[11px] text-soft" title={p.defaultModel ?? undefined}>
-                  {p.slug} · {truncateModelLabel(p.defaultModel ?? defaultModelForProviderType(p.providerType))}
+                  {truncateModelLabel(p.defaultModel ?? defaultModelForProviderType(p.providerType))}
                   {p.baseUrl ? ` · ${baseUrlHost(p.baseUrl)}` : ''}
                 </div>
               </div>
@@ -480,7 +295,7 @@ export function AdminProvidersPanel() {
                     anchor="bottom end"
                     className="z-50 mt-2 min-w-[170px] bg-base focus:outline-none"
                   >
-                    <MenuActionItem onClick={() => startEdit(p)}>
+                    <MenuActionItem onClick={() => setEditorTarget({ kind: 'edit', provider: p })}>
                       Edit
                     </MenuActionItem>
                     <MenuActionItem
@@ -505,203 +320,23 @@ export function AdminProvidersPanel() {
         {isLoading ? null : (
           <button
             type="button"
-            onClick={startCreate}
-            className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2.5 text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+            onClick={() => setEditorTarget({ kind: 'new' })}
+            className="flex w-full items-center gap-2 rounded-b-lg text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
           >
             <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
             Add provider
           </button>
         )}
-      </div>
+      </Section>
 
-      <ModalFrame open={editingId !== null} onClose={cancelEdit} size="lg">
-        <ModalTitle>{isEditingExisting ? 'Edit provider' : 'New provider'}</ModalTitle>
-        <div className="mt-4 space-y-3">
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-            <Field label="Slug">
-              <Input
-                type="text"
-                value={form.slug}
-                onChange={(e) => setForm({ ...form, slug: e.target.value })}
-                placeholder="kokoro-prod"
-                disabled={isEditingExisting}
-              />
-            </Field>
-            <Field label="Display name">
-              <Input
-                type="text"
-                value={form.displayName}
-                onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                placeholder="Kokoro (production)"
-              />
-            </Field>
-            <Field label="Provider type">
-              <Select
-                value={selectedProviderType}
-                options={providerTypeOptions}
-                getOptionKey={(option) => option.value}
-                renderValue={(option) => option.label}
-                renderOption={(option, { selected }) => (
-                  <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                    {option.label}
-                  </span>
-                )}
-                chevronClassName="h-4 w-4 text-muted"
-                onChange={(opt) => {
-                  const nextModel = providerDefaultModel(opt.value);
-                  setForm({
-                    ...form,
-                    providerType: opt.value,
-                    baseUrl: opt.value === 'custom-openai' ? form.baseUrl : '',
-                    defaultModel: nextModel,
-                    defaultInstructions: modelSupportsInstructions(nextModel, opt.value) ? form.defaultInstructions : '',
-                  });
-                  setCustomModelInput('');
-                }}
-              />
-            </Field>
-            <Field label="Default model">
-              <div className="space-y-2">
-                <Select
-                  value={selectedModelDefinition}
-                  options={modelDefinitions}
-                  getOptionKey={(model) => model.id}
-                  renderValue={(model) => model.name}
-                  renderOption={(model, { selected }) => (
-                    <span className={`block ${selected ? 'font-medium' : 'font-normal'}`}>
-                      <span className="block truncate">{model.name}</span>
-                      {model.id.includes(':') ? (
-                        <SelectOptionDetail className="truncate">
-                          {model.id.slice(model.id.indexOf(':'))}
-                        </SelectOptionDetail>
-                      ) : null}
-                    </span>
-                  )}
-                  placeholder="Select model"
-                  chevronClassName="h-4 w-4 text-muted"
-                  onChange={(model) => {
-                    if (model.id === 'custom') {
-                      const nextModel = customModelInput.trim();
-                      setForm({
-                        ...form,
-                        defaultModel: nextModel,
-                        defaultInstructions: modelSupportsInstructions(nextModel) ? form.defaultInstructions : '',
-                      });
-                      return;
-                    }
-                    setForm({
-                      ...form,
-                      defaultModel: model.id,
-                      defaultInstructions: modelSupportsInstructions(model.id) ? form.defaultInstructions : '',
-                    });
-                    setCustomModelInput('');
-                  }}
-                />
-                {supportsCustomModel && selectedModelId === 'custom' && (
-                  <Input
-                    type="text"
-                    value={customModelInput}
-                    onChange={(e) => {
-                      const nextModel = e.target.value;
-                      setCustomModelInput(nextModel);
-                      setForm({
-                        ...form,
-                        defaultModel: nextModel,
-                        defaultInstructions: modelSupportsInstructions(nextModel) ? form.defaultInstructions : '',
-                      });
-                    }}
-                    placeholder="Enter custom model id"
-                  />
-                )}
-              </div>
-            </Field>
-            {shouldShowInstructions && (
-              <Field label="TTS instructions" className="sm:col-span-2">
-                <Textarea
-                  value={form.defaultInstructions}
-                  onChange={(e) => setForm({ ...form, defaultInstructions: e.target.value })}
-                  placeholder="Optional"
-                  className="min-h-24 resize-y"
-                />
-              </Field>
-            )}
-            {shouldShowBaseUrl && (
-              <Field label="Base URL" className="sm:col-span-2">
-                <Input
-                  type="text"
-                  value={form.baseUrl}
-                  onChange={(e) => setForm({ ...form, baseUrl: e.target.value })}
-                  placeholder={baseUrlPlaceholder}
-                />
-              </Field>
-            )}
-            {form.providerType === 'kokoro-local' ? (
-              <p className="text-sm text-muted sm:col-span-2">
-                {`Runs Kokoro-82M ${where}. No key is needed; about 336 MB of model, voice and pronunciation data downloads the first time it speaks.`}
-              </p>
-            ) : (
-              <Field label="API key" className="sm:col-span-2">
-                <Input
-                  type="password"
-                  value={form.apiKey}
-                  onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                  placeholder={editingProvider?.apiKeyMask.startsWith('••••') ? `Keep existing (${editingProvider.apiKeyMask})` : 'Optional'}
-                />
-              </Field>
-            )}
-          </div>
-
-          <ToggleRow
-            label="Enabled"
-            checked={form.enabled}
-            onChange={(checked) => setForm({ ...form, enabled: checked })}
-            variant="flat"
-          />
-
-          {visibleChecks && (
-            <ul
-              className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid"
-              aria-label="Provider check results"
-            >
-              {visibleChecks.map((item) => {
-                const badge = CHECK_BADGE[item.status];
-                return (
-                  <li key={item.id} className="px-3 py-2" data-status={item.status}>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-medium text-foreground">{item.label}</span>
-                      <Badge tone={badge.tone}>{badge.label}</Badge>
-                    </div>
-                    <p className="mt-0.5 text-xs text-soft">{item.detail}</p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <div className="flex items-center gap-2 pt-1">
-            <Button
-              onClick={runCheck}
-              disabled={checkMutation.isPending}
-              variant="outline"
-              size="sm"
-            >
-              {checkMutation.isPending ? 'Checking…' : 'Check'}
-            </Button>
-            <span className="flex-1" />
-            <Button onClick={cancelEdit} variant="secondary" size="sm">
-              Cancel
-            </Button>
-            <Button
-              onClick={submit}
-              disabled={submitDisabled}
-              variant="primary"
-              size="sm"
-            >
-              {saveMutation.isPending ? 'Saving…' : isEditingExisting ? 'Save changes' : 'Create'}
-            </Button>
-          </div>
-        </div>
-      </ModalFrame>
+      <ProviderEditorDialog
+        target={editorTarget}
+        takenSlugs={takenSlugs}
+        onClose={() => setEditorTarget(null)}
+        onSaved={async () => {
+          await refreshProviders();
+        }}
+      />
 
       <ConfirmDialog
         isOpen={deleteTarget !== null}
@@ -716,16 +351,16 @@ export function AdminProvidersPanel() {
   );
 }
 
-function ProvidersListSkeleton() {
+function ProvidersListSkeleton({ rows }: { rows: number }) {
   return (
-    <div className="animate-pulse divide-y divide-line-soft" aria-label="Loading shared providers" aria-busy="true">
-      {[0, 1, 2].map((row) => (
-        <div key={row} className="flex items-center gap-3 px-3 py-2.5">
+    <div className="animate-pulse space-y-3" aria-label="Loading providers" aria-busy="true">
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} className="flex items-center gap-3">
+          <div className="h-8 w-8 shrink-0 rounded-md bg-offbase" />
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="h-4 w-36 rounded bg-offbase" />
             <div className="h-3 w-56 rounded bg-offbase" />
           </div>
-          <div className="h-7 w-7 shrink-0 rounded-md bg-offbase" />
         </div>
       ))}
     </div>
