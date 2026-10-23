@@ -115,6 +115,7 @@ type HighlightPatternOptions = {
   paintSegment?: boolean;
   useBlockGeometryOnly?: boolean;
   language?: string;
+  follow?: boolean;
 };
 
 function getHighlightLayerForPage(pageElement: HTMLElement): {
@@ -154,6 +155,7 @@ function highlightParsedBlockGeometry(
   containerRef: React.RefObject<HTMLDivElement>,
   parsedDocument: ParsedPdfDocument,
   locator: TTSSegmentLocator,
+  follow = true,
 ): boolean {
   if (locator.readerType !== 'pdf') return false;
   if (!locator.blockId) return false;
@@ -211,7 +213,7 @@ function highlightParsedBlockGeometry(
     drewAny = true;
   }
 
-  if (!drewAny || !firstRect) return drewAny;
+  if (!drewAny || !firstRect || !follow) return drewAny;
 
   const containerRect = container.getBoundingClientRect();
   const visibleTop = container.scrollTop;
@@ -402,7 +404,7 @@ export function highlightPattern(
 
   if (!spanNodes.length) {
     if (useBlockGeometryOnly) {
-      return highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+      return highlightParsedBlockGeometry(containerRef, parsedDocument, locator, options?.follow);
     }
     return false;
   }
@@ -435,7 +437,7 @@ export function highlightPattern(
       start: 0,
       end: tokens.length - 1,
     };
-    return highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+    return highlightParsedBlockGeometry(containerRef, parsedDocument, locator, options?.follow);
   }
 
   const patternLen = cleanPattern.length;
@@ -560,6 +562,7 @@ export function highlightPattern(
     });
 
     if (!scrollIntoViewRects.length) return false;
+    if (options?.follow === false) return true;
 
     // Scroll the first highlighted rect into view if needed
     const containerRect = container.getBoundingClientRect();

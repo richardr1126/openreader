@@ -62,7 +62,10 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
 
   // TTS context
   const {
-    skipToLocation,
+    browseToLocation,
+    followingNarration,
+    setFollowingNarration,
+    readerNavigationRevision,
     resolvedLanguage,
     playbackPlanReady,
     playbackPlanSegmentCount,
@@ -270,6 +273,12 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     const isLayoutChange = layoutKey !== lastSentenceLayoutKeyRef.current;
     lastSentenceLayoutKeyRef.current = layoutKey;
     const activeLocator = currentSegment?.ownerLocator ?? null;
+    if (activeLocator?.readerType === 'pdf' && activeLocator.page !== currDocPage) {
+      clearHighlights();
+      clearWordHighlights();
+      commitSurfacePart(surfaceKey, 'highlight');
+      return;
+    }
     const hasParsedBlockLocator =
       !!parsedDocument
       && activeLocator?.readerType === 'pdf'
@@ -300,6 +309,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
           paintSegment: pdfHighlightEnabled,
           useBlockGeometryOnly,
           language: resolvedLanguage,
+          follow: followingNarration,
         },
       );
       if (seq !== sentenceHighlightSeqRef.current) return;
@@ -319,11 +329,14 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     }
   }, [
     currDocText,
+    followingNarration,
+    readerNavigationRevision,
     currDocPage,
     currentSentence,
     currentSegment,
     highlightPattern,
     clearHighlights,
+    clearWordHighlights,
     pdfHighlightEnabled,
     pdfWordHighlightEnabled,
     parsedDocument,
@@ -341,7 +354,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   useEffect(() => {
     clearWordHighlightTimeouts();
 
-    if (!pdfWordHighlightEnabled) {
+    if (!pdfWordHighlightEnabled || currentSegment?.ownerLocator?.readerType === 'pdf' && currentSegment.ownerLocator.page !== currDocPage) {
       clearWordHighlights();
       return;
     }
@@ -406,6 +419,8 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     return cleanup;
   }, [
     currentWordIndex,
+    currentSegment,
+    currDocPage,
     currentSentence,
     currentSentenceAlignment,
     pdfHighlightEnabled,
@@ -493,7 +508,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   }, []);
 
   const handleScroll = useCallback(() => {
-    if (viewType !== 'scroll' || scrollFrameRef.current !== null) return;
+    if (viewType !== 'scroll' || followingNarration || scrollFrameRef.current !== null) return;
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null;
       if (programmaticScrollPageRef.current !== null) return;
@@ -518,9 +533,9 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
 
       if (visiblePage === currDocPage) return;
       scrollSyncedPageRef.current = visiblePage;
-      skipToLocation(visiblePage, true);
+      browseToLocation(visiblePage);
     });
-  }, [currDocPage, skipToLocation, viewType]);
+  }, [currDocPage, browseToLocation, followingNarration, viewType]);
 
   const parsedPageByNumber = useMemo(() => {
     const map = new Map<number, ParsedPdfPage>();
@@ -670,6 +685,8 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     <div
       ref={containerRef}
       onScroll={handleScroll}
+      onWheel={() => setFollowingNarration(false)}
+      onTouchMove={() => setFollowingNarration(false)}
       className="flex flex-col items-center overflow-auto w-full px-6 h-full pdf-viewer"
     >
       <Document
@@ -684,12 +701,12 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
         }}
         onItemClick={(args: PDFOnLinkClickArgs) => {
           if (args?.pageNumber) {
-            skipToLocation(args.pageNumber, true);
+            browseToLocation(args.pageNumber);
           } else if (args?.dest) {
             const destArray = args.dest as Array<number> || [];
             const pageNum = destArray[0] + 1 || null;
             if (pageNum) {
-              skipToLocation(pageNum, true);
+              browseToLocation(pageNum);
             }
           }
         }}

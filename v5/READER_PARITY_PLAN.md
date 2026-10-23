@@ -53,7 +53,7 @@ schema deployment before distribution; see the Swift architecture document.
 | 1 | Voice favorites | Implemented in both shared pickers: independent favorite buttons, filtering and persistence. Web uses synced user preferences; Swift uses the existing iCloud speech record. |
 | 2 | Typography | Global/per-book controls and EPUB/flowing-text rendering implemented on both platforms. Preserve publisher defaults, Dynamic Type and playback identity. PDF page typography is unchanged. |
 | 3 | Highlight appearance | Global/per-book segment and word colors, opacity, presets, inheritance/reset implemented. Swift adds the approved optional storage field and independent iCloud clock. Production schema deployment and two-device verification remain owner follow-ups. |
-| 4 | Manual browsing and follow controls | Review cursor/playback separation first; implement reader controls and navigation against that contract. Preserve canonical playback identity and existing readiness events. |
+| 4 | Manual browsing and follow controls | Implemented on web and Swift: browsing preserves playback, Follow narration controls viewport movement, and Return to narration rejoins the live cursor. Explicit text/player/contents seeks enable following through the existing playback path. No schema or audio identity changes. |
 | 5 | Citation and bracket handling | Define source-to-spoken mapping and cache implications before preference UI. Text transformations must not invalidate word highlighting or stored progress silently. |
 | 6 | Added web pauses | Establish the actual pause contract before implementation. Swift's existing controls refer to generated-piece and reader-block boundaries; these are not guaranteed sentence and paragraph boundaries. No Swift pause redesign is currently requested. |
 | 7 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
@@ -75,7 +75,7 @@ schema deployment before distribution; see the Swift architecture document.
 ## Current checkpoint
 
 The completed baseline is committed on the paired integration branches. Items
-1–3 are now implemented there. The owner approved global/per-book typography
+1–4 are now implemented there. The owner approved global/per-book typography
 and highlight appearance with iCloud sync, including their optional SwiftData
 fields and additive CloudKit fields. Web uses existing preference/document JSON
 without a SQL migration. Appearance saves update the existing ready reader
@@ -107,6 +107,25 @@ and all 392 package tests pass. Visible checks covered shared picker favorites,
 global preference reload, book font inheritance/reset, native preset previews,
 flowing-text font changes and EPUB reflow at 125% with the cursor unchanged.
 Two-device iCloud delivery and Production schema deployment remain unverified.
+
+Item 4 keeps follow state local to the open reader. Page turns and scrolls do
+not change the narration cursor, persisted progress, generation window or audio
+identity. Turning following on, or choosing Return to narration, moves only the
+view and works while paused. Text taps, player seeks, contents, search and
+bookmarks remain explicit playback seeks and re-enable following. Playback
+resume alone preserves manual browsing. Swift's reader toolbar exposes these
+controls on iOS and Catalyst; text, spreads, PDF and EPUB share the contract.
+Web exposes the controls beside the existing page/progress readout. No new
+storage, synchronization fields or readiness requests were introduced.
+
+Item 4 validation: all 1,427 Vitest tests and all 55 Chromium/WebKit cases pass,
+including both consolidated playback journeys. The production build, app type
+check and route/compute/install-profile checks pass. Native simulator and
+Catalyst builds and all 392 package tests pass. Visible checks covered web PDF
+browsing/return, native text browsing during active narration, paused return,
+and native EPUB page turns/return with the saved ordinal unchanged. Native PDF
+and spread rendering were build-checked but not separately exercised on screen
+for this increment. Changes remain local on the existing paired branches.
 
 The accepted favorite identity on web is the structured tuple of resolved
 provider configuration reference, model ID, and voice ID. Serialize lookup keys

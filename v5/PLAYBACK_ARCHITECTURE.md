@@ -1526,9 +1526,33 @@ Implemented:
   stable-anchor failures, and plan-mapping failures enter the shared render
   error state with a retry action. Authoritative zero-segment plans complete
   after rendition readiness without inventing an ordinal.
-- Manual navigation updates the rendered anchor and selected worker ordinal;
-  playback-follow navigation preserves its canonical cursor. Neither path
-  resets the plan.
+- Initial placement selects the saved worker ordinal. Later manual navigation
+  and playback-follow placement update only the rendered anchor, preserving
+  the canonical cursor and plan.
+
+### Manual browsing and narration following
+
+The visible page is independent of the audio cursor. PDF previous/next, page
+jumps, continuous scrolling and internal page links, and EPUB page turns and
+internal links browse without pausing, seeking, writing reading progress or
+retargeting generation. Browsing disables Follow narration; flowing-text scroll
+gestures do the same. Highlight projection continues from the audio clock, and
+an offscreen passage is ordinary browsing rather than a renderer failure.
+
+Follow narration is transient reader state, enabled when a book opens. Turning
+it off suppresses renderer navigation, including highlight-driven PDF scrolling,
+while preserving highlights wherever the narrated passage remains visible.
+Return to narration enables following and places the view at the current
+playhead, even while paused. Neither action changes the audio session, cache,
+playback intent or readiness stream. The text reader maps the current passage
+for following even when both visible highlight layers are disabled.
+
+Explicit playback commands remain distinct: tapping a sentence, using sentence
+skip/scrub, or choosing a chapter, search result or bookmark seeks through the
+existing canonical playback path and enables following. Merely resuming audio
+does not cancel a manual-browsing choice. There is no separately persisted page
+position and no new polling or cursor writer. The old page-to-audio skip command
+and its autoplay/cursor-swallow flags have been removed.
 
 Verified: `pnpm exec tsc --noEmit`, the focused EPUB placement/selection and
 architecture tests, `pnpm test:unit` (573 tests), `pnpm build`, and the Chromium

@@ -73,7 +73,7 @@ describe('EPUB location controller helpers', () => {
 
   test('preserves the canonical cursor only for passive renderer and playback-follow placement', () => {
     expect(shouldPreserveEpubPlaybackCursor('initial')).toBe(false);
-    expect(shouldPreserveEpubPlaybackCursor('manual')).toBe(false);
+    expect(shouldPreserveEpubPlaybackCursor('manual')).toBe(true);
     expect(shouldPreserveEpubPlaybackCursor('renderer')).toBe(true);
     expect(shouldPreserveEpubPlaybackCursor('playback-follow')).toBe(true);
   });

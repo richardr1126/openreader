@@ -1,5 +1,7 @@
 'use client';
 
+import { ReaderFollowControls } from '@/components/reader/ReaderNavigator';
+
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { useTTS, useTTSPlaybackProgress } from '@/contexts/TTSContext';
@@ -205,6 +207,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           )}
         >
           {navigator}
+          <ReaderFollowControls />
         </div>
       ) : null}
       {/* Top Edge Scrubber bar */}

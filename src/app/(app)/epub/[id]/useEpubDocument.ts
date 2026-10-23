@@ -113,6 +113,8 @@ export function useEpubDocument(
     currentSentenceOrdinal,
     playbackSegments,
     skipToOrdinal,
+    setFollowingNarration,
+    followingNarration,
   } = useTTS();
   const { epubHighlightEnabled, epubWordHighlightEnabled, readerShowsLayout } = useConfig();
 
@@ -142,6 +144,8 @@ export function useEpubDocument(
   const initialPositionRef = useRef<ReadingPosition | null>(initialPosition);
   const pendingInitialOrdinalRef = useRef<number | null>(null);
   const playbackSegmentsRef = useRef<CanonicalTtsSegment[]>(playbackSegments);
+  const followingNarrationRef = useRef(followingNarration);
+  followingNarrationRef.current = followingNarration;
   playbackSegmentsRef.current = playbackSegments;
   // Navigation callbacks change identity whenever playback state does (each
   // SSE seek-layout update during generation). Placement reads the latest ones
@@ -467,7 +471,10 @@ export function useEpubDocument(
     // EPUB.js follows in-book links (a contents page, footnotes) itself, so the
     // jump is marked as manual navigation before its relocation commits.
     const markLinkNavigation = () => {
-      if (renditionRef.current === rendition) placementIntentRef.current = 'manual';
+      if (renditionRef.current === rendition) {
+        setFollowingNarration(false);
+        placementIntentRef.current = 'manual';
+      }
     };
     const watchLinks = (contents: Contents) => contents?.on('linkClicked', markLinkNavigation);
     const current = rendition.getContents() as unknown as Contents | Contents[];
@@ -491,20 +498,25 @@ export function useEpubDocument(
         setMetadataLanguage(null);
         console.warn('Failed to read EPUB language metadata:', error);
       });
-  }, [setIsEPUB]);
+  }, [setIsEPUB, setFollowingNarration]);
 
   const resolveLocatorToCfi = useCallback((locator: TTSSegmentLocator) => (
     resolveEpubLocatorToCfi(bookRef.current, locator)
   ), []);
 
-  const handleLocationChanged = useEPUBLocationController({
+  const navigateRendition = useEPUBLocationController({
     isEpubSetOnceRef: isEPUBSetOnce,
     placementIntentRef,
     setIsEpub: setIsEPUB,
     bookRef,
     renditionRef,
     resolveLocatorToCfi,
+    followingNarrationRef,
   });
+  const handleLocationChanged = useCallback<typeof navigateRendition>((location, intent = 'manual') => {
+    if (intent === 'manual') setFollowingNarration(false);
+    navigateRendition(location, intent);
+  }, [navigateRendition, setFollowingNarration]);
 
   // Plain-text reading mode has no rendition to commit a placement, so the
   // saved cursor anchors playback directly against the plan.

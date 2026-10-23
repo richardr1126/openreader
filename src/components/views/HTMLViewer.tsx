@@ -78,6 +78,9 @@ export function HTMLViewer({
     playbackPlanSegmentCount,
     playbackSegments,
     skipToOrdinal,
+    followingNarration,
+    setFollowingNarration,
+    readerNavigationRevision,
   } = useTTS();
   const {
     currentSegment,
@@ -135,7 +138,7 @@ export function HTMLViewer({
     const container = contentRef.current;
     if (!container) return;
     clearHtmlSentenceHighlight();
-    if (highlightEnabled || wordHighlightEnabled) {
+    {
       // The owning block, plus the next one a sentence may run on into.
       const owner = currentBlockKey ? container.ownerDocument.getElementById(currentBlockKey) : null;
       const scope = owner && container.contains(owner)
@@ -145,7 +148,7 @@ export function HTMLViewer({
         onError?.(new Error('The selected worker-plan segment did not map to the rendered text.'));
         return;
       }
-      scrollSentenceIntoView(scrollRef.current);
+      if (followingNarration || readySegmentRef.current === null) scrollSentenceIntoView(scrollRef.current);
     }
     if (readySegmentRef.current !== currentSentence) {
       readySegmentRef.current = currentSentence;
@@ -153,6 +156,8 @@ export function HTMLViewer({
     }
   }, [
     blocks,
+    followingNarration,
+    readerNavigationRevision,
     highlightEnabled,
     wordHighlightEnabled,
     currentBlockKey,
@@ -231,7 +236,12 @@ export function HTMLViewer({
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Document text" className="flex-1 overflow-auto" data-testid="text-reader">
+      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Document text" className="flex-1 overflow-auto" data-testid="text-reader"
+        onWheel={() => setFollowingNarration(false)}
+        onTouchMove={() => setFollowingNarration(false)}
+        onKeyDown={(event) => {
+          if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) setFollowingNarration(false);
+        }}>
         <div
           ref={contentRef}
           className="html-container prose prose-base px-4 py-4 mx-auto"

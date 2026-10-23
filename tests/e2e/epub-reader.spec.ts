@@ -46,11 +46,17 @@ test('anonymous user opens an EPUB and reads its visible book content', async ({
     return Math.abs(container.height - frame.height);
   }).toBeLessThanOrEqual(1);
 
-  // Following the book's own contents link selects that chapter for playback.
+  // The book's own links browse; the narration cursor stays on the title.
+  const playbackPosition = page.getByRole('slider', { name: 'Playback position', exact: true });
+  const originalPosition = await playbackPosition.inputValue();
   await book.getByRole('link', { name: 'Chapter I. The Cyclone', exact: true }).click();
   await expect(book.getByRole('heading', { name: /^Chapter I\b/ })).toBeVisible();
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
   const contents = page.getByRole('dialog', { name: 'Contents' });
   await expect(contents).toBeInViewport({ ratio: 1 });
-  await expect(contents.locator('[aria-current="true"]')).toHaveText('Chapter I The Cyclone');
+  await expect(contents.locator('[aria-current="true"]')).toHaveText('The Wonderful Wizard of Oz');
+  await expect(playbackPosition).toHaveValue(originalPosition);
+  await contents.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Return to narration', exact: true }).click();
+  await expect(book.getByRole('heading', { name: 'The Wonderful Wizard of Oz', exact: true })).toBeVisible();
 });

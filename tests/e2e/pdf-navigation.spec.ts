@@ -26,10 +26,18 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
 
   await expect(pageOne).toBeInViewport();
   await expect(previousPage).toBeDisabled();
+  const playbackPosition = page.getByRole('slider', { name: 'Playback position', exact: true });
+  const originalPosition = await playbackPosition.inputValue();
   await nextPage.click();
   await expect(page.getByText('Chapter Two', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
   await expect(nextPage).toBeDisabled();
+  await expect(playbackPosition).toHaveValue(originalPosition);
+  await expect(page.getByRole('button', { name: 'Follow narration', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'Return to narration', exact: true }).click();
+  await expect(page.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
+  await expect(playbackPosition).toHaveValue(originalPosition);
+  await nextPage.click();
 
   await page.getByRole('button', { name: '2 / 2', exact: true }).click();
   const pageNumber = page.getByRole('textbox', { name: 'Page number', exact: true });

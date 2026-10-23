@@ -124,7 +124,7 @@ async function fixture(initialLayout = layout) {
       audioContext: null, audioSpeed: 1, canStartPlayback: true, isPlaying, isPlayingRef,
       playbackSegmentsRef: useRef(segments), playbackSeekLayout: seekLayout,
       selectedOrdinal: selectedOrdinalRef.current, selectedOrdinalRef, playbackRunIdRef: useRef(0),
-      setIsPlaying, setCurrDocPage: vi.fn(), setSelectedOrdinal: (ordinal) => { selectedOrdinalRef.current = ordinal; },
+      setIsPlaying, setSelectedOrdinal: (ordinal) => { selectedOrdinalRef.current = ordinal; },
       setPlaybackSeekLayout: setSeekLayout, setCurrentSentenceAlignment: vi.fn(), setCurrentWordIndex: vi.fn(), onAdvance: vi.fn(),
       controller: {
         buildPlaybackPlanRequest: () => request,

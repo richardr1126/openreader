@@ -119,6 +119,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   } = epubState;
   const {
     registerLocationChangeHandler,
+    followingNarration,
   } = useTTS();
   const {
     currentSegment,
@@ -175,7 +176,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   useLayoutEffect(() => {
     if (!isPlaybackReady) return;
     if (currentSegment) {
-      if (!highlightSegment(currentSegment)) {
+      if (!highlightSegment(currentSegment) && followingNarration) {
         onError?.(new Error('The selected worker-plan segment did not map to the rendered EPUB.'));
         return;
       }
@@ -185,6 +186,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     onReady?.();
   }, [
     currentSegment,
+    followingNarration,
     renderedTextRevision,
     highlightSegment,
     clearHighlights,

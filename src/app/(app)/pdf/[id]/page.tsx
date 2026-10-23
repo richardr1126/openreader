@@ -84,7 +84,7 @@ function PdfReader({
   const { readerShowsLayout } = useConfig();
   const outline = usePdfOutline(pdfDocument);
   const {
-    skipToLocation,
+    browseToLocation,
   } = useTTS();
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   // Plain-text mode reflows like EPUB, so its control sets side padding instead of page scale.
@@ -215,15 +215,15 @@ function PdfReader({
           navigator={currDocPages ? (
             <ReaderPager
               unit="page"
-              onPrevious={() => skipToLocation(currDocPage - 1, true)}
-              onNext={() => skipToLocation(currDocPage + 1, true)}
+              onPrevious={() => browseToLocation(currDocPage - 1)}
+              onNext={() => browseToLocation(currDocPage + 1)}
               canPrevious={currDocPage > 1}
               canNext={currDocPage < currDocPages}
               position={(
                 <PageJumpControl
                   currentPage={currDocPage}
                   numPages={currDocPages}
-                  onGoToPage={(page) => skipToLocation(page, true)}
+                  onGoToPage={browseToLocation}
                 />
               )}
             />

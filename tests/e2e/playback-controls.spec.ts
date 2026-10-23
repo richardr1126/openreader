@@ -109,6 +109,23 @@ async function verifyWordOnlyPlayback(page: Page, surface: 'html' | 'pdf') {
   const word = page.locator(surface === 'pdf' ? '.pdf-word-highlight-overlay' : '.openreader-html-highlight-word');
   await expect(word.first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator(surface === 'pdf' ? '.pdf-text-highlight-overlay' : '.openreader-html-highlight-sentence')).toHaveCount(0);
+  if (surface === 'pdf') {
+    const beforeBrowsing = await readPlaybackPosition(page);
+    let newSessions = 0;
+    const watchSessions = (request: import('@playwright/test').Request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/tts/stream/sessions') newSessions += 1;
+    };
+    page.on('request', watchSessions);
+    await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
+    await expect(pause).toBeVisible();
+    await expect.poll(() => readPlaybackPosition(page)).toBeGreaterThan(beforeBrowsing + 1);
+    await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Return to narration', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Follow narration', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(newSessions).toBe(0);
+    page.off('request', watchSessions);
+  }
   await pause.click();
   await setHighlightMode(page, true, true);
 }
@@ -292,23 +309,28 @@ async function verifyEpubPlayback(page: Page) {
   await expect(playButton).toBeVisible();
   expect(preparations).toBe(1);
 
+  const beforeBrowsing = await readPlaybackPosition(page);
   await page.getByRole('button', { name: 'Next section', exact: true }).click();
   await expect(initialViewportHeading).not.toBeInViewport({ timeout: 15_000 });
+  expect(await readPlaybackPosition(page)).toBeCloseTo(beforeBrowsing, 0);
   await expect.poll(async () => Number(await position.getAttribute('max')))
     .toBeGreaterThan(documentDuration * 0.9);
   expect(await readGeneratedSegmentCount(page, session.seekLayoutUrl))
     .toBeGreaterThanOrEqual(settledGeneratedCount);
 
-  // Resume from a different EPUB section in the same canonical session. This
-  // catches stale async rendition navigation that can leave audio advancing in
-  // one spine while the rendered text and word highlight remain in another.
+  // Resume preserves browsing while the same narration timeline advances.
+  // Returning rejoins the spoken passage without seeking or re-preparing it.
   await playButton.click();
   await expect(pauseButton).toBeVisible({ timeout: 60_000 });
   const resumedAt = await readPlaybackPosition(page);
   await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 })
     .toBeGreaterThan(resumedAt + 1);
+  await expect(page.getByRole('button', { name: 'Follow narration', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  const preparationsBeforeReturn = preparations;
+  await page.getByRole('button', { name: 'Return to narration', exact: true }).click();
   await expect.poll(() => readEpubWordHighlight(page), { timeout: 15_000 })
     .not.toBe('');
+  expect(preparations).toBe(preparationsBeforeReturn);
   await pauseButton.click();
   await expect(playButton).toBeVisible();
 
@@ -344,6 +366,8 @@ test('anonymous user controls playback across every accepted document journey', 
       timeout: 30_000,
     });
   }
+  const sourcePdfHref = await page.getByRole('link', { name: 'sample.pdf', exact: true }).getAttribute('href');
+  expect(sourcePdfHref).toBeTruthy();
 
   await page
     .getByRole('complementary')
@@ -509,12 +533,12 @@ test('anonymous user controls playback across every accepted document journey', 
   await expect(bookTitle).toBeVisible();
   await returnToLibrary(page);
 
-  await openDocument(page, pdfLinks.nth(0), 'sample.pdf');
+  await openDocument(page, pdfLinks.and(page.locator(`[href="${sourcePdfHref}"]`)), 'sample.pdf');
   await verifyWordOnlyPlayback(page, 'pdf');
   await startAndCancelPlayback(page);
   await returnToLibrary(page);
 
-  await openDocument(page, pdfLinks.nth(1), 'sample.pdf', 60_000);
+  await openDocument(page, pdfLinks.and(page.locator(`:not([href="${sourcePdfHref}"])`)), 'sample.pdf', 60_000);
   await startAndCancelPlayback(page);
   await returnToLibrary(page);
 });
