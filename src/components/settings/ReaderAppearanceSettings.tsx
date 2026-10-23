@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Section, Select, SegmentedControl } from '@/components/ui';
+import { Section, Select, SegmentedControl, SaveBar } from '@/components/ui';
 import { ColorPicker } from '@/components/ColorPicker';
 import { MinusIcon, PaletteIcon, PlusIcon, RefreshIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -13,6 +13,7 @@ import {
 } from '@/lib/shared/reader-appearance';
 
 type Values = ReaderTypography & HighlightAppearance;
+export type AppearanceDraft = { typography: Partial<ReaderTypography>; highlightAppearance: Partial<HighlightAppearance> };
 const labels: Record<keyof typeof TYPOGRAPHY_RANGES, string> = {
   sizePercent: 'Text size', lineMultiplier: 'Line spacing', paragraphSpacing: 'Paragraph spacing',
   letterSpacing: 'Letter spacing', readingWidth: 'Reading width',
@@ -105,45 +106,47 @@ function LinesGlyph({ gap = 2, widths = [100, 100, 100], centered = false }: { g
 // Block flex, not inline: glyphs of different heights would otherwise shift each segment's text baseline.
 const segmentLabel = (glyph: ReactNode, text: ReactNode) => <span className="flex items-center justify-center gap-1.5">{glyph}{text}</span>;
 
-export function ReaderAppearanceSettings({ scope = 'global', showTypography = true }: {
+export function ReaderAppearanceSettings({ scope = 'global', showTypography = true, value, onChange }: {
   scope?: 'global' | 'book'; showTypography?: boolean;
+  value?: AppearanceDraft; onChange?: (value: AppearanceDraft) => void;
 }) {
   const config = useConfig();
   const { book } = useReaderAppearance();
-  const ownTypography = scope === 'book' ? book?.settings.typography ?? {} : config.readerTypography;
-  const ownHighlights = scope === 'book' ? book?.settings.highlightAppearance ?? {} : config.highlightAppearance;
-  const resolved = {
+  const saved = {
+    typography: scope === 'book' ? book?.settings.typography ?? {} : config.readerTypography,
+    highlightAppearance: scope === 'book' ? book?.settings.highlightAppearance ?? {} : config.highlightAppearance,
+  };
+  const signature = JSON.stringify(saved);
+  const [localDraft, setLocalDraft] = useState<AppearanceDraft | null>(null);
+  const pending = value ?? localDraft ?? saved;
+  const setPending = onChange ?? setLocalDraft;
+  const ownTypography = pending.typography;
+  const ownHighlights = pending.highlightAppearance;
+  const draft = {
     ...normalizeTypography({ ...config.readerTypography, ...ownTypography }),
     ...normalizeHighlightAppearance({ ...config.highlightAppearance, ...ownHighlights }),
   };
-  const signature = JSON.stringify(resolved);
-  const [draft, setDraft] = useState<Values>(resolved);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { setDraft(JSON.parse(signature) as Values); }, [signature]);
+  const dirty = JSON.stringify(pending) !== signature;
 
-  async function save(kind: 'typography' | 'highlightAppearance', patch: Partial<Values>, reset = false) {
+  async function apply() {
     setBusy(true); setError(null);
     try {
-      const own = kind === 'typography' ? ownTypography : ownHighlights;
-      const next = reset ? {} : { ...own, ...patch };
       if (scope === 'book') {
         if (!book) throw new Error('Book settings are not ready.');
-        await book.update({ [kind]: next });
+        await book.update(pending);
       }
-      else if (kind === 'typography') await config.updateConfigKey('readerTypography', normalizeTypography(next));
-      else await config.updateConfigKey('highlightAppearance', normalizeHighlightAppearance(next));
+      else await config.updateConfig({ readerTypography: normalizeTypography(ownTypography), highlightAppearance: normalizeHighlightAppearance(ownHighlights) });
+      setLocalDraft(null);
     } catch (e) {
-      setDraft(resolved);
       setError(e instanceof Error ? e.message : 'Could not save reader appearance.');
     } finally { setBusy(false); }
   }
   function inherit(kind: 'typography' | 'highlightAppearance', key: keyof Values) {
     const own = kind === 'typography' ? ownTypography : ownHighlights;
     const next = { ...own }; delete (next as Partial<Values>)[key];
-    // Replace the override, rather than merging back the field being removed.
-    setBusy(true); setError(null);
-    void book?.update({ [kind]: next }).catch((e: Error) => setError(e.message)).finally(() => setBusy(false));
+    setPending({ ...pending, [kind]: next });
   }
   const resetField = (kind: 'typography' | 'highlightAppearance', key: keyof Values) => scope === 'book'
     ? <span className="inline-flex h-5 w-5 shrink-0">
@@ -153,8 +156,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
   const typographyChanged = scope === 'book' ? Object.keys(ownTypography).length > 0 : JSON.stringify(ownTypography) !== JSON.stringify(DEFAULT_TYPOGRAPHY);
   const highlightsChanged = scope === 'book' ? Object.keys(ownHighlights).length > 0 : JSON.stringify(ownHighlights) !== JSON.stringify(DEFAULT_HIGHLIGHT_APPEARANCE);
   const change = (kind: 'typography' | 'highlightAppearance', patch: Partial<Values>) => {
-    setDraft({ ...draft, ...patch });
-    void save(kind, patch);
+    setPending({ ...pending, [kind]: { ...pending[kind], ...patch } });
   };
   // Book scope reserves the reset slot on every row so controls share one right edge.
   const slot = scope === 'book' ? <span aria-hidden className="w-5 shrink-0" /> : null;
@@ -171,7 +173,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
     <p className="text-xs text-soft">{scope === 'book' ? 'This book inherits your global settings until you change a control.' : 'Defaults for all books. Individual books can override these settings.'}</p>
     {error && <p role="alert" className="text-sm text-warning">{error}</p>}
     {showTypography && <Section title="Typography" variant="group" action={typographyChanged &&
-      <ResetIcon label={scope === 'book' ? 'Use global typography' : 'Reset typography'} onClick={() => void save('typography', DEFAULT_TYPOGRAPHY, scope === 'book')} />}>
+      <ResetIcon label={scope === 'book' ? 'Use global typography' : 'Reset typography'} onClick={() => setPending({ ...pending, typography: scope === 'book' ? {} : DEFAULT_TYPOGRAPHY })} />}>
       <div aria-label="Typography preview" role="region" className="overflow-hidden text-foreground">
         <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-wide text-faint"><span>Reading preview</span><span>Live</span></div>
         {/* Taller on wide screens so a real page of text shows; the fade marks the clip as intentional. */}
@@ -210,7 +212,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       </Row>
     </Section>}
     <Section title="Highlight appearance" variant="group" action={highlightsChanged &&
-      <ResetIcon label={scope === 'book' ? 'Use global highlights' : 'Reset highlight appearance'} onClick={() => void save('highlightAppearance', DEFAULT_HIGHLIGHT_APPEARANCE, scope === 'book')} />}>
+      <ResetIcon label={scope === 'book' ? 'Use global highlights' : 'Reset highlight appearance'} onClick={() => setPending({ ...pending, highlightAppearance: scope === 'book' ? {} : DEFAULT_HIGHLIGHT_APPEARANCE })} />}>
       <div><p aria-label="Highlight preview" className="rounded-md px-3 py-2 text-sm text-foreground" style={{ backgroundColor: highlightBackground(draft, 'segment') }}>Read at your own pace, <span className="rounded-sm" style={{ backgroundColor: highlightBackground(draft, 'word') }}>word</span> by word.</p></div>
       <Row label="Preset" wide trail={slot}>
         <SegmentedControl ariaLabel="Highlight presets" className={segmentedClass(4)}
@@ -226,9 +228,9 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
         const color = <>
           <span className="inline-flex h-5 w-5 shrink-0">{draft[colorKey] !== 'theme' && <button type="button" aria-label={`Use theme ${layer} color`} title="Use theme color"
             className="inline-flex h-5 w-5 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            onClick={() => void save('highlightAppearance', { [colorKey]: 'theme' })}><PaletteIcon className="h-3 w-3" aria-hidden /></button>}</span>
+            onClick={() => change('highlightAppearance', { [colorKey]: 'theme' })}><PaletteIcon className="h-3 w-3" aria-hidden /></button>}</span>
           <ColorPicker label={title} field="accent" value={draft[colorKey] === 'theme' ? '#ef4444' : draft[colorKey]}
-            onChange={(next) => { setDraft({ ...draft, [colorKey]: next }); void save('highlightAppearance', { [colorKey]: next }); }} />
+            onChange={(next) => change('highlightAppearance', { [colorKey]: next })} />
           {resetField('highlightAppearance', colorKey)}
         </>;
         return <Row label={title} key={layer} lead={color} trail={resetField('highlightAppearance', opacityKey)}>
@@ -236,5 +238,6 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
         </Row>;
       })}
     </Section>
+    {!onChange && (dirty || busy) && <SaveBar saving={busy} onDiscard={() => { setLocalDraft(null); setError(null); }} onSave={() => void apply()} />}
   </fieldset>;
 }

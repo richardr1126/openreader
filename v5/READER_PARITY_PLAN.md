@@ -94,6 +94,11 @@ the display (taller box, multi-paragraph passage, faded clip). Highlight setting
 samples with selected states; each layer has one color and opacity control,
 without duplicate intensity preset buttons. Native preset labels fit narrow
 phone layouts.
+Web Appearance uses the shared settings Discard/Save bar. Theme and custom
+colors preview live on the page; typography and highlights preview in their
+samples and save together in one request. Discard, or leaving unsaved, restores
+the previous theme. Book appearance uses the same bar, including inheritance
+resets. Failed saves retain drafts for retry. iOS continues saving immediately.
 Batch validation: 1,425 Vitest tests and all 55 Chromium/WebKit Playwright
 cases pass, including both consolidated playback journeys. The production
 build and route/compute/install-profile boundary checks pass. Native build

@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ColorPicker } from '@/components/ColorPicker';
-import { ReaderAppearanceSettings } from './ReaderAppearanceSettings';
+import { ReaderAppearanceSettings, type AppearanceDraft } from './ReaderAppearanceSettings';
+import { useConfig } from '@/contexts/ConfigContext';
+import { normalizeTypography, normalizeHighlightAppearance } from '@/lib/shared/reader-appearance';
 import { CheckIcon, MoonIcon, SunIcon } from '@/components/icons/Icons';
-import { ChoiceTile, IconButton } from '@/components/ui';
+import { ChoiceTile, IconButton, SaveBar } from '@/components/ui';
 import {
   getCustomThemeColors,
   THEMES,
@@ -104,8 +106,48 @@ function ThemeChoice({
 }
 
 export function AppearanceSettingsPanel() {
-  const { theme, setTheme, applyCustomColors } = useTheme();
+  const { theme, setTheme: applyTheme, applyCustomColors } = useTheme();
+  const config = useConfig();
   const [customColors, setCustomColors] = useState<CustomThemeColors>(getCustomThemeColors);
+  // Theme choices preview live on the page; this holds what Discard (or leaving unapplied) restores.
+  const [themeBaseline, setThemeBaseline] = useState<{ theme: ThemeId; colors: CustomThemeColors } | null>(null);
+  const savedAppearance = { typography: config.readerTypography, highlightAppearance: config.highlightAppearance };
+  const [appearanceDraft, setAppearance] = useState<AppearanceDraft | null>(null);
+  const appearance = appearanceDraft ?? savedAppearance;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const appearanceDirty = JSON.stringify(appearance) !== JSON.stringify(savedAppearance);
+  const themeDirty = themeBaseline !== null
+    && (themeBaseline.theme !== theme || JSON.stringify(themeBaseline.colors) !== JSON.stringify(customColors));
+  const dirty = appearanceDirty || themeDirty;
+  const holdBaseline = () => setThemeBaseline((current) => current ?? { theme, colors: customColors });
+  const selectTheme = (next: ThemeId) => { holdBaseline(); applyTheme(next); };
+  const changeCustomColors = (next: CustomThemeColors) => { holdBaseline(); setCustomColors(next); applyCustomColors(next); };
+  const restoreTheme = useCallback((baseline: { theme: ThemeId; colors: CustomThemeColors }) => {
+    // Colors first: switching back to custom reads the stored custom colors.
+    applyCustomColors(baseline.colors);
+    applyTheme(baseline.theme);
+  }, [applyCustomColors, applyTheme]);
+  const discard = () => {
+    if (themeBaseline) { restoreTheme(themeBaseline); setCustomColors(themeBaseline.colors); setThemeBaseline(null); }
+    setAppearance(null); setError(null);
+  };
+  const apply = async () => {
+    setSaving(true); setError(null);
+    try {
+      if (appearanceDirty) await config.updateConfig({ readerTypography: normalizeTypography(appearance.typography), highlightAppearance: normalizeHighlightAppearance(appearance.highlightAppearance) });
+      setThemeBaseline(null);
+      setAppearance(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save appearance.');
+    } finally { setSaving(false); }
+  };
+  // Leaving the panel drops unapplied edits, as every other settings draft does; that includes the theme preview.
+  const unappliedTheme = useRef<typeof themeBaseline>(null);
+  unappliedTheme.current = themeDirty ? themeBaseline : null;
+  const restoreOnLeave = useRef(restoreTheme);
+  restoreOnLeave.current = restoreTheme;
+  useEffect(() => () => { if (unappliedTheme.current) restoreOnLeave.current(unappliedTheme.current); }, []);
   const [isCustomExpanded, setIsCustomExpanded] = useState(false);
   const [systemIsDark, setSystemIsDark] = useState(
     typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches,
@@ -127,13 +169,14 @@ export function AppearanceSettingsPanel() {
   const customThemeColors = getThemeColors('custom');
 
   return (
-    <div className="space-y-4">
+    <fieldset disabled={saving || !config.preferencesReady} className="min-w-0 space-y-4">
+      {error && <p role="alert" className="text-sm text-warning">{error}</p>}
       <div className="space-y-1.5">
         <ThemeChoice
           label={systemTheme.name}
           colors={getThemeColors(systemTheme.id)}
           selected={theme === systemTheme.id}
-          onClick={() => setTheme(systemTheme.id)}
+          onClick={() => selectTheme(systemTheme.id)}
           className="w-full"
         />
       </div>
@@ -146,7 +189,7 @@ export function AppearanceSettingsPanel() {
               colors={customThemeColors}
               selected={theme === 'custom'}
               onClick={() => {
-                setTheme('custom');
+                selectTheme('custom');
                 setIsCustomExpanded(true);
               }}
               className="flex-1"
@@ -208,11 +251,7 @@ export function AppearanceSettingsPanel() {
                       value={customColors[key]}
                       field={key}
                       label={label}
-                      onChange={(color) => {
-                        const updated = { ...customColors, [key]: color };
-                        setCustomColors(updated);
-                        applyCustomColors(updated);
-                      }}
+                      onChange={(color) => changeCustomColors({ ...customColors, [key]: color })}
                     />
                   </div>
                 ))}
@@ -222,10 +261,11 @@ export function AppearanceSettingsPanel() {
         </div>
       </div>
 
-      <ThemeGroup label="Light" icon={<SunIcon className="h-3.5 w-3.5" aria-hidden />} themes={lightThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
-      <ThemeGroup label="Dark" icon={<MoonIcon className="h-3.5 w-3.5" aria-hidden />} themes={darkThemes} activeTheme={theme} getColors={getThemeColors} onSelect={setTheme} />
-      <ReaderAppearanceSettings />
-    </div>
+      <ThemeGroup label="Light" icon={<SunIcon className="h-3.5 w-3.5" aria-hidden />} themes={lightThemes} activeTheme={theme} getColors={getThemeColors} onSelect={selectTheme} />
+      <ThemeGroup label="Dark" icon={<MoonIcon className="h-3.5 w-3.5" aria-hidden />} themes={darkThemes} activeTheme={theme} getColors={getThemeColors} onSelect={selectTheme} />
+      <ReaderAppearanceSettings value={appearance} onChange={setAppearance} />
+      {(dirty || saving) && <SaveBar saving={saving} onDiscard={discard} onSave={() => void apply()} />}
+    </fieldset>
   );
 }
 
