@@ -24,8 +24,16 @@ test('favorites and reader appearance persist with independent book inheritance'
   await page.getByRole('button', { name: 'Font family', exact: true }).click();
   await page.getByRole('option', { name: 'Sans', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Font family', exact: true })).toContainText('Sans');
-  await page.getByRole('slider', { name: 'Text size', exact: true }).press('ArrowRight');
-  await expect(page.getByRole('slider', { name: 'Text size', exact: true })).toHaveValue('105');
+  const sample = page.getByRole('article', { name: 'Reading sample', exact: true });
+  await expect(sample).toHaveCSS('font-family', 'system-ui, sans-serif');
+  await expect(page.getByRole('slider', { name: 'Text size', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Increase text size', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Text size', exact: true })).toHaveValue('105');
+  await expect.poll(() => sample.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeCloseTo(14.7, 3);
+  await page.getByRole('group', { name: 'Spacing presets', exact: true }).getByRole('button', { name: 'Open', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Line spacing', exact: true })).toHaveValue('1.9');
+  await expect(page.getByRole('spinbutton', { name: 'Paragraph spacing', exact: true })).toHaveValue('1.5');
+  await expect(page.getByRole('spinbutton', { name: 'Letter spacing', exact: true })).toHaveValue('0.03');
   await page.getByRole('button', { name: 'Font family', exact: true }).click();
   await expect(page.getByRole('option', { name: 'Sans', exact: true })).toHaveAttribute('aria-selected', 'true');
   await page.screenshot({ path: `/private/tmp/reader-parity-web-settings-${test.info().project.name}.png` });
@@ -47,6 +55,7 @@ test('favorites and reader appearance persist with independent book inheritance'
   await settings.getByRole('button', { name: 'Font family', exact: true }).click();
   await page.getByRole('option', { name: 'Mono', exact: true }).click();
   await expect(text).toHaveCSS('font-family', 'ui-monospace, monospace');
+  await expect(sample).toHaveCSS('font-family', 'ui-monospace, monospace');
   expect((await typographySection.boundingBox())!.height).toBe(typographyHeight);
   await expect(settings.getByRole('button', { name: 'Use global fontFamily', exact: true })).toBeVisible();
   await expect(settings.getByText('Use global', { exact: true })).toHaveCount(0);

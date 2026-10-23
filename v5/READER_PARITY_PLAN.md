@@ -85,6 +85,11 @@ rows, selectors and color picker, without an enclosing card around the groups.
 Per-field inheritance resets are small inline icons beside controls on both
 platforms; section resets live in the headers. Showing an override must not
 add a row or increase the control/section height.
+Typography uses compact numeric controls, visual spacing/width choices and a
+live reading sample. Highlight settings lead with a live preview and four color
+samples with selected states; each layer has one color and opacity control,
+without duplicate intensity preset buttons. Native preset labels fit narrow
+phone layouts.
 Batch validation: 1,425 Vitest tests and all 55 Chromium/WebKit Playwright
 cases pass, including both consolidated playback journeys. The production
 build and route/compute/install-profile boundary checks pass. Native build
