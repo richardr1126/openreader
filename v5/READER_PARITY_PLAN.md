@@ -94,7 +94,10 @@ right-aligned control column: segments/selects one width, steppers another. The 
 the display (taller box, multi-paragraph passage, faded clip). Highlight settings lead with a live preview and four color
 samples with selected states; each layer has one color and opacity control,
 without duplicate intensity preset buttons. Native preset labels fit narrow
-phone layouts.
+phone layouts. Web typography and highlight rows use the same leading row icons
+and ⓘ help popovers as other settings, in both app settings and reader sidebars.
+Explanations stay in the popovers; previews, aligned controls and reset actions
+remain visible. Wide controls wrap below their labels when the sidebar is narrow.
 Web Appearance uses the shared settings Discard/Save bar. Theme and custom
 colors preview live on the page; typography and highlights preview in their
 samples and save together in one request. Discard, or leaving unsaved, restores

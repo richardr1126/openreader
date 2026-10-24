@@ -21,6 +21,9 @@ test('favorites and reader appearance persist with independent book inheritance'
   await expect(page.getByRole('button', { name: `Favorite ${voice}`, exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+  await page.getByRole('button', { name: 'About Font family', exact: true }).click();
+  await expect(page.getByText(/^Choose the typeface for flowing text and EPUB\./)).toBeVisible();
+  await page.getByRole('button', { name: 'About Font family', exact: true }).click();
   await page.getByRole('button', { name: 'Font family', exact: true }).click();
   await page.getByRole('option', { name: 'Sans', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Font family', exact: true })).toContainText('Sans');
@@ -64,6 +67,9 @@ test('favorites and reader appearance persist with independent book inheritance'
   });
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Document settings', exact: true });
+  await settings.getByRole('button', { name: 'About Word', exact: true }).click();
+  await expect(page.getByText(/^Choose the color and opacity of the spoken word’s highlight\./)).toBeVisible();
+  await settings.getByRole('button', { name: 'About Word', exact: true }).click();
   const typographySection = settings.locator('section').filter({ has: page.getByRole('heading', { name: 'Typography', exact: true }) });
   const typographyHeight = (await typographySection.boundingBox())!.height;
   await settings.getByRole('button', { name: 'Font family', exact: true }).click();

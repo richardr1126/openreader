@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Section, Select, SegmentedControl, SaveBar } from '@/components/ui';
+import { Section, Select, SegmentedControl, SaveBar, RowIcon, InfoTip } from '@/components/ui';
 import { ColorPicker } from '@/components/ColorPicker';
-import { MinusIcon, PaletteIcon, PlusIcon, RefreshIcon } from '@/components/icons/Icons';
+import { BookIcon, DocumentIcon, HighlighterIcon, MinusIcon, PaletteIcon, PlusIcon, RefreshIcon, TextCursorIcon, ZoomIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import {
@@ -84,8 +84,14 @@ function Stepper({ label, value, min, max, step, suffix = '', onChange }: {
 function Row({ label, wide = false, actions, lead, children }: {
   label: string; wide?: boolean; actions?: ReactNode; lead?: ReactNode; children: ReactNode;
 }) {
+  const { icon, info } = APPEARANCE_ROWS[label];
   return <div className={`flex items-center justify-between gap-x-4 gap-y-2 ${wide ? 'flex-wrap' : ''}`}>
-    <span className="flex min-w-0 items-center gap-1 text-sm font-medium text-foreground">{label}{actions}</span>
+    <div className={`flex min-w-0 items-center gap-3 ${wide ? 'shrink-0' : 'flex-1'}`}>
+      <RowIcon>{icon}</RowIcon>
+      <span className="flex min-w-0 items-center gap-1 text-sm font-medium text-foreground">
+        <span className="min-w-0">{label}</span>{actions}<InfoTip label={label}>{info}</InfoTip>
+      </span>
+    </div>
     <div className={`ml-auto flex items-center gap-2 ${wide ? 'w-full sm:w-auto' : ''}`}>
       {lead}
       <div className={`flex min-w-0 items-center gap-2 ${wide ? 'flex-1 sm:w-72 sm:flex-none' : 'w-40'}`}>{children}</div>
@@ -101,6 +107,21 @@ function LinesGlyph({ gap = 2, widths = [100, 100, 100], centered = false }: { g
     {widths.map((width, line) => <span key={line} className="h-px bg-current" style={{ width: `${width}%` }} />)}
   </span>;
 }
+
+const APPEARANCE_ROWS: Record<string, { icon: ReactNode; info: string }> = {
+  'Font family': { icon: <TextCursorIcon />, info: 'Choose the typeface for flowing text and EPUB. Default uses the document’s or publisher’s font. PDF page fonts stay unchanged.' },
+  'Text size': { icon: <ZoomIcon />, info: 'Scale the text relative to its normal size. This changes the reading layout without changing audio or your saved position.' },
+  Spacing: { icon: <LinesGlyph gap={3} />, info: 'Apply line, paragraph, and letter spacing together. Adjust the individual controls below for a custom combination.' },
+  'Line spacing': { icon: <LinesGlyph gap={4} />, info: 'Set the distance between lines as a multiple of the text size.' },
+  'Paragraph spacing': { icon: <DocumentIcon />, info: 'Set the space between paragraphs relative to the text size.' },
+  'Letter spacing': { icon: <TextCursorIcon />, info: 'Add space between letters relative to the text size. Zero keeps the font’s normal spacing.' },
+  Width: { icon: <BookIcon />, info: 'Choose a preset text-column width. Narrower columns shorten each line; Full uses all available reading space.' },
+  'Reading width': { icon: <BookIcon />, info: 'Set how much of the available reading area the text column uses. This affects flowing text and EPUB, not PDF pages.' },
+  Alignment: { icon: <LinesGlyph widths={[100, 60, 100]} />, info: 'Default follows the document. Left keeps a natural right edge; Justified stretches lines to align both edges.' },
+  Preset: { icon: <PaletteIcon />, info: 'Apply segment and word highlight colors and opacity together. Theme follows the current app colors; the other presets use fixed colors.' },
+  Segment: { icon: <HighlighterIcon />, info: 'Choose the color and opacity of the current segment’s highlight. The separate Highlight segment switch controls whether it is shown.' },
+  Word: { icon: <TextCursorIcon />, info: 'Choose the color and opacity of the spoken word’s highlight. The separate Highlight words switch controls whether it is shown.' },
+};
 
 // Block flex, not inline: glyphs of different heights would otherwise shift each segment's text baseline.
 const segmentLabel = (glyph: ReactNode, text: ReactNode) => <span className="flex items-center justify-center gap-1.5">{glyph}{text}</span>;
