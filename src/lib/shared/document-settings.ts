@@ -7,9 +7,12 @@ import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import { normalizeTypographyOverride, normalizeHighlightOverride } from './reader-appearance';
 import { normalizeSpeechTextOverride } from '@openreader/tts/speech-text';
+import { normalizeVoiceCustomizationOverride } from '@openreader/tts/voice-customization';
+import { normalizeReaderPresentationOverride } from './reader-presentation';
+import { clampTtsSegmentMaxBlockLength } from '@/types/config';
 
-function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
-  if (!Array.isArray(value)) return [...(DEFAULT_DOCUMENT_SETTINGS.pdf?.skipBlockKinds ?? [])];
+export function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
+  if (!Array.isArray(value)) return [];
   const allow = new Set(PARSED_PDF_BLOCK_KINDS);
   const out: ParsedPdfBlockKind[] = [];
   for (const entry of value) {
@@ -57,19 +60,20 @@ export function mergeDocumentSettings(
     : normalizeLanguageTag(rawLanguage, defaults.language || 'en');
   const pdf = rec.pdf && typeof rec.pdf === 'object' ? rec.pdf as Record<string, unknown> : null;
   const voiceOverride = normalizeVoiceOverride(rec.voiceOverride);
+  const playback = rec.playback && typeof rec.playback === 'object' ? rec.playback as Record<string, unknown> : null;
 
   return {
     schemaVersion: 1,
     language,
-    pdf: {
-      skipBlockKinds: pdf
-        ? normalizeSkipKinds(pdf.skipBlockKinds)
-        : [...(defaults.pdf?.skipBlockKinds ?? [])],
-    },
+    ...(pdf ? { pdf: { ...(Array.isArray(pdf.skipBlockKinds) ? { skipBlockKinds: normalizeSkipKinds(pdf.skipBlockKinds) } : {}) } } : {}),
     ...(voiceOverride ? { voiceOverride } : {}),
     ...(rec.typography ? { typography: normalizeTypographyOverride(rec.typography) } : {}),
     ...(rec.highlightAppearance ? { highlightAppearance: normalizeHighlightOverride(rec.highlightAppearance) } : {}),
     ...(rec.speechText ? { speechText: normalizeSpeechTextOverride(rec.speechText) } : {}),
+    ...(rec.voiceCustomization ? { voiceCustomization: normalizeVoiceCustomizationOverride(rec.voiceCustomization) } : {}),
+    ...(rec.presentation ? { presentation: normalizeReaderPresentationOverride(rec.presentation) } : {}),
+    ...(playback ? { playback: { ...(typeof playback.maxSegmentLength === 'number' && Number.isFinite(playback.maxSegmentLength)
+      ? { maxSegmentLength: clampTtsSegmentMaxBlockLength(playback.maxSegmentLength) } : {}) } } : {}),
   };
 }
 
@@ -81,6 +85,10 @@ export function preserveDocumentAppearance(incoming: DocumentSettings, previous:
     ...(incoming.typography === undefined && previous.typography !== undefined ? { typography: previous.typography } : {}),
     ...(incoming.highlightAppearance === undefined && previous.highlightAppearance !== undefined ? { highlightAppearance: previous.highlightAppearance } : {}),
     ...(incoming.speechText === undefined && previous.speechText !== undefined ? { speechText: previous.speechText } : {}),
+    ...(incoming.voiceCustomization === undefined && previous.voiceCustomization !== undefined ? { voiceCustomization: previous.voiceCustomization } : {}),
+    ...(incoming.presentation === undefined && previous.presentation !== undefined ? { presentation: previous.presentation } : {}),
+    ...(incoming.playback === undefined && previous.playback !== undefined ? { playback: previous.playback } : {}),
+    ...(incoming.pdf === undefined && previous.pdf !== undefined ? { pdf: previous.pdf } : {}),
   };
 }
 

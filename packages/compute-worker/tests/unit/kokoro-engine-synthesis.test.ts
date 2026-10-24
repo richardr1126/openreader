@@ -155,6 +155,39 @@ describe('local Kokoro synthesis', () => {
     expect(fake.runs).toHaveLength(1);
   });
 
+  test('custom source-word splits add PCM silence and move later word timings by every join', async () => {
+    const text = Array.from({ length: 8 }, () => 'The cat sat on the mat.').join(' ');
+    const customization = { pieceCharacterLimit: 50, piecePauseMilliseconds: 150, blockPauseMilliseconds: 500 };
+    const { wav, words } = await synthesizeKokoro({ text, voice: 'af_heart', speed: 1, customization });
+    expect(fake.runs.length).toBeGreaterThan(1);
+    expect(words.map(word => word.word)).toEqual(text.split(' '));
+    const runSamples = fake.runs.map(run => run.ids.length * 2 * 600);
+    const expectedSamples = runSamples.reduce((sum, count) => sum + count, 0) + (runSamples.length - 1) * 3600 + 12000;
+    expect(wav.readUInt32LE(40)).toBe(expectedSamples * 2);
+    const firstEnd = runSamples[0]!;
+    expect(wav.subarray(44 + firstEnd * 2, 44 + (firstEnd + 3600) * 2).every(byte => byte === 0)).toBe(true);
+    expect(wav.subarray(-24000).every(byte => byte === 0)).toBe(true);
+    const secondStart = words.find(word => word.start >= firstEnd / 24000)!;
+    expect(secondStart.start).toBeCloseTo((firstEnd + 3600 + 1200) / 24000);
+    expect(words.at(-1)!.end).toBeLessThan((expectedSamples - 12000) / 24000);
+  });
+
+  test('explicit zero keeps the exact default waveform and timings', async () => {
+    const request = { text: longText, voice: 'af_heart', speed: 1 };
+    const baseline = await synthesizeKokoro(request);
+    const zero = await synthesizeKokoro({ ...request, customization: { pieceCharacterLimit: null, piecePauseMilliseconds: 0, blockPauseMilliseconds: 0 } });
+    expect(zero.wav.equals(baseline.wav)).toBe(true);
+    expect(zero.words).toEqual(baseline.words);
+  });
+
+  test('cancels customized piece generation before scheduling the next run', async () => {
+    const controller = new AbortController();
+    fake.onRun = async () => { controller.abort(); };
+    await expect(synthesizeKokoro({ text: longText, voice: 'af_heart', speed: 1,
+      customization: { pieceCharacterLimit: 50, piecePauseMilliseconds: 2000, blockPauseMilliseconds: 2000 } }, controller.signal)).rejects.toThrow();
+    expect(fake.runs).toHaveLength(1);
+  });
+
   test('never runs two model passes at once', async () => {
     fake.onRun = () => new Promise((resolve) => setTimeout(resolve, 5));
 

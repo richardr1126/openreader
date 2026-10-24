@@ -23,6 +23,7 @@ import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { StorageSettingsPanel } from './StorageSettingsPanel';
 import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
+import { ReaderSettingsPanel } from './ReaderSettingsPanel';
 import { settingsNavGroups, visibleSettingsSections, type SettingsSectionId } from './settings-sections';
 
 function CloseSettingsLink() {
@@ -179,6 +180,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                 <div>
                   {runtimeConfig.enableTtsProvidersTab && activeSection === 'api' ? <ProviderSettingsPanel active /> : null}
                   {activeSection === 'theme' ? <AppearanceSettingsPanel /> : null}
+                  {activeSection === 'reader' ? <ReaderSettingsPanel /> : null}
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
                   {activeSection === 'storage' ? <StorageSettingsPanel /> : null}
                   {activeSection === 'about' ? <AboutSettingsPanel /> : null}

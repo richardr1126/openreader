@@ -132,7 +132,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
   }, [query, settingsMutation]);
   // Presentation edits update the existing ready snapshot. Bootstrapping again
   // would needlessly resolve audio work for a color or font change.
-  const updatePresentation = async (patch: Pick<DocumentSettings, 'typography' | 'highlightAppearance'>) => {
+  const updatePresentation = async (patch: Pick<DocumentSettings, 'typography' | 'highlightAppearance' | 'presentation'>) => {
     const current = queryClient.getQueryData<ReaderBootstrapResult>(key);
     if (current?.status !== 'ready') throw new Error('Reader settings are not ready.');
     const saved = await settingsMutation.mutateAsync({ ...current.payload.settings, ...patch });

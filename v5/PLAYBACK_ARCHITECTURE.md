@@ -2078,6 +2078,13 @@ their seven-day expiry, and signed download links keep their independent
 five-minute lifetime. Lookup/command acknowledgments can omit chapter scans,
 while chapter details and artifact phases load visibly through the export owner.
 
+Artifact assembly also works when reading filled the cache without an export
+generation session, or that session expired. The worker validates the immutable
+plan's document/version/reader scope and requires every requested sidecar to be
+durably settled. Cache-epoch and generation-replacement checks remain active
+through publication. Added pauses are stored in the same source audio and exact
+durations; see `VOICE_CUSTOMIZATION.md` for their settings and timing contract.
+
 Combined local verification passed 190 Vitest files / 1,053 tests, all 43
 Chromium/WebKit cases including real playback with delayed metadata and a held
 overview, application/worker type checks, the production build, and route,

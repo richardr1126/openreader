@@ -20,7 +20,7 @@ import {
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 import { useTTS } from '@/contexts/TTSContext';
-import { useConfig } from '@/contexts/ConfigContext';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import {
   highlightPattern,
   clearHighlights,
@@ -89,7 +89,7 @@ export function usePdfDocument(
   } = useTTS();
   // Page text comes from the parsed blocks, so the plain-text reading mode
   // anchors playback without loading pdf.js at all.
-  const { readerShowsLayout } = useConfig();
+  const { presentation: { showsLayout: readerShowsLayout } } = useReaderAppearance();
   const currDocId = document.id;
   const currDocData = document.data;
   const currDocName = document.name;

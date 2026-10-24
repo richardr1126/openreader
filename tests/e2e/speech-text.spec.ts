@@ -7,6 +7,8 @@ test('speech defaults and independent book overrides persist without changing di
   test.setTimeout(75_000);
   await enterAnonymousLibrary(page);
   await page.goto('/app/settings?section=api');
+  await expect(page.getByRole('switch', { name: 'Skip citations', exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
   const citations = page.getByRole('switch', { name: 'Skip citations', exact: true });
   const brackets = page.getByRole('button', { name: 'Skip bracketed text', exact: true });
   const voiceSection = page.getByRole('region', { name: 'Model & Voice', exact: true }).locator('section')
@@ -26,6 +28,7 @@ test('speech defaults and independent book overrides persist without changing di
   await page.getByRole('option', { name: 'Both', exact: true }).click();
   await page.getByRole('region', { name: 'Unsaved changes', exact: true }).getByRole('button', { name: 'Save', exact: true }).click();
   await page.reload();
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
   await expect(citations).toHaveAttribute('aria-checked', 'true');
   await expect(brackets).toContainText('Both');
   await page.getByRole('link', { name: 'Close settings', exact: true }).click();
@@ -35,6 +38,7 @@ test('speech defaults and independent book overrides persist without changing di
   await expect(text).toBeVisible();
   const original = await text.innerText();
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
   await expect(citations).toHaveAttribute('aria-checked', 'true');
   await expect(brackets).toContainText('Both');
   await citations.click();
@@ -46,6 +50,7 @@ test('speech defaults and independent book overrides persist without changing di
   await expect(brackets).toContainText('Both');
   await page.reload();
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
   await expect(citations).toHaveAttribute('aria-checked', 'false');
   await expect(brackets).toContainText('Both');
   await page.getByRole('button', { name: 'Use app default for citations', exact: true }).click();

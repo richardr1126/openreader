@@ -19,7 +19,6 @@ import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useEpubDocument } from './useEpubDocument';
 import { epubTocOutline, findEpubTocTitle } from '@/lib/client/epub/toc-titles';
-import { useConfig } from '@/contexts/ConfigContext';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { PlanTextReader } from '@/components/views/HTMLViewer';
 import { ReaderPager, ReaderPosition, ReadingProgress } from '@/components/reader/ReaderNavigator';
@@ -69,7 +68,7 @@ function EpubReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const { readerShowsLayout } = useConfig();
+  const { presentation: { showsLayout: readerShowsLayout } } = useReaderAppearance();
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
   const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const navigationPanel = isReaderNavigationPanel(activeSidebar) ? activeSidebar : null;

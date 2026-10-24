@@ -21,6 +21,11 @@ test('favorites and reader appearance persist with independent book inheritance'
   await expect(page.getByRole('button', { name: `Favorite ${voice}`, exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Appearance', exact: true }).click();
+  const themes = page.getByRole('button', { name: 'Themes', exact: true });
+  await expect(themes).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByRole('button', { name: 'Sunset', exact: true })).toBeHidden();
+  await themes.click();
+  await expect(themes).toHaveAttribute('aria-expanded', 'true');
   await page.getByRole('button', { name: 'About Font family', exact: true }).click();
   await expect(page.getByText(/^Choose the typeface for flowing text and EPUB\./)).toBeVisible();
   await page.getByRole('button', { name: 'About Font family', exact: true }).click();
@@ -45,6 +50,8 @@ test('favorites and reader appearance persist with independent book inheritance'
   await page.getByRole('button', { name: 'Increase text size', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Text size', exact: true })).toHaveValue('105');
   await expect.poll(() => sample.evaluate((element) => parseFloat(getComputedStyle(element).fontSize))).toBeCloseTo(14.7, 3);
+  await expect(page.getByRole('radiogroup', { name: 'Spacing presets', exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'More typography', exact: true }).click();
   await page.getByRole('radiogroup', { name: 'Spacing presets', exact: true }).getByRole('radio', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Line spacing', exact: true })).toHaveValue('1.9');
   await expect(page.getByRole('spinbutton', { name: 'Paragraph spacing', exact: true })).toHaveValue('1.5');
@@ -107,4 +114,20 @@ test('favorites and reader appearance persist with independent book inheritance'
   await unsaved.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(text).toHaveCSS('font-family', 'system-ui, sans-serif');
   await expect(text).toHaveCSS('--reader-word-color', '');
+  await expect(settings.getByRole('button', { name: 'More typography', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await settings.getByRole('button', { name: 'More typography', exact: true }).click();
+  const presets = ['Spacing presets', 'Reading width presets', 'Alignment'];
+  const checkPresetWidths = async () => {
+    const boxes = await Promise.all(presets.map(name => settings.getByRole('radiogroup', { name, exact: true }).boundingBox()));
+    for (const box of boxes) {
+      expect(box).not.toBeNull();
+      expect(Math.abs(box!.x - boxes[0]!.x)).toBeLessThan(1);
+      expect(Math.abs(box!.width - boxes[0]!.width)).toBeLessThan(1);
+    }
+  };
+  await checkPresetWidths();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await checkPresetWidths();
+  await settings.getByRole('radiogroup', { name: 'Alignment', exact: true }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `/private/tmp/reader-typography-sidebar-${test.info().project.name}.png` });
 });

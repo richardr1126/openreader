@@ -1,4 +1,7 @@
 import type { DocumentListState } from '@/types/documents';
+import { DEFAULT_PDF_SKIP_BLOCK_KINDS } from '@/types/document-settings';
+import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import { AUTOMATIC_VOICE_CUSTOMIZATION, type VoiceCustomization } from '@openreader/tts/voice-customization';
 import { DEFAULT_SPEECH_TEXT, type SpeechTextOptions } from '@openreader/tts/speech-text';
 import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 import type { FavoriteVoice } from '@/lib/shared/voice-favorites';
@@ -26,7 +29,9 @@ export interface AppConfigValues {
   /** Space, arrow and speed keys control playback in readers. */
   playbackShortcuts: boolean;
   /** PDF/EPUB show their laid-out pages; off reads the plan as flowing text. */
-  readerShowsLayout: boolean;
+  pdfShowsLayout: boolean;
+  epubShowsLayout: boolean;
+  pdfSkipBlockKinds: ParsedPdfBlockKind[];
   headerMargin: number;
   footerMargin: number;
   leftMargin: number;
@@ -40,6 +45,7 @@ export interface AppConfigValues {
   readerTypography: ReaderTypography;
   highlightAppearance: HighlightAppearance;
   speechText: SpeechTextOptions;
+  voiceCustomization: VoiceCustomization;
   ttsSegmentMaxBlockLength: number;
   pdfHighlightEnabled: boolean;
   pdfWordHighlightEnabled: boolean;
@@ -70,7 +76,9 @@ export function getAppConfigDefaults(): AppConfigValues {
     voice: '',
     epubTheme: false,
     playbackShortcuts: true,
-    readerShowsLayout: true,
+    pdfShowsLayout: true,
+    epubShowsLayout: true,
+    pdfSkipBlockKinds: [...DEFAULT_PDF_SKIP_BLOCK_KINDS],
     headerMargin: 0,
     footerMargin: 0,
     leftMargin: 0,
@@ -84,6 +92,7 @@ export function getAppConfigDefaults(): AppConfigValues {
     readerTypography: DEFAULT_TYPOGRAPHY,
     highlightAppearance: DEFAULT_HIGHLIGHT_APPEARANCE,
     speechText: DEFAULT_SPEECH_TEXT,
+    voiceCustomization: AUTOMATIC_VOICE_CUSTOMIZATION,
     ttsSegmentMaxBlockLength: 450,
     pdfHighlightEnabled: true,
     pdfWordHighlightEnabled: true,

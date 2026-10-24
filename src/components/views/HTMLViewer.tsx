@@ -4,7 +4,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
-import { useConfig } from '@/contexts/ConfigContext';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { READER_FONT_FAMILIES } from '@/lib/shared/reader-appearance';
 import type { HtmlBlock } from '@openreader/tts/html-blocks';
@@ -88,13 +87,7 @@ export function HTMLViewer({
     currentSentenceAlignment,
     currentWordIndex,
   } = useTTSHighlight();
-  const config = useConfig();
-  const highlightEnabled = readerType === 'pdf'
-    ? config.pdfHighlightEnabled
-    : readerType === 'epub' ? config.epubHighlightEnabled : config.htmlHighlightEnabled;
-  const wordHighlightEnabled = readerType === 'pdf'
-    ? config.pdfWordHighlightEnabled
-    : readerType === 'epub' ? config.epubWordHighlightEnabled : config.htmlWordHighlightEnabled;
+  const { presentation: { highlightSegment: highlightEnabled, highlightWords: wordHighlightEnabled } } = useReaderAppearance(readerType);
 
   const readySegmentRef = useRef<string | null>(null);
 

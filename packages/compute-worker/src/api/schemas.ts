@@ -173,6 +173,11 @@ export const ttsVoicePreviewRequestSchema = z.object({
     nativeSpeed: z.number().min(0.5).max(3),
     ttsInstructions: z.string().max(4000).optional(),
     language: z.string().trim().min(1).max(64).optional(),
+    voiceCustomization: z.object({
+      pieceCharacterLimit: z.number().int().min(50).max(450).nullable(),
+      piecePauseMilliseconds: z.number().int().min(0).max(2000).nullable(),
+      blockPauseMilliseconds: z.number().int().min(0).max(2000).nullable(),
+    }).strict().optional(),
   }).strict(),
   text: z.string().trim().min(1).max(TTS_VOICE_PREVIEW_MAX_TEXT_CHARS),
 }).strict();

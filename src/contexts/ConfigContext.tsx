@@ -19,7 +19,9 @@ interface ConfigContextType {
   voice: string;
   epubTheme: boolean;
   playbackShortcuts: boolean;
-  readerShowsLayout: boolean;
+  pdfShowsLayout: boolean;
+  epubShowsLayout: boolean;
+  pdfSkipBlockKinds: AppConfigValues['pdfSkipBlockKinds'];
   ttsSegmentMaxBlockLength: number;
   headerMargin: number;
   footerMargin: number;
@@ -34,6 +36,7 @@ interface ConfigContextType {
   readerTypography: AppConfigValues['readerTypography'];
   highlightAppearance: AppConfigValues['highlightAppearance'];
   speechText: AppConfigValues['speechText'];
+  voiceCustomization: AppConfigValues['voiceCustomization'];
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
   /** Saves several keys in one request, applied in the patch's key order. */
   updateConfig: (patch: Partial<AppConfigValues>) => Promise<void>;
@@ -97,7 +100,9 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       voice: config.voice,
       epubTheme: config.epubTheme,
       playbackShortcuts: config.playbackShortcuts,
-      readerShowsLayout: config.readerShowsLayout,
+      pdfShowsLayout: config.pdfShowsLayout,
+      epubShowsLayout: config.epubShowsLayout,
+      pdfSkipBlockKinds: config.pdfSkipBlockKinds,
       ttsSegmentMaxBlockLength: config.ttsSegmentMaxBlockLength,
       headerMargin: config.headerMargin,
       footerMargin: config.footerMargin,
@@ -113,6 +118,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       readerTypography: config.readerTypography,
       highlightAppearance: config.highlightAppearance,
       speechText: config.speechText,
+      voiceCustomization: config.voiceCustomization,
       updateConfig,
       isLoading,
       preferencesReady: !isSessionPending && query.isSuccess,

@@ -2575,6 +2575,11 @@ export interface paths {
                             nativeSpeed: number;
                             ttsInstructions?: string;
                             language?: string;
+                            voiceCustomization?: {
+                                pieceCharacterLimit: number | null;
+                                piecePauseMilliseconds: number | null;
+                                blockPauseMilliseconds: number | null;
+                            };
                         };
                         text: string;
                     };

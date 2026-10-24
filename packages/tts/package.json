@@ -7,6 +7,7 @@
     "./audio-format": "./src/audio-format.ts",
     "./audio-text": "./src/audio-text.ts",
     "./speech-text": "./src/speech-text.ts",
+    "./voice-customization": "./src/voice-customization.ts",
     "./credential-broker": "./src/credential-broker.ts",
     "./generate": "./src/generate.ts",
     "./kokoro": "./src/kokoro.ts",

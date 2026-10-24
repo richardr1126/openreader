@@ -37,12 +37,12 @@ const scope = {
 } as ResolvedSegmentDocumentScope;
 const preferences = { providerRef: 'kitten', providerType: 'custom-openai', ttsModel: 'KittenTTS', voice: '' };
 const request = new NextRequest(`http://localhost/api/documents/${documentId}/reader-bootstrap`);
-function plan(segments = [0, 1]) {
+function plan(segments = [0, 1], readerType = 'html') {
   const artifact = {
     schemaVersion: 1, storageUserId: 'owner', documentId, documentVersion: 1,
-    readerType: 'html', settingsHash: 'shared-plan-settings',
+    readerType, settingsHash: 'shared-plan-settings',
     segments: segments.map((ordinal) => ({ ordinal, segmentKey: `segment-${ordinal}`,
-      text: `This is readable sentence number ${ordinal}.`, locator: { readerType: 'html', location: '1' } })),
+      text: `This is readable sentence number ${ordinal}.`, locator: readerType === 'pdf' ? { readerType: 'pdf', page: 1 } : { readerType: 'html', location: '1' } })),
   };
   return { artifact, body: JSON.stringify(artifact) };
 }
@@ -60,6 +60,22 @@ beforeEach(() => {
 });
 
 describe('bootstrap playback preparation', () => {
+  test('uses global PDF skip and segment defaults, then applies independent book overrides', async () => {
+    mocks.readPlan.mockResolvedValue(plan([0, 1], 'pdf'));
+    const prepare = (settings = DEFAULT_DOCUMENT_SETTINGS) => resolveReaderPlayback(request, documentId,
+      { ...scope, readerType: 'pdf' }, settings,
+      { ...preferences, ttsSegmentMaxBlockLength: 600, pdfSkipBlockKinds: ['header', 'footer'] });
+    await prepare();
+    expect(mocks.enqueue.mock.calls.at(-1)?.[0].planning).toMatchObject({ maxBlockLength: 600,
+      documentSource: { skipBlockKinds: ['header', 'footer'] } });
+    const inheritedHash = mocks.enqueue.mock.calls.at(-1)?.[0].settingsHash;
+    await prepare({ ...DEFAULT_DOCUMENT_SETTINGS, playback: { maxSegmentLength: 300 }, pdf: { skipBlockKinds: [] } });
+    expect(mocks.enqueue.mock.calls.at(-1)?.[0].planning).toMatchObject({ maxBlockLength: 300,
+      documentSource: { skipBlockKinds: [] } });
+    expect(mocks.enqueue.mock.calls.at(-1)?.[0].settingsHash).not.toBe(inheritedHash);
+    await prepare({ ...DEFAULT_DOCUMENT_SETTINGS, playback: {}, pdf: {} });
+    expect(mocks.enqueue.mock.calls.at(-1)?.[0].settingsHash).toBe(inheritedHash);
+  });
   test.each([
     ['auto', 'tr-TR', 'F1', 'tr-TR'],
     ['auto', 'de-DE', 'F1', 'de-DE'],

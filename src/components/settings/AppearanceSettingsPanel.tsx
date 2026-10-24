@@ -5,8 +5,10 @@ import { ColorPicker } from '@/components/ColorPicker';
 import { ReaderAppearanceSettings, type AppearanceDraft } from './ReaderAppearanceSettings';
 import { useConfig } from '@/contexts/ConfigContext';
 import { normalizeTypography, normalizeHighlightAppearance } from '@/lib/shared/reader-appearance';
-import { CheckIcon, MoonIcon, SunIcon } from '@/components/icons/Icons';
-import { ChoiceTile, IconButton, SaveBar } from '@/components/ui';
+import { CheckIcon, MoonIcon, PaletteIcon, SunIcon } from '@/components/icons/Icons';
+import { ChoiceTile, IconButton, RowIcon, SaveBar } from '@/components/ui';
+import { AnimatedCollapse, ExpandableSettingsCard } from './ExpandableSettingsCard';
+import { getHighlightVisibility } from '@/lib/shared/reader-presentation';
 import {
   getCustomThemeColors,
   THEMES,
@@ -111,7 +113,7 @@ export function AppearanceSettingsPanel() {
   const [customColors, setCustomColors] = useState<CustomThemeColors>(getCustomThemeColors);
   // Theme choices preview live on the page; this holds what Discard (or leaving unapplied) restores.
   const [themeBaseline, setThemeBaseline] = useState<{ theme: ThemeId; colors: CustomThemeColors } | null>(null);
-  const savedAppearance = { typography: config.readerTypography, highlightAppearance: config.highlightAppearance };
+  const savedAppearance = { typography: config.readerTypography, highlightAppearance: config.highlightAppearance, highlightVisibility: getHighlightVisibility(config) };
   const [appearanceDraft, setAppearance] = useState<AppearanceDraft | null>(null);
   const appearance = appearanceDraft ?? savedAppearance;
   const [saving, setSaving] = useState(false);
@@ -135,7 +137,7 @@ export function AppearanceSettingsPanel() {
   const apply = async () => {
     setSaving(true); setError(null);
     try {
-      if (appearanceDirty) await config.updateConfig({ readerTypography: normalizeTypography(appearance.typography), highlightAppearance: normalizeHighlightAppearance(appearance.highlightAppearance) });
+      if (appearanceDirty) await config.updateConfig({ readerTypography: normalizeTypography(appearance.typography), highlightAppearance: normalizeHighlightAppearance(appearance.highlightAppearance), ...appearance.highlightVisibility });
       setThemeBaseline(null);
       setAppearance(null);
     } catch (e) {
@@ -171,6 +173,10 @@ export function AppearanceSettingsPanel() {
   return (
     <fieldset disabled={saving || !config.preferencesReady} className="min-w-0 space-y-4">
       {error && <p role="alert" className="text-sm text-warning">{error}</p>}
+      <ExpandableSettingsCard label="Themes" header={<>
+        <RowIcon><PaletteIcon /></RowIcon><span className="flex-1">{theme.charAt(0).toUpperCase() + theme.slice(1)}</span>
+        <ThemeSwatches colors={getThemeColors(theme)} />
+      </>}>
       <div className="space-y-1.5">
         <ThemeChoice
           label={systemTheme.name}
@@ -214,7 +220,7 @@ export function AppearanceSettingsPanel() {
             </IconButton>
           </div>
 
-          {isCustomExpanded && (
+          <AnimatedCollapse open={isCustomExpanded}>
             <div
               className="rounded-lg border p-3 space-y-2"
               style={{
@@ -257,12 +263,13 @@ export function AppearanceSettingsPanel() {
                 ))}
               </div>
             </div>
-          )}
+          </AnimatedCollapse>
         </div>
       </div>
 
       <ThemeGroup label="Light" icon={<SunIcon className="h-3.5 w-3.5" aria-hidden />} themes={lightThemes} activeTheme={theme} getColors={getThemeColors} onSelect={selectTheme} />
       <ThemeGroup label="Dark" icon={<MoonIcon className="h-3.5 w-3.5" aria-hidden />} themes={darkThemes} activeTheme={theme} getColors={getThemeColors} onSelect={selectTheme} />
+      </ExpandableSettingsCard>
       <ReaderAppearanceSettings value={appearance} onChange={setAppearance} />
       {(dirty || saving) && <SaveBar saving={saving} onDiscard={discard} onSave={() => void apply()} />}
     </fieldset>

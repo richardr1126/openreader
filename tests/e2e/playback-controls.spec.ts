@@ -88,6 +88,11 @@ async function setHighlightMode(page: Page, sentence: boolean, words: boolean) {
     if (await toggle.getAttribute('aria-checked') !== String(enabled)) await toggle.click();
     await expect(toggle).toHaveAttribute('aria-checked', String(enabled));
   }
+  const save = settings.getByRole('button', { name: 'Save', exact: true });
+  if (await save.isVisible()) {
+    await save.click();
+    await expect(save).toBeHidden();
+  }
   await settings.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(settings).toBeHidden();
 }
@@ -350,6 +355,15 @@ test('anonymous user controls playback across every accepted document journey', 
   test.setTimeout(240_000);
   await enterAnonymousLibrary(page);
 
+  // Exercise added silence through the real provider, progressive stream,
+  // seeks and word highlighting in the consolidated playback journey.
+  await page.goto('/app/settings?section=api');
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
+  await page.getByRole('button', { name: 'Between segments', exact: true }).click();
+  await page.getByRole('option', { name: '150 ms', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('link', { name: 'Close settings', exact: true }).click();
+
   await uploadLibraryFiles(page, [
     resolve('tests/files/multilingual-sample.txt'),
     resolve('tests/files/sample.md'),
@@ -462,21 +476,28 @@ test('anonymous user controls playback across every accepted document journey', 
 
   await startAndCancelPlayback(page);
 
-  // Reader Settings rebuild the plan too, and the segment slider commits once
-  // on release instead of once per tick.
+  // Advanced settings draft until Save; cancelling regeneration leaves the
+  // current plan intact and Discard restores the inherited value.
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   const readerSettings = page.getByLabel('Document settings');
-  const segmentLength = readerSettings.getByRole('slider', { name: 'Max segment length', exact: true });
-  const initialSegmentLength = await segmentLength.inputValue();
-  await segmentLength.focus();
-  await segmentLength.press('ArrowRight');
+  await readerSettings.getByRole('button', { name: 'Advanced', exact: true }).click();
+  const segmentLength = readerSettings.getByRole('button', { name: 'Max segment length', exact: true });
+  // textContent is what toHaveText compares. WebKit's innerText omits text
+  // while the card is still clipped at the start of its opening transition.
+  await expect(segmentLength).toHaveText(/^\d+ characters$/);
+  const initialSegmentLength = (await segmentLength.textContent())!;
+  await segmentLength.click();
+  await page.getByRole('option', { name: '600 characters', exact: true }).click();
+  await readerSettings.getByRole('button', { name: 'Save', exact: true }).click();
   const segmentDialog = page
     .getByTestId('confirm-dialog-panel')
-    .filter({ has: page.getByRole('heading', { name: 'Change the maximum segment length?', exact: true }) });
+    .filter({ has: page.getByRole('heading', { name: 'Change advanced settings?', exact: true }) });
   await expect(segmentDialog).toHaveCSS('opacity', '1');
   await segmentDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(segmentDialog).toBeHidden();
-  await expect(segmentLength).toHaveValue(initialSegmentLength);
+  await expect(segmentLength).toHaveText('600 characters');
+  await readerSettings.getByRole('button', { name: 'Discard', exact: true }).click();
+  await expect(segmentLength).toHaveText(initialSegmentLength);
   await page.keyboard.press('Escape');
 
   await page.reload();

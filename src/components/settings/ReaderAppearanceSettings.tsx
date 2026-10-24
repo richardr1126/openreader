@@ -3,9 +3,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Section, Select, SegmentedControl, SaveBar, RowIcon, InfoTip } from '@/components/ui';
 import { ColorPicker } from '@/components/ColorPicker';
-import { BookIcon, DocumentIcon, HighlighterIcon, MinusIcon, PaletteIcon, PlusIcon, RefreshIcon, TextCursorIcon, ZoomIcon } from '@/components/icons/Icons';
+import { BookIcon, DisclosureIcon, DocumentIcon, HighlighterIcon, MinusIcon, PaletteIcon, PlusIcon, RefreshIcon, TextCursorIcon, ZoomIcon } from '@/components/icons/Icons';
+import { AnimatedCollapse } from './ExpandableSettingsCard';
+import styles from './ReaderAppearanceSettings.module.css';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
+import { ReaderPresentationControls } from './ReaderPresentationControls';
+import { getHighlightVisibility, resolveReaderPresentation, type HighlightVisibility } from '@/lib/shared/reader-presentation';
+import type { ReaderPresentation } from '@/lib/shared/reader-presentation';
+import type { ReaderType } from '@/types/user-state';
 import {
   DEFAULT_TYPOGRAPHY, DEFAULT_HIGHLIGHT_APPEARANCE, HIGHLIGHT_PRESETS, TYPOGRAPHY_RANGES,
   normalizeTypography, normalizeHighlightAppearance, type ReaderTypography, type HighlightAppearance,
@@ -13,7 +19,7 @@ import {
 } from '@/lib/shared/reader-appearance';
 
 type Values = ReaderTypography & HighlightAppearance;
-export type AppearanceDraft = { typography: Partial<ReaderTypography>; highlightAppearance: Partial<HighlightAppearance> };
+export type AppearanceDraft = { typography: Partial<ReaderTypography>; highlightAppearance: Partial<HighlightAppearance>; presentation?: Partial<ReaderPresentation>; highlightVisibility?: HighlightVisibility };
 const labels: Record<keyof typeof TYPOGRAPHY_RANGES, string> = {
   sizePercent: 'Text size', lineMultiplier: 'Line spacing', paragraphSpacing: 'Paragraph spacing',
   letterSpacing: 'Letter spacing', readingWidth: 'Reading width',
@@ -77,24 +83,23 @@ function Stepper({ label, value, min, max, step, suffix = '', onChange }: {
 
 /**
  * Label on the left and a fixed-width control column on the right: every control shares the right edge, and
- * each kind (`wide` selects/segments, steppers) shares a left edge. `actions` (reset icons) follow the label
- * text; `lead` sits just outside the column's left edge. On narrow panels `wide` controls drop under the
- * label; steppers stay beside it.
+ * each kind shares a left edge. Wide presets stack consistently in narrow panels,
+ * based on the settings container rather than the browser viewport.
  */
 function Row({ label, wide = false, actions, lead, children }: {
   label: string; wide?: boolean; actions?: ReactNode; lead?: ReactNode; children: ReactNode;
 }) {
   const { icon, info } = APPEARANCE_ROWS[label];
-  return <div className={`flex items-center justify-between gap-x-4 gap-y-2 ${wide ? 'flex-wrap' : ''}`}>
+  return <div className={`flex items-center justify-between gap-x-4 gap-y-2 ${wide ? styles.wide : ''}`}>
     <div className={`flex min-w-0 items-center gap-3 ${wide ? 'shrink-0' : 'flex-1'}`}>
       <RowIcon>{icon}</RowIcon>
       <span className="flex min-w-0 items-center gap-1 text-sm font-medium text-foreground">
         <span className="min-w-0">{label}</span>{actions}<InfoTip label={label}>{info}</InfoTip>
       </span>
     </div>
-    <div className={`ml-auto flex items-center gap-2 ${wide ? 'w-full sm:w-auto' : ''}`}>
+    <div className={`ml-auto flex items-center gap-2 ${wide ? styles.controls : ''}`}>
       {lead}
-      <div className={`flex min-w-0 items-center gap-2 ${wide ? 'flex-1 sm:w-72 sm:flex-none' : 'w-40'}`}>{children}</div>
+      <div className={`flex min-w-0 items-center gap-2 ${wide ? styles.column : 'w-40'}`}>{children}</div>
     </div>
   </div>;
 }
@@ -131,10 +136,12 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
   value?: AppearanceDraft; onChange?: (value: AppearanceDraft) => void;
 }) {
   const config = useConfig();
-  const { book } = useReaderAppearance();
-  const saved = {
+  const [moreTypography, setMoreTypography] = useState(false);
+  const { book, readerType } = useReaderAppearance();
+  const saved: AppearanceDraft = {
     typography: scope === 'book' ? book?.settings.typography ?? {} : config.readerTypography,
     highlightAppearance: scope === 'book' ? book?.settings.highlightAppearance ?? {} : config.highlightAppearance,
+    ...(scope === 'book' ? { presentation: book?.settings.presentation ?? {} } : { highlightVisibility: getHighlightVisibility(config) }),
   };
   const signature = JSON.stringify(saved);
   const [localDraft, setLocalDraft] = useState<AppearanceDraft | null>(null);
@@ -146,6 +153,21 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
     ...normalizeTypography({ ...config.readerTypography, ...ownTypography }),
     ...normalizeHighlightAppearance({ ...config.highlightAppearance, ...ownHighlights }),
   };
+  const [highlightFormat, setHighlightFormat] = useState<ReaderType>('pdf');
+  const format = scope === 'book' ? readerType : highlightFormat;
+  const prefix = format === 'pdf' ? 'pdf' : format === 'epub' ? 'epub' : 'html';
+  const visibility = pending.highlightVisibility ?? getHighlightVisibility(config);
+  const presentation = resolveReaderPresentation({ ...config, ...visibility }, format, scope === 'book' ? pending.presentation : undefined);
+  const changePresentation = (patch: Partial<ReaderPresentation>) => {
+    if (scope === 'book') setPending({ ...pending, presentation: { ...pending.presentation, ...patch } });
+    else setPending({ ...pending, highlightVisibility: { ...visibility,
+      ...(patch.highlightSegment === undefined ? {} : { [`${prefix}HighlightEnabled`]: patch.highlightSegment }),
+      ...(patch.highlightWords === undefined ? {} : { [`${prefix}WordHighlightEnabled`]: patch.highlightWords }),
+    } });
+  };
+  const resetPresentation = (key: keyof ReaderPresentation) => {
+    const next = { ...pending.presentation }; delete next[key]; setPending({ ...pending, presentation: next });
+  };
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dirty = JSON.stringify(pending) !== signature;
@@ -155,9 +177,9 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
     try {
       if (scope === 'book') {
         if (!book) throw new Error('Book settings are not ready.');
-        await book.update(pending);
+        await book.update({ typography: pending.typography, highlightAppearance: pending.highlightAppearance, presentation: pending.presentation });
       }
-      else await config.updateConfig({ readerTypography: normalizeTypography(ownTypography), highlightAppearance: normalizeHighlightAppearance(ownHighlights) });
+      else await config.updateConfig({ readerTypography: normalizeTypography(ownTypography), highlightAppearance: normalizeHighlightAppearance(ownHighlights), ...pending.highlightVisibility });
       setLocalDraft(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save reader appearance.');
@@ -173,7 +195,16 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
     }} />;
   };
   const typographyChanged = scope === 'book' ? Object.keys(ownTypography).length > 0 : JSON.stringify(ownTypography) !== JSON.stringify(DEFAULT_TYPOGRAPHY);
-  const highlightsChanged = scope === 'book' ? Object.keys(ownHighlights).length > 0 : JSON.stringify(ownHighlights) !== JSON.stringify(DEFAULT_HIGHLIGHT_APPEARANCE);
+  const highlightsChanged = scope === 'book'
+    ? Object.keys(ownHighlights).length > 0 || pending.presentation?.highlightSegment !== undefined || pending.presentation?.highlightWords !== undefined
+    : JSON.stringify(ownHighlights) !== JSON.stringify(DEFAULT_HIGHLIGHT_APPEARANCE) || !presentation.highlightSegment || !presentation.highlightWords;
+  const resetHighlights = () => {
+    if (scope === 'book') {
+      const next = { ...pending.presentation }; delete next.highlightSegment; delete next.highlightWords;
+      setPending({ ...pending, highlightAppearance: {}, presentation: next });
+    } else setPending({ ...pending, highlightAppearance: DEFAULT_HIGHLIGHT_APPEARANCE,
+      highlightVisibility: { ...visibility, [`${prefix}HighlightEnabled`]: true, [`${prefix}WordHighlightEnabled`]: true } });
+  };
   const change = (kind: 'typography' | 'highlightAppearance', patch: Partial<Values>) => {
     setPending({ ...pending, [kind]: { ...pending[kind], ...patch } });
   };
@@ -186,9 +217,12 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
   const numberRow = (key: keyof typeof TYPOGRAPHY_RANGES) => <Row label={labels[key]} key={key} actions={resetField('typography', [key], `Use global ${key}`)}>{stepper(key)}</Row>;
   const fontStyle = (value: string) => ({ fontFamily: READER_FONT_FAMILIES[value as ReaderTypography['fontFamily']] || undefined });
 
-  return <fieldset disabled={busy || (scope === 'book' && !book)} className="min-w-0 space-y-5">
+  return <fieldset disabled={busy || (scope === 'book' && !book)} className="min-w-0 space-y-5" style={{ containerType: 'inline-size', containerName: 'reader-appearance' }}>
     <p className="text-xs text-soft">{scope === 'book' ? 'This book inherits your global settings until you change a control.' : 'Defaults for all books. Individual books can override these settings.'}</p>
     {error && <p role="alert" className="text-sm text-warning">{error}</p>}
+    {scope === 'book' && <ReaderPresentationControls readerType={readerType}
+      value={resolveReaderPresentation(config, readerType, pending.presentation)} overrides={pending.presentation}
+      onChange={changePresentation} onReset={resetPresentation} />}
     {showTypography && <Section title="Typography" variant="group" action={typographyChanged &&
       <ResetIcon label={scope === 'book' ? 'Use global typography' : 'Reset typography'} onClick={() => setPending({ ...pending, typography: scope === 'book' ? {} : DEFAULT_TYPOGRAPHY })} />}>
       <div aria-label="Typography preview" role="region" className="overflow-hidden text-foreground">
@@ -199,7 +233,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           {PREVIEW_PARAGRAPHS.map((text) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>{text}</p>)}
         </div>
       </div>
-      <Row label="Font family" wide actions={resetField('typography', ['fontFamily'], 'Use global fontFamily')}>
+      <Row label="Font family" actions={resetField('typography', ['fontFamily'], 'Use global fontFamily')}>
         <div className="min-w-0 flex-1"><Select aria-label="Font family" disabled={busy} buttonClassName="h-9 rounded-full py-0 pl-3.5 text-xs font-medium"
           value={SELECT_OPTIONS.fontFamily.find((option) => option.value === draft.fontFamily)} options={SELECT_OPTIONS.fontFamily}
           renderValue={(option) => <span style={fontStyle(option.value)}>{option.label}</span>}
@@ -207,6 +241,12 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           onChange={({ value }) => change('typography', { fontFamily: value as ReaderTypography['fontFamily'] })} /></div>
       </Row>
       {numberRow('sizePercent')}
+      <div>
+      <button type="button" aria-expanded={moreTypography} onClick={() => setMoreTypography(current => !current)}
+        className="flex min-h-8 w-full items-center justify-between text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        More typography<DisclosureIcon className={`h-4 w-4 text-faint transition-transform duration-300 motion-reduce:transition-none ${moreTypography ? 'rotate-90' : ''}`} aria-hidden />
+      </button>
+      <AnimatedCollapse open={moreTypography}><div className="divide-y divide-line-soft [&>*]:py-2.5">
       <Row label="Spacing" wide>
         <SegmentedControl ariaLabel="Spacing presets" className={segmentedClass(3)}
           value={SPACING_PRESETS.find((preset) => draft.lineMultiplier === preset.lineMultiplier && draft.paragraphSpacing === preset.paragraphSpacing && draft.letterSpacing === preset.letterSpacing)?.label ?? ''}
@@ -227,10 +267,16 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           options={SELECT_OPTIONS.alignment.map((option) => ({ value: option.value as ReaderTypography['alignment'],
             label: segmentLabel(<LinesGlyph widths={option.value === 'justify' ? [100, 100, 100] : [100, 60, 100]} />, option.value === 'default' ? 'Default' : option.label) }))} />
       </Row>
+      </div></AnimatedCollapse>
+      </div>
     </Section>}
     <Section title="Highlight appearance" variant="group" action={highlightsChanged &&
-      <ResetIcon label={scope === 'book' ? 'Use global highlights' : 'Reset highlight appearance'} onClick={() => setPending({ ...pending, highlightAppearance: scope === 'book' ? {} : DEFAULT_HIGHLIGHT_APPEARANCE })} />}>
-      <div><p aria-label="Highlight preview" className="rounded-md px-3 py-2 text-sm text-foreground" style={{ backgroundColor: highlightBackground(draft, 'segment') }}>Read at your own pace, <span className="rounded-sm" style={{ backgroundColor: highlightBackground(draft, 'word') }}>word</span> by word.</p></div>
+      <ResetIcon label={scope === 'book' ? 'Use global highlights' : 'Reset highlight appearance'} onClick={resetHighlights} />}>
+      {scope === 'global' && <SegmentedControl ariaLabel="Highlight document format" value={highlightFormat} onChange={setHighlightFormat}
+        options={[{ value: 'pdf', label: 'PDF' }, { value: 'epub', label: 'EPUB' }, { value: 'html', label: 'Text' }]} className="grid-cols-3" />}
+      <ReaderPresentationControls highlights readerType={format} value={presentation} overrides={scope === 'book' ? pending.presentation : undefined}
+        onChange={changePresentation} onReset={resetPresentation} />
+      <div><p aria-label="Highlight preview" className="rounded-md px-3 py-2 text-sm text-foreground" style={{ backgroundColor: presentation.highlightSegment ? highlightBackground(draft, 'segment') : undefined }}>Read at your own pace, <span className="rounded-sm" style={{ backgroundColor: presentation.highlightWords ? highlightBackground(draft, 'word') : undefined }}>word</span> by word.</p></div>
       <Row label="Preset" wide>
         <SegmentedControl ariaLabel="Highlight presets" className={segmentedClass(4)}
           value={Object.entries(HIGHLIGHT_PRESETS).find(([, preset]) => Object.entries(preset).every(([key, value]) => draft[key as keyof HighlightAppearance] === value))?.[0] ?? ''}

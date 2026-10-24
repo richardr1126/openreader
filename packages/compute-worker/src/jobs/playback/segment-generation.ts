@@ -1,5 +1,6 @@
 import { MP3_ENCODER_DELAY_SEC, normalizeToMp3, getCbrSilenceSecond, parseMp3FrameLengths } from '@openreader/tts/audio-format';
 import { mapSpeechTextSegments, normalizeSpeechText, speechTextSection, remapSpeechAlignment } from '@openreader/tts/speech-text';
+import { voiceCustomizationCacheKey } from '@openreader/tts/voice-customization';
 import { stripId3Tag } from './ffmpeg-export';
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import {
@@ -313,6 +314,8 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         text: segment.text,
         voice: effectiveSettings.voice,
         speed: effectiveSettings.nativeSpeed,
+        ...(voiceCustomizationCacheKey(effectiveSettings.voiceCustomization, requestCreds.providerType)
+          ? { customization: effectiveSettings.voiceCustomization } : {}),
       }, signal, input.onModelDownloadProgress);
       const audioBuffer = await normalizeToMp3(wav, signal, {
         provider: requestCreds.providerType,
@@ -340,6 +343,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       instructions: effectiveSettings.ttsInstructions,
       language: effectiveSettings.language,
       provider: requestCreds.providerType,
+      ...(effectiveSettings.voiceCustomization ? { voiceCustomization: effectiveSettings.voiceCustomization } : {}),
       apiKey: requestCreds.apiKey,
       baseUrl: requestCreds.baseUrl ?? undefined,
     }, signal, { ttsUpstreamTimeoutMs: input.synthesisTimeoutMs });

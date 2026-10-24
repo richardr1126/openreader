@@ -4,6 +4,8 @@ import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 import { normalizeFavoriteVoices } from '@/lib/shared/voice-favorites';
 import { normalizeTypography, normalizeHighlightAppearance } from '@/lib/shared/reader-appearance';
 import { normalizeSpeechText } from '@openreader/tts/speech-text';
+import { normalizeVoiceCustomization } from '@openreader/tts/voice-customization';
+import { normalizeSkipKinds } from '@/lib/shared/document-settings';
 
 // Dropped on write. `iosBetaBannerDismissed` belonged to the first iOS banner;
 // retiring it shows the current banner again to users who dismissed the old one.
@@ -60,6 +62,13 @@ export function sanitizePreferencesPatch(
   const rec = input as Record<string, unknown>;
   const out: SyncedPreferencesPatch = {};
   let migrated = false;
+  // The former shared display switch becomes two format-specific defaults.
+  // Existing users keep the same display on both formats until they edit one.
+  if (typeof rec.readerShowsLayout === 'boolean') {
+    if (typeof rec.pdfShowsLayout !== 'boolean') out.pdfShowsLayout = rec.readerShowsLayout;
+    if (typeof rec.epubShowsLayout !== 'boolean') out.epubShowsLayout = rec.readerShowsLayout;
+    migrated = true;
+  }
 
   const legacyProviderRef = typeof rec.ttsProvider === 'string'
     ? rec.ttsProvider
@@ -123,7 +132,8 @@ export function sanitizePreferencesPatch(
         break;
       case 'epubTheme':
       case 'playbackShortcuts':
-      case 'readerShowsLayout':
+      case 'pdfShowsLayout':
+      case 'epubShowsLayout':
       case 'pdfHighlightEnabled':
       case 'pdfWordHighlightEnabled':
       case 'epubHighlightEnabled':
@@ -146,6 +156,12 @@ export function sanitizePreferencesPatch(
         break;
       case 'speechText':
         out[key] = normalizeSpeechText(value);
+        break;
+      case 'voiceCustomization':
+        out[key] = normalizeVoiceCustomization(value);
+        break;
+      case 'pdfSkipBlockKinds':
+        if (Array.isArray(value)) out[key] = normalizeSkipKinds(value);
         break;
       case 'documentListState':
         if (isRecord(value)) {

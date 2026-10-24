@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { sniffAudioFormat } from '@openreader/tts/audio-format';
+import { appendCbrSilence, getCbrSilenceSecond, MP3_FRAME_DURATION_MS, parseMp3FrameLengths, sniffAudioFormat } from '@openreader/tts/audio-format';
 
 function bytes(...values: number[]): Buffer {
   return Buffer.from(values);
 }
+
+describe('added stream-profile pauses', () => {
+  it('keeps zero byte-identical and appends frame-valid silence with bounded duration', async () => {
+    const audio = await getCbrSilenceSecond();
+    expect(await appendCbrSilence(audio, 0)).toBe(audio);
+    const padded = await appendCbrSilence(audio, 150);
+    expect(padded.subarray(0, audio.length)).toEqual(audio);
+    const added = padded.subarray(audio.length);
+    const frames = parseMp3FrameLengths(added);
+    expect(frames.reduce((sum, size) => sum + size, 0)).toBe(added.length);
+    expect(Math.abs(frames.length * MP3_FRAME_DURATION_MS - 150)).toBeLessThan(MP3_FRAME_DURATION_MS / 2);
+  });
+});
 
 describe('sniffAudioFormat', () => {
   it('detects wav from RIFF/WAVE header', () => {

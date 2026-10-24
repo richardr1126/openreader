@@ -1,4 +1,7 @@
 import { Readable } from 'node:stream';
+import { estimateAddedPauseMs } from '@openreader/tts/voice-customization';
+import type { TTSSegmentSettings } from '@openreader/tts/types';
+import { estimateMsPerCharForNativeSpeed } from '@openreader/tts/playback-cbr-layout';
 import { verifyTtsPlaybackToken } from '@openreader/tts/playback-token';
 import {
   cumulativeCbrFrameBytes,
@@ -16,7 +19,7 @@ import {
   type PlanSlotInput,
 } from '../../playback-audio-layout';
 import type { PlaybackSessionController } from '../../playback/session-controller';
-import type { PlaybackSessionReadModel, PlaybackSessionRow } from '../../playback/session-read-model';
+import type { PlaybackSessionReadModel } from '../../playback/session-read-model';
 import type { ComputeWorkerRouteContext } from '../../route-context';
 import {
   errorCode,
@@ -26,19 +29,11 @@ import {
 import { apiErrorResponseSchema, jsonSchema } from '../../schemas';
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
-const ESTIMATE_MS_PER_CHAR_BASE = 78;
 // Expressive or slow voices can speak far past the text estimate, and real audio
 // that overruns the advertised length would be cut off. The advertised length is
 // therefore a deterministic upper bound; the client ends playback at the last
 // generated segment's exact end rather than playing the trailing pad.
 const ADVERTISED_LENGTH_HEADROOM = 2;
-
-function estimateRateForSession(session: PlaybackSessionRow): number {
-  const speedRaw = (session.settingsJson as { nativeSpeed?: unknown } | null)?.nativeSpeed;
-  const speed = Number(speedRaw);
-  const clamped = Number.isFinite(speed) && speed > 0 ? Math.min(3, Math.max(0.5, speed)) : 1;
-  return ESTIMATE_MS_PER_CHAR_BASE / clamped;
-}
 
 function stripId3Tag(bytes: Buffer): Buffer {
   if (bytes.length < 10 || bytes.subarray(0, 3).toString('ascii') !== 'ID3') return bytes;
@@ -162,7 +157,11 @@ export function registerPlaybackAudioRoutes(
             if (startOrdinal === null) {
               return { kind: 'error', code: 400, message: 'Playback stream start ordinal is not present in the canonical plan' };
             }
-            const estimateRate = estimateRateForSession(session);
+            const settings = (typeof session.settingsJson === 'string'
+              ? JSON.parse(session.settingsJson) : session.settingsJson) as TTSSegmentSettings | null;
+            const estimateRate = estimateMsPerCharForNativeSpeed(settings?.nativeSpeed);
+            const pauseEstimate = (text: string, upperBound = false) =>
+              estimateAddedPauseMs(text, settings?.voiceCustomization, settings?.providerType ?? '', upperBound);
             // Size every not-yet-generated (silence) slot in WHOLE MP3 frames, with
             // its exact frame byte length, so the silence we emit decodes to exactly
             // the duration the byte/time grid advertises. Without this, each silence
@@ -179,6 +178,7 @@ export function registerPlaybackAudioRoutes(
               ordinal: segment.ordinal,
               text: segment.text,
               durationMs: null, // pure estimate → stable Content-Length across requests
+              addedPauseMs: pauseEstimate(segment.text, true),
             }));
             const total = buildByteLayout(
               totalSlots, startOrdinal, estimateRate * ADVERTISED_LENGTH_HEADROOM, layoutOptions,
@@ -199,11 +199,13 @@ export function registerPlaybackAudioRoutes(
                 for (const row of rows) completed.set(row.ordinal, row.durationMs);
                 prefixBytes += buildByteLayout(batch.map((segment) => ({
                   ...segment, durationMs: completed.get(segment.ordinal) ?? null,
+                  addedPauseMs: pauseEstimate(segment.text),
                 })), startOrdinal, estimateRate, layoutOptions).totalBytes;
               }
             }
             const mapLayout = buildByteLayout(planSegments.map((segment) => ({
               ...segment, durationMs: completed.get(segment.ordinal) ?? null,
+              addedPauseMs: pauseEstimate(segment.text),
             })), startOrdinal, estimateRate, layoutOptions);
             app.log.info({ sessionId, fromOrdinal: startOrdinal, rangeStart,
               durationMs: Date.now() - startedAt, durationReads: completed.size,

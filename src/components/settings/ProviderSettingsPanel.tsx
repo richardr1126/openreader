@@ -1,5 +1,10 @@
 'use client';
 import { SpeechTextControls } from './SpeechTextControls';
+import { VoiceCustomizationControls } from './VoiceCustomizationControls';
+import { AdvancedSettings, AdvancedSettingsGroup } from './AdvancedSettings';
+import { MaxSegmentLengthControl } from './MaxSegmentLengthControl';
+import { PdfBlockKindControls } from './PdfBlockKindControls';
+import { VOICE_CUSTOMIZATION_FIELDS } from '@openreader/tts/voice-customization';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -43,6 +48,9 @@ export function ProviderSettingsPanel({
     voice,
     voiceSpeed,
     speechText,
+    voiceCustomization,
+    ttsSegmentMaxBlockLength,
+    pdfSkipBlockKinds,
     updateConfig,
     isLoading: configLoading,
   } = useConfig();
@@ -56,6 +64,9 @@ export function ProviderSettingsPanel({
   const [localVoice, setLocalVoice] = useState(voice);
   const [localSpeed, setLocalSpeed] = useState(voiceSpeed);
   const [localSpeechText, setLocalSpeechText] = useState(speechText);
+  const [localCustomization, setLocalCustomization] = useState(voiceCustomization);
+  const [localMaxSegmentLength, setLocalMaxSegmentLength] = useState(ttsSegmentMaxBlockLength);
+  const [localPdfSkipKinds, setLocalPdfSkipKinds] = useState(pdfSkipBlockKinds);
   const [hydrated, setHydrated] = useState(false);
 
   const viewModel = useMemo(() => resolveTtsSettingsViewModel({
@@ -122,7 +133,10 @@ export function ProviderSettingsPanel({
     setLocalVoice(voice);
     setLocalSpeed(voiceSpeed);
     setLocalSpeechText(speechText);
-  }, [providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed, speechText]);
+    setLocalCustomization(voiceCustomization);
+    setLocalMaxSegmentLength(ttsSegmentMaxBlockLength);
+    setLocalPdfSkipKinds(pdfSkipBlockKinds);
+  }, [providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed, speechText, voiceCustomization, ttsSegmentMaxBlockLength, pdfSkipBlockKinds]);
 
   useEffect(() => {
     if (configLoading || (active && hydrated)) return;
@@ -144,6 +158,7 @@ export function ProviderSettingsPanel({
         nativeSpeed: providerModelPolicy.supportsNativeModelSpeed ? localSpeed : 1,
         ...(providerModelPolicy.supportsInstructions && localInstructions ? { ttsInstructions: localInstructions } : {}),
         language: resolveTtsLanguage({ voice: previewVoice }),
+        voiceCustomization: localCustomization,
       },
       text: buildVoicePreviewText({ currentSentence: null, documentLanguage: null, voice: previewVoice }),
     });
@@ -151,6 +166,7 @@ export function ProviderSettingsPanel({
     effectiveProviderType,
     localInstructions,
     localSpeed,
+    localCustomization,
     modelValue,
     playSample,
     providerModelPolicy.supportsInstructions,
@@ -208,6 +224,9 @@ export function ProviderSettingsPanel({
     || finalModel !== ttsModel
     || localInstructions !== ttsInstructions
     || localVoice !== voice
+    || VOICE_CUSTOMIZATION_FIELDS.some(key => localCustomization[key] !== voiceCustomization[key])
+    || localMaxSegmentLength !== ttsSegmentMaxBlockLength
+    || JSON.stringify(localPdfSkipKinds) !== JSON.stringify(pdfSkipBlockKinds)
     || localSpeechText.citations !== speechText.citations || localSpeechText.brackets !== speechText.brackets
     || (providerModelPolicy.supportsNativeModelSpeed && localSpeed !== voiceSpeed);
 
@@ -227,9 +246,15 @@ export function ProviderSettingsPanel({
         ttsModel: finalModel,
         ttsInstructions: localInstructions,
         speechText: localSpeechText,
+        voiceCustomization: localCustomization,
+        ttsSegmentMaxBlockLength: localMaxSegmentLength,
+        pdfSkipBlockKinds: localPdfSkipKinds,
         ...(shownVoice ? { voice: shownVoice } : {}),
         ...(providerModelPolicy.supportsNativeModelSpeed ? { voiceSpeed: localSpeed } : {}),
       });
+      // The displayed fallback voice becomes an explicit preference on Save.
+      // Keep the draft aligned with that committed selection as well.
+      if (shownVoice) setLocalVoice(shownVoice);
     } catch (error) {
       console.error('Failed to save TTS settings:', error);
       toast.error('Could not save TTS settings. Please try again.');
@@ -404,10 +429,16 @@ export function ProviderSettingsPanel({
         )}
       </Section>
 
-      <Section title="Skip when reading aloud" variant="group"
+      <AdvancedSettings>
+      <AdvancedSettingsGroup title="Skip when reading aloud"
         subtitle="App defaults. Each book can override these settings.">
         <SpeechTextControls value={localSpeechText} onChange={change => setLocalSpeechText({ ...localSpeechText, ...change })} />
-      </Section>
+        <PdfBlockKindControls value={localPdfSkipKinds} onChange={setLocalPdfSkipKinds} />
+      </AdvancedSettingsGroup>
+        <VoiceCustomizationControls value={localCustomization} local={effectiveProviderType === 'kokoro-local'}
+          onChange={change => setLocalCustomization({ ...localCustomization, ...change })} />
+        <MaxSegmentLengthControl value={localMaxSegmentLength} onChange={setLocalMaxSegmentLength} />
+      </AdvancedSettings>
 
       {dirty || saving ? (
         <SaveBar

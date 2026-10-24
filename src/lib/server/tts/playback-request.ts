@@ -1,4 +1,5 @@
 import { buildTtsPlaybackSettingsHash, buildTtsSegmentSettingsJson } from '@openreader/tts/segments';
+import { normalizeVoiceCustomization } from '@openreader/tts/voice-customization';
 import { isTtsProviderType } from '@openreader/tts/provider-catalog';
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import { getDocumentSkipBlockKinds } from '@/lib/server/tts/document-skip-kinds';
@@ -89,6 +90,7 @@ export function parseTtsSegmentSettings(value: unknown): TTSSegmentSettings | nu
     ...(typeof rec.ttsInstructions === 'string' ? { ttsInstructions: rec.ttsInstructions } : {}),
     ...(typeof rec.language === 'string' ? { language: normalizeLanguageTag(rec.language) } : {}),
     ...(rec.speechText ? { speechText: normalizeSpeechText(rec.speechText) } : {}),
+    ...(rec.voiceCustomization ? { voiceCustomization: normalizeVoiceCustomization(rec.voiceCustomization) } : {}),
   };
 }
 
@@ -192,7 +194,7 @@ export async function buildTtsPlaybackPlanningInput(
     : JSON.stringify(rawSettingsJson);
   const planExtent = 'document';
   const skipBlockKinds = scope.readerType === 'pdf'
-    ? parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds(parsed.documentId, scope.storageUserId)
+    ? parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds(parsed.documentId, scope.storageUserId, scope.userId)
     : [];
   const isPlainText = scope.readerType === 'html'
     ? scope.documentName.toLowerCase().endsWith('.txt')

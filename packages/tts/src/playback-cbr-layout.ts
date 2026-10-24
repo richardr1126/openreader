@@ -44,6 +44,7 @@ export interface PlanSlotInput {
   locator?: unknown;
   segmentKey?: string | null;
   durationMs: number | null;
+  addedPauseMs?: number;
 }
 
 export interface PlaybackLayoutSlot {
@@ -104,6 +105,7 @@ export function buildPlaybackCbrLayout(
   let cursorBytes = 0;
   for (const segment of ordered) {
     const generated = segment.durationMs != null && segment.durationMs > 0;
+    const estimatedMs = estimateDurationMs(segment.text, msPerChar) + Math.max(0, segment.addedPauseMs ?? 0);
     let durationMs: number;
     let byteLength: number;
     if (generated) {
@@ -111,13 +113,13 @@ export function buildPlaybackCbrLayout(
       byteLength = bytesForDurationMs(durationMs);
     } else if (frameMs > 0) {
       // Silence quantized to whole frames so decoded duration == byte grid.
-      const frames = Math.max(1, Math.round(estimateDurationMs(segment.text, msPerChar) / frameMs));
+      const frames = Math.max(1, Math.round(estimatedMs / frameMs));
       durationMs = Math.max(1, Math.round(frames * frameMs));
       byteLength = options?.silenceBytesForFrames
         ? options.silenceBytesForFrames(frames)
         : bytesForDurationMs(durationMs);
     } else {
-      durationMs = estimateDurationMs(segment.text, msPerChar);
+      durationMs = estimatedMs;
       byteLength = bytesForDurationMs(durationMs);
     }
     slots.push({

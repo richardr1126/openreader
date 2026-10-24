@@ -12,7 +12,6 @@ import {
 
 import type { Book, Contents, NavItem, Rendition } from 'epubjs';
 
-import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { useEPUBHighlighting } from '@/hooks/epub/useEPUBHighlighting';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
@@ -116,7 +115,7 @@ export function useEpubDocument(
     setFollowingNarration,
     followingNarration,
   } = useTTS();
-  const { epubHighlightEnabled, epubWordHighlightEnabled, readerShowsLayout } = useConfig();
+  const { presentation: { highlightSegment: epubHighlightEnabled, highlightWords: epubWordHighlightEnabled, showsLayout: readerShowsLayout } } = useReaderAppearance();
 
   const currDocData = document.data;
   const currDocName = document.name;

@@ -164,6 +164,7 @@ describe('TTS playback export job', () => {
     const storage = new MemoryStorage();
     storage.objects.set(request.planObjectKey, Buffer.from(JSON.stringify({
       schemaVersion: 1,
+      documentId: request.documentId, documentVersion: request.documentVersion, readerType: request.readerType,
       segments: [
         { ordinal: 0, text: 'One.', locator: { readerType: 'pdf', page: 1 } },
         { ordinal: 1, text: 'Two.', locator: { readerType: 'pdf', page: 1 } },
@@ -175,11 +176,11 @@ describe('TTS playback export job', () => {
     return storage;
   }
 
-  function handler(storage: MemoryStorage, sidecars: Map<number, ReturnType<typeof sidecar>>, status = 'succeeded') {
+  function handler(storage: MemoryStorage, sidecars: Map<number, ReturnType<typeof sidecar>>, status: string | null = 'succeeded') {
     return createTtsPlaybackExportHandler({
       storage,
       playbackStorage: {
-        sessions: { getSession: async () => ({
+        sessions: { getSession: async () => status === null ? null : ({
           sessionId: request.sessionId,
           storageUserId: request.storageUserId,
           documentId: request.documentId,
@@ -210,6 +211,28 @@ describe('TTS playback export job', () => {
     });
     expect(storage.objects.get(result.artifact.objectKey)?.toString()).toBe('onetwo');
     await expect(run(request, 0)).rejects.toThrow('session is not complete: running');
+  });
+
+  test('exports cached audio without a transient export session, preserving segment buffers', async () => {
+    const storage = pdfPlanStorage();
+    const sidecars = new Map([
+      [0, sidecar(0, 'completed', 'audio/0')], [1, sidecar(1, 'completed', 'audio/1')],
+    ]);
+    const run = handler(storage, sidecars, null);
+    await expect(run(request, 0)).rejects.toThrow('segment 2 is not durably settled');
+    storage.objects.set('audio/2', Buffer.from('three-with-its-added-pause'));
+    sidecars.set(2, sidecar(2, 'completed', 'audio/2'));
+    const result = await run(request, 0);
+    expect(result.artifact).toMatchObject({ status: 'ready', generatedSegments: 3, skippedSegments: 0 });
+    expect(storage.objects.get(result.artifact.objectKey)?.toString()).toBe('onetwothree-with-its-added-pause');
+  });
+
+  test('validates immutable plan scope when no session can establish it', async () => {
+    const storage = pdfPlanStorage();
+    const run = handler(storage, new Map(), null);
+    await expect(run({ ...request, documentId: 'e'.repeat(64) }, 0)).rejects.toThrow('plan scope mismatch');
+    await expect(run({ ...request, documentVersion: 2 }, 0)).rejects.toThrow('plan scope mismatch');
+    await expect(run({ ...request, readerType: 'html' }, 0)).rejects.toThrow('plan scope mismatch');
   });
 
   test('rebuilds a ready artifact once retried segments change the settled counts', async () => {

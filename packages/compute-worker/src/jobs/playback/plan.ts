@@ -1,5 +1,6 @@
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import { normalizeSpeechText } from '@openreader/tts/speech-text';
+import { normalizeVoiceCustomization } from '@openreader/tts/voice-customization';
 import { buildHtmlSourceUnits, parseHtmlBlocks } from '@openreader/tts/html-blocks';
 import { buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
 import {
@@ -60,6 +61,7 @@ export function parseTtsSettings(value: unknown): TTSSegmentSettings {
     ttsInstructions,
     language: typeof rec.language === 'string' ? normalizeLanguageTag(rec.language) : 'en',
     ...(rec.speechText ? { speechText: normalizeSpeechText(rec.speechText) } : {}),
+    ...(rec.voiceCustomization ? { voiceCustomization: normalizeVoiceCustomization(rec.voiceCustomization) } : {}),
   };
 }
 
@@ -251,6 +253,7 @@ async function persistTtsPlaybackPlan(input: {
 export async function readPersistedTtsPlaybackPlanSegments(
   storage: Pick<ArtifactStorage, 'readObject'>,
   planObjectKey: string,
+  expectedScope?: { documentId: string; documentVersion: number; readerType: string },
 ): Promise<TtsPlaybackSegmentInput[] | null> {
   let bytes: ArrayBuffer;
   try {
@@ -260,10 +263,17 @@ export async function readPersistedTtsPlaybackPlanSegments(
   }
   const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as {
     schemaVersion?: unknown;
+    documentId?: unknown;
+    documentVersion?: unknown;
+    readerType?: unknown;
     segments?: Array<{ ordinal?: unknown; segmentKey?: unknown; text?: unknown; locator?: unknown }>;
   };
   if (parsed.schemaVersion !== 1) {
     throw new Error(`Unsupported TTS playback plan schema version: ${String(parsed.schemaVersion)}`);
+  }
+  if (expectedScope && (parsed.documentId !== expectedScope.documentId
+    || parsed.documentVersion !== expectedScope.documentVersion || parsed.readerType !== expectedScope.readerType)) {
+    throw new Error('TTS playback plan scope mismatch');
   }
   if (!Array.isArray(parsed.segments)) throw new Error('TTS playback plan artifact missing segments');
   return parsed.segments.map((row) => {

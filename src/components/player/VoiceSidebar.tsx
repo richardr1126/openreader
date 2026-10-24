@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { normalizeVoiceCustomization } from '@openreader/tts/voice-customization';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
@@ -28,7 +29,7 @@ import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
  * sample with the draft settings and never touch the document's audio.
  */
 export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { providerRef, providerType, ttsModel, ttsInstructions } = useConfig();
+  const { providerRef, providerType, ttsModel, ttsInstructions, voiceCustomization } = useConfig();
   const favorites = useVoiceFavorites(providerRef, ttsModel);
   const {
     voice: appliedVoice,
@@ -42,6 +43,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     isProcessing,
     pause,
     setBookVoiceAndRestart,
+    bookSpeechSettings,
   } = useTTS();
   const { currentSentence } = useTTSHighlight();
   const { providers } = useSharedProviders();
@@ -97,6 +99,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         ttsModel,
         voice,
         nativeSpeed: draft.nativeSpeed,
+        voiceCustomization: normalizeVoiceCustomization({ ...voiceCustomization, ...bookSpeechSettings.voiceCustomization }),
         ...(policy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
         language: resolveTtsLanguage({ configuredLanguage: documentLanguage, documentLanguage: detectedDocumentLanguage, voice }),
       },
@@ -113,6 +116,8 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     providerType,
     ttsInstructions,
     ttsModel,
+    voiceCustomization,
+    bookSpeechSettings.voiceCustomization,
   ]);
 
   const pickerPreview: VoicePickerPreview = { state: preview.state, play: playPreview, stop: stopPreview };

@@ -65,6 +65,7 @@ export async function synthesizeTtsVoicePreview(
         instructions: settings.ttsInstructions,
         language: settings.language,
         provider: creds.providerType,
+        ...(settings.voiceCustomization ? { voiceCustomization: settings.voiceCustomization } : {}),
         apiKey: creds.apiKey,
         baseUrl: creds.baseUrl ?? undefined,
       }, synthesisSignal, { ttsUpstreamTimeoutMs: timeoutMs }),

@@ -1,6 +1,6 @@
 # Reader parity implementation plan
 
-Updated 2026-10-23. This is the shared implementation order for the web and
+Updated 2026-10-24. This is the shared implementation order for the web and
 Swift repositories. Platform capability parity does not introduce cross-service
 library or settings synchronization.
 
@@ -55,7 +55,7 @@ schema deployment before distribution; see the Swift architecture document.
 | 3 | Highlight appearance | Global/per-book segment and word colors, opacity, presets, inheritance/reset implemented. Swift adds the approved optional storage field and independent iCloud clock. Production schema deployment and two-device verification remain owner follow-ups. |
 | 4 | Manual browsing and follow controls | Implemented on web and Swift: browsing preserves playback, Follow narration controls viewport movement, and Return to narration rejoins the live cursor. Explicit text/player/contents seeks enable following through the existing playback path. No schema or audio identity changes. |
 | 5 | Citation and bracket handling | Implemented on web and Swift: numeric/author–year citation skipping and Off/Square brackets/Parentheses/Both prose handling, with independent app defaults and per-book overrides. Source maps preserve highlighting and progress; filtered audio uses separate reusable cache variants. See `SPEECH_TEXT_HANDLING.md`. Production CloudKit schema deployment and two-device delivery remain owner follow-ups. |
-| 6 | Added web pauses | Establish the actual pause contract before implementation. Swift's existing controls refer to generated-piece and reader-block boundaries; these are not guaranteed sentence and paragraph boundaries. No Swift pause redesign is currently requested. |
+| 6 | Added web pauses | Implemented: Automatic preserves existing engine pauses (currently 0 ms added on web), with app defaults and independent book overrides. All providers support between-segment pauses; worker-local Kokoro also supports custom piece length and between-piece pauses. Boundaries are generated pieces and reader blocks, not necessarily sentences/paragraphs. See `VOICE_CUSTOMIZATION.md`. Swift is unchanged. |
 | 7 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
 | 8 | FishAudio | The only requested new provider. Implement both platforms after the provider contract exists; review credential handling and execution boundaries. |
 | 9 | Optional queued voice changes | Preserve current Apply. Add a distinct queue option after specifying its interaction with generated audio, timeline reuse, and current playback. |
@@ -75,7 +75,7 @@ schema deployment before distribution; see the Swift architecture document.
 ## Current checkpoint
 
 The completed baseline is committed on the paired integration branches. Items
-1–5 are now implemented there. The owner approved global/per-book typography
+1–6 are now implemented there. The owner approved global/per-book typography
 and highlight appearance with iCloud sync, including their optional SwiftData
 fields and additive CloudKit fields. Web uses existing preference/document JSON
 without a SQL migration. Appearance saves update the existing ready reader
@@ -140,6 +140,21 @@ speech timing test failed during a run with the reader open; it passed on the
 complete rerun with the app closed. Production CloudKit deployment and
 two-device delivery remain unverified owner actions. Source and cache contracts
 and approved storage additions are recorded in `SPEECH_TEXT_HANDLING.md`.
+
+Item 6 validation: all 1,452 Vitest tests and all 59 Chromium/WebKit cases pass,
+including the consolidated real-playback journeys with a 150 ms segment pause
+and their original assertions unchanged. The production build, app and worker
+type checks, and route/compute/install-profile checks pass. Visible checks
+covered Automatic (0 ms), draft save/discard, reload, independent book
+overrides/reset, local Kokoro splitting/pauses, actual playback and downloading
+an audiobook assembled from the durable reading cache. The increment fixed a
+JSON-settings decoding omission that made resumed timing estimates drop added
+pauses; regression tests require object and stored-string settings to agree.
+Voice customization uses the unchanged shared setting row, compact inline
+selectors, and sliders confined to the control column for Custom values.
+Browser assertions cover inline alignment and unclipped values at phone width.
+Swift code and its existing pause defaults are unchanged. Changes remain local
+on the existing integration branch.
 
 The accepted favorite identity on web is the structured tuple of resolved
 provider configuration reference, model ID, and voice ID. Serialize lookup keys

@@ -26,7 +26,7 @@ export function SpeechTextControls({ value, onChange, overrides, onReset }: {
     </SettingRow>
     <SettingRow label="Bracketed text" icon={<TextCursorIcon />}
       info="Skip all text inside square brackets, parentheses, or both. Off preserves bracketed prose. Only speech changes; the displayed document stays intact."
-      labelAction={reset('brackets')}>
+      labelAction={reset('brackets')} controlClassName="w-40 max-w-[48%]">
       <Select aria-label="Skip bracketed text" value={options.find(option => option.value === value.brackets)} options={options} onChange={({ value: brackets }) => onChange({ brackets })} />
     </SettingRow>
   </>;

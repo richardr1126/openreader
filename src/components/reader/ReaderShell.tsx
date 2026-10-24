@@ -280,7 +280,7 @@ export function ReaderShell<T extends ReaderType>({
         aria-hidden={!rendererReady}
       >
         <Fragment key={attemptKey}>
-          <ReaderAppearanceProvider settings={payload.settings} update={bootstrap.updatePresentation}>
+          <ReaderAppearanceProvider readerType={readerType} settings={payload.settings} update={bootstrap.updatePresentation}>
           {children({
             payload,
             document: sourceDocument,

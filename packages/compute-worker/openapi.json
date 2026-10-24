@@ -11129,6 +11129,35 @@
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 64
+                      },
+                      "voiceCustomization": {
+                        "type": "object",
+                        "properties": {
+                          "pieceCharacterLimit": {
+                            "type": "integer",
+                            "minimum": 50,
+                            "maximum": 450,
+                            "nullable": true
+                          },
+                          "piecePauseMilliseconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2000,
+                            "nullable": true
+                          },
+                          "blockPauseMilliseconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2000,
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "pieceCharacterLimit",
+                          "piecePauseMilliseconds",
+                          "blockPauseMilliseconds"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [

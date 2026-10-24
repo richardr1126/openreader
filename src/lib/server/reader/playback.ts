@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server';
 import { resolveTtsLanguage } from '@openreader/tts/language';
 import { normalizeSpeechText } from '@openreader/tts/speech-text';
+import { effectiveVoiceCustomization } from '@openreader/tts/voice-customization';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
 import { resolveProviderDefaults, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { APP_CONFIG_DEFAULTS, type AppConfigValues } from '@/types/config';
@@ -124,12 +125,13 @@ export async function resolveReaderPlayback(
         : {}),
       language,
       speechText: normalizeSpeechText({ ...preferences.speechText, ...settings.speechText }),
+      voiceCustomization: effectiveVoiceCustomization({ ...preferences.voiceCustomization, ...settings.voiceCustomization }, provider.providerType),
     },
     startLocation: {},
-    maxBlockLength: preferences.ttsSegmentMaxBlockLength,
+    maxBlockLength: settings.playback?.maxSegmentLength ?? preferences.ttsSegmentMaxBlockLength,
     language,
     ...(scope.readerType === 'pdf'
-      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? [] }
+      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds }
       : {}),
   };
   const planningInput = await buildTtsPlaybackPlanningInput(parsed, scope);

@@ -25,7 +25,7 @@ import {
 import { forceReparsePdfDocument } from '@/lib/client/api/documents';
 import type { DocumentSettings as DocumentSettingsValue } from '@/types/document-settings';
 import { usePdfDocument } from './usePdfDocument';
-import { useConfig } from '@/contexts/ConfigContext';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { PlanTextReader } from '@/components/views/HTMLViewer';
 import { PageJumpControl, ReaderPager } from '@/components/reader/ReaderNavigator';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
@@ -81,7 +81,7 @@ function PdfReader({
     setParsedOverlayEnabled,
     pdfDocument,
   } = pdfState;
-  const { readerShowsLayout } = useConfig();
+  const { presentation: { showsLayout: readerShowsLayout } } = useReaderAppearance();
   const outline = usePdfOutline(pdfDocument);
   const {
     browseToLocation,
@@ -251,22 +251,7 @@ function PdfReader({
         pdf={{
           parseStatus: isForceReparseStarting ? 'running' : 'ready',
           parsedOverlayEnabled,
-          skipBlockKinds: documentSettings.pdf?.skipBlockKinds ?? [],
           onToggleOverlay: (enabled) => setParsedOverlayEnabled(enabled),
-          onToggleSkipKind: (kind, enabled) => {
-            const current = new Set(documentSettings.pdf?.skipBlockKinds ?? []);
-            if (enabled) current.add(kind);
-            else current.delete(kind);
-            const nextSettings: DocumentSettingsValue = {
-              ...documentSettings,
-              schemaVersion: 1,
-              pdf: {
-                ...(documentSettings.pdf ?? {}),
-                skipBlockKinds: Array.from(current),
-              },
-            };
-            void updateDocumentSettings(nextSettings);
-          },
           onForceReparse: requestForceReparse,
         }}
       />

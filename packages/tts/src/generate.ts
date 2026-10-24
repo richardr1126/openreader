@@ -12,7 +12,8 @@ import {
   resolveReplicateVoiceInputKey,
 } from './voice-resolution';
 import { getUpstreamRetryAfterSeconds, getUpstreamStatus } from './upstream-response';
-import { normalizeToMp3 } from './audio-format';
+import { appendCbrSilence, normalizeToMp3 } from './audio-format';
+import { effectiveVoiceCustomization, voiceCustomizationCacheKey, type VoiceCustomization } from './voice-customization';
 import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import {
@@ -32,6 +33,7 @@ export interface ServerTTSRequest {
   provider: string;
   apiKey: string;
   baseUrl?: string;
+  voiceCustomization?: VoiceCustomization;
 }
 
 type CustomVoice = string;
@@ -52,6 +54,7 @@ type ResolvedServerTTSRequest = {
   provider: string;
   apiKey: string;
   baseUrl?: string;
+  voiceCustomization?: VoiceCustomization;
 };
 
 /**
@@ -61,7 +64,7 @@ type ResolvedServerTTSRequest = {
  * `normalizeToMp3` accepts.
  */
 export type LocalTtsSynthesizer = (
-  request: { text: string; voice: string; speed: number },
+  request: { text: string; voice: string; speed: number; customization?: VoiceCustomization },
   signal: AbortSignal,
 ) => Promise<Buffer>;
 
@@ -381,6 +384,8 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
     provider,
     apiKey: input.apiKey,
     baseUrl: input.baseUrl,
+    ...(voiceCustomizationCacheKey(input.voiceCustomization, provider)
+      ? { voiceCustomization: effectiveVoiceCustomization(input.voiceCustomization, provider) } : {}),
   };
 }
 
@@ -393,6 +398,7 @@ function makeCacheKey(input: {
   text: string;
   instructions?: string;
   language?: string;
+  voiceCustomization?: VoiceCustomization;
 }) {
   const canonical = {
     provider: input.provider,
@@ -403,6 +409,8 @@ function makeCacheKey(input: {
     text: input.text,
     instructions: input.instructions || undefined,
     language: input.language || undefined,
+    ...(voiceCustomizationCacheKey(input.voiceCustomization, input.provider)
+      ? { voiceCustomization: voiceCustomizationCacheKey(input.voiceCustomization, input.provider) } : {}),
   };
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
@@ -418,6 +426,7 @@ export function buildTTSCacheKey(request: ServerTTSRequest): string {
     text: resolved.text,
     instructions: resolved.instructions,
     language: resolved.language,
+    voiceCustomization: resolved.voiceCustomization,
   });
 }
 
@@ -657,7 +666,8 @@ function runLocalRequest(request: ResolvedServerTTSRequest, signal: AbortSignal)
   if (!localSynthesizer) {
     throw new Error('The local Kokoro provider runs only in the compute worker');
   }
-  return localSynthesizer({ text: request.text, voice: request.voice, speed: request.speed }, signal);
+  return localSynthesizer({ text: request.text, voice: request.voice, speed: request.speed,
+    ...(request.voiceCustomization ? { customization: request.voiceCustomization } : {}) }, signal);
 }
 
 async function runProviderRequest(
@@ -675,12 +685,14 @@ async function runProviderRequest(
 
   // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;
   // Normalize to MP3 so playback storage and document export stay MP3-only.
-  return normalizeToMp3(raw, signal, {
+  const normalized = await normalizeToMp3(raw, signal, {
     provider: request.provider,
     model: request.model,
     textLength: request.text.length,
     providerMs,
   });
+  return request.provider === 'kokoro-local' ? normalized
+    : appendCbrSilence(normalized, request.voiceCustomization?.blockPauseMilliseconds ?? 0, signal);
 }
 
 /**
@@ -794,6 +806,7 @@ export async function generateTTSBuffer(
     text: resolved.text,
     instructions: resolved.instructions,
     language: resolved.language,
+    voiceCustomization: resolved.voiceCustomization,
   });
 
   const cachedBuffer = ttsAudioCache.get(cacheKey);

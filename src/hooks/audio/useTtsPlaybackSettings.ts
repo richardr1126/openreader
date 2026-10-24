@@ -5,10 +5,9 @@ import toast from 'react-hot-toast';
 
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { AppConfigValues } from '@/types/config';
-import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
+import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings, type BookSpeechSettings } from '@/types/document-settings';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
-import type { SpeechTextOptions } from '@openreader/tts/speech-text';
 
 type UseTtsPlaybackSettingsInput = {
   isPlaying: boolean;
@@ -143,7 +142,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         try {
           // The audio controller's snapshot does not own live font/color edits.
           // Omit those fields so the server preserves their latest values.
-          await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined });
+          await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
         } catch (error) {
           console.error('Could not save book voice:', error);
           setReaderSettings(previous);
@@ -174,25 +173,28 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     });
   }, [setAudioSpeed, updateConfigKey]);
 
-  const setBookSpeechText = useCallback((speechText: Partial<SpeechTextOptions>) => {
-    if (!documentId || !readerSettings) return;
+  const setBookSpeechSettings = useCallback(async (change: BookSpeechSettings): Promise<boolean> => {
+    if (!documentId || !readerSettings) return false;
     const previous = readerSettings;
-    const next = { ...readerSettings, speechText };
-    void restartAfterConfigUpdate(() => setReaderSettings(next), async () => {
+    const next = { ...readerSettings, ...change };
+    let saved = false;
+    await restartAfterConfigUpdate(() => setReaderSettings(next), async () => {
       try {
-        await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined });
+        await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+        saved = true;
       } catch (error) {
-        console.error('Could not save speech settings:', error);
+        console.error('Could not save book speech settings:', error);
         setReaderSettings(previous);
         toast.error('Could not save this book’s speech settings');
       }
     }, { resetPlan: true });
+    return saved;
   }, [documentId, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
 
   return {
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
-    setBookSpeechText,
+    setBookSpeechSettings,
   };
 }

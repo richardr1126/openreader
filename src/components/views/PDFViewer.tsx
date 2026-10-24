@@ -6,7 +6,7 @@ import type { Dest } from 'react-pdf/src/shared/types.js';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
-import { useConfig } from '@/contexts/ConfigContext';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { usePDFResize } from '@/hooks/pdf/usePDFResize';
 import type { PdfDocumentState } from '@/app/(app)/pdf/[id]/usePdfDocument';
 import type { ParsedPdfBlock, ParsedPdfPage } from '@/types/parsed-pdf';
@@ -58,7 +58,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const lastWordLayoutKeyRef = useRef<string>('');
 
   // Config context
-  const { viewType, pdfHighlightEnabled, pdfWordHighlightEnabled } = useConfig();
+  const { presentation: { viewType, highlightSegment: pdfHighlightEnabled, highlightWords: pdfWordHighlightEnabled } } = useReaderAppearance();
 
   // TTS context
   const {
