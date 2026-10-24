@@ -74,10 +74,11 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
   );
 }
 
-function RowLabel({ id, label, info }: { id?: string; label: string; info?: ReactNode }) {
+function RowLabel({ id, label, info, action }: { id?: string; label: string; info?: ReactNode; action?: ReactNode }) {
   return (
     <span className="flex items-center gap-1">
       <span id={id} className="text-sm font-medium leading-5 text-foreground">{label}</span>
+      {action}
       {info ? <InfoTip label={label}>{info}</InfoTip> : null}
     </span>
   );
@@ -91,6 +92,7 @@ function RowLabel({ id, label, info }: { id?: string; label: string; info?: Reac
  */
 export function SettingRow({
   label,
+  labelAction,
   icon,
   description,
   info,
@@ -100,6 +102,7 @@ export function SettingRow({
   children,
 }: {
   label: string;
+  labelAction?: ReactNode;
   icon?: ReactNode;
   description?: ReactNode;
   info?: ReactNode;
@@ -112,7 +115,7 @@ export function SettingRow({
     <div className="flex min-w-0 flex-1 items-center gap-3">
       {icon ? <RowIcon>{icon}</RowIcon> : null}
       <div className="min-w-0 flex-1 space-y-0.5">
-        <RowLabel label={label} info={info} />
+        <RowLabel label={label} info={info} action={labelAction} />
         {description ? <span className="block text-xs leading-4 text-soft">{description}</span> : null}
         {meta ? <span className="block text-[11px] leading-4 text-faint">{meta}</span> : null}
       </div>

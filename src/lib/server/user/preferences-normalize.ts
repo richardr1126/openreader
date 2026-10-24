@@ -3,6 +3,7 @@ import { isBuiltInTtsProviderId, isTtsProviderType, type TtsProviderId } from '@
 import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 import { normalizeFavoriteVoices } from '@/lib/shared/voice-favorites';
 import { normalizeTypography, normalizeHighlightAppearance } from '@/lib/shared/reader-appearance';
+import { normalizeSpeechText } from '@openreader/tts/speech-text';
 
 // Dropped on write. `iosBetaBannerDismissed` belonged to the first iOS banner;
 // retiring it shows the current banner again to users who dismissed the old one.
@@ -142,6 +143,9 @@ export function sanitizePreferencesPatch(
         break;
       case 'highlightAppearance':
         out[key] = normalizeHighlightAppearance(value);
+        break;
+      case 'speechText':
+        out[key] = normalizeSpeechText(value);
         break;
       case 'documentListState':
         if (isRecord(value)) {

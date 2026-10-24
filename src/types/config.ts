@@ -1,4 +1,5 @@
 import type { DocumentListState } from '@/types/documents';
+import { DEFAULT_SPEECH_TEXT, type SpeechTextOptions } from '@openreader/tts/speech-text';
 import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 import type { FavoriteVoice } from '@/lib/shared/voice-favorites';
 import { DEFAULT_TYPOGRAPHY, DEFAULT_HIGHLIGHT_APPEARANCE, type ReaderTypography, type HighlightAppearance } from '@/lib/shared/reader-appearance';
@@ -38,6 +39,7 @@ export interface AppConfigValues {
   favoriteVoices: FavoriteVoice[];
   readerTypography: ReaderTypography;
   highlightAppearance: HighlightAppearance;
+  speechText: SpeechTextOptions;
   ttsSegmentMaxBlockLength: number;
   pdfHighlightEnabled: boolean;
   pdfWordHighlightEnabled: boolean;
@@ -81,6 +83,7 @@ export function getAppConfigDefaults(): AppConfigValues {
     favoriteVoices: [],
     readerTypography: DEFAULT_TYPOGRAPHY,
     highlightAppearance: DEFAULT_HIGHLIGHT_APPEARANCE,
+    speechText: DEFAULT_SPEECH_TEXT,
     ttsSegmentMaxBlockLength: 450,
     pdfHighlightEnabled: true,
     pdfWordHighlightEnabled: true,

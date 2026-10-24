@@ -2,6 +2,7 @@ import { buildTtsPlaybackSettingsHash, buildTtsSegmentSettingsJson } from '@open
 import { isTtsProviderType } from '@openreader/tts/provider-catalog';
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import { getDocumentSkipBlockKinds } from '@/lib/server/tts/document-skip-kinds';
+import { normalizeSpeechText, BRACKETED_TEXT_MODES } from '@openreader/tts/speech-text';
 import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TtsPlaybackPlanRequest, TtsPlaybackRequest } from '@/lib/server/compute-worker/protocol';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
@@ -74,6 +75,11 @@ export function parseTtsSegmentSettings(value: unknown): TTSSegmentSettings | nu
   if (typeof rec.nativeSpeed !== 'number' || !Number.isFinite(rec.nativeSpeed)) return null;
   if (rec.ttsInstructions !== undefined && typeof rec.ttsInstructions !== 'string') return null;
   if (rec.language !== undefined && typeof rec.language !== 'string') return null;
+  if (rec.speechText !== undefined) {
+    if (!rec.speechText || typeof rec.speechText !== 'object') return null;
+    const speech = rec.speechText as Record<string, unknown>;
+    if (typeof speech.citations !== 'boolean' || !BRACKETED_TEXT_MODES.includes(speech.brackets as never)) return null;
+  }
   return {
     providerRef: rec.providerRef,
     providerType: rec.providerType,
@@ -82,6 +88,7 @@ export function parseTtsSegmentSettings(value: unknown): TTSSegmentSettings | nu
     nativeSpeed: rec.nativeSpeed,
     ...(typeof rec.ttsInstructions === 'string' ? { ttsInstructions: rec.ttsInstructions } : {}),
     ...(typeof rec.language === 'string' ? { language: normalizeLanguageTag(rec.language) } : {}),
+    ...(rec.speechText ? { speechText: normalizeSpeechText(rec.speechText) } : {}),
   };
 }
 

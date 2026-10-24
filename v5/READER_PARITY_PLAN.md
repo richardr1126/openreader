@@ -54,7 +54,7 @@ schema deployment before distribution; see the Swift architecture document.
 | 2 | Typography | Global/per-book controls and EPUB/flowing-text rendering implemented on both platforms. Preserve publisher defaults, Dynamic Type and playback identity. PDF page typography is unchanged. |
 | 3 | Highlight appearance | Global/per-book segment and word colors, opacity, presets, inheritance/reset implemented. Swift adds the approved optional storage field and independent iCloud clock. Production schema deployment and two-device verification remain owner follow-ups. |
 | 4 | Manual browsing and follow controls | Implemented on web and Swift: browsing preserves playback, Follow narration controls viewport movement, and Return to narration rejoins the live cursor. Explicit text/player/contents seeks enable following through the existing playback path. No schema or audio identity changes. |
-| 5 | Citation and bracket handling | Define source-to-spoken mapping and cache implications before preference UI. Text transformations must not invalidate word highlighting or stored progress silently. |
+| 5 | Citation and bracket handling | Implemented on web and Swift: numeric/author–year citation skipping and Off/Square brackets/Parentheses/Both prose handling, with independent app defaults and per-book overrides. Source maps preserve highlighting and progress; filtered audio uses separate reusable cache variants. See `SPEECH_TEXT_HANDLING.md`. Production CloudKit schema deployment and two-device delivery remain owner follow-ups. |
 | 6 | Added web pauses | Establish the actual pause contract before implementation. Swift's existing controls refer to generated-piece and reader-block boundaries; these are not guaranteed sentence and paragraph boundaries. No Swift pause redesign is currently requested. |
 | 7 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
 | 8 | FishAudio | The only requested new provider. Implement both platforms after the provider contract exists; review credential handling and execution boundaries. |
@@ -75,7 +75,7 @@ schema deployment before distribution; see the Swift architecture document.
 ## Current checkpoint
 
 The completed baseline is committed on the paired integration branches. Items
-1–4 are now implemented there. The owner approved global/per-book typography
+1–5 are now implemented there. The owner approved global/per-book typography
 and highlight appearance with iCloud sync, including their optional SwiftData
 fields and additive CloudKit fields. Web uses existing preference/document JSON
 without a SQL migration. Appearance saves update the existing ready reader
@@ -126,6 +126,17 @@ browsing/return, native text browsing during active narration, paused return,
 and native EPUB page turns/return with the saved ordinal unchanged. Native PDF
 and spread rendering were build-checked but not separately exercised on screen
 for this increment. Changes remain local on the existing paired branches.
+
+Item 5 validation: all 1,438 Vitest tests and all 57 Chromium/WebKit cases pass,
+including both consolidated playback journeys. The production build, app and
+worker type checks, and boundary checks pass. Native simulator and Catalyst
+builds and all 398 package tests pass. Visible checks covered web defaults,
+reload, book overrides/reset and PDF block-kind placement, plus native defaults,
+relaunch, independent book overrides and inheritance reset. One existing Apple
+speech timing test failed during a run with the reader open; it passed on the
+complete rerun with the app closed. Production CloudKit deployment and
+two-device delivery remain unverified owner actions. Source and cache contracts
+and approved storage additions are recorded in `SPEECH_TEXT_HANDLING.md`.
 
 The accepted favorite identity on web is the structured tuple of resolved
 provider configuration reference, model ID, and voice ID. Serialize lookup keys

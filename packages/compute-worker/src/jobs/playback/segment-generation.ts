@@ -1,4 +1,6 @@
-import { MP3_ENCODER_DELAY_SEC, normalizeToMp3 } from '@openreader/tts/audio-format';
+import { MP3_ENCODER_DELAY_SEC, normalizeToMp3, getCbrSilenceSecond, parseMp3FrameLengths } from '@openreader/tts/audio-format';
+import { mapSpeechTextSegments, normalizeSpeechText, speechTextSection, remapSpeechAlignment } from '@openreader/tts/speech-text';
+import { stripId3Tag } from './ffmpeg-export';
 import { generateTTSBuffer } from '@openreader/tts/generate';
 import {
   buildTtsPlaybackAudioContentHash,
@@ -151,6 +153,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   sessionInstanceId: string;
   s3Prefix: string;
   segments: TtsPlaybackSegmentInput[];
+  sourceSegments?: TtsPlaybackSegmentInput[];
   putAudioObject: (key: string, body: Buffer) => Promise<void>;
   deleteAudioObject?: (key: string) => Promise<void>;
   audioObjectExists: (key: string) => Promise<boolean>;
@@ -212,17 +215,23 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     ? Math.max(1, providerDepth - 1)
     : providerDepth;
   const effectiveSettings = resolveEffectiveTtsSettings(settings, requestCreds);
+  const speech = mapSpeechTextSegments(input.sourceSegments ?? input.segments,
+    normalizeSpeechText(settings.speechText), (segment) => speechTextSection(normalizeLocator(segment.locator as never)));
 
   const normalized = input.segments.map((segment) => {
-    const text = normalizeSegmentText(segment.text);
+    const sourceText = normalizeSegmentText(segment.text);
+    const mapping = speech.get(segment.ordinal) ?? { text: sourceText };
+    const text = mapping.text;
     const locator = normalizeLocator(segment.locator as never);
-    if (!text || !locator) return null;
+    if (!sourceText || !locator) return null;
     const segmentKey = typeof segment.segmentKey === 'string' && segment.segmentKey.trim()
       ? segment.segmentKey.trim()
       : null;
     return {
       original: segment,
       text,
+      mapping,
+      sourceText,
       audioContentHash: buildTtsPlaybackAudioContentHash({
         documentId: input.request.documentId,
         documentVersion: input.request.documentVersion,
@@ -240,7 +249,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     throw new Error('TTS playback storage is required for segment generation');
   }
   const playbackStorage = input.playbackStorage;
-  if (requestCreds.providerType === 'kokoro-local') {
+  if (requestCreds.providerType === 'kokoro-local' && normalized.some((segment) => segment.text.trim())) {
     // The first local request downloads and verifies ~336 MB. Do that here,
     // reporting progress, rather than inside a segment's synthesis timeout.
     // The shared download keeps going if this run is cancelled.
@@ -275,7 +284,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     shouldStart: () => shouldContinueWrites(segment.original.ordinal),
   }).then((result) => {
     const first = result.alignments[0];
-    return first ? { ...first, sentenceIndex: segment.original.ordinal } : null;
+    return first ? remapSpeechAlignment(segment.sourceText, segment.mapping, { ...first, sentenceIndex: segment.original.ordinal }) : null;
   }).catch(async () => {
     await input.onAlignmentFailed?.().catch(() => undefined);
     return null;
@@ -291,6 +300,13 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     segment: (typeof normalized)[number],
     signal: AbortSignal,
   ): Promise<{ audioBuffer: Buffer; alignment: SegmentAlignment | null }> => {
+    if (!segment.text.trim()) {
+      const silence = stripId3Tag(await getCbrSilenceSecond(signal));
+      const frames = parseMp3FrameLengths(silence);
+      const size = frames.slice(0, 2).reduce((sum, length) => sum + length, 0);
+      return { audioBuffer: silence.subarray(0, size),
+        alignment: { sentenceIndex: segment.original.ordinal, sentence: segment.sourceText, words: [] } };
+    }
     if (requestCreds.providerType === 'kokoro-local') {
       const startedAt = Date.now();
       const { wav, words } = await synthesizeKokoro({
@@ -310,7 +326,8 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         end: word.end + MP3_ENCODER_DELAY_SEC,
       }));
       const alignment = heard.length > 0
-        ? { ...mapWordsToSentenceOffsets(segment.text, heard), sentenceIndex: segment.original.ordinal }
+        ? remapSpeechAlignment(segment.sourceText, segment.mapping,
+          { ...mapWordsToSentenceOffsets(segment.text, heard), sentenceIndex: segment.original.ordinal })
         : null;
       return { audioBuffer, alignment };
     }
@@ -539,7 +556,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       stopScheduling = true;
       return null;
     }
-    const usage = await (input.consumeUsage ?? (async () => ({ allowed: true })))({
+    const usage = segment.text.trim() ? await (input.consumeUsage ?? (async () => ({ allowed: true })))({
       action: 'tts_synthesis',
       sessionId: input.request.sessionId,
       userId: input.request.userId,
@@ -550,7 +567,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         segment.audioContentHash,
       ].join(':'),
       characters: segment.text.length,
-    }, input.signal);
+    }, input.signal) : { allowed: true };
     if (!usage.allowed) {
       await input.onUsageDenied?.();
       stopScheduling = true;
@@ -593,7 +610,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         // worker; the segment then waits for a slot again.
         const slotLost = new AbortController();
         try {
-          const releaseProvider = input.acquireProviderCapacity
+          const releaseProvider = input.acquireProviderCapacity && segment.text.trim()
             ? await input.acquireProviderCapacity({
               providerRef: effectiveProviderRef,
               characters: segment.text.length,

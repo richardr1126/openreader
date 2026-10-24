@@ -1,4 +1,5 @@
 import type { TtsProviderType } from './provider-catalog';
+import type { SpeechTextOptions } from './speech-text';
 
 export type ReaderType = 'pdf' | 'epub' | 'html';
 
@@ -25,6 +26,7 @@ export interface TTSSegmentSettings {
   nativeSpeed: number;
   ttsInstructions?: string;
   language?: string;
+  speechText?: SpeechTextOptions;
 }
 
 export interface TTSSentenceWord {

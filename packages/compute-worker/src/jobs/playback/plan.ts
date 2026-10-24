@@ -1,4 +1,5 @@
 import { normalizeLanguageTag } from '@openreader/tts/language';
+import { normalizeSpeechText } from '@openreader/tts/speech-text';
 import { buildHtmlSourceUnits, parseHtmlBlocks } from '@openreader/tts/html-blocks';
 import { buildPdfPageSourceUnits } from '@openreader/tts/pdf-sources';
 import {
@@ -58,6 +59,7 @@ export function parseTtsSettings(value: unknown): TTSSegmentSettings {
     nativeSpeed: Number(nativeSpeed),
     ttsInstructions,
     language: typeof rec.language === 'string' ? normalizeLanguageTag(rec.language) : 'en',
+    ...(rec.speechText ? { speechText: normalizeSpeechText(rec.speechText) } : {}),
   };
 }
 

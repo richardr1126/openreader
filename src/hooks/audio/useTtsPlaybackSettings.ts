@@ -8,6 +8,7 @@ import type { AppConfigValues } from '@/types/config';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import type { SpeechTextOptions } from '@openreader/tts/speech-text';
 
 type UseTtsPlaybackSettingsInput = {
   isPlaying: boolean;
@@ -173,9 +174,25 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     });
   }, [setAudioSpeed, updateConfigKey]);
 
+  const setBookSpeechText = useCallback((speechText: Partial<SpeechTextOptions>) => {
+    if (!documentId || !readerSettings) return;
+    const previous = readerSettings;
+    const next = { ...readerSettings, speechText };
+    void restartAfterConfigUpdate(() => setReaderSettings(next), async () => {
+      try {
+        await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined });
+      } catch (error) {
+        console.error('Could not save speech settings:', error);
+        setReaderSettings(previous);
+        toast.error('Could not save this book’s speech settings');
+      }
+    }, { resetPlan: true });
+  }, [documentId, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
+
   return {
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    setBookSpeechText,
   };
 }

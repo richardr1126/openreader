@@ -12,6 +12,7 @@
  */
 
 'use client';
+import type { SpeechTextOptions } from '@openreader/tts/speech-text';
 
 import {
   createContext,
@@ -114,6 +115,8 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   /** Set (or with null, reset) the open book's voice and/or model speed with one plan restart. */
   setBookVoiceAndRestart: (change: { voice?: string | null; nativeSpeed?: number | null }) => void;
+  bookSpeechText: Partial<SpeechTextOptions>;
+  setBookSpeechText: (value: Partial<SpeechTextOptions>) => void;
   /** Reacquire the server-owned bootstrap payload after plan-affecting settings change. */
   reacquirePlaybackPlan: () => Promise<void>;
   initializeReaderSession: (input: {
@@ -563,6 +566,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    setBookSpeechText,
   } = useTtsPlaybackSettings({
     isPlaying,
     restartSeqRef,
@@ -623,6 +627,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrDocPages,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    bookSpeechText: readerSettings?.speechText ?? {},
+    setBookSpeechText,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
@@ -670,6 +676,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrDocPages,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    readerSettings?.speechText,
+    setBookSpeechText,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,

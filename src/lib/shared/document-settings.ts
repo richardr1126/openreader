@@ -6,6 +6,7 @@ import {
 import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import { normalizeTypographyOverride, normalizeHighlightOverride } from './reader-appearance';
+import { normalizeSpeechTextOverride } from '@openreader/tts/speech-text';
 
 function normalizeSkipKinds(value: unknown): ParsedPdfBlockKind[] {
   if (!Array.isArray(value)) return [...(DEFAULT_DOCUMENT_SETTINGS.pdf?.skipBlockKinds ?? [])];
@@ -68,6 +69,7 @@ export function mergeDocumentSettings(
     ...(voiceOverride ? { voiceOverride } : {}),
     ...(rec.typography ? { typography: normalizeTypographyOverride(rec.typography) } : {}),
     ...(rec.highlightAppearance ? { highlightAppearance: normalizeHighlightOverride(rec.highlightAppearance) } : {}),
+    ...(rec.speechText ? { speechText: normalizeSpeechTextOverride(rec.speechText) } : {}),
   };
 }
 
@@ -78,6 +80,7 @@ export function preserveDocumentAppearance(incoming: DocumentSettings, previous:
     ...incoming,
     ...(incoming.typography === undefined && previous.typography !== undefined ? { typography: previous.typography } : {}),
     ...(incoming.highlightAppearance === undefined && previous.highlightAppearance !== undefined ? { highlightAppearance: previous.highlightAppearance } : {}),
+    ...(incoming.speechText === undefined && previous.speechText !== undefined ? { speechText: previous.speechText } : {}),
   };
 }
 

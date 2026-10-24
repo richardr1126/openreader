@@ -33,6 +33,7 @@ interface ConfigContextType {
   favoriteVoices: AppConfigValues['favoriteVoices'];
   readerTypography: AppConfigValues['readerTypography'];
   highlightAppearance: AppConfigValues['highlightAppearance'];
+  speechText: AppConfigValues['speechText'];
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
   /** Saves several keys in one request, applied in the patch's key order. */
   updateConfig: (patch: Partial<AppConfigValues>) => Promise<void>;
@@ -111,6 +112,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       favoriteVoices: config.favoriteVoices,
       readerTypography: config.readerTypography,
       highlightAppearance: config.highlightAppearance,
+      speechText: config.speechText,
       updateConfig,
       isLoading,
       preferencesReady: !isSessionPending && query.isSuccess,

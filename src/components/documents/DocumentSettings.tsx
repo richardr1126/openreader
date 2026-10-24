@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { ReaderAppearanceSettings } from '@/components/settings/ReaderAppearanceSettings';
+import { SpeechTextControls } from '@/components/settings/SpeechTextControls';
+import { normalizeSpeechText, type SpeechTextOptions } from '@openreader/tts/speech-text';
 import { useConfig, ViewType } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
@@ -115,8 +117,9 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
     htmlWordHighlightEnabled,
     ttsModel,
     providerType,
+    speechText,
   } = useConfig();
-  const { voice, reacquirePlaybackPlan } = useTTS();
+  const { voice, reacquirePlaybackPlan, bookSpeechText, setBookSpeechText } = useTTS();
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     providerType,
@@ -135,6 +138,13 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
       : { sentence: pdfHighlightEnabled, word: pdfWordHighlightEnabled, sentenceKey: 'pdfHighlightEnabled' as const, wordKey: 'pdfWordHighlightEnabled' as const };
   const [localMaxBlockLength, setLocalMaxBlockLength] = useState(ttsSegmentMaxBlockLength);
   const { confirmPlanChange, planChangeDialog } = usePlanChangeConfirm();
+  const changeSpeechText = (change: Partial<SpeechTextOptions>, reset?: keyof SpeechTextOptions) => {
+    const next = { ...bookSpeechText, ...change };
+    for (const key of ['citations', 'brackets'] as const) {
+      if (key === reset || next[key] === speechText[key]) delete next[key];
+    }
+    confirmPlanChange({ setting: 'what is skipped when reading aloud', apply: () => setBookSpeechText(next) });
+  };
 
   // The slider only previews while dragging; the plan is rebuilt once on release.
   const commitMaxBlockLength = () => {
@@ -246,6 +256,21 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
 
         <ReaderAppearanceSettings scope="book" showTypography={!isPdfMode || !readerShowsLayout} />
 
+        <Section title="Skip when reading aloud" variant="group"
+          subtitle="This book uses app defaults until you change a control.">
+          <SpeechTextControls value={normalizeSpeechText({ ...speechText, ...bookSpeechText })}
+            overrides={bookSpeechText} onChange={changeSpeechText} onReset={key => changeSpeechText({}, key)} />
+          {isPdfMode && pdf && <details>
+            <summary className="cursor-pointer text-sm font-medium text-foreground">PDF block kinds</summary>
+            <div className="grid grid-cols-2 gap-x-3 pt-2">
+              {PDF_SKIP_KIND_OPTIONS.map(option => <CheckItem key={option.kind} label={option.label}
+                checked={pdf.skipBlockKinds.includes(option.kind)} onChange={enabled => confirmPlanChange({
+                  setting: 'which PDF blocks are skipped', apply: () => pdf.onToggleSkipKind(option.kind, enabled),
+                })} />)}
+            </div>
+          </details>}
+        </Section>
+
         <Section title="Playback" variant="group">
           <RangeField
             label="Max segment length"
@@ -311,24 +336,6 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
               disabled={pdf.parseStatus !== 'ready'}
               variant="plain"
             />
-            <details>
-              <summary className="cursor-pointer text-sm font-medium text-foreground">
-                Skip when reading aloud
-              </summary>
-              <div className="grid grid-cols-2 gap-x-3 pt-2">
-                {PDF_SKIP_KIND_OPTIONS.map((option) => (
-                  <CheckItem
-                    key={option.kind}
-                    label={option.label}
-                    checked={pdf.skipBlockKinds.includes(option.kind)}
-                    onChange={(enabled) => confirmPlanChange({
-                      setting: 'which PDF blocks are skipped',
-                      apply: () => pdf.onToggleSkipKind(option.kind, enabled),
-                    })}
-                  />
-                ))}
-              </div>
-            </details>
           </Section>
         )}
       </div>

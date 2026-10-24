@@ -1,4 +1,5 @@
 'use client';
+import { SpeechTextControls } from './SpeechTextControls';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -41,6 +42,7 @@ export function ProviderSettingsPanel({
     ttsInstructions,
     voice,
     voiceSpeed,
+    speechText,
     updateConfig,
     isLoading: configLoading,
   } = useConfig();
@@ -53,6 +55,7 @@ export function ProviderSettingsPanel({
   const [localInstructions, setLocalInstructions] = useState(ttsInstructions);
   const [localVoice, setLocalVoice] = useState(voice);
   const [localSpeed, setLocalSpeed] = useState(voiceSpeed);
+  const [localSpeechText, setLocalSpeechText] = useState(speechText);
   const [hydrated, setHydrated] = useState(false);
 
   const viewModel = useMemo(() => resolveTtsSettingsViewModel({
@@ -118,7 +121,8 @@ export function ProviderSettingsPanel({
     setLocalInstructions(ttsInstructions);
     setLocalVoice(voice);
     setLocalSpeed(voiceSpeed);
-  }, [providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed]);
+    setLocalSpeechText(speechText);
+  }, [providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed, speechText]);
 
   useEffect(() => {
     if (configLoading || (active && hydrated)) return;
@@ -204,6 +208,7 @@ export function ProviderSettingsPanel({
     || finalModel !== ttsModel
     || localInstructions !== ttsInstructions
     || localVoice !== voice
+    || localSpeechText.citations !== speechText.citations || localSpeechText.brackets !== speechText.brackets
     || (providerModelPolicy.supportsNativeModelSpeed && localSpeed !== voiceSpeed);
 
   const discard = () => {
@@ -221,6 +226,7 @@ export function ProviderSettingsPanel({
         providerType: viewModel.selectedProviderType,
         ttsModel: finalModel,
         ttsInstructions: localInstructions,
+        speechText: localSpeechText,
         ...(shownVoice ? { voice: shownVoice } : {}),
         ...(providerModelPolicy.supportsNativeModelSpeed ? { voiceSpeed: localSpeed } : {}),
       });
@@ -338,6 +344,20 @@ export function ProviderSettingsPanel({
         </SettingRow>
       </Section>
 
+      {providerModelPolicy.supportsInstructions && (
+        <Section title="Instructions" variant="group">
+          <SettingRow label="Voice instructions" icon={<ChatBubbleIcon />} stacked>
+            <Textarea
+              aria-label="Voice instructions"
+              value={localInstructions}
+              onChange={(event) => setLocalInstructions(event.target.value)}
+              placeholder="Optional voice instructions"
+              className="h-24 resize-none"
+            />
+          </SettingRow>
+        </Section>
+      )}
+
       <Section
         title="Default voice"
         variant="group"
@@ -384,19 +404,10 @@ export function ProviderSettingsPanel({
         )}
       </Section>
 
-      {providerModelPolicy.supportsInstructions && (
-        <Section title="Instructions" variant="group">
-          <SettingRow label="Voice instructions" icon={<ChatBubbleIcon />} stacked>
-            <Textarea
-              aria-label="Voice instructions"
-              value={localInstructions}
-              onChange={(event) => setLocalInstructions(event.target.value)}
-              placeholder="Optional voice instructions"
-              className="h-24 resize-none"
-            />
-          </SettingRow>
-        </Section>
-      )}
+      <Section title="Skip when reading aloud" variant="group"
+        subtitle="App defaults. Each book can override these settings.">
+        <SpeechTextControls value={localSpeechText} onChange={change => setLocalSpeechText({ ...localSpeechText, ...change })} />
+      </Section>
 
       {dirty || saving ? (
         <SaveBar

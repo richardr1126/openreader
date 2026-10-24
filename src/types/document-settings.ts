@@ -1,4 +1,5 @@
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
+import type { SpeechTextOptions } from '@openreader/tts/speech-text';
 import type { ReaderTypography, HighlightAppearance } from '@/lib/shared/reader-appearance';
 
 export interface DocumentSettings {
@@ -15,6 +16,7 @@ export interface DocumentSettings {
   voiceOverride?: DocumentVoiceOverride;
   typography?: Partial<ReaderTypography>;
   highlightAppearance?: Partial<HighlightAppearance>;
+  speechText?: Partial<SpeechTextOptions>;
 }
 
 export interface DocumentVoiceOverride {

@@ -55,6 +55,10 @@ async function generate(input: {
   sidecar: TtsPlaybackSegmentMetadata | null;
   retryErroredSegments?: boolean;
   acquireProviderCapacity?: () => Promise<() => Promise<void>>;
+  text?: string;
+  sourceTexts?: string[];
+  ordinal?: number;
+  speechText?: { citations: boolean; brackets: 'off' | 'both' };
 }) {
   let sidecar = input.sidecar;
   const playbackStorage = {
@@ -87,6 +91,7 @@ async function generate(input: {
         nativeSpeed: 1,
         ttsInstructions: '',
         language: 'en',
+        speechText: input.speechText,
       },
       planning: {},
       planObjectKey: 'plan-key',
@@ -95,11 +100,13 @@ async function generate(input: {
     sessionInstanceId: 'instance-1',
     s3Prefix: 'openreader',
     segments: [{
-      ordinal: 0,
+      ordinal: input.ordinal ?? 0,
       segmentKey: 'segment-0',
-      text: 'Retry this.',
+      text: input.text ?? 'Retry this.',
       locator: { readerType: 'html', location: '1' },
     }],
+    sourceSegments: input.sourceTexts?.map((text, ordinal) => ({ ordinal, segmentKey: `source-${ordinal}`, text,
+      locator: { readerType: 'html', location: '1' } })),
     putAudioObject: vi.fn(async () => undefined),
     audioObjectExists: vi.fn(async () => false),
     playbackStorage,
@@ -155,5 +162,26 @@ describe('playback segment retries', () => {
 
     expect(mocks.generateTTSBuffer).toHaveBeenCalledTimes(2);
     expect(result.sidecar()?.status).toBe('completed');
+  });
+
+  test('sends only spoken text to synthesis while keeping source metadata', async () => {
+    const result = await generate({ sidecar: null, text: 'A [1] result (Smith, 2024).', speechText: { citations: true, brackets: 'off' } });
+    expect(mocks.generateTTSBuffer.mock.calls[0][0]).toMatchObject({ text: 'A result.' });
+    expect(result.sidecar()?.status).toBe('completed');
+  });
+
+  test('a fully omitted segment retains its ordinal without provider capacity', async () => {
+    const acquire = vi.fn(async () => async () => undefined);
+    const result = await generate({ sidecar: null, text: '[Only a note.]', speechText: { citations: false, brackets: 'both' }, acquireProviderCapacity: acquire });
+    expect(acquire).not.toHaveBeenCalled();
+    expect(mocks.generateTTSBuffer).not.toHaveBeenCalled();
+    expect(result.sidecar()).toMatchObject({ ordinal: 0, status: 'completed', alignment: { words: [] } });
+  });
+
+  test('deep-start windows use bracket context from the full source plan', async () => {
+    const result = await generate({ sidecar: null, text: 'More note.', ordinal: 1,
+      sourceTexts: ['A [note.', 'More note.', 'End] B.'], speechText: { citations: false, brackets: 'both' } });
+    expect(mocks.generateTTSBuffer).not.toHaveBeenCalled();
+    expect(result.sidecar()).toMatchObject({ ordinal: 1, status: 'completed', alignment: { words: [] } });
   });
 });

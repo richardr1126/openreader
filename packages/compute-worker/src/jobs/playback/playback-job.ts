@@ -327,6 +327,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
           sessionInstanceId: resolveTtsPlaybackSessionInstanceId(currentSession),
           s3Prefix: input.s3Prefix,
           segments: generationSegments,
+          sourceSegments: plannedSegments,
           putAudioObject: (key, body) => input.storage.putObject(key, body, 'audio/mpeg'),
           deleteAudioObject: input.storage.deleteObject,
           audioObjectExists: input.storage.objectExists,

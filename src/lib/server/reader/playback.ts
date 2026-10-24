@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { resolveTtsLanguage } from '@openreader/tts/language';
+import { normalizeSpeechText } from '@openreader/tts/speech-text';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
 import { resolveProviderDefaults, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { APP_CONFIG_DEFAULTS, type AppConfigValues } from '@/types/config';
@@ -122,6 +123,7 @@ export async function resolveReaderPlayback(
         ? { ttsInstructions: preferences.ttsInstructions || provider.defaultInstructions }
         : {}),
       language,
+      speechText: normalizeSpeechText({ ...preferences.speechText, ...settings.speechText }),
     },
     startLocation: {},
     maxBlockLength: preferences.ttsSegmentMaxBlockLength,
