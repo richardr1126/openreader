@@ -63,6 +63,7 @@ export function VoicePicker({
   preview,
   notices,
   favorites,
+  allowCustomVoice = false,
 }: {
   voices: string[];
   /** The voice string: one id, or a Kokoro blend. */
@@ -74,11 +75,18 @@ export function VoicePicker({
   /** Warnings shown between the search field and the list. */
   notices?: ReactNode;
   favorites?: { voices: Set<string>; toggle: (voice: string) => Promise<void>; available: boolean };
+  allowCustomVoice?: boolean;
 }) {
   const [query, setQuery] = useState('');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  const [customVoiceOpen, setCustomVoiceOpen] = useState(false);
+  const [customVoice, setCustomVoice] = useState(value);
   const selectedVoices = selectedVoicesFor(value, voices, pickPolicy);
+  const showCustomVoice = allowCustomVoice || selectedVoices.some((voice) => !voices.includes(voice));
+  const customSelection = customVoice.trim()
+    ? voiceStringFor(selectedVoicesFor(customVoice.trim(), [], pickPolicy), pickPolicy)
+    : '';
   const groups = useMemo(() => groupVoices(
     favoritesOnly ? voices.filter((voice) => favorites?.voices.has(voice)) : voices,
     query, groupByLanguage,
@@ -166,6 +174,47 @@ export function VoicePicker({
             </div>
           ))}
         </div>
+      )}
+      {showCustomVoice && (
+        <details
+          className="group rounded-lg border border-line-soft bg-surface-solid"
+          open={customVoiceOpen}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setCustomVoiceOpen(open);
+            if (open) setCustomVoice(value);
+          }}
+        >
+          <summary className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Custom voice ID
+          </summary>
+          <div className="flex items-center gap-2 border-t border-line-soft p-3">
+            <Input
+              className="min-w-0 flex-1"
+              aria-label="Custom voice ID"
+              placeholder="Voice ID from your provider"
+              value={customVoice}
+              onChange={(event) => setCustomVoice(event.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              controlSize="sm"
+            />
+            <VoicePreviewButton
+              previewKey="custom-voice"
+              label="custom voice"
+              preview={preview}
+              disabled={!customSelection}
+              voice={customSelection}
+            />
+            <Button size="sm" className="shrink-0 whitespace-nowrap" disabled={!customSelection || customSelection === value} onClick={() => {
+              preview.stop();
+              onChange(customSelection);
+            }}>
+              Use voice
+            </Button>
+          </div>
+        </details>
       )}
     </div>
   );

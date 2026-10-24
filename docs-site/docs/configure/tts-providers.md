@@ -68,6 +68,8 @@ A custom server needs only `POST /v1/audio/speech`. It may return MP3, WAV, OGG 
 
 Voice listing is optional. OpenReader tries `/v1/audio/voices`, `/v1/voices` and `/v1/styles`. If none answer, it offers the Kokoro voices for Kokoro models and the standard OpenAI voices (`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`) otherwise.
 
+For external providers, **Custom voice ID** below the voice list lets users enter an ID supplied by their provider, even when it is missing from the catalog. They can preview it, choose **Use voice**, then **Save** in settings or **Apply** in the reader. The provider must support the entered ID.
+
 ## Seed a provider from the environment
 
 On first start, if there are no providers yet and `API_BASE` or `API_KEY` is set, OpenReader creates a **Custom OpenAI-like** provider with the slug `default-openai`, using `API_BASE`, `API_KEY` and `API_MODEL_NAME` (default `kokoro`). After that the variables are no longer read; edit or delete the provider in the admin panel like any other. A `providers` list in `RUNTIME_SEED_JSON` replaces this behavior (see [Environment Variables](../reference/environment-variables#runtime-json-seed)).

@@ -418,6 +418,8 @@ export function ProviderSettingsPanel({
           <p className="text-xs text-soft">Loading voices…</p>
         ) : (
           <VoicePicker
+            key={`${viewModel.selectedProviderRef}:${finalModel}`}
+            allowCustomVoice={providerModelPolicy.isResolvedProviderType && providerModelPolicy.providerType !== 'kokoro-local'}
             favorites={favorites}
             voices={voiceOptions}
             value={shownVoice}

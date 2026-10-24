@@ -24,6 +24,7 @@ The **Voice** button in the player opens the voice panel for the current documen
 - Pick a voice. Providers that support blending let you select several voices to mix them.
 - **Model speed** changes how fast the voice itself speaks. It regenerates audio from your position.
 - **Preview selection** plays a short sample before you apply it.
+- For external providers, expand **Custom voice ID** to enter a voice missing from the list. Preview it or choose **Use voice**, then **Apply**. Closing the panel discards unapplied changes.
 
 Changes in the voice panel apply **to this book only**. **Use default** returns the book to your default voice. Set the default voice, provider and model for all documents in **Settings → Model & Voice**.
 
