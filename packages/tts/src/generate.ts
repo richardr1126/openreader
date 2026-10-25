@@ -5,6 +5,7 @@ import {
   isBuiltInTtsProviderId,
   KOKORO_LOCAL_MODEL,
   REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+  replicateExecutionModel,
 } from './provider-catalog';
 import { defaultBaseUrlForProviderType, resolveTtsProviderModelPolicy } from './provider-policy';
 import {
@@ -463,7 +464,7 @@ async function fetchTTSBufferWithRetry(
 }
 
 export async function buildReplicateInput(request: ResolvedServerTTSRequest): Promise<Record<string, unknown>> {
-  const model = request.model as string;
+  const model = replicateExecutionModel(request.model as string);
 
   if (model === 'google/gemini-3.1-flash-tts') {
     const input: Record<string, unknown> = {
@@ -500,7 +501,7 @@ export async function buildReplicateInput(request: ResolvedServerTTSRequest): Pr
     return addReplicateLanguageInput(input, request);
   }
 
-  if (model === 'inworld/tts-1.5-mini') {
+  if (model === 'inworld/realtime-tts-1.5-mini') {
     const input: Record<string, unknown> = {
       text: request.text,
       voice_id: request.voice,
@@ -607,7 +608,7 @@ async function runReplicateRequest(
 ): Promise<Buffer> {
   const replicate = new Replicate({ auth: request.apiKey });
   const input = await buildReplicateInput(request);
-  const modelId = request.model as `${string}/${string}`;
+  const modelId = replicateExecutionModel(request.model as string) as `${string}/${string}`;
   const cooldownScopeKey = getReplicateCooldownScopeKey(request);
 
   return runWithReplicateGate(cooldownScopeKey, signal, async () => {

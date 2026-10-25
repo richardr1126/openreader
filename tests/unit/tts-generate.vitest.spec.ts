@@ -65,6 +65,12 @@ describe('replicate output URL extraction', () => {
 });
 
 describe('TTS upstream cache identity', () => {
+  test('retains the released Inworld model identity for saved audio', () => {
+    expect(buildTTSCacheKey({
+      text: 'A saved Inworld passage.', voice: 'Ashley', speed: 1,
+      provider: 'replicate', model: 'inworld/tts-1.5-mini', apiKey: 'test',
+    })).toBe('a025f53b850fdfdd2f1f0dcb5f35eab1bef2cf93f6a5d353c3f52a0127a36f53');
+  });
   test('includes language in the upstream audio cache key', () => {
     const request = {
       text: '同じ文章です。',
@@ -79,6 +85,39 @@ describe('TTS upstream cache identity', () => {
     expect(buildTTSCacheKey({ ...request, language: 'ja' }))
       .not.toBe(buildTTSCacheKey({ ...request, language: 'en' }));
   });
+});
+
+describe('renamed Replicate Inworld model', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test.each(['inworld/tts-1.5-mini', 'inworld/realtime-tts-1.5-mini'])(
+    'executes %s through the current SDK endpoint with native rate and language', async (model) => {
+      const calls: { url: string; body: Record<string, unknown> | null }[] = [];
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const body = request.method === 'POST' ? await request.json() : null;
+        calls.push({ url: request.url, body });
+        if (request.url.endsWith('/predictions')) {
+          return new Response(JSON.stringify({ id: 'prediction1', status: 'succeeded',
+            output: 'https://replicate.delivery/inworld-check.mp3' }), { headers: { 'Content-Type': 'application/json' } });
+        }
+        if (request.url.startsWith('https://replicate.delivery/')) {
+          // Stop after verifying SDK dispatch; no transcoding or real service.
+          return new Response('', { status: 404 });
+        }
+        return new Response(JSON.stringify({ latest_version: { openapi_schema: {
+          components: { schemas: { Input: { properties: { language: { enum: ['English', 'Spanish'] } } } } },
+        } } }), { headers: { 'Content-Type': 'application/json' } });
+      });
+      await expect(generateTTSBuffer({ text: `Inworld endpoint check ${model}`, voice: 'Ashley', speed: 1.2,
+        provider: 'replicate', model, language: 'es', apiKey: 'test-key' })).rejects.toThrow();
+      const prediction = calls.find((call) => call.url.endsWith('/predictions'));
+      expect(prediction?.url).toBe('https://api.replicate.com/v1/models/inworld/realtime-tts-1.5-mini/predictions');
+      expect(prediction?.body?.input).toMatchObject({ voice_id: 'Ashley', speaking_rate: 1.2, language: 'Spanish' });
+      expect(prediction?.body?.input).not.toHaveProperty('speed');
+      expect(calls.every((call) => !call.url.includes('/inworld/tts-1.5-mini'))).toBe(true);
+    },
+  );
 });
 
 describe('Replicate language schema values', () => {

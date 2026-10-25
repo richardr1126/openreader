@@ -68,6 +68,12 @@ const DEEPINFRA_MODELS_FULL: TtsModelDefinition[] = [
 export const REPLICATE_KOKORO_82M_VERSIONED_MODEL =
   'alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5' as const;
 
+/** Saved v5 settings and audio keys keep their original model string. Only
+ * upstream execution/metadata follows Replicate's renamed model. */
+export function replicateExecutionModel(model: string): string {
+  return model === 'inworld/tts-1.5-mini' ? 'inworld/realtime-tts-1.5-mini' : model;
+}
+
 const REPLICATE_MODELS: TtsModelDefinition[] = [
   {
     id: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
@@ -76,7 +82,7 @@ const REPLICATE_MODELS: TtsModelDefinition[] = [
   { id: 'google/gemini-3.1-flash-tts', name: 'google/gemini-3.1-flash-tts' },
   { id: 'minimax/speech-2.8-turbo', name: 'minimax/speech-2.8-turbo' },
   { id: 'qwen/qwen3-tts', name: 'qwen/qwen3-tts' },
-  { id: 'inworld/tts-1.5-mini', name: 'inworld/tts-1.5-mini' },
+  { id: 'inworld/realtime-tts-1.5-mini', name: 'inworld/realtime-tts-1.5-mini' },
   { id: 'custom', name: 'Other' },
 ];
 
@@ -137,7 +143,7 @@ const REPLICATE_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
   'google/gemini-3.1-flash-tts': GEMINI_FLASH_TTS_VOICES,
   'minimax/speech-2.8-turbo': MINIMAX_SPEECH_VOICES,
   'qwen/qwen3-tts': QWEN3_TTS_VOICES,
-  'inworld/tts-1.5-mini': INWORLD_TTS_VOICES,
+  'inworld/realtime-tts-1.5-mini': INWORLD_TTS_VOICES,
 };
 const DEEPINFRA_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
   'hexgrad/Kokoro-82M': KOKORO_DEFAULT_VOICES,
@@ -275,7 +281,8 @@ export function getDefaultVoices(provider: TtsProviderId, model: string): string
   }
 
   if (provider === 'replicate') {
-    return REPLICATE_DEFAULT_VOICES_BY_MODEL[model] ? [...REPLICATE_DEFAULT_VOICES_BY_MODEL[model]] : ['default'];
+    const executionModel = replicateExecutionModel(model);
+    return REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel] ? [...REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel]] : ['default'];
   }
 
   if (provider === 'deepinfra') {

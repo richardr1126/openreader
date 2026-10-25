@@ -58,6 +58,15 @@ describe('tts provider catalog', () => {
     expect(supportsNativeModelSpeed('replicate', 'qwen/qwen3-tts')).toBe(false);
   });
 
+  test('offers the renamed Inworld model and retains voices for saved old IDs', () => {
+    const models = resolveProviderModels('replicate').map((model) => model.id);
+    expect(models).toContain('inworld/realtime-tts-1.5-mini');
+    expect(models).not.toContain('inworld/tts-1.5-mini');
+    for (const model of ['inworld/tts-1.5-mini', 'inworld/realtime-tts-1.5-mini']) {
+      expect(getDefaultVoices('replicate', model)).toEqual(['Ashley', 'Dennis', 'Alex', 'Darlene']);
+    }
+  });
+
   test('keeps a real default-openai provider over the admin default', () => {
     const sharedProviders = [
       { slug: 'gemini-31-flash-tts', providerType: 'replicate' as const, defaultModel: 'google/gemini-3.1-flash-tts', defaultInstructions: null },
