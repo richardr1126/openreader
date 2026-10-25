@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
-  REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+  isRetiredReplicateModel,
   getDefaultVoices,
   providerSupportsCustomModel,
   resolveProviderModels,
@@ -18,6 +18,20 @@ import {
 import { applyConfigPatch, applyConfigUpdate, getVoicePreferenceKey } from '../../src/lib/client/config/updates';
 
 describe('tts provider catalog', () => {
+  test('retires hosted Kokoro and defaults new Replicate setups to Gemini', () => {
+    const models = resolveProviderModels('replicate').map((model) => model.id);
+    expect(models[0]).toBe('google/gemini-3.1-flash-tts');
+    expect(models.some((model) => model.includes('alphanumericuser'))).toBe(false);
+    expect(resolveProviderDefaults({ providerRef: 'replicate' })).toMatchObject({
+      defaultModel: 'google/gemini-3.1-flash-tts', defaultVoice: 'Zephyr',
+    });
+    for (const model of ['alphanumericuser/kokoro-82m', 'alphanumericuser/kokoro-82m:old-version']) {
+      expect(isRetiredReplicateModel(model)).toBe(true);
+      expect(getDefaultVoices('replicate', model)).toEqual([]);
+    }
+    expect(getDefaultVoices('kokoro-local', 'kokoro-82m')).toContain('af_heart');
+    expect(getDefaultVoices('deepinfra', 'hexgrad/Kokoro-82M')).toContain('af_heart');
+  });
   test('resolves provider models with fixed Deepinfra catalog', () => {
     expect(resolveProviderModels('openai').map((model) => model.id)).toEqual([
       'tts-1',
@@ -52,7 +66,7 @@ describe('tts provider catalog', () => {
   });
 
   test('uses blocklist semantics for Replicate native speed support', () => {
-    expect(supportsNativeModelSpeed('replicate', REPLICATE_KOKORO_82M_VERSIONED_MODEL)).toBe(true);
+    expect(supportsNativeModelSpeed('replicate', 'minimax/speech-2.8-turbo')).toBe(true);
     expect(supportsNativeModelSpeed('replicate', 'acme/runtime-speed-model')).toBe(true);
     expect(supportsNativeModelSpeed('replicate', 'google/gemini-3.1-flash-tts')).toBe(false);
     expect(supportsNativeModelSpeed('replicate', 'qwen/qwen3-tts')).toBe(false);
@@ -104,14 +118,14 @@ describe('tts provider catalog', () => {
         {
           slug: 'shared-replicate',
           providerType: 'replicate',
-          defaultModel: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+          defaultModel: 'google/gemini-3.1-flash-tts',
           defaultInstructions: 'Narrate warmly',
         },
       ],
     });
     expect(defaults.providerRef).toBe('shared-replicate');
     expect(defaults.providerType).toBe('replicate');
-    expect(defaults.defaultModel).toBe(REPLICATE_KOKORO_82M_VERSIONED_MODEL);
+    expect(defaults.defaultModel).toBe('google/gemini-3.1-flash-tts');
     expect(defaults.defaultInstructions).toBe('Narrate warmly');
   });
 
@@ -125,12 +139,12 @@ describe('tts provider catalog', () => {
         {
           slug: 'shared-replicate',
           providerType: 'replicate',
-          defaultModel: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+          defaultModel: 'google/gemini-3.1-flash-tts',
           defaultInstructions: null,
         },
       ],
     });
-    expect(resolved).toBe(REPLICATE_KOKORO_82M_VERSIONED_MODEL);
+    expect(resolved).toBe('google/gemini-3.1-flash-tts');
   });
 
   test('resolveTtsModelForProvider keeps requested model when showAllProviderModels is true', () => {
@@ -143,7 +157,7 @@ describe('tts provider catalog', () => {
         {
           slug: 'shared-replicate',
           providerType: 'replicate',
-          defaultModel: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+          defaultModel: 'google/gemini-3.1-flash-tts',
           defaultInstructions: null,
         },
       ],

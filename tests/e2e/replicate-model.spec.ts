@@ -25,6 +25,7 @@ test('Replicate offers the current Inworld model and its voices', async ({ page,
     await page.getByRole('button', { name: 'Model', exact: true }).click();
     await expect(page.getByRole('option', { name: 'inworld/realtime-tts-1.5-mini', exact: true })).toBeVisible();
     await expect(page.getByRole('option', { name: 'inworld/tts-1.5-mini', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('option', { name: /alphanumericuser\/kokoro-82m/ })).toHaveCount(0);
   } finally {
     await admin.delete(`/api/admin/providers/${provider.id}`);
     await admin.dispose();

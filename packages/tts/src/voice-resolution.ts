@@ -2,6 +2,7 @@ import { LRUCache } from 'lru-cache';
 import { logTtsError, ttsLogger } from './logger';
 import {
   OPENAI_DEFAULT_VOICES,
+  isRetiredReplicateModel,
   replicateExecutionModel,
   resolveProviderModels,
   type ReplicateVoiceInputKey,
@@ -201,6 +202,7 @@ function extractReplicateLanguageInputFromOpenApiSchema(openApiSchema: unknown):
 }
 
 async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promise<unknown | null> {
+  if (isRetiredReplicateModel(model)) return null;
   const parsedModel = parseReplicateModelIdentifier(replicateExecutionModel(model));
   if (!parsedModel) {
     return null;

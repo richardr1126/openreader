@@ -65,8 +65,10 @@ const DEEPINFRA_MODELS_FULL: TtsModelDefinition[] = [
   { id: 'custom', name: 'Other' },
 ];
 
-export const REPLICATE_KOKORO_82M_VERSIONED_MODEL =
-  'alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5' as const;
+/** Retain saved IDs for audio identity, but never submit this retired model. */
+export function isRetiredReplicateModel(model: string): boolean {
+  return model.trim().split(':', 1)[0] === 'alphanumericuser/kokoro-82m';
+}
 
 /** Saved v5 settings and audio keys keep their original model string. Only
  * upstream execution/metadata follows Replicate's renamed model. */
@@ -75,10 +77,6 @@ export function replicateExecutionModel(model: string): string {
 }
 
 const REPLICATE_MODELS: TtsModelDefinition[] = [
-  {
-    id: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-    name: 'alphanumericuser/kokoro-82m',
-  },
   { id: 'google/gemini-3.1-flash-tts', name: 'google/gemini-3.1-flash-tts' },
   { id: 'minimax/speech-2.8-turbo', name: 'minimax/speech-2.8-turbo' },
   { id: 'qwen/qwen3-tts', name: 'qwen/qwen3-tts' },
@@ -139,7 +137,6 @@ export const QWEN3_TTS_VOICES = ['Aiden', 'Dylan'] as const;
 export const INWORLD_TTS_VOICES = ['Ashley', 'Dennis', 'Alex', 'Darlene'] as const;
 
 const REPLICATE_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
-  [REPLICATE_KOKORO_82M_VERSIONED_MODEL]: KOKORO_DEFAULT_VOICES,
   'google/gemini-3.1-flash-tts': GEMINI_FLASH_TTS_VOICES,
   'minimax/speech-2.8-turbo': MINIMAX_SPEECH_VOICES,
   'qwen/qwen3-tts': QWEN3_TTS_VOICES,
@@ -282,6 +279,7 @@ export function getDefaultVoices(provider: TtsProviderId, model: string): string
 
   if (provider === 'replicate') {
     const executionModel = replicateExecutionModel(model);
+    if (isRetiredReplicateModel(model)) return [];
     return REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel] ? [...REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel]] : ['default'];
   }
 
@@ -320,6 +318,7 @@ function parseReplicateModelIdentifier(model: string): {
 }
 
 export function resolveVoiceSource(provider: TtsProviderId, model: string): TtsVoiceSource {
+  if (provider === 'replicate' && isRetiredReplicateModel(model)) return 'static';
   if (provider === 'deepinfra' && DEEPINFRA_API_VOICE_MODELS.has(model)) {
     return 'deepinfra-api';
   }

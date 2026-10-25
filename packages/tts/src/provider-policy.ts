@@ -8,7 +8,6 @@ import {
   supportsNativeModelSpeed,
   supportsTtsInstructions,
   KOKORO_LOCAL_MODEL,
-  REPLICATE_KOKORO_82M_VERSIONED_MODEL,
   type SharedProviderTypeResolverEntry,
   type TtsProviderId,
   type TtsProviderType,
@@ -61,7 +60,7 @@ export interface ResolveTtsModelForProviderInput {
 export function defaultModelForProviderType(providerType: TtsProviderId): string {
   if (providerType === 'openai') return 'tts-1';
   if (providerType === 'deepinfra') return 'hexgrad/Kokoro-82M';
-  if (providerType === 'replicate') return REPLICATE_KOKORO_82M_VERSIONED_MODEL;
+  if (providerType === 'replicate') return 'google/gemini-3.1-flash-tts';
   if (providerType === 'kokoro-local') return KOKORO_LOCAL_MODEL;
   return 'kokoro';
 }
@@ -73,6 +72,7 @@ export function defaultBaseUrlForProviderType(providerType: TtsProviderId): stri
 }
 
 export function defaultVoiceForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'replicate') return 'Zephyr';
   if (providerType === 'openai') return 'alloy';
   if (providerType === 'deepinfra') return 'af_bella';
   if (providerType === 'kokoro-local') return 'af_heart';

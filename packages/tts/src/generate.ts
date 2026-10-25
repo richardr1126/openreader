@@ -4,7 +4,7 @@ import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
 import {
   isBuiltInTtsProviderId,
   KOKORO_LOCAL_MODEL,
-  REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+  isRetiredReplicateModel,
   replicateExecutionModel,
 } from './provider-catalog';
 import { defaultBaseUrlForProviderType, resolveTtsProviderModelPolicy } from './provider-policy';
@@ -19,7 +19,6 @@ import { LRUCache } from 'lru-cache';
 import { createHash } from 'crypto';
 import {
   getLanguageDisplayName,
-  resolveReplicateKokoroLanguageCode,
   toBaseLanguageCode,
 } from './language';
 
@@ -351,7 +350,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const provider = input.provider || 'openai';
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
   const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
-    : provider === 'replicate' && !input.model ? REPLICATE_KOKORO_82M_VERSIONED_MODEL
+    : provider === 'replicate' && !input.model ? 'google/gemini-3.1-flash-tts'
     : provider === 'kokoro-local' ? KOKORO_LOCAL_MODEL
     : input.model;
   const model = (rawModel ?? 'gpt-4o-mini-tts') as SpeechCreateParams['model'];
@@ -464,6 +463,11 @@ async function fetchTTSBufferWithRetry(
 }
 
 export async function buildReplicateInput(request: ResolvedServerTTSRequest): Promise<Record<string, unknown>> {
+  if (isRetiredReplicateModel(request.model as string)) {
+    // This is an explicit local rejection, not a retryable provider failure.
+    // Do not rewrite the saved model: existing durable audio keeps its key.
+    throw Object.assign(new Error('This Replicate model has been removed. Choose another model in provider settings.'), { status: 422 });
+  }
   const model = replicateExecutionModel(request.model as string);
 
   if (model === 'google/gemini-3.1-flash-tts') {
@@ -546,16 +550,6 @@ async function addReplicateLanguageInput(
   input: Record<string, unknown>,
   request: ResolvedServerTTSRequest,
 ): Promise<Record<string, unknown>> {
-  if (request.model === REPLICATE_KOKORO_82M_VERSIONED_MODEL) {
-    const languageCode = resolveReplicateKokoroLanguageCode({
-      language: request.language,
-      voice: request.voice,
-    });
-    if (languageCode) {
-      input.language_code = languageCode;
-    }
-    return input;
-  }
   if (!request.language) return input;
   const languageInput = await resolveReplicateLanguageInput({
     provider: 'replicate',

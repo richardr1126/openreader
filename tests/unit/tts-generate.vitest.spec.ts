@@ -8,7 +8,6 @@ import {
   registerLocalTtsSynthesizer,
   resolveReplicateLanguageValue,
 } from '@openreader/tts/generate';
-import { REPLICATE_KOKORO_82M_VERSIONED_MODEL } from '@openreader/tts/provider-catalog';
 
 describe('replicate output URL extraction', () => {
   test('returns direct URL string output', () => {
@@ -137,50 +136,17 @@ describe('Replicate language schema values', () => {
     expect(resolveReplicateLanguageValue('fr', gemini)).toBeNull();
   });
 
-  test('includes language_code for the built-in Replicate Kokoro model', async () => {
-    await expect(buildReplicateInput({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      speed: 1,
-      format: 'mp3',
-      model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-      language: 'en',
-      provider: 'replicate',
-      apiKey: 'r8_token',
-    })).resolves.toEqual({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      language_code: 'a',
-    });
-
-    await expect(buildReplicateInput({
-      text: 'Hello world',
-      voice: 'bf_emma',
-      speed: 1,
-      format: 'mp3',
-      model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-      language: 'en',
-      provider: 'replicate',
-      apiKey: 'r8_token',
-    })).resolves.toEqual({
-      text: 'Hello world',
-      voice: 'bf_emma',
-      language_code: 'b',
-    });
-
-    await expect(buildReplicateInput({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      speed: 1,
-      format: 'mp3',
-      model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-      provider: 'replicate',
-      apiKey: 'r8_token',
-    })).resolves.toEqual({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      language_code: 'a',
-    });
+  test.each(['alphanumericuser/kokoro-82m', `alphanumericuser/kokoro-82m:${'a'.repeat(64)}`])('rejects retired model %s without fetching or replacing it', async (model) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const request = { text: 'Hello world', voice: 'af_sarah', speed: 1.2, format: 'mp3', model, provider: 'replicate', apiKey: 'mock-key' };
+      const key = buildTTSCacheKey(request);
+      await expect(generateTTSBuffer(request)).rejects.toMatchObject({ status: 422, message: expect.stringContaining('Choose another model') });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(request.model).toBe(model);
+      expect(buildTTSCacheKey(request)).toBe(key);
+    } finally { vi.unstubAllGlobals(); }
   });
 });
 
