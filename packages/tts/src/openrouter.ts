@@ -98,6 +98,16 @@ export function normalizeOpenRouterOptions(value: string | undefined, model: str
   return Object.keys(options).length ? JSON.stringify(canonical({ ...options, model })) : '';
 }
 
+/** A user's own options win; the provider's apply only to the model they were written for. */
+export function resolveEffectiveOpenRouterOptions(
+  model: string,
+  requestOptions: string | null | undefined,
+  sharedDefaultOptions: string | null | undefined,
+): string {
+  return normalizeOpenRouterOptions(requestOptions ?? undefined, model)
+    || normalizeOpenRouterOptions(sharedDefaultOptions ?? undefined, model);
+}
+
 export function openRouterRequestOptions(value: string | undefined, model: string): Omit<OpenRouterModelOptions, 'model'> {
   const normalized = normalizeOpenRouterOptions(value, model);
   if (!normalized) return {};

@@ -10,6 +10,7 @@ const SHARED: SharedProviderEntry[] = [
     providerType: 'openai',
     defaultModel: 'gpt-4o-mini-tts',
     defaultInstructions: 'Default shared instructions',
+    defaultModelOptions: null,
   },
   {
     slug: 'shared-replicate',
@@ -17,6 +18,7 @@ const SHARED: SharedProviderEntry[] = [
     providerType: 'replicate',
     defaultModel: 'owner/model:ver',
     defaultInstructions: null,
+    defaultModelOptions: null,
   },
 ];
 
@@ -35,6 +37,7 @@ describe('resolveTtsSettingsViewModel (admin/shared modes)', () => {
           providerType: 'openai',
           defaultModel: 'gpt-4o-mini-tts',
           defaultInstructions: null,
+          defaultModelOptions: null,
         },
         ...SHARED,
       ],

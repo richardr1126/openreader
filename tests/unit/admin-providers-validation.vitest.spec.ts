@@ -9,6 +9,7 @@ import {
   decryptedKeyFor,
   listAdminProviders,
   toMasked,
+  updateAdminProvider,
   validateProviderType,
   validateSlug,
   type AdminProviderRecord,
@@ -47,6 +48,7 @@ describe('admin provider validation', () => {
       apiKeyLast4: 'abcd',
       defaultModel: 'gpt-4o-mini-tts',
       defaultInstructions: 'warm tone',
+      defaultModelOptions: null,
       enabled: true,
       createdAt: 1,
       updatedAt: 1,
@@ -67,6 +69,56 @@ describe('admin provider validation', () => {
     try {
       expect(toMasked(created).apiKeyMask).toBe('(not set)');
       await expect(decryptedKeyFor(created)).resolves.toBe('');
+    } finally {
+      await db.delete(adminProviders).where(inArray(adminProviders.id, [created.id]));
+    }
+  });
+
+  test('checks default instructions against the provider type', async () => {
+    const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+    const created = await createAdminProvider({
+      slug: `router-${suffix}`,
+      displayName: 'OpenRouter',
+      providerType: 'openrouter',
+      defaultModel: 'fish-audio/s2.1-pro-free:free',
+      defaultInstructions: 'warm tone',
+    });
+
+    try {
+      expect(created.defaultInstructions).toBe('warm tone');
+      await expect(createAdminProvider({
+        slug: `router-plain-${suffix}`,
+        displayName: 'OpenRouter',
+        providerType: 'openrouter',
+        defaultModel: 'mistralai/voxtral-mini-tts-2603',
+        defaultInstructions: 'warm tone',
+      })).rejects.toThrow('defaultInstructions is only supported');
+    } finally {
+      await db.delete(adminProviders).where(inArray(adminProviders.id, [created.id]));
+    }
+  });
+
+  test('stores OpenRouter model options bound to the default model and clears them when it changes', async () => {
+    const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 8)}`;
+    const created = await createAdminProvider({
+      slug: `router-options-${suffix}`,
+      displayName: 'OpenRouter',
+      providerType: 'openrouter',
+      defaultModel: 'fish-audio/s2.1-pro-free:free',
+      defaultModelOptions: '{"provider":{"options":{"fish-audio":{"top_p":0.5,"temperature":0.4}}}}',
+    });
+
+    try {
+      expect(JSON.parse(created.defaultModelOptions ?? '')).toEqual({
+        model: 'fish-audio/s2.1-pro-free:free',
+        provider: { options: { 'fish-audio': { temperature: 0.4, top_p: 0.5 } } },
+      });
+      await expect(updateAdminProvider(created.id, { defaultModelOptions: '{"provider":' }))
+        .rejects.toThrow('valid JSON');
+      await expect(updateAdminProvider(created.id, { defaultModelOptions: '{"api_key":"x"}' }))
+        .rejects.toThrow(AdminProviderError);
+      const moved = await updateAdminProvider(created.id, { defaultModel: 'openai/gpt-4o-mini-tts' });
+      expect(moved.defaultModelOptions).toBeNull();
     } finally {
       await db.delete(adminProviders).where(inArray(adminProviders.id, [created.id]));
     }

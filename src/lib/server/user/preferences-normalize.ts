@@ -24,6 +24,7 @@ export interface PreferenceNormalizationContext {
     providerType: TtsProviderId;
     defaultModel: string | null;
     defaultInstructions: string | null;
+    defaultModelOptions?: string | null;
   }>;
 }
 

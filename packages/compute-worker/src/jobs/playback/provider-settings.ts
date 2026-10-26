@@ -1,14 +1,15 @@
 import type { TtsCredentialBrokerResponse } from '@openreader/tts/credential-broker';
 import { resolveEffectiveTtsInstructions } from '@openreader/tts/instructions';
+import { resolveEffectiveOpenRouterOptions } from '@openreader/tts/openrouter';
 import { resolveTtsModelForProvider } from '@openreader/tts/provider-policy';
 import type { TTSSegmentSettings } from '@openreader/tts/types';
 
 /**
  * Settings a synthesis request actually runs with once the credential broker
  * has resolved the provider: the broker's provider identity, the model the
- * provider accepts, and the provider's default instructions when the request
- * has none. Shared by playback segments and voice previews so both speak with
- * the same resolved voice.
+ * provider accepts, and the provider's default instructions and model options
+ * when the request has none. Shared by playback segments and voice previews so
+ * both speak with the same resolved voice.
  */
 export function resolveEffectiveTtsSettings(
   settings: TTSSegmentSettings,
@@ -38,5 +39,8 @@ export function resolveEffectiveTtsSettings(
       requestInstructions: settings.ttsInstructions,
       sharedDefaultInstructions: creds.defaultInstructions,
     }) ?? '',
+    ...(creds.providerType === 'openrouter'
+      ? { ttsModelOptions: resolveEffectiveOpenRouterOptions(effectiveModel, settings.ttsModelOptions, creds.defaultModelOptions) }
+      : {}),
   };
 }

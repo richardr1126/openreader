@@ -55,6 +55,7 @@ describe('TTS credential broker client', () => {
       baseUrl: 'http://kokoro:8880/v1',
       defaultModel: 'kokoro',
       defaultInstructions: null,
+      defaultModelOptions: null,
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);

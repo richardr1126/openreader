@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server';
 import { resolveTtsLanguage } from '@openreader/tts/language';
+import { resolveEffectiveOpenRouterOptions } from '@openreader/tts/openrouter';
 import { normalizeSpeechText } from '@openreader/tts/speech-text';
 import { effectiveVoiceCustomization } from '@openreader/tts/voice-customization';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
@@ -32,6 +33,7 @@ function preferenceContext(
       providerType: provider.providerType,
       defaultModel: provider.defaultModel,
       defaultInstructions: provider.defaultInstructions,
+      defaultModelOptions: provider.defaultModelOptions,
     })),
   };
 }
@@ -120,7 +122,9 @@ export async function resolveReaderPlayback(
       ttsModel: model,
       voice,
       nativeSpeed: policy.supportsNativeModelSpeed ? bookVoice.voiceSpeed : 1,
-      ...(provider.providerType === 'openrouter' && preferences.ttsModelOptions ? { ttsModelOptions: preferences.ttsModelOptions } : {}),
+      ...(provider.providerType === 'openrouter'
+        ? { ttsModelOptions: resolveEffectiveOpenRouterOptions(model, preferences.ttsModelOptions, provider.defaultModelOptions) }
+        : {}),
       ...(policy.supportsInstructions && (preferences.ttsInstructions || provider.defaultInstructions)
         ? { ttsInstructions: preferences.ttsInstructions || provider.defaultInstructions }
         : {}),

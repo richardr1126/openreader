@@ -23,6 +23,7 @@ export interface TtsCredentialBrokerResponse {
   baseUrl: string | null;
   defaultModel: string | null;
   defaultInstructions: string | null;
+  defaultModelOptions: string | null;
 }
 
 export interface TtsCredentialBrokerErrorResponse {
@@ -65,7 +66,16 @@ export function parseTtsCredentialBrokerResponse(value: unknown): TtsCredentialB
   const baseUrl = normalizedOptionalString(record.baseUrl);
   const defaultModel = normalizedOptionalString(record.defaultModel);
   const defaultInstructions = normalizedOptionalString(record.defaultInstructions);
-  if (baseUrl === undefined || defaultModel === undefined || defaultInstructions === undefined) return null;
+  // Absent until the app that serves the broker is deployed; the worker deploys separately.
+  const defaultModelOptions = record.defaultModelOptions === undefined
+    ? null
+    : normalizedOptionalString(record.defaultModelOptions);
+  if (
+    baseUrl === undefined
+    || defaultModel === undefined
+    || defaultInstructions === undefined
+    || defaultModelOptions === undefined
+  ) return null;
   return {
     providerRef,
     providerType: record.providerType,
@@ -73,6 +83,7 @@ export function parseTtsCredentialBrokerResponse(value: unknown): TtsCredentialB
     baseUrl,
     defaultModel,
     defaultInstructions,
+    defaultModelOptions,
   };
 }
 

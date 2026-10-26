@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { enterAnonymousLibrary } from './support/onboarding';
 
-test('OpenRouter discovers models, gates instructions and persists model options', async ({ page, playwright }, testInfo) => {
+test('OpenRouter discovers models, gates instructions and layers user over provider model options', async ({ page, playwright }, testInfo) => {
   await enterAnonymousLibrary(page);
   const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
   const signIn = await admin.post('/api/auth/sign-in/email', {
@@ -20,11 +20,17 @@ test('OpenRouter discovers models, gates instructions and persists model options
   const editor = page.getByRole('dialog', { name: 'Add OpenRouter', exact: true });
   await expect(editor.getByRole('button', { name: 'Default model', exact: true })).toContainText('S2.1 Pro Free');
   await expect(editor.getByRole('textbox', { name: 'TTS instructions', exact: true })).toBeVisible();
+  await editor.getByText('Advanced', { exact: true }).click();
+  await editor.getByRole('textbox', { name: 'Model options', exact: true }).fill('{"provider":');
+  await expect(editor.getByRole('alert').filter({ hasText: 'valid JSON' })).toBeVisible();
+  await expect(editor.getByRole('button', { name: 'Add provider', exact: true })).toBeDisabled();
   await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.context().clearCookies(); await page.context().addCookies(anonymousCookies);
   const name = `OpenRouter ${testInfo.project.name} ${testInfo.repeatEachIndex}`;
   const created = await admin.post('/api/admin/providers', { data: {
     slug: `router-${testInfo.project.name}-${testInfo.repeatEachIndex}`, displayName: name, providerType: 'openrouter', defaultModel: 'fish-audio/s2.1-pro-free:free',
+    defaultInstructions: 'Calm librarian',
+    defaultModelOptions: '{"provider":{"options":{"fish-audio":{"temperature":0.4}}}}',
   } });
   expect(created.status()).toBe(201);
   const { provider } = await created.json();
@@ -39,16 +45,23 @@ test('OpenRouter discovers models, gates instructions and persists model options
     await page.getByRole('button', { name: 'Model', exact: true }).click();
     await expect(page.getByRole('option')).toHaveCount(models.length + 1);
     await page.getByRole('option', { name: /Fish Audio: S2.1 Pro Free/ }).click();
-    await page.getByRole('textbox', { name: 'Voice instructions', exact: true }).fill('Warm narration');
-    await page.getByRole('button', { name: 'Advanced model options', exact: true }).click();
+    const instructions = page.getByRole('textbox', { name: 'Voice instructions', exact: true });
+    await expect(instructions).toHaveValue('Calm librarian');
+    await instructions.fill('Warm narration');
+    const disclosure = page.getByRole('button', { name: 'Advanced model options', exact: true });
+    await expect(disclosure).toContainText('Provider default');
+    await disclosure.click();
     const options = page.getByRole('textbox', { name: 'Model options', exact: true });
+    await expect(options).toHaveValue(/"temperature": 0.4/);
     await options.fill('{"provider":');
     await expect(page.getByRole('alert').filter({ hasText: 'valid JSON' })).toBeVisible();
     await options.fill('{"provider":{"options":{"fish-audio":{"temperature":0.7}}}}');
     const unsaved = page.getByRole('region', { name: 'Unsaved changes', exact: true });
     await unsaved.getByRole('button', { name: 'Save', exact: true }).click(); await expect(unsaved).toBeHidden();
     await page.reload();
-    const disclosure = page.getByRole('button', { name: 'Advanced model options', exact: true });
+    await expect(instructions).toHaveValue('Warm narration');
+    await page.getByRole('button', { name: 'Use provider default', exact: true }).click();
+    await expect(instructions).toHaveValue('Calm librarian');
     await expect(disclosure).toContainText('Custom for Fish Audio: S2.1 Pro Free');
     await disclosure.click();
     await expect(options).toHaveValue(/"temperature": 0.7/);

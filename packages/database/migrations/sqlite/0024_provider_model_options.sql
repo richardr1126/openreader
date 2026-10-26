@@ -1,0 +1,1 @@
+ALTER TABLE `admin_providers` ADD `default_model_options` text;

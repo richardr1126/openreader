@@ -1,9 +1,9 @@
 'use client';
 import { SpeechTextControls } from './SpeechTextControls';
 import { VoiceCustomizationControls } from './VoiceCustomizationControls';
-import { OpenRouterOptionsControls } from './OpenRouterOptionsControls';
+import { OpenRouterOptionsControls, readableOpenRouterOptions } from './OpenRouterOptionsControls';
 import { useOpenRouterModels } from '@/hooks/useOpenRouterModels';
-import { normalizeOpenRouterOptions, openRouterRequestOptions } from '@openreader/tts/openrouter';
+import { normalizeOpenRouterOptions } from '@openreader/tts/openrouter';
 import { AdvancedSettings, AdvancedSettingsGroup } from './AdvancedSettings';
 import { MaxSegmentLengthControl } from './MaxSegmentLengthControl';
 import { PdfBlockKindControls } from './PdfBlockKindControls';
@@ -12,7 +12,7 @@ import { VOICE_CUSTOMIZATION_FIELDS } from '@openreader/tts/voice-customization'
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { ChatBubbleIcon, CubeIcon, ServerStackIcon, SpeedometerIcon } from '@/components/icons/Icons';
-import { InlineButton, Input, RangeInput, RowIcon, SaveBar, Section, Select, SelectOptionDetail, SettingRow, Textarea } from '@/components/ui';
+import { Button, InlineButton, Input, RangeInput, RowIcon, SaveBar, Section, Select, SelectOptionDetail, SettingRow, Textarea } from '@/components/ui';
 import { ProviderSelect } from '@/components/providers/ProviderSelect';
 import { SELECTION_PREVIEW_KEY, VoicePicker, VoicePreviewButton, type VoicePickerPreview } from '@/components/player/VoicePicker';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -124,14 +124,22 @@ export function ProviderSettingsPanel({
   const voiceOptions = shownVoice && !availableVoices.includes(shownVoice)
     ? [shownVoice, ...availableVoices]
     : availableVoices;
-  const chooseProviderModel = (next: { providerRef?: string; providerType?: TtsProviderType; model: string }) => {
+  /** What the admin set for a provider; the draft starts from it and saving it unchanged keeps following it. */
+  const providerDefaultsFor = useCallback((ref: string, type: TtsProviderType, model: string) => {
+    const defaults = resolveProviderDefaults({ providerRef: ref, providerType: type, sharedProviders });
+    return {
+      instructions: defaults.defaultInstructions,
+      modelOptions: readableOpenRouterOptions(readModelOptions(defaults.providerType, defaults.defaultModelOptions, model).normalized),
+    };
+  }, [sharedProviders]);
+  const chooseProviderModel = useCallback((next: { providerRef?: string; providerType?: TtsProviderType; model: string }) => {
     if (next.providerRef !== undefined) setLocalProviderRef(next.providerRef);
     if (next.providerType !== undefined) setLocalProviderType(next.providerType);
     setModelValue(next.model);
-    setLocalModelOptions('');
+    setLocalModelOptions(providerDefaultsFor(next.providerRef ?? localProviderRef, next.providerType ?? localProviderType, next.model).modelOptions);
     // Voices belong to a provider and model; the new list supplies the default.
     setLocalVoice('');
-  };
+  }, [localProviderRef, localProviderType, providerDefaultsFor]);
 
   const loadSaved = useCallback(() => {
     setLocalProviderRef(providerRef);
@@ -139,15 +147,14 @@ export function ProviderSettingsPanel({
     setModelValue(ttsModel);
     setCustomModelInput(ttsModel);
     setLocalInstructions(ttsInstructions);
-    const options = openRouterRequestOptions(ttsModelOptions, ttsModel);
-    setLocalModelOptions(Object.keys(options).length ? JSON.stringify(options, null, 2) : '');
+    setLocalModelOptions(readableOpenRouterOptions(ttsModelOptions) || providerDefaultsFor(providerRef, providerType, ttsModel).modelOptions);
     setLocalVoice(voice);
     setLocalSpeed(voiceSpeed);
     setLocalSpeechText(speechText);
     setLocalCustomization(voiceCustomization);
     setLocalMaxSegmentLength(ttsSegmentMaxBlockLength);
     setLocalPdfSkipKinds(pdfSkipBlockKinds);
-  }, [providerRef, providerType, ttsInstructions, ttsModelOptions, ttsModel, voice, voiceSpeed, speechText, voiceCustomization, ttsSegmentMaxBlockLength, pdfSkipBlockKinds]);
+  }, [providerRef, providerType, providerDefaultsFor, ttsInstructions, ttsModelOptions, ttsModel, voice, voiceSpeed, speechText, voiceCustomization, ttsSegmentMaxBlockLength, pdfSkipBlockKinds]);
 
   useEffect(() => {
     if (configLoading || (active && hydrated)) return;
@@ -214,7 +221,7 @@ export function ProviderSettingsPanel({
     chooseProviderModel({ providerRef: fallback.id, providerType: defaults.providerType, model: defaults.defaultModel });
     setLocalInstructions(defaults.defaultInstructions);
     setCustomModelInput('');
-  }, [selectedProvider, sharedProviders, viewModel.providers]);
+  }, [chooseProviderModel, selectedProvider, sharedProviders, viewModel.providers]);
 
   const resetToDefaults = () => {
     const defaults = resolveProviderDefaults({
@@ -235,11 +242,17 @@ export function ProviderSettingsPanel({
       sharedProviders,
     }).defaultModel;
   const modelOptions = readModelOptions(effectiveProviderType, localModelOptions, finalModel);
+  const selectedDefaults = providerDefaultsFor(viewModel.selectedProviderRef, viewModel.selectedProviderType, finalModel);
+  const followsProviderInstructions = !!selectedDefaults.instructions && localInstructions.trim() === selectedDefaults.instructions.trim();
+  const savedInstructions = followsProviderInstructions ? '' : localInstructions;
+  const savedModelOptions = modelOptions.normalized === readModelOptions(effectiveProviderType, selectedDefaults.modelOptions, finalModel).normalized
+    ? ''
+    : modelOptions.normalized;
   const dirty = viewModel.selectedProviderRef !== providerRef
     || viewModel.selectedProviderType !== providerType
     || finalModel !== ttsModel
     || localInstructions !== ttsInstructions
-    || !!modelOptions.error || modelOptions.normalized !== ttsModelOptions
+    || !!modelOptions.error || savedModelOptions !== ttsModelOptions
     || localVoice !== voice
     || VOICE_CUSTOMIZATION_FIELDS.some(key => localCustomization[key] !== voiceCustomization[key])
     || localMaxSegmentLength !== ttsSegmentMaxBlockLength
@@ -261,8 +274,8 @@ export function ProviderSettingsPanel({
         providerRef: viewModel.selectedProviderRef,
         providerType: viewModel.selectedProviderType,
         ttsModel: finalModel,
-        ttsInstructions: localInstructions,
-        ttsModelOptions: modelOptions.normalized,
+        ttsInstructions: savedInstructions,
+        ttsModelOptions: savedModelOptions,
         speechText: localSpeechText,
         voiceCustomization: localCustomization,
         ttsSegmentMaxBlockLength: localMaxSegmentLength,
@@ -387,12 +400,18 @@ export function ProviderSettingsPanel({
         </SettingRow>
         {effectiveProviderType === 'openrouter' && <OpenRouterOptionsControls model={finalModel}
           modelName={catalog.data?.find(model => model.id === finalModel)?.name ?? finalModel}
-          value={localModelOptions} error={modelOptions.error} onChange={setLocalModelOptions} />}
+          value={localModelOptions} providerDefault={selectedDefaults.modelOptions} error={modelOptions.error}
+          onChange={setLocalModelOptions} />}
       </Section>
 
       {providerModelPolicy.supportsInstructions && (
         <Section title="Instructions" variant="group">
-          <SettingRow label="Voice instructions" icon={<ChatBubbleIcon />} stacked>
+          <SettingRow
+            label="Voice instructions"
+            icon={<ChatBubbleIcon />}
+            description={followsProviderInstructions ? 'Set by your provider. Edits apply only to you.' : undefined}
+            stacked
+          >
             <Textarea
               aria-label="Voice instructions"
               value={localInstructions}
@@ -400,6 +419,13 @@ export function ProviderSettingsPanel({
               placeholder="Optional voice instructions"
               className="h-24 resize-none"
             />
+            {selectedDefaults.instructions && !followsProviderInstructions && (
+              <div className="flex justify-end">
+                <Button size="xs" variant="ghost" onClick={() => setLocalInstructions(selectedDefaults.instructions)}>
+                  Use provider default
+                </Button>
+              </div>
+            )}
           </SettingRow>
         </Section>
       )}

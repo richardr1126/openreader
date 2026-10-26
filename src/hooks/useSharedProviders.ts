@@ -12,6 +12,7 @@ export interface SharedProviderEntry {
   providerType: TtsProviderId;
   defaultModel: string | null;
   defaultInstructions: string | null;
+  defaultModelOptions: string | null;
 }
 
 async function fetchSharedProviders(signal?: AbortSignal): Promise<SharedProviderEntry[]> {

@@ -26,6 +26,7 @@ export interface ResolveTtsPolicyInput {
 export interface ProviderDefaultResolverEntry extends SharedProviderTypeResolverEntry {
   defaultModel?: string | null;
   defaultInstructions?: string | null;
+  defaultModelOptions?: string | null;
 }
 
 export interface TtsProviderModelPolicy {
@@ -48,6 +49,7 @@ export interface ResolvedProviderDefaults {
   defaultModel: string;
   defaultVoice: string;
   defaultInstructions: string;
+  defaultModelOptions: string;
 }
 
 export interface ResolveTtsModelForProviderInput {
@@ -121,6 +123,7 @@ export function resolveProviderDefaults(input: {
     defaultModel: sharedDefaultModel || (isBuiltInTtsProviderId(providerType) ? defaultModelForProviderType(providerType) : ''),
     defaultVoice: isBuiltInTtsProviderId(providerType) ? defaultVoiceForProviderType(providerType) : '',
     defaultInstructions: sharedDefaultInstructions,
+    defaultModelOptions: shared?.defaultModelOptions ?? '',
   };
 }
 

@@ -205,6 +205,7 @@ export const adminProviders = sqliteTable('admin_providers', {
   apiKeyLast4: text('api_key_last4'),
   defaultModel: text('default_model'),
   defaultInstructions: text('default_instructions'),
+  defaultModelOptions: text('default_model_options'),
   enabled: integer('enabled').notNull().default(1),
   createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),
   updatedAt: integer('updated_at').notNull().default(SQLITE_NOW_MS),

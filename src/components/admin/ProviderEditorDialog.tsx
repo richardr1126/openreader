@@ -26,7 +26,9 @@ import {
   supportsTtsInstructions,
   type TtsProviderId,
 } from '@openreader/tts/provider-catalog';
+import { normalizeOpenRouterOptions } from '@openreader/tts/openrouter';
 import { defaultModelForProviderType } from '@openreader/tts/provider-policy';
+import { OpenRouterOptionsEditor, readableOpenRouterOptions } from '@/components/settings/OpenRouterOptionsControls';
 import { useOpenRouterModels } from '@/hooks/useOpenRouterModels';
 
 export interface AdminProviderMasked {
@@ -38,6 +40,7 @@ export interface AdminProviderMasked {
   apiKeyMask: string;
   defaultModel: string | null;
   defaultInstructions: string | null;
+  defaultModelOptions: string | null;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
@@ -53,6 +56,7 @@ interface FormState {
   apiKey: string;
   defaultModel: string;
   defaultInstructions: string;
+  defaultModelOptions: string;
   enabled: boolean;
 }
 
@@ -94,6 +98,7 @@ function formFor(providerType: TtsProviderId): FormState {
     apiKey: '',
     defaultModel: defaultModelForProviderType(providerType),
     defaultInstructions: '',
+    defaultModelOptions: '',
     enabled: true,
   };
 }
@@ -107,8 +112,19 @@ function formFromProvider(provider: AdminProviderMasked): FormState {
     apiKey: '',
     defaultModel: provider.defaultModel ?? defaultModelForProviderType(provider.providerType),
     defaultInstructions: provider.defaultInstructions ?? '',
+    defaultModelOptions: readableOpenRouterOptions(provider.defaultModelOptions),
     enabled: provider.enabled,
   };
+}
+
+function modelOptionsError(form: FormState): string | undefined {
+  if (form.providerType !== 'openrouter') return undefined;
+  try {
+    normalizeOpenRouterOptions(form.defaultModelOptions, form.defaultModel.trim());
+    return undefined;
+  } catch (error) {
+    return (error as Error).message;
+  }
 }
 
 async function readError(res: Response): Promise<Error> {
@@ -125,6 +141,7 @@ function requestBody(form: FormState) {
     ...(form.apiKey.length > 0 ? { apiKey: form.apiKey } : {}),
     defaultModel: form.defaultModel.trim() || null,
     defaultInstructions: supportsTtsInstructions(form.defaultModel, form.providerType) ? form.defaultInstructions.trim() || null : null,
+    defaultModelOptions: form.providerType === 'openrouter' ? form.defaultModelOptions.trim() || null : null,
     enabled: form.enabled,
   };
 }
@@ -149,6 +166,7 @@ async function checkProvider(input: { editingId: string | null; form: FormState 
       apiKey: input.form.apiKey,
       defaultModel: input.form.defaultModel.trim(),
       defaultInstructions: input.form.defaultInstructions.trim(),
+      defaultModelOptions: input.form.providerType === 'openrouter' ? input.form.defaultModelOptions.trim() : '',
     }),
   });
   if (!res.ok) throw await readError(res);
@@ -324,7 +342,8 @@ function ProviderForm({
   const selectedModel = models.find((model) => model.id === selectedModelId);
   const [customModel, setCustomModel] = useState(modelIsPreset ? '' : form.defaultModel);
   const keptKey = editing?.apiKeyMask.startsWith('••••') ? editing.apiKeyMask : null;
-  const submitDisabled = saving || !form.slug.trim() || !form.displayName.trim() || (isCustom && !form.baseUrl.trim());
+  const optionsError = modelOptionsError(form);
+  const submitDisabled = saving || !form.slug.trim() || !form.displayName.trim() || (isCustom && !form.baseUrl.trim()) || !!optionsError;
 
   return (
     <form
@@ -372,7 +391,7 @@ function ProviderForm({
                 </span>
               )}
               chevronClassName="h-4 w-4 text-muted"
-              onChange={(model) => onChange({ defaultModel: model.id === CUSTOM_MODEL_ID ? customModel.trim() : model.id })}
+              onChange={(model) => onChange({ defaultModel: model.id === CUSTOM_MODEL_ID ? customModel.trim() : model.id, defaultModelOptions: '' })}
             />
             {supportsCustomModel && selectedModelId === CUSTOM_MODEL_ID && (
               <Input
@@ -381,7 +400,7 @@ function ProviderForm({
                 value={customModel}
                 onChange={(e) => {
                   setCustomModel(e.target.value);
-                  onChange({ defaultModel: e.target.value });
+                  onChange({ defaultModel: e.target.value, defaultModelOptions: '' });
                 }}
                 placeholder={form.providerType === 'replicate' ? 'owner/model or owner/model:version' : 'Model ID'}
               />
@@ -440,6 +459,17 @@ function ProviderForm({
               className="font-mono"
             />
           </Field>
+          {form.providerType === 'openrouter' && (
+            <Field label="Model options" hint="Users can replace these with their own.">
+              <OpenRouterOptionsEditor
+                model={form.defaultModel.trim()}
+                modelName={selectedModel?.name ?? form.defaultModel}
+                value={form.defaultModelOptions}
+                error={optionsError}
+                onChange={(defaultModelOptions) => onChange({ defaultModelOptions })}
+              />
+            </Field>
+          )}
           <ToggleRow
             label="Enabled"
             checked={form.enabled}

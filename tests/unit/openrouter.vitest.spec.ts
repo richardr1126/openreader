@@ -3,7 +3,8 @@ import { buildTTSCacheKey, generateTTSBuffer } from '@openreader/tts/generate';
 import { buildTtsSegmentSettingsHash } from '@openreader/tts/segments';
 import { FISH_AUDIO_VOICES, getDefaultVoices, resolveProviderModels } from '@openreader/tts/provider-catalog';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
-import { OPENROUTER_DEFAULT_MODEL, normalizeOpenRouterOptions, openRouterCapabilities, parseOpenRouterModels, pcmToWav } from '@openreader/tts/openrouter';
+import { parseTtsCredentialBrokerResponse } from '@openreader/tts/credential-broker';
+import { OPENROUTER_DEFAULT_MODEL, normalizeOpenRouterOptions, openRouterCapabilities, parseOpenRouterModels, pcmToWav, resolveEffectiveOpenRouterOptions } from '@openreader/tts/openrouter';
 import { parseTtsSegmentSettings } from '../../src/lib/server/tts/playback-request';
 
 vi.mock('@openreader/tts/audio-format', () => ({
@@ -76,6 +77,21 @@ describe('OpenRouter speech', () => {
     expect(normalizeOpenRouterOptions(a, 'other/model')).toBe('');
     expect(() => normalizeOpenRouterOptions('{"provider":{"options":{"fish-audio":{"api_key":"bad"}}}}', OPENROUTER_DEFAULT_MODEL)).toThrow('Credentials');
     expect(() => normalizeOpenRouterOptions('{"input_references":[{"type":"input_audio","input_audio":{"url":"http://localhost/x"}}]}', OPENROUTER_DEFAULT_MODEL)).toThrow('HTTPS');
+  });
+
+  test('user options replace provider defaults, which apply only to their own model', () => {
+    const shared = normalizeOpenRouterOptions('{"provider":{"options":{"fish-audio":{"temperature":0.4}}}}', OPENROUTER_DEFAULT_MODEL);
+    const own = normalizeOpenRouterOptions('{"provider":{"options":{"fish-audio":{"temperature":0.9}}}}', OPENROUTER_DEFAULT_MODEL);
+    expect(resolveEffectiveOpenRouterOptions(OPENROUTER_DEFAULT_MODEL, '', shared)).toBe(shared);
+    expect(resolveEffectiveOpenRouterOptions(OPENROUTER_DEFAULT_MODEL, own, shared)).toBe(own);
+    expect(resolveEffectiveOpenRouterOptions('openai/gpt-4o-mini-tts', '', shared)).toBe('');
+  });
+
+  test('broker responses carry provider model options and tolerate an app that predates them', () => {
+    const response = { providerRef: 'router', providerType: 'openrouter', apiKey: 'k', baseUrl: null, defaultModel: OPENROUTER_DEFAULT_MODEL, defaultInstructions: null };
+    expect(parseTtsCredentialBrokerResponse(response)?.defaultModelOptions).toBeNull();
+    expect(parseTtsCredentialBrokerResponse({ ...response, defaultModelOptions: '{"model":"x"}' })?.defaultModelOptions).toBe('{"model":"x"}');
+    expect(parseTtsCredentialBrokerResponse({ ...response, defaultModelOptions: 7 })).toBeNull();
   });
 
   test('propagates upstream failure without echoing secrets or switching models', async () => {
