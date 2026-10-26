@@ -344,7 +344,11 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         prefix: input.s3Prefix, readObject: async key => {
           if (!input.readAudioObject) throw new Error('Cloned voice storage is unavailable');
           return input.readAudioObject(key);
-        } })),
+        } }).catch((error: unknown) => {
+        // A transient storage failure must not poison every later segment.
+        resolvedVoice = undefined;
+        throw error;
+      })),
       speed: effectiveSettings.nativeSpeed,
       format: 'mp3',
       model: effectiveSettings.ttsModel,

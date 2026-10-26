@@ -683,6 +683,38 @@ function runLocalRequest(request: ResolvedServerTTSRequest, signal: AbortSignal)
     ...(request.voiceCustomization ? { customization: request.voiceCustomization } : {}) }, signal);
 }
 
+/**
+ * Turns a failed provider response into a message a reader can act on. Never
+ * include upstream bodies: services may echo credentials or private text.
+ * Google reports an invalid key as HTTP 400, so only its reason code is read.
+ */
+async function providerHttpError(provider: 'Google AI Studio' | 'OpenRouter' | 'Fish Audio', response: Response) {
+  let status = response.status;
+  if (provider === 'Google AI Studio' && status === 400 && (await readErrorPrefix(response)).includes('API_KEY_INVALID')) status = 401;
+  else await response.body?.cancel();
+  const message = status === 401 || status === 403 ? `${provider} rejected the API key. Check it in provider settings.`
+    : status === 402 ? `${provider} has no remaining credit for this API key.`
+    : status === 404 && provider === 'OpenRouter' ? 'OpenRouter found no endpoint for this model that your privacy settings allow.'
+    : status === 429 ? `${provider} rate limited the request (HTTP 429).`
+    : status >= 500 ? `${provider} is unavailable right now (HTTP ${status}).`
+    : `${provider} rejected the request (HTTP ${status}). Check the model, voice, and instructions.`;
+  return Object.assign(new Error(message), { status, response: { status, headers: response.headers } });
+}
+
+async function readErrorPrefix(response: Response): Promise<string> {
+  if (!response.body) return '';
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = []; let bytes = 0;
+  try {
+    while (bytes < 16_384) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      chunks.push(value); bytes += value.byteLength;
+    }
+  } finally { await reader.cancel(); reader.releaseLock(); }
+  return Buffer.concat(chunks, bytes).toString('utf8');
+}
+
 async function runGoogleAiStudioRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
@@ -726,10 +758,7 @@ async function runGoogleAiStudioRequest(
         chunks.push(audio);
         break;
       }
-      await response.body?.cancel();
-      const error = Object.assign(new Error(`Google AI Studio returned HTTP ${response.status}`), {
-        status: response.status, response: { status: response.status, headers: response.headers },
-      });
+      const error = await providerHttpError('Google AI Studio', response);
       if ((response.status !== 429 && response.status < 500) || attempt >= settings.ttsUpstreamMaxRetries) throw error;
       await sleepWithSignal((getUpstreamRetryAfterSeconds(error) ?? Math.min(2 ** attempt, 4)) * 1000, deadline);
     }
@@ -797,10 +826,7 @@ async function runOpenRouterRequest(
       const audio = Buffer.concat(chunks, bytes);
       return capabilities.format === 'pcm' ? Buffer.from(pcmToWav(audio, capabilities.pcmSampleRate)) : audio;
     }
-    await response.body?.cancel();
-    const error = Object.assign(new Error(`OpenRouter returned HTTP ${response.status}`), {
-      status: response.status, response: { status: response.status, headers: response.headers },
-    });
+    const error = await providerHttpError('OpenRouter', response);
     if ((response.status !== 429 && response.status < 500) || attempt >= settings.ttsUpstreamMaxRetries) throw error;
     await sleepWithSignal((getUpstreamRetryAfterSeconds(error) ?? Math.min(2 ** attempt, 4)) * 1000, deadline);
   }
@@ -858,11 +884,7 @@ async function runFishAudioRequest(
         reader.releaseLock();
       }
     }
-    // Never include upstream bodies: services may echo credentials or text.
-    const error = Object.assign(new Error(`Fish Audio returned HTTP ${response.status}`), {
-      status: response.status, response: { status: response.status, headers: response.headers },
-    });
-    await response.body?.cancel();
+    const error = await providerHttpError('Fish Audio', response);
     if ((response.status !== 429 && response.status < 500) || attempt >= settings.ttsUpstreamMaxRetries) throw error;
     const delay = (getUpstreamRetryAfterSeconds(error) ?? 0) * 1000
       || Math.min(OPENAI_RETRY_INITIAL_DELAY_MS * 2 ** attempt, OPENAI_RETRY_MAX_DELAY_MS);

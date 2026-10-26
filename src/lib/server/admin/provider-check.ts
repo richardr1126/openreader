@@ -194,6 +194,8 @@ async function checkSpeech(
   }
   if (result.status === 504) return item('error', 'The speech sample timed out.');
   if (result.status === 503) return item('error', 'The worker could not load this provider\'s credentials.');
+  if (result.code === 'UPSTREAM_AUTH') return item('error', 'The provider rejected the API key.');
+  if (result.code === 'UPSTREAM_CREDIT') return item('error', 'The provider account has no remaining credit.');
   if (result.code === 'UPSTREAM_ERROR') {
     return item('error', 'The provider rejected the request. Check the model, voice, and instructions.');
   }

@@ -119,6 +119,14 @@ describe('admin provider check', () => {
     expect(items.at(-1)).toMatchObject({ id: 'speech', status: 'error' });
   });
 
+  test('names a rejected key or exhausted credit reported by the worker', async () => {
+    for (const [code, detail] of [['UPSTREAM_AUTH', 'The provider rejected the API key.'], ['UPSTREAM_CREDIT', 'The provider account has no remaining credit.']]) {
+      const d = deps({ synthesizePreview: vi.fn(async () => ({ ok: false as const, status: 502, code, retryAfterMs: null })) });
+      const items = await runProviderCheck(draft(), { slug: 'p', enabled: true, matchesDraft: true }, d, signal);
+      expect(items.at(-1)).toMatchObject({ id: 'speech', status: 'error', detail });
+    }
+  });
+
   test('checks a Replicate model with the key', async () => {
     const d = deps({ fetch: vi.fn(async () => new Response('', { status: 404 })) as unknown as typeof fetch });
     const items = await runProviderCheck(

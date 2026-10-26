@@ -38,6 +38,18 @@ test('saves a private Fish sample without requiring upstream model creation and 
   for (const hidden of [sample.audio, 'secret']) expect(body).not.toContain(hidden);
   vi.unstubAllGlobals();
 });
+test('requires the spoken transcript for Fish Audio references', async () => {
+  expect((await POST(req('POST', { ...sample, transcript: '  ' }))).status).toBe(400);
+  expect(mocks.write).not.toHaveBeenCalled();
+});
+test('still lists saved voices when OpenRouter capability discovery fails', async () => {
+  mocks.resolve.mockResolvedValue({ provider: 'openrouter', apiKey: 'secret' });
+  mocks.list.mockResolvedValue([{ id: 'clone:x', name: 'Saved' }]);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })));
+  const response = await GET(new NextRequest('http://localhost/api/tts/cloned-voices?providerRef=or&model=example%2Fdiscovery-down'));
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ supportsCloning: false, voices: [{ name: 'Saved' }] });
+});
 test('uses authenticated ownership for rename and deletion regardless of a supplied user ID', async () => {
   const id = 'clone:7e94cb5c-1032-44b8-84ee-8a7a6f99d629';
   mocks.read.mockResolvedValue({ id, name: 'Old name' });

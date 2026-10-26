@@ -59,8 +59,16 @@ describe('Google AI Studio speech', () => {
 
   test('does not echo upstream bodies or silently change models', async () => {
     const fetchMock = vi.fn(async () => new Response('synthetic-google-secret echoed', { status: 403 })); vi.stubGlobal('fetch', fetchMock);
-    await expect(generateTTSBuffer({ ...request, text: 'Rejected Google sample' })).rejects.toMatchObject({ status: 403, message: 'Google AI Studio returned HTTP 403' });
+    await expect(generateTTSBuffer({ ...request, text: 'Rejected Google sample' })).rejects.toMatchObject({ status: 403, message: 'Google AI Studio rejected the API key. Check it in provider settings.' });
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  test('reports Google\'s HTTP 400 invalid-key reason as a rejected key without echoing the body', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: { code: 400, message: 'API key not valid synthetic-google-secret',
+      details: [{ reason: 'API_KEY_INVALID' }] } }, { status: 400 })));
+    const error = await generateTTSBuffer({ ...request, text: 'Bad key sample' }).catch((caught: unknown) => caught);
+    expect(error).toMatchObject({ status: 401, message: 'Google AI Studio rejected the API key. Check it in provider settings.' });
+    expect(String((error as Error).message)).not.toContain('synthetic-google-secret');
   });
 
   test('retries throttling with the same model and stops a retry wait on cancellation', async () => {

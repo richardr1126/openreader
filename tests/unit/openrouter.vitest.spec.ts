@@ -96,7 +96,7 @@ describe('OpenRouter speech', () => {
 
   test('propagates upstream failure without echoing secrets or switching models', async () => {
     const fetchMock = vi.fn(async () => new Response('synthetic-secret upstream echo', { status: 402 })); vi.stubGlobal('fetch', fetchMock);
-    await expect(generateTTSBuffer({ ...request, text: 'Rejected speech' })).rejects.toMatchObject({ status: 402, message: 'OpenRouter returned HTTP 402' });
+    await expect(generateTTSBuffer({ ...request, text: 'Rejected speech' })).rejects.toMatchObject({ status: 402, message: 'OpenRouter has no remaining credit for this API key.' });
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

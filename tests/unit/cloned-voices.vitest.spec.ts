@@ -68,5 +68,10 @@ describe('private cloned voice execution', () => {
     expect(body.voice).toBeUndefined();
     expect(buildTTSCacheKey(request)).not.toBe(buildTTSCacheKey({ ...request, referenceAudio: { ...request.referenceAudio, transcript: 'Different reference.' } }));
     expect(buildTTSCacheKey(request)).not.toContain('private-key');
+    // Later segments reuse the discovered endpoint capabilities.
+    fetch.mockResolvedValueOnce(new Response(new Uint8Array([3, 4])));
+    await generateTTSBuffer({ ...request, text: 'The next segment.' });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch.mock.calls[2][0]).toContain('/audio/speech');
   });
 });

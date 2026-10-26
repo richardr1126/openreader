@@ -94,7 +94,8 @@ export function CloneVoiceEditor({ providerRef, providerType, model, beforeCaptu
     source.onended = () => { if (mounted.current && playback.current === context) setPlaying(false); };
     source.start(0, start, clipLength); setPlaying(true);
   };
-  const canSave = !!audio && !!name.trim() && permitted && !saving && !recording && !requesting && !loading;
+  const transcriptRequired = providerType === 'fish-audio';
+  const canSave = !!audio && !!name.trim() && (!transcriptRequired || !!transcript.trim()) && permitted && !saving && !recording && !requesting && !loading;
   const save = async () => {
     if (!audio || !canSave) return;
     setSaving(true); setError(''); const controller = new AbortController(); request.current = controller;
@@ -154,7 +155,9 @@ export function CloneVoiceEditor({ providerRef, providerType, model, beforeCaptu
           <div className="flex flex-wrap gap-4"><Button variant="ghost" className="gap-2 px-0 text-accent" onClick={() => void record()}><MicrophoneIcon className="h-4 w-4" />Record again</Button><Button variant="ghost" className="gap-2 px-0 text-accent" onClick={() => fileInput.current?.click()}><UploadIcon className="h-4 w-4" />Import instead</Button></div>
         </div>
         <label className="block space-y-2"><span className="text-sm font-medium">Name</span><Input autoFocus aria-label="Voice name" maxLength={80} value={name} onChange={e => setName(e.target.value)} placeholder="For example, Grandpa reading" /></label>
-        <details className={card}><summary className="cursor-pointer text-sm font-medium">Sample transcript (optional)</summary><Textarea aria-label="Sample transcript" placeholder="Words spoken in the selected clip" className="mt-3" rows={3} maxLength={4000} value={transcript} onChange={e => setTranscript(e.target.value)} /><p className="mt-2 text-xs text-soft">Use the words spoken in the selected clip.</p></details>
+        {transcriptRequired
+          ? <label className="block space-y-2"><span className="text-sm font-medium">Sample transcript</span><Textarea aria-label="Sample transcript" placeholder="Words spoken in the selected clip" rows={3} maxLength={4000} value={transcript} onChange={e => setTranscript(e.target.value)} /><span className="block text-xs text-soft">Fish Audio needs the exact words spoken in the selected clip.</span></label>
+          : <details className={card}><summary className="cursor-pointer text-sm font-medium">Sample transcript (optional)</summary><Textarea aria-label="Sample transcript" placeholder="Words spoken in the selected clip" className="mt-3" rows={3} maxLength={4000} value={transcript} onChange={e => setTranscript(e.target.value)} /><p className="mt-2 text-xs text-soft">Use the words spoken in the selected clip.</p></details>}
         <label className={`${card} flex cursor-pointer items-start gap-3`}><Checkbox className="mt-0.5 shrink-0" checked={permitted} onChange={e => setPermitted(e.target.checked)} /><span><span className="block text-sm font-medium">This is my voice, or I have permission from the person speaking to use it</span><span className="mt-1 block text-xs text-soft">Don&apos;t use a voice to impersonate someone or to pass off generated speech as their real words.</span></span></label>
       </fieldset>}
       {error && <p role="alert" className="text-sm text-warning">{error}</p>}
@@ -162,7 +165,7 @@ export function CloneVoiceEditor({ providerRef, providerType, model, beforeCaptu
     <div className="mt-6 flex shrink-0 justify-end gap-3 border-t border-line-soft pt-4">
       <Button size="sm" variant="outline" disabled={disabled} onClick={onClose}>Cancel</Button>
       {audio && !recording && <Button size="sm" variant="primary" disabled={!canSave} onClick={() => void save()}>
-        {saving ? 'Saving voice…' : !name.trim() ? 'Name your voice to save' : !permitted ? 'Confirm permission to save' : 'Save voice'}
+        {saving ? 'Saving voice…' : !name.trim() ? 'Name your voice to save' : transcriptRequired && !transcript.trim() ? 'Add the transcript to save' : !permitted ? 'Confirm permission to save' : 'Save voice'}
       </Button>}
     </div>
   </ModalFrame>;

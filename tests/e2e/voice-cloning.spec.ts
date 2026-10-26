@@ -51,6 +51,10 @@ test(`${providerType} personal voices require sample permission and persist thro
       buffer: Buffer.from(pcmToWav(new Uint8Array(96_000))) });
     await editor.getByRole('textbox', { name: 'Voice name', exact: true }).fill('My narrator');
     await expect(editor.getByRole('slider', { name: 'Sample length', exact: true })).toBeVisible();
+    if (providerType === 'fish-audio') {
+      await expect(editor.getByRole('button', { name: 'Add the transcript to save', exact: true })).toBeDisabled();
+      await editor.getByRole('textbox', { name: 'Sample transcript', exact: true }).fill('A clear reference sample.');
+    }
     await expect(editor.getByRole('button', { name: 'Confirm permission to save', exact: true })).toBeDisabled();
     await editor.getByRole('checkbox').check();
     await editor.getByRole('button', { name: 'Save voice', exact: true }).click();

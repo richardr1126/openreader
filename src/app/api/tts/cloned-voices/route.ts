@@ -39,7 +39,8 @@ export async function GET(request: NextRequest) {
         if (provider.provider === 'fish-audio') supportsCloning = FISH_AUDIO_MODELS.some(v => v.id === model);
         if (provider.provider === 'openrouter') {
           try { await validateOpenRouterReferences(model, { input_references: [{ type: 'input_audio', input_audio: { data: '' } }] }, request.signal); supportsCloning = true; }
-          catch (error) { if (!(error instanceof Error) || !error.message.includes('no endpoint supporting')) throw error; }
+          // Discovery failures only hide cloning; saved voices still load.
+          catch { /* supportsCloning stays false */ }
         }
       }
     }
@@ -66,6 +67,8 @@ export async function POST(request: NextRequest) {
     if ('error' in provider || !['fish-audio', 'openrouter'].includes(provider.provider)) return NextResponse.json({ error: 'Choose Fish Audio or OpenRouter.' }, { status: 400 });
     if (provider.provider === 'fish-audio' && !FISH_AUDIO_MODELS.some(v => v.id === input.model)) return NextResponse.json({ error: 'Choose a supported Fish Audio model.' }, { status: 400 });
     if (!provider.apiKey) return NextResponse.json({ error: 'Configure this provider’s API key before cloning a voice.' }, { status: 400 });
+    // Fish Audio conditions on the reference text; a missing transcript degrades the clone.
+    if (provider.provider === 'fish-audio' && !input.transcript.trim()) return NextResponse.json({ error: 'Enter the words spoken in the sample.' }, { status: 400 });
     const providerRef = provider.adminRecord?.slug ?? input.providerRef;
     const voice: StoredClonedVoice = { id: `clone:${randomUUID()}`, name: input.name, providerRef,
       providerType: provider.provider as StoredClonedVoice['providerType'], model: input.model,

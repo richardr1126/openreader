@@ -135,6 +135,23 @@ export interface OpenRouterSpeechEndpoint {
   supports_image_reference?: boolean;
 }
 
+// Endpoint capabilities are public catalog data. Cache them like the model
+// catalog so each synthesized segment does not pay a discovery round trip.
+const endpointCatalog = new Map<string, { expires: number; endpoints: OpenRouterSpeechEndpoint[] }>();
+
+async function fetchOpenRouterEndpoints(model: string, parts: string[], signal: AbortSignal): Promise<OpenRouterSpeechEndpoint[]> {
+  const cached = endpointCatalog.get(model);
+  if (cached && cached.expires > Date.now()) return cached.endpoints;
+  const url = `${OPENROUTER_BASE_URL}/models/${parts.map(encodeURIComponent).join('/')}/endpoints`;
+  const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]), redirect: 'error' });
+  if (!response.ok) throw new Error(`OpenRouter endpoint discovery returned HTTP ${response.status}`);
+  const body = await readPublicMetadata(response);
+  const endpoints = (JSON.parse(body) as { data?: { endpoints?: OpenRouterSpeechEndpoint[] } }).data?.endpoints ?? [];
+  if (endpointCatalog.size >= 64) endpointCatalog.clear();
+  endpointCatalog.set(model, { endpoints, expires: Date.now() + 5 * 60_000 });
+  return endpoints;
+}
+
 export async function validateOpenRouterReferences(model: string, options: Omit<OpenRouterModelOptions, 'model'>, signal: AbortSignal): Promise<void> {
   const refs = options.input_references;
   if (!refs?.length) return;
@@ -145,11 +162,7 @@ export async function validateOpenRouterReferences(model: string, options: Omit<
   if (model.startsWith('heygen/') && image && !audio) throw new Error('HeyGen needs audio with an image reference');
   const parts = model.split('/');
   if (parts.length !== 2 || parts.some(part => !part || part === '.' || part === '..')) throw new Error('Invalid OpenRouter model ID');
-  const url = `${OPENROUTER_BASE_URL}/models/${parts.map(encodeURIComponent).join('/')}/endpoints`;
-  const response = await fetch(url, { signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]), redirect: 'error' });
-  if (!response.ok) throw new Error(`OpenRouter endpoint discovery returned HTTP ${response.status}`);
-  const body = await readPublicMetadata(response);
-  const endpoints = (JSON.parse(body) as { data?: { endpoints?: OpenRouterSpeechEndpoint[] } }).data?.endpoints ?? [];
+  const endpoints = await fetchOpenRouterEndpoints(model, parts, signal);
   if (!endpoints.some(endpoint => (!audio || endpoint.supports_voice_cloning)
     && (audio < 2 || endpoint.supports_multiple_audio_references) && (!image || endpoint.supports_image_reference))) {
     throw new Error('The selected OpenRouter model has no endpoint supporting these voice references');

@@ -1,4 +1,4 @@
-import { GetObjectCommand, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { clonedVoiceKey, clonedVoicesPrefix, CLONED_VOICE_MAX_JSON_BYTES, type StoredClonedVoice, type ClonedVoice } from '@openreader/tts/cloned-voices';
 import { getS3Config, getS3InternalClient, isS3Configured } from '@/lib/server/storage/s3';
 
@@ -15,26 +15,40 @@ export async function readClonedVoice(userId: string, id: string): Promise<Store
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as StoredClonedVoice;
 }
+// Listing reads this summary with HEAD requests instead of downloading every
+// reference sample. S3 metadata is ASCII-only and capped near 2 KB per object.
+const SUMMARY_METADATA_KEY = 'voice-summary';
+const SUMMARY_METADATA_MAX_BYTES = 1_800;
+
 export async function writeClonedVoice(userId: string, voice: StoredClonedVoice): Promise<void> {
   const config = getS3Config();
   const body = Buffer.from(JSON.stringify(voice));
-  if (body.length > CLONED_VOICE_MAX_JSON_BYTES) throw new Error('Cloned voice exceeded its size limit');
+  const summary = encodeURIComponent(JSON.stringify(clonedVoiceSummary(voice)));
+  if (body.length > CLONED_VOICE_MAX_JSON_BYTES || summary.length > SUMMARY_METADATA_MAX_BYTES) {
+    throw new Error('Cloned voice exceeded its size limit');
+  }
   await getS3InternalClient().send(new PutObjectCommand({ Bucket: config.bucket,
-    Key: clonedVoiceKey(config.prefix, userId, voice.id), Body: body, ContentType: 'application/json', ServerSideEncryption: 'AES256' }));
+    Key: clonedVoiceKey(config.prefix, userId, voice.id), Body: body, ContentType: 'application/json',
+    Metadata: { [SUMMARY_METADATA_KEY]: summary }, ServerSideEncryption: 'AES256' }));
 }
 export function clonedVoiceSummary(voice: StoredClonedVoice): ClonedVoice {
   return { id: voice.id, name: voice.name, providerRef: voice.providerRef, providerType: voice.providerType, model: voice.model };
+}
+async function readClonedVoiceSummary(userId: string, key: string): Promise<ClonedVoice | null> {
+  const config = getS3Config();
+  const result = await getS3InternalClient().send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
+  const encoded = result.Metadata?.[SUMMARY_METADATA_KEY];
+  if (!encoded) return null;
+  const summary = JSON.parse(decodeURIComponent(encoded)) as ClonedVoice;
+  // The object key, not its metadata, is authoritative for the voice ID.
+  return key === clonedVoiceKey(config.prefix, userId, summary.id) ? summary : null;
 }
 export async function listClonedVoices(userId: string): Promise<ClonedVoice[]> {
   const config = getS3Config();
   const result = await getS3InternalClient().send(new ListObjectsV2Command({ Bucket: config.bucket,
     Prefix: clonedVoicesPrefix(config.prefix, userId), MaxKeys: 100 }));
-  const voices: ClonedVoice[] = [];
-  for (const object of result.Contents ?? []) {
-    const id = object.Key?.split('/').pop()?.replace(/\.json$/, '');
-    if (id) voices.push(clonedVoiceSummary(await readClonedVoice(userId, `clone:${id}`)));
-  }
-  return voices;
+  const keys = (result.Contents ?? []).flatMap(object => object.Key?.endsWith('.json') ? [object.Key] : []);
+  return (await Promise.all(keys.map(key => readClonedVoiceSummary(userId, key)))).filter(voice => voice !== null);
 }
 export async function deleteClonedVoice(userId: string, id: string): Promise<void> {
   const config = getS3Config();

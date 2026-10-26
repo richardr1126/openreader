@@ -49,7 +49,7 @@ describe('Fish Audio', () => {
     const fetchMock = vi.fn(async () => new Response('account text test-secret', { status: 402 }));
     vi.stubGlobal('fetch', fetchMock);
     await expect(generateTTSBuffer({ ...request, text: 'default voice', speed: 3 })).rejects.toMatchObject({
-      status: 402, message: 'Fish Audio returned HTTP 402',
+      status: 402, message: 'Fish Audio has no remaining credit for this API key.',
     });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ text: 'default voice', format: 'mp3', prosody: { speed: 2 } });
@@ -79,7 +79,7 @@ describe('Fish Audio', () => {
   test('propagates rate limits without exposing upstream text', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('test-secret echoed', { status: 429, headers: { 'Retry-After': '0.01' } })));
     await expect(generateTTSBuffer({ ...request, text: 'throttled' }, undefined, { ttsUpstreamMaxRetries: 1 }))
-      .rejects.toMatchObject({ status: 429, message: 'Fish Audio returned HTTP 429',
+      .rejects.toMatchObject({ status: 429, message: 'Fish Audio rate limited the request (HTTP 429).',
         response: { headers: expect.any(Headers) } });
   });
 
