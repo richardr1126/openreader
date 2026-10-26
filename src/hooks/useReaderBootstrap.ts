@@ -33,12 +33,26 @@ export function useReaderBootstrap(documentId: string | undefined) {
   const pendingProgress = useRef<DocumentProgressPayload | null>(null);
   const lastProgressTimestamp = useRef(0);
   const progressPersistenceEnabled = useRef(false);
+  const surfaceOwner = `${sessionId}:${documentId ?? ''}`;
+  const lastSettingsCommit = useRef<{ owner: string; settings: DocumentSettings } | null>(null);
+  const bootstrapSettingsAtStart = useRef(lastSettingsCommit.current);
+  const preserveNewerPresentation = useCallback((snapshot: ReaderBootstrapResult, atStart: typeof lastSettingsCommit.current): ReaderBootstrapResult => {
+    const commit = lastSettingsCommit.current;
+    if (snapshot.status !== 'ready' || !commit || commit.owner !== surfaceOwner || commit === atStart) return snapshot;
+    return { ...snapshot, payload: { ...snapshot.payload, settings: { ...snapshot.payload.settings,
+      typography: commit.settings.typography, highlightAppearance: commit.settings.highlightAppearance,
+      presentation: commit.settings.presentation } } };
+  }, [surfaceOwner]);
   const query = useQuery({
     queryKey: key,
     // Bootstrap ensures durable server work. Development Strict Mode may
     // briefly remove every observer, but that must not abort the request that
     // creates/reconnects the operation or surface an ECONNRESET on the server.
-    queryFn: () => getReaderBootstrap(documentId!),
+    queryFn: async () => {
+      const atStart = lastSettingsCommit.current;
+      bootstrapSettingsAtStart.current = atStart;
+      return preserveNewerPresentation(await getReaderBootstrap(documentId!), atStart);
+    },
     enabled: !sessionPending && Boolean(documentId),
     retry: false,
     gcTime: 0,
@@ -61,7 +75,6 @@ export function useReaderBootstrap(documentId: string | undefined) {
   // A plan-affecting settings change re-plans on the server. The open reader
   // keeps its last ready surface meanwhile instead of returning to the loader;
   // only an explicit restart (such as a PDF reparse) hides it.
-  const surfaceOwner = `${sessionId}:${documentId ?? ''}`;
   const [settled, setSettled] = useState<{
     owner: string;
     result: Extract<ReaderBootstrapResult, { status: 'ready' }>;
@@ -127,15 +140,21 @@ export function useReaderBootstrap(documentId: string | undefined) {
     flushProgress();
   }, [flushProgress]);
   const updateSettings = useCallback(async (settings: DocumentSettings) => {
-    await settingsMutation.mutateAsync(settings);
+    const saved = await settingsMutation.mutateAsync(settings);
+    lastSettingsCommit.current = { owner: surfaceOwner, settings: saved.settings };
     await query.refetch({ throwOnError: true });
-  }, [query, settingsMutation]);
+  }, [query, settingsMutation, surfaceOwner]);
   // Presentation edits update the existing ready snapshot. Bootstrapping again
   // would needlessly resolve audio work for a color or font change.
   const updatePresentation = async (patch: Pick<DocumentSettings, 'typography' | 'highlightAppearance' | 'presentation'>) => {
     const current = queryClient.getQueryData<ReaderBootstrapResult>(key);
     if (current?.status !== 'ready') throw new Error('Reader settings are not ready.');
-    const saved = await settingsMutation.mutateAsync({ ...current.payload.settings, ...patch });
+    // A replan may still be returning a snapshot from before the last speech
+    // save. Base this write on the acknowledged settings, not that older view.
+    const baseline = lastSettingsCommit.current?.owner === surfaceOwner
+      ? lastSettingsCommit.current.settings : current.payload.settings;
+    const saved = await settingsMutation.mutateAsync({ ...baseline, ...patch });
+    lastSettingsCommit.current = { owner: surfaceOwner, settings: saved.settings };
     queryClient.setQueryData<ReaderBootstrapResult>(key, (latest) => latest?.status === 'ready'
       ? { ...latest, payload: { ...latest.payload, settings: saved.settings } }
       : latest);
@@ -149,6 +168,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
       ...(input.progress ? { progress: input.progress } : {}),
     };
     setSettled(null);
+    bootstrapSettingsAtStart.current = lastSettingsCommit.current;
     queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
   }, [key, queryClient]);
   const retry = useCallback(async () => {
@@ -168,15 +188,16 @@ export function useReaderBootstrap(documentId: string | undefined) {
   useEffect(() => {
     if (!documentId || query.data?.status !== 'pending') return;
     const operationId = pendingOperationId;
+    const atStart = bootstrapSettingsAtStart.current;
     return subscribeReaderBootstrap(documentId, (snapshot) => {
       queryClient.setQueryData<ReaderBootstrapResult>(
         queryKeys.readerBootstrap(sessionId, documentId),
         snapshot.status === 'pending' && operationId
           ? { ...snapshot, operationId }
-          : snapshot,
+          : preserveNewerPresentation(snapshot, atStart),
       );
     }, { operationId });
-  }, [documentId, pendingOperationId, query.data?.status, queryClient, sessionId]);
+  }, [documentId, pendingOperationId, query.data?.status, queryClient, sessionId, preserveNewerPresentation]);
 
   const documentSource: ReaderDocumentSourceResult = result.status !== 'ready'
     ? { status: 'idle' }
