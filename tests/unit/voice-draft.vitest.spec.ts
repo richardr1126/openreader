@@ -32,6 +32,14 @@ describe('voice draft', () => {
       .toBe('af_heart + af_bella');
   });
 
+  test('personal voices show their saved name instead of the clone ID', () => {
+    const names = new Map([['clone:a52db5a3', 'Grandpa reading']]);
+    expect(formatVoiceDockLabel({ voice: 'clone:a52db5a3', nativeSpeed: 1, supportsNativeModelSpeed: false, clonedNames: names })).toBe('Grandpa reading');
+    expect(describePendingVoiceChanges({ voice: 'af_heart', nativeSpeed: 1 }, { voice: 'clone:a52db5a3', nativeSpeed: 1 }, names))
+      .toEqual(['Voice af_heart → Grandpa reading']);
+    expect(displayVoiceName('clone:a52db5a3')).toBe('Your voice');
+  });
+
   test('describes and isolates only what changed', () => {
     const applied = { voice: 'af_heart', nativeSpeed: 1 };
     expect(pendingVoiceSettings(applied, applied)).toBeNull();

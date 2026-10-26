@@ -1,9 +1,12 @@
 import { expect, test } from '@playwright/test';
 import { pcmToWav } from '@openreader/tts/openrouter';
+import { resolve } from 'node:path';
 import { enterAnonymousLibrary } from './support/onboarding';
+import { uploadLibraryFiles } from './support/upload';
 
 for (const providerType of ['fish-audio', 'openrouter'] as const) {
 test(`${providerType} personal voices require sample permission and persist through selection, rename and removal`, async ({ page, playwright }, testInfo) => {
+  test.setTimeout(90_000);
   await enterAnonymousLibrary(page);
   const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
   expect((await admin.post('/api/auth/sign-in/email', { headers: { Origin: 'http://localhost:3003' },
@@ -66,6 +69,12 @@ test(`${providerType} personal voices require sample permission and persist thro
     await expect(page.getByRole('button', { name: 'Renamed narrator', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Renamed narrator', exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `/private/tmp/openreader-voice-cloning/web-${testInfo.project.name}.png` });
+    // The reader dock names the personal voice, never its clone ID.
+    await page.getByRole('link', { name: 'Close settings', exact: true }).click();
+    await uploadLibraryFiles(page, resolve('tests/files/sample.md'));
+    await page.getByRole('link', { name: 'sample.md', exact: true }).click();
+    await expect(page.getByRole('button', { name: /^Voice:/ }).first()).toHaveAttribute('aria-label', 'Voice: Renamed narrator');
+    await page.goto('/app/settings?section=api');
     await page.getByRole('button', { name: 'More for Renamed narrator', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
     const deletion = page.getByRole('dialog', { name: 'Delete Renamed narrator?', exact: true });

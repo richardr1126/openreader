@@ -21,6 +21,7 @@ import {
 } from '@/lib/client/tts/voice-draft';
 import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
 import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
+import { useClonedVoiceNames } from '@/hooks/useClonedVoiceNames';
 
 /**
  * The reader's voice panel. Voice and model-speed picks are a draft: they
@@ -64,7 +65,8 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   const [edits, setEdits] = useState<Partial<VoiceSettingsDraft>>({});
   const draft: VoiceSettingsDraft = { ...applied, ...edits };
   const pending = pendingVoiceSettings(applied, draft);
-  const pendingLines = describePendingVoiceChanges(applied, draft);
+  const clonedNames = useClonedVoiceNames(applied.voice, draft.voice);
+  const pendingLines = describePendingVoiceChanges(applied, draft, clonedNames);
 
   const preview = useVoicePreview({ isPlaying, pausePlayback: pause });
   const { stop: stopPreview } = preview;
