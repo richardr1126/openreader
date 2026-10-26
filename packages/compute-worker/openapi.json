@@ -11095,6 +11095,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "settings": {
                     "type": "object",
                     "properties": {

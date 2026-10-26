@@ -218,6 +218,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         >
           {/* Remounting on open starts each visit with an empty search. */}
           <VoicePicker
+            cloning={{ providerRef, providerType, model: ttsModel, beforeCapture: pause }}
             allowCustomVoice={policy.isResolvedProviderType && policy.providerType !== 'kokoro-local'}
             favorites={favorites}
             key={isOpen ? 'open' : 'closed'}

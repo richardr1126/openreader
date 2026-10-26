@@ -2567,6 +2567,7 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
+                        userId?: string;
                         settings: {
                             providerRef: string;
                             providerType: string;

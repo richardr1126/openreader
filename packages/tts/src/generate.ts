@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { fishReferenceRequest } from './fish-audio';
 import { OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL, normalizeOpenRouterOptions, openRouterCapabilities, openRouterRequestOptions, pcmToWav, splitOpenRouterInput, validateOpenRouterReferences } from './openrouter';
 import Replicate from 'replicate';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
@@ -25,6 +26,7 @@ import {
 } from './language';
 
 export interface ServerTTSRequest {
+  referenceAudio?: import('./cloned-voices').VoiceReferenceAudio;
   text: string;
   voice: string;
   speed: number;
@@ -47,6 +49,7 @@ type ExtendedSpeechParams = Omit<SpeechCreateParams, 'voice'> & {
 };
 
 type ResolvedServerTTSRequest = {
+  referenceAudio?: import('./cloned-voices').VoiceReferenceAudio;
   text: string;
   voice: string;
   speed: number;
@@ -381,6 +384,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
 
   return {
     text: input.text.replace(PRIVATE_USE_CHARACTERS, ''),
+    referenceAudio: input.referenceAudio,
     voice: normalizedVoice,
     speed,
     format,
@@ -397,6 +401,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
 }
 
 function makeCacheKey(input: {
+  referenceAudio?: import('./cloned-voices').VoiceReferenceAudio;
   provider: string;
   model: string | null | undefined;
   voice: string | undefined;
@@ -409,6 +414,7 @@ function makeCacheKey(input: {
   voiceCustomization?: VoiceCustomization;
 }) {
   const canonical = {
+    ...(input.referenceAudio ? { referenceHash: createHash('sha256').update(JSON.stringify(input.referenceAudio)).digest('hex') } : {}),
     provider: input.provider,
     model: input.model || '',
     voice: input.voice || '',
@@ -427,6 +433,7 @@ function makeCacheKey(input: {
 export function buildTTSCacheKey(request: ServerTTSRequest): string {
   const resolved = resolveTTSRequest(request);
   return makeCacheKey({
+    referenceAudio: resolved.referenceAudio,
     provider: resolved.provider,
     model: resolved.model,
     voice: resolved.voice,
@@ -696,10 +703,16 @@ async function runOpenRouterRequest(
   if (!request.apiKey) throw Object.assign(new Error('OpenRouter needs an API key.'), { status: 401 });
   const capabilities = openRouterCapabilities(request.model);
   const options = openRouterRequestOptions(request.modelOptions, request.model);
+  if (request.referenceAudio) {
+    options.input_references = [
+      { type: 'input_audio', input_audio: { data: `data:audio/wav;base64,${request.referenceAudio.audio}` } },
+      ...(request.referenceAudio.transcript ? [{ type: 'text' as const, text: request.referenceAudio.transcript }] : []),
+    ];
+  }
   await validateOpenRouterReferences(request.model, options, signal);
   const body = JSON.stringify({
     ...options, model: request.model, input: request.text,
-    ...(request.voice && request.voice !== 'default' ? { voice: request.voice } : {}),
+    ...(!options.input_references?.some(part => part.type === 'input_audio') && request.voice && request.voice !== 'default' ? { voice: request.voice } : {}),
     ...(request.instructions ? { instructions: request.instructions } : {}),
     ...(capabilities.nativeSpeed ? { speed: Math.max(0.5, Math.min(2, request.speed)) } : {}),
     response_format: capabilities.format,
@@ -751,8 +764,10 @@ async function runFishAudioRequest(
   // Add direction only at the provider boundary, after citation/bracket
   // filtering. Display text and alignment still use the original passage.
   const direction = request.instructions?.replace(/[\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
-  const body = JSON.stringify({
-    text: direction ? `[${direction}] ${request.text}` : request.text,
+  const text = direction ? `[${direction}] ${request.text}` : request.text;
+  const body = request.referenceAudio ? Buffer.from(fishReferenceRequest({ text, speed: request.speed,
+    reference: request.referenceAudio, language: request.language })) : JSON.stringify({
+    text,
     format: 'mp3',
     ...(request.voice && request.voice !== 'default' ? { reference_id: request.voice } : {}),
     prosody: { speed: Math.max(0.5, Math.min(2, request.speed)) },
@@ -762,7 +777,7 @@ async function runFishAudioRequest(
   for (let attempt = 0; ; attempt += 1) {
     const response = await fetch('https://api.fish.audio/v1/tts', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${request.apiKey}`, 'Content-Type': 'application/json', model: request.model },
+      headers: { Authorization: `Bearer ${request.apiKey}`, 'Content-Type': request.referenceAudio ? 'application/msgpack' : 'application/json', model: request.model },
       body,
       signal: deadline,
       redirect: 'error',
@@ -931,6 +946,7 @@ export async function generateTTSBuffer(
 
   const resolved = resolveTTSRequest(request);
   const cacheKey = makeCacheKey({
+    referenceAudio: resolved.referenceAudio,
     provider: resolved.provider,
     model: resolved.model,
     voice: resolved.voice,

@@ -389,6 +389,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       activeSse = Math.max(0, activeSse + delta);
     },
     ttsVoicePreview: {
+      readObject: async key => new Uint8Array(await storage.readObject(key)),
+      s3Prefix,
       resolveCredentials: resolveTtsCredentialsFromBroker,
       synthesize: generateTTSBuffer,
       acquireProviderCapacity: (input) => providerCapacity.acquire(input),

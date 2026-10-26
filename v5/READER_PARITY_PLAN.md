@@ -59,6 +59,7 @@ schema deployment before distribution; see the Swift architecture document.
 | 7 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
 | 8 | Fish Audio and OpenRouter | Native Fish Audio is implemented on web and Swift; see `FISH_AUDIO.md`. Add OpenRouter on both platforms with all discovered speech models, model-specific options, capability-aware Instructions, API voice catalogs and verified fallback voices. OpenRouter remains planned; see the contract below. |
 | 9 | Optional queued voice changes | Preserve current Apply. Add a distinct queue option after specifying its interaction with generated audio, timeline reuse, and current playback. |
+| 11 | Personal voice cloning on web and Swift | Added retroactively and implemented, 2026-10-26. Record/import, trim, name, consent, select, preview, rename and remove saved voices through native Fish Audio or cloning-capable OpenRouter speech endpoints. Free OpenReader feature on web; existing iOS Pro gate retained. Provider usage charges remain separate. Validation and live-provider limits are recorded in `VOICE_CLONING.md`. |
 
 ## Explicitly deferred or excluded
 

@@ -165,6 +165,7 @@ export const ttsPlaybackSessionPrepareSchema = ttsPlaybackOperationCreateSchema.
 
 /** One short in-memory voice sample; never part of a playback session. */
 export const ttsVoicePreviewRequestSchema = z.object({
+  userId: z.string().trim().min(1).max(256).optional(),
   settings: z.object({
     providerRef: z.string().trim().min(1).max(256),
     providerType: z.string().refine((value): value is TtsProviderType => isTtsProviderType(value)),

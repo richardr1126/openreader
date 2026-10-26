@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { ClonedVoiceLibrary } from './ClonedVoiceLibrary';
+import type { VoiceCloningContext } from './CloneVoiceEditor';
 import { CheckIcon, HeartIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, IconButton, Input, cn } from '@/components/ui';
@@ -65,6 +67,7 @@ export function VoicePicker({
   notices,
   favorites,
   allowCustomVoice = false,
+  cloning,
 }: {
   voices: string[];
   /** The voice string: one id, or a Kokoro blend. */
@@ -77,6 +80,7 @@ export function VoicePicker({
   notices?: ReactNode;
   favorites?: { voices: Set<string>; toggle: (voice: string) => Promise<void>; available: boolean };
   allowCustomVoice?: boolean;
+  cloning?: VoiceCloningContext;
 }) {
   const [query, setQuery] = useState('');
   const [favoritesOnly, setFavoritesOnly] = useState(false);
@@ -89,7 +93,7 @@ export function VoicePicker({
     ? voiceStringFor(selectedVoicesFor(customVoice.trim(), [], pickPolicy), pickPolicy)
     : '';
   const groups = useMemo(() => groupVoices(
-    favoritesOnly ? voices.filter((voice) => favorites?.voices.has(voice)) : voices,
+    (favoritesOnly ? voices.filter((voice) => favorites?.voices.has(voice)) : voices).filter(v => !v.startsWith('clone:')),
     query, groupByLanguage,
   ), [voices, query, groupByLanguage, favoritesOnly, favorites?.voices]);
   const previewError = preview.state.phase === 'error' ? preview.state : null;
@@ -114,6 +118,7 @@ export function VoicePicker({
       </div>
       {favoriteError && <p role="alert" className="text-xs text-warning">{favoriteError}</p>}
       {notices}
+      {cloning?.providerRef && ['fish-audio', 'openrouter'].includes(cloning.providerType) && <ClonedVoiceLibrary key={`${cloning.providerRef}:${cloning.model}`} cloning={cloning} value={value} onChange={onChange} preview={preview} favorites={favorites} query={query} favoritesOnly={favoritesOnly} fallbackVoice={voices.find(v => !v.startsWith('clone:')) ?? 'default'} />}
       {previewError && (
         <p role="status" className="text-xs text-warning">{previewError.message}</p>
       )}

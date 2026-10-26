@@ -318,6 +318,7 @@ describe('server-state architecture', () => {
       '/api/internal/compute/tts-credentials',
       '/api/local-library',
       '/api/local-library/content',
+      '/api/tts/cloned-voices',
       '/api/tts/export/download',
       '/api/tts/export/events',
       '/api/tts/export/resolve',

@@ -12,8 +12,9 @@ Energetic Male, Adrian, Delia and Sheila. Names are presentation only; persisted
 selections, preview requests, synthesis and cache keys use the reference ID.
 Custom voice IDs remain available. Existing saved `default` selections still
 omit `reference_id`; selecting a named voice and saving/applying opts into a
-fixed reference without rewriting cached audio. Recording uploads and browsing
-the entire public library remain outside this integration.
+fixed reference without rewriting cached audio. Personal recording/import and
+private voice creation are added by reader parity item 11; see `VOICE_CLONING.md`.
+Browsing the entire public library remains outside this integration.
 Native speed uses `prosody.speed` within 0.5–2.0. The existing Swift UI's narrower
 app-wide speed range remains in effect. Model, reference and speed participate
 in the existing audio identity; choosing a different voice preserves old audio.

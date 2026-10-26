@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./fish-audio": "./src/fish-audio.ts",
+    "./cloned-voices": "./src/cloned-voices.ts",
     "./openrouter": "./src/openrouter.ts",
     "./audio-format": "./src/audio-format.ts",
     "./audio-text": "./src/audio-text.ts",

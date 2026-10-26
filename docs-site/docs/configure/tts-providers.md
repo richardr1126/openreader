@@ -71,13 +71,17 @@ Voice listing is optional. OpenReader tries `/v1/audio/voices`, `/v1/voices` and
 
 For external providers, **Custom voice ID** below the voice list lets users enter an ID supplied by their provider, even when it is missing from the catalog. They can preview it, choose **Use voice**, then **Save** in settings or **Apply** in the reader. The provider must support the entered ID.
 
+With **Fish Audio**, or an **OpenRouter** model whose endpoints support voice cloning, **Your voices → New voice** records or imports a short sample. Review and trim 1–15.9 seconds, name the voice, optionally enter the words spoken in the sample, and confirm permission to use it. Save the voice, then **Save** your settings or **Apply** in the reader. Saved voices support previews, favorites, renaming and removal in the same picker.
+
+Voice cloning has no OpenReader purchase gate on web. The iOS app retains its Pro requirement; provider charges are separate on both platforms. Both services receive the private sample when generating narration; creating a saved voice does not require Fish's upstream model-creation allowance. Web samples stay in your instance's private storage; iOS samples stay on that device and do not sync through iCloud. Removing a saved voice deletes its sample and preserves cached narration.
+
 ### Fish Audio
 
 **Voice instructions** accepts a short direction such as `Warm, calm narration`. OpenReader adds it as a bracketed cue to every speech request after text filtering, without changing the displayed passage or alignment text. Changing directions generates a separate reusable audio variant.
 
 Add **Fish Audio** and get an API key from [Fish Audio](https://fish.audio/app/api-keys). New setups explicitly select **S2.1 Pro Free** (`s2.1-pro-free`); availability depends on your account and Fish's current service. Choose a paid model explicitly when you want to use it. OpenReader never retries a failed free-model request with a paid model.
 
-All four models offer **Sarah**, **Energetic Male**, **Adrian**, **Delia** and **Sheila**, with Sarah selected for new setups. These public voice references keep narration consistent across passages. Other Fish voice model IDs can be entered under **Custom voice ID**. Existing saved **default** selections still let Fish choose a voice per request; choose a named voice and Save (or Apply in the reader) to use a fixed reference. OpenReader sends the selected ID as `reference_id` and does not upload recordings. Native generation speed supports 0.5×–2×. Audio uses the existing worker alignment, playback cache and export paths.
+All four models offer **Sarah**, **Energetic Male**, **Adrian**, **Delia** and **Sheila**, with Sarah selected for new setups. These public voice references keep narration consistent across passages. Other Fish voice model IDs can be entered under **Custom voice ID**. Existing saved **default** selections still let Fish choose a voice per request; choose a named voice and Save (or Apply in the reader) to use a fixed reference. Provider voice IDs use `reference_id`; personal cloned voices use the private sample described above. Native generation speed supports 0.5×–2×. Audio uses the existing worker alignment, playback cache and export paths.
 
 The automatic **default** option stays at the bottom of the list and can be selected again at any time.
 

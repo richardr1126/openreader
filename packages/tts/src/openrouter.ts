@@ -38,7 +38,7 @@ type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string
 export interface OpenRouterModelOptions {
   model: string;
   provider?: { options: Record<string, Record<string, JsonValue>>; zdr?: boolean; data_collection?: 'allow' | 'deny' };
-  input_references?: Array<{ type: 'input_audio'; input_audio: { url: string } } | { type: 'image_url'; image_url: { url: string } } | { type: 'text'; text: string }>;
+  input_references?: Array<{ type: 'input_audio'; input_audio: { url: string } | { data: string } } | { type: 'image_url'; image_url: { url: string } } | { type: 'text'; text: string }>;
 }
 
 function record(value: unknown): value is Record<string, unknown> {

@@ -20,6 +20,7 @@ import type { TtsPlaybackStorage } from '../../playback/storage';
 import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
 import { parseTtsSettings, type TtsPlaybackSegmentInput } from './plan';
 import { resolveEffectiveTtsSettings } from './provider-settings';
+import { resolveClonedVoice } from './cloned-voice';
 import type { TtsPlaybackRequest } from './schemas';
 import type { ModelDownloadProgressHandler } from '../../inference/model-download';
 import { ProviderCapacityWaitTimeoutError } from '../provider-capacity';
@@ -216,6 +217,9 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     ? Math.max(1, providerDepth - 1)
     : providerDepth;
   const effectiveSettings = resolveEffectiveTtsSettings(settings, requestCreds);
+  // Cached segments remain playable after the saved choice is removed. Only
+  // an actual synthesis needs the private reference, shared by this pipeline.
+  let resolvedVoice: ReturnType<typeof resolveClonedVoice> | undefined;
   const speech = mapSpeechTextSegments(input.sourceSegments ?? input.segments,
     normalizeSpeechText(settings.speechText), (segment) => speechTextSection(normalizeLocator(segment.locator as never)));
 
@@ -336,7 +340,11 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     }
     const audioBuffer = await generateTTSBuffer({
       text: segment.text,
-      voice: effectiveSettings.voice,
+      ...await (resolvedVoice ??= resolveClonedVoice({ settings: effectiveSettings, userId: input.request.userId,
+        prefix: input.s3Prefix, readObject: async key => {
+          if (!input.readAudioObject) throw new Error('Cloned voice storage is unavailable');
+          return input.readAudioObject(key);
+        } })),
       speed: effectiveSettings.nativeSpeed,
       format: 'mp3',
       model: effectiveSettings.ttsModel,

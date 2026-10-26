@@ -13,6 +13,7 @@ import { UNCLAIMED_USER_ID } from '../storage/docstore-legacy';
 import { cleanupClaimedLegacyFsSources } from './legacy-fs-claim-cleanup';
 import { logDegraded } from '../errors/logging';
 import { hashForLog, serverLogger } from '../logger';
+import { transferClonedVoices } from '../tts/cloned-voices';
 
 type UserPreferenceRow = {
   userId: string;
@@ -42,6 +43,7 @@ export async function claimAnonymousData(
   if (!userId) {
     return { documents: 0, preferences: 0, progress: 0, documentSettings: 0, folders: 0, onboarding: 0 };
   }
+  if (namespace === null) await transferClonedVoices(unclaimedUserId, userId);
 
   const claimableDocumentRows = await db
     .select({ id: documents.id })

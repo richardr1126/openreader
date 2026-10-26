@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       });
       if (!usage.allowed) return rateLimited(usage.retryAfterMs);
 
-      const result = await new ComputeWorkerClient().synthesizeTtsVoicePreview(parsed, {
+      const result = await new ComputeWorkerClient().synthesizeTtsVoicePreview({ ...parsed, userId }, {
         signal: request.signal,
       });
       if (!result.ok) {
