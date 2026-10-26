@@ -3,6 +3,7 @@ import { buildTTSCacheKey, generateTTSBuffer } from '@openreader/tts/generate';
 import { getDefaultVoices, providerSupportsCustomModel, resolveProviderModels } from '@openreader/tts/provider-catalog';
 import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 import { parseTtsCredentialBrokerResponse } from '@openreader/tts/credential-broker';
+import { EXTERNAL_PROVIDER_ORDER } from '../../src/components/providers/provider-brands';
 import { runProviderCheck } from '../../src/lib/server/admin/provider-check';
 
 vi.mock('@openreader/tts/audio-format', () => ({
@@ -15,6 +16,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Fish Audio', () => {
   test('uses the free model explicitly and supports broker resolution', () => {
+    expect(EXTERNAL_PROVIDER_ORDER).toEqual(['openai', 'fish-audio', 'replicate', 'deepinfra', 'custom-openai']);
     expect(resolveProviderDefaults({ providerRef: 'fish-audio' })).toMatchObject({
       providerType: 'fish-audio', defaultModel: 's2.1-pro-free', defaultVoice: 'default',
     });

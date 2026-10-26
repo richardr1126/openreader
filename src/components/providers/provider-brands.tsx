@@ -6,8 +6,8 @@ import type { TtsProviderId } from '@openreader/tts/provider-catalog';
 /**
  * How each provider type presents itself in the admin and voice settings:
  * its logo tile, name, and where to get a key. Marks are the companies' own
- * artwork (OpenAI and Replicate via Simple Icons, DeepInfra from its site),
- * drawn on the tile colour each brand uses.
+ * artwork (OpenAI and Replicate via Simple Icons, DeepInfra and Fish Audio
+ * from their sites), drawn on the tile colour each brand uses.
  */
 export interface ProviderBrand {
   name: string;
@@ -48,7 +48,7 @@ export const PROVIDER_BRANDS: Record<TtsProviderId, ProviderBrand> = {
 };
 
 /** External provider types in the order the add-provider picker shows them. */
-export const EXTERNAL_PROVIDER_ORDER: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'fish-audio', 'custom-openai'];
+export const EXTERNAL_PROVIDER_ORDER: readonly TtsProviderId[] = ['openai', 'fish-audio', 'replicate', 'deepinfra', 'custom-openai'];
 
 type LogoSize = 'sm' | 'md' | 'lg';
 
@@ -70,10 +70,10 @@ export function ProviderLogo({ providerType, size = 'md' }: { providerType: TtsP
   switch (providerType) {
     case 'fish-audio':
       return (
-        <Tile size={size} className="bg-accent-wash text-accent">
-          <svg viewBox="0 0 24 24" className="h-full w-full" fill="currentColor">
-            <path d="M6 12C9 5 17 4 22 12c-5 8-13 7-16 0L1 7v10l5-5Z" />
-            <circle cx="17" cy="11" r="1" className="fill-surface" />
+        <Tile size={size} className="bg-white ring-1 ring-inset ring-black/10">
+          <svg viewBox="28 28 457 457" className="h-full w-full">
+            <path fill="#b1b3b4" d="M476.53 249.75c4.64 0 8.41 3.77 8.41 8.41v11.67c0 4.65-3.77 8.41-8.41 8.41-4.65 0-8.42-3.76-8.42-8.41v-11.67c0-4.64 3.77-8.41 8.42-8.41zM442.88 256.79c4.65 0 8.41 3.77 8.41 8.42v33.01c0 4.64-3.76 8.41-8.41 8.41-4.64 0-8.41-3.77-8.41-8.41v-33.01c0-4.65 3.77-8.42 8.41-8.42zM409.45 264.89c4.64 0 8.41 3.77 8.41 8.41v37.96c0 4.64-3.77 8.41-8.41 8.41-4.65 0-8.41-3.77-8.41-8.41v-37.96c0-4.64 3.76-8.41 8.41-8.41zM375.8 271.62c4.65 0 8.41 3.76 8.41 8.41v37.43c0 4.64-3.76 8.41-8.41 8.41-4.64 0-8.41-3.77-8.41-8.41v-37.43c0-4.65 3.77-8.41 8.41-8.41zM342.16 277.61c4.64 0 8.41 3.77 8.41 8.41v31.54c0 4.65-3.77 8.42-8.41 8.42-4.65 0-8.41-3.77-8.41-8.42v-31.54c0-4.64 3.76-8.41 8.41-8.41zM308.72 301.69c4.65 0 8.41 3.76 8.41 8.41v5.68c0 4.64-3.76 8.41-8.41 8.41-4.64 0-8.41-3.77-8.41-8.41v-5.68c0-4.65 3.77-8.41 8.41-8.41z" />
+            <path fill="#000" d="M36.41 197.28c4.65 0 8.41 3.77 8.41 8.42v3.57c0 4.65-3.76 8.41-8.41 8.41-4.64 0-8.41-3.76-8.41-8.41v-3.57c0-4.65 3.77-8.42 8.41-8.42zM71 200.12c4.65 0 8.41 3.77 8.41 8.41v15.46c0 4.65-3.76 8.41-8.41 8.41-4.64 0-8.41-3.76-8.41-8.41v-15.46c0-4.64 3.77-8.41 8.41-8.41zM105.59 195.6c4.65 0 8.41 3.77 8.41 8.41v64.56c0 4.65-3.76 8.41-8.41 8.41-4.64 0-8.41-3.76-8.41-8.41v-64.56c0-4.64 3.77-8.41 8.41-8.41zM140.29 188.87c4.64 0 8.41 3.77 8.41 8.41v4.21c0 4.65-3.77 8.41-8.41 8.41-4.65 0-8.41-3.76-8.41-8.41v-4.21c0-4.64 3.76-8.41 8.41-8.41zM140.29 245.02c4.64 0 8.41 3.76 8.41 8.41v44.47c0 4.65-3.77 8.41-8.41 8.41-4.65 0-8.41-3.76-8.41-8.41v-44.47c0-4.65 3.76-8.41 8.41-8.41zM442.88 181.72c4.65 0 8.41 3.77 8.41 8.42v46.47c0 4.64-3.76 8.41-8.41 8.41-4.64 0-8.41-3.77-8.41-8.41v-46.47c0-4.65 3.77-8.42 8.41-8.42zM409.45 174.26c4.64 0 8.41 3.77 8.41 8.41v62.45c0 4.65-3.77 8.41-8.41 8.41-4.65 0-8.41-3.76-8.41-8.41v-62.45c0-4.64 3.76-8.41 8.41-8.41zM375.8 171c4.65 0 8.41 3.77 8.41 8.41v74.23c0 4.65-3.76 8.41-8.41 8.41-4.64 0-8.41-3.76-8.41-8.41v-74.23c0-4.64 3.77-8.41 8.41-8.41zM342.16 173.1c4.64 0 8.41 3.77 8.41 8.41v75.49c0 4.65-3.77 8.42-8.41 8.42-4.65 0-8.41-3.77-8.41-8.42v-75.49c0-4.64 3.76-8.41 8.41-8.41zM308.72 178.25c4.65 0 8.41 3.77 8.41 8.42v95.78c0 4.64-3.76 8.41-8.41 8.41-4.64 0-8.41-3.77-8.41-8.41v-95.78c0-4.65 3.77-8.42 8.41-8.42zM274.45 186.98c4.64 0 8.41 3.77 8.41 8.41v109.45c0 4.65-3.77 8.41-8.41 8.41-4.65 0-8.41-3.76-8.41-8.41v-109.45c0-4.64 3.76-8.41 8.41-8.41zM240.91 201.6c4.64 0 8.41 3.76 8.41 8.41v104.93c0 4.64-3.77 8.41-8.41 8.41-4.65 0-8.41-3.77-8.41-8.41v-104.93c0-4.65 3.76-8.41 8.41-8.41zM207.26 220.84c4.65 0 8.41 3.76 8.41 8.41v90.63c0 4.64-3.76 8.41-8.41 8.41-4.64 0-8.41-3.77-8.41-8.41v-90.63c0-4.65 3.77-8.41 8.41-8.41zM476.53 201.6c4.64 0 8.41 3.76 8.41 8.41v23.13c0 4.64-3.77 8.41-8.41 8.41-4.65 0-8.42-3.77-8.42-8.41v-23.13c0-4.65 3.77-8.41 8.42-8.41zM173.62 234.19c4.64 0 8.41 3.76 8.41 8.41v89.16c0 4.64-3.77 8.41-8.41 8.41-4.65 0-8.41-3.77-8.41-8.41v-89.16c0-4.65 3.76-8.41 8.41-8.41z" />
           </svg>
         </Tile>
       );
