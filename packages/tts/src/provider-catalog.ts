@@ -54,9 +54,22 @@ export const FISH_AUDIO_MODELS: TtsModelDefinition[] = [
   { id: 's2.1-pro-free', name: 'S2.1 Pro Free' },
   { id: 's2.1-pro', name: 'S2.1 Pro' },
   { id: 's2-pro', name: 'S2 Pro' },
-  { id: 's1', name: 'S1' },
   { id: 'drama-3', name: 'Drama 3' },
 ];
+
+// Public voice references shared by Fish's hosted models. Persist/send the ID;
+// names are presentation only and must never become audio/cache identities.
+export const FISH_AUDIO_VOICES = [
+  { id: '933563129e564b19a115bedd57b7406a', name: 'Sarah' },
+  { id: '802e3bc2b27e49c2995d23ef70e6ac89', name: 'Energetic Male' },
+  { id: 'bf322df2096a46f18c579d0baa36f41d', name: 'Adrian' },
+  { id: 'c70cfb98867a4bfb9ae20d2401257b92', name: 'Delia' },
+  { id: 'f3a2b90078d54a65af4b95f63bc7798e', name: 'Sheila' },
+] as const;
+
+export function catalogVoiceName(voice: string): string {
+  return FISH_AUDIO_VOICES.find(({ id }) => id === voice)?.name ?? voice;
+}
 
 const CUSTOM_OPENAI_MODELS: TtsModelDefinition[] = [
   { id: 'kokoro', name: 'Kokoro' },
@@ -215,6 +228,10 @@ const TTS_PROVIDER_TYPE_SET: ReadonlySet<TtsProviderType> = new Set([
 ]);
 
 const MODELS_WITH_INSTRUCTIONS = new Set([
+  's2-pro',
+  's2.1-pro',
+  's2.1-pro-free',
+  'drama-3',
   'gpt-4o-mini-tts',
   'google/gemini-3.1-flash-tts',
   'qwen/qwen3-tts',
@@ -284,7 +301,8 @@ export function providerSupportsCustomModel(provider: TtsProviderId): boolean {
 }
 
 export function getDefaultVoices(provider: TtsProviderId, model: string): string[] {
-  if (provider === 'fish-audio') return ['default'];
+  if (provider === 'fish-audio') return FISH_AUDIO_MODELS.some(({ id }) => id === model)
+    ? [...FISH_AUDIO_VOICES.map(({ id }) => id), 'default'] : [];
   if (provider === 'openai') {
     return supportsTtsInstructions(model) ? [...GPT4O_MINI_DEFAULT_VOICES] : [...OPENAI_DEFAULT_VOICES];
   }

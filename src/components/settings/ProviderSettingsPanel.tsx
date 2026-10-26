@@ -415,7 +415,9 @@ export function ProviderSettingsPanel({
         )}
 
         {effectiveProviderType === 'fish-audio' && (
-          <p className="text-xs text-soft">Default lets Fish choose a voice. For consistent narration, enter a Fish voice reference ID under Custom voice ID.</p>
+          <p className="text-xs text-soft">{shownVoice === 'default'
+            ? 'Your saved default lets Fish choose a voice for each request. Select a named voice and Save to keep narration consistent.'
+            : 'Named voices keep the same voice reference across narration segments. Custom voice IDs are also supported.'}</p>
         )}
         {voicesPending ? (
           <p className="text-xs text-soft">Loading voices…</p>

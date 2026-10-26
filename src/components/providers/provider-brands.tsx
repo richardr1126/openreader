@@ -19,7 +19,7 @@ export interface ProviderBrand {
 export const PROVIDER_BRANDS: Record<TtsProviderId, ProviderBrand> = {
   'fish-audio': {
     name: 'Fish Audio',
-    summary: 'S2.1 Pro, S2 Pro, S1 and Drama 3 with custom voice IDs',
+    summary: 'S2.1 Pro, S2 Pro and Drama 3 with custom voice IDs',
     apiKeyUrl: 'https://fish.audio/app/api-keys',
   },
   openai: {

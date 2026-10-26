@@ -16,7 +16,7 @@ API keys stay on the server, encrypted (see [How saved keys are protected](./adm
 | **OpenAI** | OpenAI's speech API (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`). | API key. |
 | **Replicate** | Hosted models on Replicate, from a built-in list or any model ID. | API key. |
 | **Deepinfra** | Hosted models on DeepInfra, including Kokoro-82M. | API key. |
-| **Fish Audio** | S2.1 Pro Free, S2.1 Pro, S2 Pro, S1 and Drama 3. | API key; optional voice reference ID. |
+| **Fish Audio** | S2.1 Pro Free, S2.1 Pro, S2 Pro and Drama 3. | API key; optional voice reference ID. |
 
 Setup guides for specific services are listed under **TTS Providers** in the sidebar.
 
@@ -73,9 +73,13 @@ For external providers, **Custom voice ID** below the voice list lets users ente
 
 ### Fish Audio
 
+**Voice instructions** accepts a short direction such as `Warm, calm narration`. OpenReader adds it as a bracketed cue to every speech request after text filtering, without changing the displayed passage or alignment text. Changing directions generates a separate reusable audio variant.
+
 Add **Fish Audio** and get an API key from [Fish Audio](https://fish.audio/app/api-keys). New setups explicitly select **S2.1 Pro Free** (`s2.1-pro-free`); availability depends on your account and Fish's current service. Choose a paid model explicitly when you want to use it. OpenReader never retries a failed free-model request with a paid model.
 
-The **default** voice lets Fish choose a voice. For consistent narration across passages, copy a voice model's reference ID from Fish Audio and enter it under **Custom voice ID**. OpenReader sends that as `reference_id`; it does not import Fish's public voice library or upload voice recordings. Native generation speed supports 0.5×–2×. Audio uses the existing worker alignment, playback cache and export paths.
+All four models offer **Sarah**, **Energetic Male**, **Adrian**, **Delia** and **Sheila**, with Sarah selected for new setups. These public voice references keep narration consistent across passages. Other Fish voice model IDs can be entered under **Custom voice ID**. Existing saved **default** selections still let Fish choose a voice per request; choose a named voice and Save (or Apply in the reader) to use a fixed reference. OpenReader sends the selected ID as `reference_id` and does not upload recordings. Native generation speed supports 0.5×–2×. Audio uses the existing worker alignment, playback cache and export paths.
+
+The automatic **default** option stays at the bottom of the list and can be selected again at any time.
 
 **Check** verifies API access using Fish's voice metadata endpoint. After saving, it also generates a short sample through the worker; metadata access alone does not prove generation credit or model access. Fish's [speech API reference](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech) describes the supported models and voice IDs.
 

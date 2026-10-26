@@ -7,6 +7,7 @@ import { Button, IconButton, Input, cn } from '@/components/ui';
 import type { VoicePreviewState } from '@/hooks/audio/useVoicePreview';
 import {
   groupVoices,
+  displayVoiceName,
   selectedVoicesFor,
   toggleDraftVoice,
   voiceStringFor,
@@ -135,6 +136,7 @@ export function VoicePicker({
               <ul className="space-y-0.5">
                 {group.voices.map((voiceId) => {
                   const selected = selectedVoices.includes(voiceId);
+                  const name = displayVoiceName(voiceId);
                   return (
                     <li
                       key={voiceId}
@@ -143,7 +145,7 @@ export function VoicePicker({
                         selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken',
                       )}
                     >
-                      <VoicePreviewButton previewKey={voiceId} label={voiceId} preview={preview} voice={voiceId} />
+                      <VoicePreviewButton previewKey={voiceId} label={name} preview={preview} voice={voiceId} />
                       <button
                         type="button"
                         aria-pressed={selected}
@@ -153,12 +155,12 @@ export function VoicePicker({
                           selected ? 'font-medium text-accent' : 'text-foreground',
                         )}
                       >
-                        <span className="truncate">{voiceId}</span>
+                        <span className="truncate">{name}</span>
                         {selected ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden /> : null}
                       </button>
                       {favorites?.available && !(groupByLanguage && voiceId.includes('+')) && (
                         <IconButton size="sm" aria-pressed={favorites.voices.has(voiceId)}
-                          aria-label={favorites.voices.has(voiceId) ? `Remove ${voiceId} from favorites` : `Favorite ${voiceId}`}
+                          aria-label={favorites.voices.has(voiceId) ? `Remove ${name} from favorites` : `Favorite ${name}`}
                           className={favorites.voices.has(voiceId) ? 'text-accent' : 'text-faint'}
                           onClick={() => {
                             setFavoriteError(null);

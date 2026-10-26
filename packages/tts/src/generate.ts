@@ -678,8 +678,11 @@ async function runFishAudioRequest(
   if (!request.apiKey) {
     throw Object.assign(new Error('Fish Audio needs an API key.'), { status: 401 });
   }
+  // Add direction only at the provider boundary, after citation/bracket
+  // filtering. Display text and alignment still use the original passage.
+  const direction = request.instructions?.replace(/[\[\]]/g, ' ').replace(/\s+/g, ' ').trim();
   const body = JSON.stringify({
-    text: request.text,
+    text: direction ? `[${direction}] ${request.text}` : request.text,
     format: 'mp3',
     ...(request.voice && request.voice !== 'default' ? { reference_id: request.voice } : {}),
     prosody: { speed: Math.max(0.5, Math.min(2, request.speed)) },

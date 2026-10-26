@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { buildTTSCacheKey, generateTTSBuffer } from '@openreader/tts/generate';
-import { getDefaultVoices, providerSupportsCustomModel, resolveProviderModels } from '@openreader/tts/provider-catalog';
+import { FISH_AUDIO_VOICES, getDefaultVoices, providerSupportsCustomModel, resolveProviderModels } from '@openreader/tts/provider-catalog';
 import { resolveProviderDefaults } from '@openreader/tts/provider-policy';
 import { parseTtsCredentialBrokerResponse } from '@openreader/tts/credential-broker';
 import { EXTERNAL_PROVIDER_ORDER } from '../../src/components/providers/provider-brands';
@@ -18,10 +18,13 @@ describe('Fish Audio', () => {
   test('uses the free model explicitly and supports broker resolution', () => {
     expect(EXTERNAL_PROVIDER_ORDER).toEqual(['openai', 'fish-audio', 'replicate', 'deepinfra', 'custom-openai']);
     expect(resolveProviderDefaults({ providerRef: 'fish-audio' })).toMatchObject({
-      providerType: 'fish-audio', defaultModel: 's2.1-pro-free', defaultVoice: 'default',
+      providerType: 'fish-audio', defaultModel: 's2.1-pro-free', defaultVoice: FISH_AUDIO_VOICES[0].id,
     });
     expect(providerSupportsCustomModel('fish-audio')).toBe(false);
-    expect(getDefaultVoices('fish-audio', 's2.1-pro-free')).toEqual(['default']);
+    for (const { id } of resolveProviderModels('fish-audio')) {
+      expect(getDefaultVoices('fish-audio', id)).toEqual([...FISH_AUDIO_VOICES.map(({ id }) => id), 'default']);
+    }
+    expect(getDefaultVoices('fish-audio', 's1')).toEqual([]);
     expect(parseTtsCredentialBrokerResponse({ providerRef: 'my-fish', providerType: 'fish-audio',
       apiKey: 'test-secret', baseUrl: null, defaultModel: 's2.1-pro-free', defaultInstructions: null,
     })?.providerType).toBe('fish-audio');
@@ -31,13 +34,13 @@ describe('Fish Audio', () => {
     const fetchMock = vi.fn(async () => new Response(new Uint8Array([1, 2, 3])));
     vi.stubGlobal('fetch', fetchMock);
     await expect(generateTTSBuffer({ ...request, model, voice: 'reference-123', speed: 1.2, language: 'en',
-      baseUrl: 'https://untrusted.example', instructions: 'Do not send this',
+      baseUrl: 'https://untrusted.example', instructions: '  [Warm narration]\nwith care  ',
     })).resolves.toEqual(Buffer.from([1, 2, 3]));
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.fish.audio/v1/tts');
     expect(init.headers).toEqual({ Authorization: 'Bearer test-secret', 'Content-Type': 'application/json', model });
-    expect(JSON.parse(init.body as string)).toEqual({ text: request.text, format: 'mp3',
+    expect(JSON.parse(init.body as string)).toEqual({ text: `[Warm narration with care] ${request.text}`, format: 'mp3',
       reference_id: 'reference-123', prosody: { speed: 1.2 }, language: 'en' });
     expect(init.redirect).toBe('error');
   });
@@ -58,6 +61,7 @@ describe('Fish Audio', () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     await expect(generateTTSBuffer({ ...request, model: 'typo-paid-fallback' })).rejects.toMatchObject({ status: 422 });
+    await expect(generateTTSBuffer({ ...request, model: 's1' })).rejects.toMatchObject({ status: 422 });
     await expect(generateTTSBuffer({ ...request, apiKey: '' })).rejects.toMatchObject({ status: 401 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -100,8 +104,10 @@ describe('Fish Audio', () => {
   });
 
   test('separates cached models and voice references', () => {
+    expect(new Set(FISH_AUDIO_VOICES.map(({ id }) => buildTTSCacheKey({ ...request, voice: id }))).size).toBe(5);
     expect(buildTTSCacheKey({ ...request, model: 's2.1-pro-free' })).not.toBe(buildTTSCacheKey({ ...request, model: 's2.1-pro' }));
     expect(buildTTSCacheKey(request)).not.toBe(buildTTSCacheKey({ ...request, voice: 'reference-123' }));
+    expect(buildTTSCacheKey(request)).not.toBe(buildTTSCacheKey({ ...request, instructions: 'Warm narration' }));
   });
 
   test('checks credentials against Fish voice metadata, then speaks through the worker', async () => {
@@ -110,11 +116,11 @@ describe('Fish Audio', () => {
     const results = await runProviderCheck({ providerType: 'fish-audio', apiKey: 'test-secret', baseUrl: '',
       defaultModel: 's2.1-pro-free', defaultInstructions: '',
     }, { slug: 'my-fish', enabled: true, matchesDraft: true }, {
-      fetch: fetchMock as typeof fetch, resolveVoices: async () => ['default'], workerAvailable: () => true,
+      fetch: fetchMock as typeof fetch, resolveVoices: async () => FISH_AUDIO_VOICES.map(({ id }) => id), workerAvailable: () => true,
       synthesizePreview: preview,
     }, new AbortController().signal);
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.fish.audio/model?page_size=1');
-    expect(preview.mock.calls[0][0]).toMatchObject({ settings: { providerRef: 'my-fish', providerType: 'fish-audio', voice: 'default' } });
+    expect(preview.mock.calls[0][0]).toMatchObject({ settings: { providerRef: 'my-fish', providerType: 'fish-audio', voice: FISH_AUDIO_VOICES[0].id } });
     expect(results.every(({ status }) => status === 'ok')).toBe(true);
     expect(JSON.stringify(results)).not.toContain('test-secret');
   });

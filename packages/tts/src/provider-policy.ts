@@ -8,6 +8,7 @@ import {
   supportsNativeModelSpeed,
   supportsTtsInstructions,
   KOKORO_LOCAL_MODEL,
+  FISH_AUDIO_VOICES,
   type SharedProviderTypeResolverEntry,
   type TtsProviderId,
   type TtsProviderType,
@@ -74,7 +75,7 @@ export function defaultBaseUrlForProviderType(providerType: TtsProviderId): stri
 }
 
 export function defaultVoiceForProviderType(providerType: TtsProviderId): string {
-  if (providerType === 'fish-audio') return 'default';
+  if (providerType === 'fish-audio') return FISH_AUDIO_VOICES[0].id;
   if (providerType === 'replicate') return 'Zephyr';
   if (providerType === 'openai') return 'alloy';
   if (providerType === 'deepinfra') return 'af_bella';

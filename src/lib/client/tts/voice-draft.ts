@@ -1,4 +1,5 @@
 import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@openreader/tts/kokoro';
+import { catalogVoiceName } from '@openreader/tts/provider-catalog';
 import {
   getKokoroVoiceLanguages,
   getLanguageDisplayName,
@@ -53,7 +54,7 @@ export function voiceStringFor(selected: string[], policy: VoicePickPolicy): str
 
 /** Human-readable voice name for labels: `af_heart + af_bella` for a mix. */
 export function displayVoiceName(voice: string): string {
-  return voice.includes('+') ? parseKokoroVoiceNames(voice).join(' + ') : voice;
+  return voice.includes('+') ? parseKokoroVoiceNames(voice).join(' + ') : catalogVoiceName(voice);
 }
 
 /** The dock label, e.g. `af_heart · 1.1x`; speed only when supported and not 1. */
@@ -109,6 +110,7 @@ export function groupVoices(voices: string[], query: string, groupByLanguage: bo
   const matches = needle
     ? voices.filter((voiceId) => {
       if (voiceId.toLowerCase().includes(needle)) return true;
+      if (displayVoiceName(voiceId).toLowerCase().includes(needle)) return true;
       const language = groupByLanguage ? getKokoroVoiceLanguages(voiceId)[0] : undefined;
       return Boolean(language) && getLanguageDisplayName(language as string).toLowerCase().includes(needle);
     })

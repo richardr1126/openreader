@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   describePendingVoiceChanges,
+  displayVoiceName,
   formatVoiceDockLabel,
   groupVoices,
   pendingVoiceSettings,
@@ -14,6 +15,14 @@ const MULTI = { multi: true, maxVoices: 2 };
 const SINGLE = { multi: false, maxVoices: 1 };
 
 describe('voice draft', () => {
+  test('Fish names remain presentation while selection and search retain reference IDs', () => {
+    const sarah = '933563129e564b19a115bedd57b7406a';
+    expect(displayVoiceName(sarah)).toBe('Sarah');
+    expect(displayVoiceName('custom-reference')).toBe('custom-reference');
+    expect(groupVoices([sarah, 'custom-reference'], 'sarah', false)[0].voices).toEqual([sarah]);
+    expect(voiceStringFor(toggleDraftVoice(['default'], sarah, SINGLE), SINGLE)).toBe(sarah);
+    expect(formatVoiceDockLabel({ voice: sarah, nativeSpeed: 1, supportsNativeModelSpeed: true })).toBe('Sarah');
+  });
   test('dock label shows model speed only when supported and not 1x', () => {
     expect(formatVoiceDockLabel({ voice: 'af_heart', nativeSpeed: 1.1, supportsNativeModelSpeed: true }))
       .toBe('af_heart · 1.1x');

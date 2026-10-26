@@ -225,9 +225,14 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             pickPolicy={pickPolicy}
             groupByLanguage={policy.isKokoroModel}
             preview={pickerPreview}
-            notices={languageWarnings.map((warning) => (
-              <p key={warning} className="text-xs text-warning">{warning}</p>
-            ))}
+            notices={<>
+              {policy.providerType === 'fish-audio' && draft.voice === 'default' && (
+                <p className="text-xs text-warning">Select a named voice and Apply to keep narration consistent across passages.</p>
+              )}
+              {languageWarnings.map((warning) => (
+                <p key={warning} className="text-xs text-warning">{warning}</p>
+              ))}
+            </>}
           />
         </Section>
       </div>
