@@ -13,7 +13,7 @@ async function save(page: Page, regenerate = false) {
   await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
 }
 
-test('reader defaults inherit independently and speech saves preserve book display choices', async ({ page }) => {
+test('reader defaults inherit independently and speech saves preserve book display choices', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   await enterAnonymousLibrary(page);
   await page.goto('/app/settings?section=reader');
@@ -66,6 +66,7 @@ test('reader defaults inherit independently and speech saves preserve book displ
   await page.getByRole('button', { name: 'Advanced', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Max segment length', exact: true })).toHaveText('300 characters');
   await page.getByRole('button', { name: 'Use app default for max segment length', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Max segment length', exact: true })).toHaveText('600 characters');
   await save(page, true);
   await expect(page.getByRole('button', { name: 'Max segment length', exact: true })).toHaveText('600 characters');
   await page.getByRole('button', { name: 'PDF block kinds', exact: true }).click();
@@ -75,8 +76,11 @@ test('reader defaults inherit independently and speech saves preserve book displ
   await expect(header).not.toBeChecked();
   await page.getByRole('button', { name: 'Use app default for show the pages', exact: true }).click();
   await page.getByRole('button', { name: 'Use app default for highlight segment', exact: true }).click();
+  await expect(pages).not.toBeChecked();
+  await expect(segment).not.toBeChecked();
   await save(page);
   await expect(pages).not.toBeChecked();
   await expect(segment).not.toBeChecked();
   await expect(page.getByRole('region', { name: 'Document text', exact: true })).toBeVisible();
+  await page.screenshot({ path: `/private/tmp/reader-defaults-fixed-${testInfo.project.name}.png` });
 });

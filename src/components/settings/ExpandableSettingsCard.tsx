@@ -16,7 +16,9 @@ export function AnimatedCollapse({ open, children, id }: { open: boolean; childr
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  return <div id={id} inert={!open} aria-hidden={!open} className="overflow-hidden transition-[height,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+  // Clipping must not create a scroll container: focus can otherwise scroll
+  // this animated wrapper during pointer-down and move the clicked control.
+  return <div id={id} inert={!open} aria-hidden={!open} className="overflow-clip transition-[height,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
     style={{ height: open ? height ?? 'auto' : 0, opacity: open ? 1 : 0 }}>
     <div ref={content}>{children}</div>
   </div>;

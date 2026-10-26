@@ -57,6 +57,9 @@ so sidebar and phone layouts stack consistently. Themes occupy their own card,
 collapsed to the current theme name and swatches. Theme, typography, Advanced,
 and PDF block disclosures animate measured height changes and respect reduced
 motion. Their collapsed contents are inert and hidden from accessibility.
+Animated contents use `overflow: clip` so focus scrolls the settings pane rather
+than a hidden inner container. `overflow: hidden` allowed WebKit to move reset
+buttons between pointer-down and pointer-up, intermittently dropping clicks.
 
 ## Audio, timing and persistence
 
