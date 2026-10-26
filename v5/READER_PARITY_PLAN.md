@@ -59,13 +59,14 @@ schema deployment before distribution; see the Swift architecture document.
 | 7 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
 | 8 | Fish Audio and OpenRouter | Native Fish Audio is implemented on web and Swift; see `FISH_AUDIO.md`. Add OpenRouter on both platforms with all discovered speech models, model-specific options, capability-aware Instructions, API voice catalogs and verified fallback voices. OpenRouter remains planned; see the contract below. |
 | 9 | Optional queued voice changes | Preserve current Apply. Add a distinct queue option after specifying its interaction with generated audio, timeline reuse, and current playback. |
+| 10 | Replace DeepInfra with Google AI Studio | Implemented, 2026-10-26: current web/desktop and Swift setup and execution use native Gemini 3.8 Flash/Flash-Lite TTS, 30 preset voices, custom voice IDs and Instructions. DeepInfra setup/key cleanup follows the Speech SDK removal; stored audio is untouched and old credentials are never relabeled. Archived release docs remain. See `GOOGLE_AI_STUDIO.md` for execution and validation. |
 | 11 | Personal voice cloning on web and Swift | Added retroactively and implemented, 2026-10-26. Record/import, trim, name, consent, select, preview, rename and remove saved voices through native Fish Audio or cloning-capable OpenRouter speech endpoints. Free OpenReader feature on web; existing iOS Pro gate retained. Provider usage charges remain separate. Validation and live-provider limits are recorded in `VOICE_CLONING.md`. |
 
 ## Explicitly deferred or excluded
 
 - Swift DOCX and PPDocLayout/PDF classification work.
 - Additional web ONNX TTS models beyond the current Kokoro, or new providers
-  other than Fish Audio and OpenRouter. Models accessed through OpenRouter are
+  other than Fish Audio, OpenRouter and the Google AI Studio replacement in item 10. Models accessed through OpenRouter are
   included in item 8; each underlying service does not need a native adapter.
 - Web offline/chapter downloads and new cache-retention workflows. Swift already
   uses purgeable audio cache; no new retention feature is requested.

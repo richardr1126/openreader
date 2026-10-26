@@ -8,7 +8,7 @@ OpenReader is an open-source text-to-speech document reader built with Next.js. 
 
 > Previously named **OpenReader-WebUI**.
 
-It supports multiple TTS providers, including Kokoro running locally in OpenReader itself, OpenAI, Replicate, DeepInfra, and custom OpenAI-compatible endpoints such as [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI), [KittenTTS-FastAPI](https://github.com/richardr1126/KittenTTS-FastAPI), [Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI), and [Supertonic](./configure/tts-provider-guides/supertonic).
+It supports multiple TTS providers, including Kokoro running locally in OpenReader itself, OpenAI, Replicate, Google AI Studio, and custom OpenAI-compatible endpoints such as [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI), [KittenTTS-FastAPI](https://github.com/richardr1126/KittenTTS-FastAPI), [Orpheus-FastAPI](https://github.com/Lex-au/Orpheus-FastAPI), and [Supertonic](./configure/tts-provider-guides/supertonic).
 
 ## 🚀 Get OpenReader
 
@@ -33,7 +33,7 @@ It supports multiple TTS providers, including Kokoro running locally in OpenRead
 - 🎯 **Multi-Provider TTS Support**
   - On-device: **Kokoro (local)** runs Kokoro-82M inside the compute worker, with no separate TTS service or API key
   - Self-hosted: [**Kokoro-FastAPI**](https://github.com/remsky/Kokoro-FastAPI) (multi-voice combinations), [**KittenTTS-FastAPI**](https://github.com/richardr1126/KittenTTS-FastAPI), [**Orpheus-FastAPI**](https://github.com/Lex-au/Orpheus-FastAPI), [**Supertonic**](./configure/tts-provider-guides/supertonic), or any custom OpenAI-compatible endpoint
-  - Cloud: [**OpenAI**](https://platform.openai.com/docs/pricing#transcription-and-speech) (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`), [**Replicate**](https://replicate.com/explore) (built-in catalog + any model ID), [**DeepInfra**](https://deepinfra.com/models/text-to-speech) (Kokoro-82M and others)
+  - Cloud: [**OpenAI**](https://platform.openai.com/docs/pricing#transcription-and-speech) (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`), [**Replicate**](https://replicate.com/explore) (built-in catalog + any model ID), [**Google AI Studio**](./configure/tts-provider-guides/google-ai-studio) (Gemini 3.8 Flash TTS and Flash-Lite TTS)
 - 🌐 **Multilingual Support**
   - Choose a document language for language-aware narration and highlighting
   - Available languages depend on the configured provider, model, and voice

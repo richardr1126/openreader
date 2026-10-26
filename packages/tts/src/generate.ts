@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { fishReferenceRequest } from './fish-audio';
+import { GOOGLE_AI_STUDIO_BASE_URL, googleSpeechAudio, googleSpeechBody } from './google-ai-studio';
 import { OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL, normalizeOpenRouterOptions, openRouterCapabilities, openRouterRequestOptions, pcmToWav, splitOpenRouterInput, validateOpenRouterReferences } from './openrouter';
 import Replicate from 'replicate';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
@@ -356,7 +357,7 @@ const PRIVATE_USE_CHARACTERS = /\p{Co}/gu;
 function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const provider = input.provider || 'openai';
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
-  const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
+  const rawModel = provider === 'google-ai-studio' && !input.model ? 'gemini-3.8-flash-tts'
     : provider === 'openrouter' && !input.model ? OPENROUTER_DEFAULT_MODEL
     : provider === 'fish-audio' && !input.model ? 's2.1-pro-free'
     : provider === 'replicate' && !input.model ? 'google/gemini-3.1-flash-tts'
@@ -370,7 +371,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   });
 
   const normalizedVoice = (
-    providerType !== 'openrouter' && (providerType === 'replicate' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
+    providerType !== 'openrouter' && providerType !== 'google-ai-studio' && (providerType === 'replicate' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
       ? input.voice.split('+')[0].trim()
       : input.voice
   ) as string;
@@ -682,6 +683,61 @@ function runLocalRequest(request: ResolvedServerTTSRequest, signal: AbortSignal)
     ...(request.voiceCustomization ? { customization: request.voiceCustomization } : {}) }, signal);
 }
 
+async function runGoogleAiStudioRequest(
+  request: ResolvedServerTTSRequest,
+  signal: AbortSignal,
+  settings: ResolvedTtsUpstreamRuntimeSettings,
+): Promise<Buffer> {
+  if (!request.apiKey) throw Object.assign(new Error('Google AI Studio needs an API key.'), { status: 401 });
+  const deadline = AbortSignal.any([signal, AbortSignal.timeout(settings.ttsUpstreamTimeoutMs)]);
+  // The existing conservative speech split bounds each JSON/base64 response.
+  // Normalize sequentially; only the current segment is retained, never a book.
+  const pieces = splitOpenRouterInput(request.text);
+  const chunks: Buffer[] = []; let bytes = 0;
+  for (const text of pieces) {
+    deadline.throwIfAborted();
+    const body = JSON.stringify(googleSpeechBody({ ...request, text }));
+    for (let attempt = 0; ; attempt++) {
+      const response = await fetch(`${GOOGLE_AI_STUDIO_BASE_URL}/interactions`, {
+        method: 'POST', headers: { 'x-goog-api-key': request.apiKey, 'Content-Type': 'application/json' },
+        body, signal: deadline, redirect: 'error',
+      });
+      if (response.ok) {
+        if (!response.body) throw new Error('Google AI Studio returned no audio');
+        const reader = response.body.getReader();
+        const parts: Uint8Array[] = []; let size = 0;
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > 45 * 1024 * 1024) throw new Error('Google AI Studio response exceeded the size limit');
+            parts.push(value);
+          }
+        } finally { await reader.cancel(); reader.releaseLock(); }
+        // Do not surface JSON parser errors: they may quote private input.
+        let payload: unknown;
+        try { payload = JSON.parse(Buffer.concat(parts, size).toString('utf8')); }
+        catch { throw new Error('Google AI Studio returned invalid audio metadata'); }
+        const wav = googleSpeechAudio(payload);
+        const audio = pieces.length === 1 ? wav : await normalizeToMp3(wav, deadline);
+        bytes += audio.byteLength;
+        if (bytes > 32 * 1024 * 1024) throw new Error('Google AI Studio segment exceeded the audio size limit');
+        chunks.push(audio);
+        break;
+      }
+      await response.body?.cancel();
+      const error = Object.assign(new Error(`Google AI Studio returned HTTP ${response.status}`), {
+        status: response.status, response: { status: response.status, headers: response.headers },
+      });
+      if ((response.status !== 429 && response.status < 500) || attempt >= settings.ttsUpstreamMaxRetries) throw error;
+      await sleepWithSignal((getUpstreamRetryAfterSeconds(error) ?? Math.min(2 ** attempt, 4)) * 1000, deadline);
+    }
+  }
+  if (!bytes) throw new Error('Google AI Studio returned no audio');
+  return Buffer.concat(chunks, bytes);
+}
+
 async function runOpenRouterRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
@@ -819,9 +875,16 @@ async function runProviderRequest(
   signal: AbortSignal,
   upstreamSettings: ResolvedTtsUpstreamRuntimeSettings,
 ): Promise<Buffer> {
+  // Removed or stale provider IDs must never fall through to another service
+  // with that provider's credential. Shared slugs are resolved before execution.
+  if (!isBuiltInTtsProviderId(request.provider)) {
+    throw Object.assign(new Error('This speech provider is unavailable. Choose another provider in settings.'), { status: 422 });
+  }
   const providerStartedAt = Date.now();
   const raw = request.provider === 'kokoro-local'
     ? await runLocalRequest(request, signal)
+    : request.provider === 'google-ai-studio'
+      ? await runGoogleAiStudioRequest(request, signal, upstreamSettings)
     : request.provider === 'openrouter'
       ? await runOpenRouterRequest(request, signal, upstreamSettings)
     : request.provider === 'fish-audio'
@@ -845,7 +908,7 @@ async function runProviderRequest(
 
 /**
  * Shared providers only store a base URL for custom endpoints. Without the
- * provider's own default, the OpenAI SDK would send a Deepinfra key to OpenAI.
+ * provider's own default, the OpenAI SDK could send a key to the wrong service.
  */
 function openAiCompatibleBaseUrl(request: ResolvedServerTTSRequest): string | undefined {
   if (request.baseUrl) return request.baseUrl;
@@ -941,6 +1004,7 @@ export async function generateTTSBuffer(
   signal?: AbortSignal,
   runtimeSettings?: TtsUpstreamRuntimeSettings,
 ): Promise<Buffer> {
+  signal?.throwIfAborted();
   const upstreamSettings = resolveTtsUpstreamSettings(runtimeSettings);
   ensureTtsAudioCache(upstreamSettings);
 

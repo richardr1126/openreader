@@ -12,7 +12,7 @@ import { getRuntimeConfig, setRuntimeConfigKey } from '@/lib/server/admin/settin
 export const BUILT_IN_PROVIDER_IDS: readonly TtsProviderId[] = [
   'custom-openai',
   'replicate',
-  'deepinfra',
+  'google-ai-studio',
   'openai',
   'fish-audio',
   'openrouter',

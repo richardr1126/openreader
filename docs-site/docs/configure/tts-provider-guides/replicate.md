@@ -23,7 +23,7 @@ Users choose the provider, model and voice in **Settings → Model & Voice**.
   - `qwen/qwen3-tts`
   - `inworld/realtime-tts-1.5-mini`
 - Existing `inworld/tts-1.5-mini` settings run through the renamed model. Saved settings and audio cache identities are preserved; no migration is required.
-- The former hosted Kokoro option is retired because of slow cold starts. Existing selections require another model for new generation; saved audio and settings are retained. New Replicate setups default to Gemini 3.1 Flash TTS with Zephyr. Local Kokoro and DeepInfra Kokoro remain available.
+- The former hosted Kokoro option is retired because of slow cold starts. Existing selections require another model for new generation; saved audio and settings are retained. New Replicate setups default to Gemini 3.1 Flash TTS with Zephyr. Local Kokoro remains available; Google AI Studio offers direct Gemini speech.
 - You can also choose `Other` and enter any Replicate model ID (for example `owner/model-name` or `owner/model-name:version`).
 - Native model speed is not available on all Replicate models; OpenReader hides/disables native speed controls where unsupported.
 - Speech is requested by the compute worker, not the browser. The API key is never sent to browsers.

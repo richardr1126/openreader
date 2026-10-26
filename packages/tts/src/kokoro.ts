@@ -55,10 +55,9 @@ export const isKokoroModel = (modelName: string | undefined): boolean => {
 export const getMaxVoicesForProvider = (provider: TtsProviderId, model: string): number => {
   if (!isKokoroModel(model)) return 1;
   
-  // Deepinfra and Replicate Kokoro do not support multiple voices.
+  // Replicate Kokoro does not support multiple voices.
   // Replicate must always stay single-voice, even for Kokoro models.
   if (provider === 'replicate') return 1;
-  if (provider === 'deepinfra') return 1;
   
   // Other providers with Kokoro support unlimited voices
   return Infinity;

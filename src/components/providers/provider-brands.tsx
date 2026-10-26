@@ -6,7 +6,7 @@ import type { TtsProviderId } from '@openreader/tts/provider-catalog';
 /**
  * How each provider type presents itself in the admin and voice settings:
  * its logo tile, name, and where to get a key. Marks are the companies' own
- * artwork (OpenAI and Replicate via Simple Icons, DeepInfra and Fish Audio
+ * artwork (OpenAI and Replicate via Simple Icons, Google and Fish Audio
  * from their sites), drawn on the tile colour each brand uses.
  */
 export interface ProviderBrand {
@@ -28,10 +28,10 @@ export const PROVIDER_BRANDS: Record<TtsProviderId, ProviderBrand> = {
     summary: 'gpt-4o-mini-tts, tts-1 and tts-1-hd',
     apiKeyUrl: 'https://platform.openai.com/api-keys',
   },
-  deepinfra: {
-    name: 'DeepInfra',
-    summary: 'Kokoro, Orpheus, Chatterbox, Zonos and more',
-    apiKeyUrl: 'https://deepinfra.com/dash/api_keys',
+  'google-ai-studio': {
+    name: 'Google AI Studio',
+    summary: 'Gemini 3.8 Flash and Flash-Lite speech with expressive voices',
+    apiKeyUrl: 'https://aistudio.google.com/api-keys',
   },
   replicate: {
     name: 'Replicate',
@@ -49,7 +49,7 @@ export const PROVIDER_BRANDS: Record<TtsProviderId, ProviderBrand> = {
 };
 
 /** External provider types in the order the add-provider picker shows them. */
-export const EXTERNAL_PROVIDER_ORDER: readonly TtsProviderId[] = ['openrouter', 'fish-audio', 'openai', 'replicate', 'deepinfra', 'custom-openai'];
+export const EXTERNAL_PROVIDER_ORDER: readonly TtsProviderId[] = ['openrouter', 'fish-audio', 'openai', 'google-ai-studio', 'replicate', 'custom-openai'];
 
 type LogoSize = 'sm' | 'md' | 'lg';
 
@@ -92,12 +92,14 @@ export function ProviderLogo({ providerType, size = 'md' }: { providerType: TtsP
           <svg viewBox="0 0 24 24" className="h-full w-full p-[8%]" fill="#fff"><path d="M24 10.262v2.712h-9.518V24h-3.034V10.262zm0-5.131v2.717H8.755V24H5.722V5.131zM24 0v2.717H3.034V24H0V0z" /></svg>
         </Tile>
       );
-    case 'deepinfra':
+    case 'google-ai-studio':
       return (
-        <Tile size={size} className="bg-[#0a0e1a]">
-          <svg viewBox="-0.4 10.45 28 28" className="h-full w-full">
-            <path fill="#fff" d="M2.833 19.29A2.837 2.837 0 0 1 0 16.458a2.837 2.837 0 0 1 2.833-2.833 2.837 2.837 0 0 1 2.834 2.833 2.837 2.837 0 0 1-2.834 2.834m0-4.554a1.723 1.723 0 0 0 0 3.445c.95 0 1.723-.772 1.723-1.722s-.772-1.723-1.723-1.723M2.833 27.283A2.837 2.837 0 0 1 0 24.449a2.837 2.837 0 0 1 2.833-2.833 2.837 2.837 0 0 1 2.834 2.833 2.837 2.837 0 0 1-2.834 2.834m0-4.555c-.948 0-1.72.772-1.72 1.721s.772 1.723 1.72 1.723a1.722 1.722 0 1 0 0-3.443M2.833 35.267A2.837 2.837 0 0 1 0 32.434 2.837 2.837 0 0 1 2.833 29.6a2.837 2.837 0 0 1 2.834 2.834 2.837 2.837 0 0 1-2.834 2.833m0-4.554a1.723 1.723 0 0 0 0 3.445 1.724 1.724 0 0 0 0-3.445M24.38 19.29a2.837 2.837 0 0 1-2.833-2.833 2.837 2.837 0 0 1 2.833-2.833 2.837 2.837 0 0 1 2.834 2.833 2.837 2.837 0 0 1-2.834 2.834m0-4.554a1.724 1.724 0 1 0 1.723 1.723c0-.95-.772-1.723-1.723-1.723M24.38 27.283a2.837 2.837 0 0 1-2.833-2.834 2.837 2.837 0 0 1 2.833-2.833 2.837 2.837 0 0 1 2.834 2.833 2.837 2.837 0 0 1-2.834 2.834m0-4.555c-.948 0-1.722.772-1.722 1.721s.772 1.723 1.722 1.723 1.723-.772 1.723-1.723c0-.95-.772-1.72-1.723-1.72M24.38 35.267a2.837 2.837 0 0 1-2.833-2.833A2.837 2.837 0 0 1 24.38 29.6a2.837 2.837 0 0 1 2.834 2.834 2.837 2.837 0 0 1-2.834 2.833m0-4.554c-.948 0-1.722.772-1.722 1.722a1.724 1.724 0 0 0 3.445 0c0-.95-.772-1.722-1.723-1.722M13.607 23.283a2.837 2.837 0 0 1-2.834-2.834 2.837 2.837 0 0 1 2.834-2.833 2.837 2.837 0 0 1 2.833 2.833 2.837 2.837 0 0 1-2.833 2.834m0-4.555a1.724 1.724 0 1 0 1.723 1.723c0-.95-.773-1.723-1.723-1.723M13.607 15.298a2.837 2.837 0 0 1-2.834-2.833 2.837 2.837 0 0 1 2.834-2.834 2.837 2.837 0 0 1 2.833 2.834 2.837 2.837 0 0 1-2.833 2.833m0-4.554a1.724 1.724 0 0 0 0 3.445 1.724 1.724 0 0 0 0-3.445M13.607 31.283a2.837 2.837 0 0 1-2.834-2.834 2.837 2.837 0 0 1 2.834-2.833 2.837 2.837 0 0 1 2.833 2.833 2.837 2.837 0 0 1-2.833 2.834m0-4.555a1.724 1.724 0 1 0 1.723 1.723c0-.95-.773-1.723-1.723-1.723M13.607 39.267a2.837 2.837 0 0 1-2.834-2.833 2.837 2.837 0 0 1 2.834-2.834 2.837 2.837 0 0 1 2.833 2.834 2.837 2.837 0 0 1-2.833 2.833m0-4.554c-.949 0-1.723.772-1.723 1.722s.772 1.723 1.723 1.723a1.724 1.724 0 0 0 0-3.445" />
-            <path fill="#5699db" d="M9.098 19.781a.9.9 0 0 1-.342-.066L6.91 18.98a.925.925 0 1 1 .687-1.72l1.845.736a.926.926 0 0 1-.344 1.785zM9.098 27.617a.9.9 0 0 1-.342-.066l-1.845-.736a.925.925 0 1 1 .687-1.719l1.845.735a.926.926 0 0 1-.344 1.785zM19.918 23.702a.9.9 0 0 1-.342-.065l-1.844-.736a.925.925 0 0 1 .685-1.719l1.845.735a.926.926 0 0 1-.344 1.785M19.918 15.867a.9.9 0 0 1-.342-.066l-1.844-.735a.926.926 0 0 1 .685-1.72l1.845.736a.926.926 0 0 1-.344 1.785M19.918 31.531a.9.9 0 0 1-.342-.066l-1.844-.735a.925.925 0 0 1 .685-1.72l1.845.736a.926.926 0 0 1-.344 1.785M7.302 31.812a.926.926 0 0 1-.344-1.785l1.845-.736a.925.925 0 1 1 .687 1.72l-1.845.735a.9.9 0 0 1-.342.066zM7.302 24.023a.926.926 0 0 1-.344-1.785l1.845-.736a.925.925 0 1 1 .687 1.72l-1.845.735a.9.9 0 0 1-.342.066zM7.302 15.843a.926.926 0 0 1-.344-1.785l1.845-.735a.925.925 0 1 1 .687 1.72l-1.845.734a.9.9 0 0 1-.342.066zM9.098 36.015a.9.9 0 0 1-.342-.066l-1.845-.735a.925.925 0 0 1 .686-1.719l1.844.735a.925.925 0 0 1-.343 1.785M18.075 19.782a.926.926 0 0 1-.343-1.787l1.844-.735a.927.927 0 0 1 .687 1.721l-1.844.735a.9.9 0 0 1-.342.066zM18.075 27.618a.926.926 0 0 1-.343-1.787l1.844-.735a.927.927 0 0 1 .687 1.721l-1.844.735a.9.9 0 0 1-.342.066zM18.075 36.015a.925.925 0 0 1-.344-1.785l1.845-.736a.925.925 0 1 1 .686 1.72l-1.845.735a.9.9 0 0 1-.342.066" />
+        <Tile size={size} className="bg-white ring-1 ring-inset ring-black/10">
+          <svg viewBox="0 0 48 48" className="h-full w-full">
+            <path fill="#4285F4" d="M43.61 24.46c0-1.36-.12-2.66-.35-3.92H24v7.42h11a9.4 9.4 0 0 1-4.08 6.18v5.14h6.6c3.86-3.56 6.09-8.8 6.09-14.82Z" />
+            <path fill="#34A853" d="M24 44c5.5 0 10.11-1.82 13.48-4.72l-6.6-5.14c-1.82 1.22-4.15 1.95-6.88 1.95-5.3 0-9.79-3.58-11.4-8.4H5.78v5.3A20.36 20.36 0 0 0 24 44Z" />
+            <path fill="#FBBC05" d="M12.6 27.69a12.2 12.2 0 0 1 0-7.38v-5.3H5.78a20 20 0 0 0 0 17.98l6.82-5.3Z" />
+            <path fill="#EA4335" d="M24 11.91c3 0 5.69 1.03 7.81 3.05l5.86-5.86A19.64 19.64 0 0 0 24 4 20.36 20.36 0 0 0 5.78 15.01l6.82 5.3c1.61-4.82 6.1-8.4 11.4-8.4Z" />
           </svg>
         </Tile>
       );

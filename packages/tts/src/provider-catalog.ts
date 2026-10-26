@@ -1,9 +1,9 @@
 import { isKokoroModel } from './kokoro';
 import { OPENROUTER_DEFAULT_MODEL, openRouterCapabilities, type OpenRouterSpeechModel } from './openrouter';
 
-export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'fish-audio' | 'openrouter' | 'kokoro-local';
+export type TtsProviderId = 'custom-openai' | 'replicate' | 'google-ai-studio' | 'openai' | 'fish-audio' | 'openrouter' | 'kokoro-local';
 export type TtsProviderType = TtsProviderId | 'unknown';
-export type TtsVoiceSource = 'static' | 'deepinfra-api' | 'custom-openai-api' | 'replicate-api';
+export type TtsVoiceSource = 'static' | 'custom-openai-api' | 'replicate-api';
 export type ReplicateVoiceInputKey = 'voice' | 'voice_id' | 'speaker';
 
 export interface SharedProviderTypeResolverEntry {
@@ -80,14 +80,9 @@ const CUSTOM_OPENAI_MODELS: TtsModelDefinition[] = [
   { id: 'custom', name: 'Other' },
 ];
 
-const DEEPINFRA_MODELS_FULL: TtsModelDefinition[] = [
-  { id: 'hexgrad/Kokoro-82M', name: 'hexgrad/Kokoro-82M' },
-  { id: 'canopylabs/orpheus-3b-0.1-ft', name: 'canopylabs/orpheus-3b-0.1-ft' },
-  { id: 'sesame/csm-1b', name: 'sesame/csm-1b' },
-  { id: 'ResembleAI/chatterbox', name: 'ResembleAI/chatterbox' },
-  { id: 'Zyphra/Zonos-v0.1-hybrid', name: 'Zyphra/Zonos-v0.1-hybrid' },
-  { id: 'Zyphra/Zonos-v0.1-transformer', name: 'Zyphra/Zonos-v0.1-transformer' },
-  { id: 'custom', name: 'Other' },
+export const GOOGLE_AI_STUDIO_MODELS: TtsModelDefinition[] = [
+  { id: 'gemini-3.8-flash-tts', name: 'Gemini 3.8 Flash TTS' },
+  { id: 'gemini-3.8-flash-lite-tts', name: 'Gemini 3.8 Flash-Lite TTS' },
 ];
 
 /** Retain saved IDs for audio identity, but never submit this retired model. */
@@ -117,17 +112,10 @@ const REPLICATE_MODELS: TtsModelDefinition[] = [
 export const KOKORO_LOCAL_MODEL = 'kokoro-82m' as const;
 const KOKORO_LOCAL_MODELS: TtsModelDefinition[] = [{ id: KOKORO_LOCAL_MODEL, name: 'Kokoro-82M' }];
 
-const DEEPINFRA_API_VOICE_MODELS = new Set([
-  'ResembleAI/chatterbox',
-  'Zyphra/Zonos-v0.1-hybrid',
-  'Zyphra/Zonos-v0.1-transformer',
-]);
-
 const DEFAULT_MODELS: TtsModelDefinition[] = [{ id: 'tts-1', name: 'TTS-1' }];
 
 export const OPENAI_DEFAULT_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const;
 export const GPT4O_MINI_DEFAULT_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer'] as const;
-export const CUSTOM_OPENAI_DEFAULT_VOICES = ['af_sarah', 'af_bella', 'af_nicole', 'am_adam', 'am_michael', 'bf_emma', 'bf_isabella', 'bm_george', 'bm_lewis'] as const;
 export const KOKORO_DEFAULT_VOICES = [
   'af_alloy', 'af_aoede', 'af_bella', 'af_heart', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova',
   'af_river', 'af_sarah', 'af_sky', 'am_adam', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam',
@@ -142,8 +130,6 @@ export const KOKORO_DEFAULT_VOICES = [
  * `b*`), Spanish `e*`, Hindi `h*`, Italian `i*` and Brazilian Portuguese `p*`.
  */
 export const KOKORO_LOCAL_VOICES = KOKORO_DEFAULT_VOICES.filter((voice) => /^[abehip][fm]_/.test(voice));
-export const ORPHEUS_DEFAULT_VOICES = ['tara', 'leah', 'jess', 'leo', 'dan', 'mia', 'zac'] as const;
-export const SESAME_DEFAULT_VOICES = ['conversational_a', 'conversational_b', 'read_speech_a', 'read_speech_b', 'read_speech_c', 'read_speech_d', 'none'] as const;
 
 // Replicate model voices
 export const GEMINI_FLASH_TTS_VOICES = [
@@ -166,14 +152,6 @@ const REPLICATE_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
   'minimax/speech-2.8-turbo': MINIMAX_SPEECH_VOICES,
   'qwen/qwen3-tts': QWEN3_TTS_VOICES,
   'inworld/realtime-tts-1.5-mini': INWORLD_TTS_VOICES,
-};
-const DEEPINFRA_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
-  'hexgrad/Kokoro-82M': KOKORO_DEFAULT_VOICES,
-  'canopylabs/orpheus-3b-0.1-ft': ORPHEUS_DEFAULT_VOICES,
-  'sesame/csm-1b': SESAME_DEFAULT_VOICES,
-  'ResembleAI/chatterbox': ['None'],
-  'Zyphra/Zonos-v0.1-hybrid': ['random'],
-  'Zyphra/Zonos-v0.1-transformer': ['random'],
 };
 
 export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
@@ -203,11 +181,11 @@ export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
     models: () => REPLICATE_MODELS,
   },
   {
-    id: 'deepinfra',
+    id: 'google-ai-studio',
     kind: 'external',
-    name: 'Deepinfra',
-    supportsCustomModel: true,
-    models: () => DEEPINFRA_MODELS_FULL,
+    name: 'Google AI Studio',
+    supportsCustomModel: false,
+    models: () => GOOGLE_AI_STUDIO_MODELS,
   },
   {
     id: 'openai',
@@ -249,6 +227,7 @@ const REPLICATE_MODELS_WITHOUT_NATIVE_SPEED = new Set([
 ]);
 
 export function supportsTtsInstructions(model: string | null | undefined, provider?: string): boolean {
+  if (provider === 'google-ai-studio') return GOOGLE_AI_STUDIO_MODELS.some(({ id }) => id === model);
   return !!model && (provider === 'openrouter' ? openRouterCapabilities(model).instructions : MODELS_WITH_INSTRUCTIONS.has(model));
 }
 
@@ -281,6 +260,7 @@ export function resolveProviderType(
 }
 
 export function supportsNativeModelSpeed(provider: TtsProviderId, model: string | null | undefined): boolean {
+  if (provider === 'google-ai-studio') return false;
   if (provider === 'openrouter') return openRouterCapabilities(model || '').nativeSpeed;
   if (!model) {
     return true;
@@ -329,11 +309,7 @@ export function getDefaultVoices(provider: TtsProviderId, model: string): string
     return REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel] ? [...REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel]] : ['default'];
   }
 
-  if (provider === 'deepinfra') {
-    return DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]
-      ? [...DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]]
-      : [...CUSTOM_OPENAI_DEFAULT_VOICES];
-  }
+  if (provider === 'google-ai-studio') return GOOGLE_AI_STUDIO_MODELS.some(({ id }) => id === model) ? [...GEMINI_FLASH_TTS_VOICES] : [];
 
   if (provider === 'kokoro-local') {
     return [...KOKORO_LOCAL_VOICES];
@@ -365,10 +341,6 @@ function parseReplicateModelIdentifier(model: string): {
 
 export function resolveVoiceSource(provider: TtsProviderId, model: string): TtsVoiceSource {
   if (provider === 'replicate' && isRetiredReplicateModel(model)) return 'static';
-  if (provider === 'deepinfra' && DEEPINFRA_API_VOICE_MODELS.has(model)) {
-    return 'deepinfra-api';
-  }
-
   if (provider === 'replicate' && parseReplicateModelIdentifier(model) !== null) {
     return 'replicate-api';
   }

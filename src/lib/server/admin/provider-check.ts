@@ -38,7 +38,7 @@ export interface ProviderCheckDeps {
 const PROBE_TIMEOUT_MS = 10_000;
 const SPEECH_TIMEOUT_MS = 35_000;
 const SAMPLE_TEXT = 'This is a quick provider check.';
-const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'fish-audio', 'openrouter'];
+const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'google-ai-studio', 'replicate', 'fish-audio', 'openrouter'];
 
 function hostOf(url: string): string {
   try {
@@ -115,14 +115,14 @@ async function checkConnection(
     return item('ok', 'Replicate accepted the key and found the model.');
   }
 
-  const baseUrl = (draft.providerType === 'openrouter' ? defaultBaseUrlForProviderType('openrouter')
+  const baseUrl = (draft.providerType === 'openrouter' || draft.providerType === 'google-ai-studio' ? defaultBaseUrlForProviderType(draft.providerType)
     : draft.baseUrl || defaultBaseUrlForProviderType(draft.providerType)).replace(/\/+$/, '');
   const host = hostOf(baseUrl);
   let response: Response;
   try {
-    response = await deps.fetch(draft.providerType === 'openrouter' ? `${baseUrl}/key`
+    response = await deps.fetch(draft.providerType === 'google-ai-studio' ? `${baseUrl}/models/${encodeURIComponent(model)}` : draft.providerType === 'openrouter' ? `${baseUrl}/key`
       : draft.providerType === 'fish-audio' ? 'https://api.fish.audio/model?page_size=1' : `${baseUrl}/models`, {
-      headers: draft.apiKey ? { Authorization: `Bearer ${draft.apiKey}` } : {},
+      headers: draft.apiKey ? (draft.providerType === 'google-ai-studio' ? { 'x-goog-api-key': draft.apiKey } : { Authorization: `Bearer ${draft.apiKey}` }) : {},
       signal: AbortSignal.any([signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
       cache: 'no-store',
       redirect: 'error',

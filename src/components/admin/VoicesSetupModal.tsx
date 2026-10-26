@@ -76,7 +76,7 @@ export function VoicesSetupModal({
           <section className="flex flex-col rounded-lg border border-line bg-surface-sunken p-3">
             <h4 className="text-sm font-semibold text-foreground">A voice service</h4>
             <p className="mt-1 flex-1 text-xs text-soft">
-              OpenAI, DeepInfra, Replicate, or a speech server you run. Needs a key or address.
+              OpenAI, Google AI Studio, Replicate, or a speech server you run. Needs a key or address.
             </p>
             <Button className="mt-3" onClick={onUseService}>Set up a service</Button>
           </section>

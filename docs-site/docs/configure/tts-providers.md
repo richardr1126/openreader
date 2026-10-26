@@ -15,7 +15,7 @@ API keys stay on the server, encrypted (see [How saved keys are protected](./adm
 | **Custom OpenAI-like** | Any server with an OpenAI-compatible speech endpoint, such as Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI or Supertonic. | Base URL; API key if the server requires one. |
 | **OpenAI** | OpenAI's speech API (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`). | API key. |
 | **Replicate** | Hosted models on Replicate, from a built-in list or any model ID. | API key. |
-| **Deepinfra** | Hosted models on DeepInfra, including Kokoro-82M. | API key. |
+| **Google AI Studio** | Gemini 3.8 Flash TTS and Flash-Lite TTS, with style instructions and 30 prebuilt voices. | Google AI Studio API key. |
 | **Fish Audio** | S2.1 Pro Free, S2.1 Pro, S2 Pro and Drama 3. | API key; optional voice reference ID. |
 
 Setup guides for specific services are listed under **TTS Providers** in the sidebar.

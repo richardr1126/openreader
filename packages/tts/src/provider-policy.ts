@@ -65,7 +65,7 @@ export function defaultModelForProviderType(providerType: TtsProviderId): string
   if (providerType === 'openrouter') return OPENROUTER_DEFAULT_MODEL;
   if (providerType === 'fish-audio') return 's2.1-pro-free';
   if (providerType === 'openai') return 'tts-1';
-  if (providerType === 'deepinfra') return 'hexgrad/Kokoro-82M';
+  if (providerType === 'google-ai-studio') return 'gemini-3.8-flash-tts';
   if (providerType === 'replicate') return 'google/gemini-3.1-flash-tts';
   if (providerType === 'kokoro-local') return KOKORO_LOCAL_MODEL;
   return 'kokoro';
@@ -75,7 +75,7 @@ export function defaultBaseUrlForProviderType(providerType: TtsProviderId): stri
   if (providerType === 'openrouter') return OPENROUTER_BASE_URL;
   if (providerType === 'fish-audio') return 'https://api.fish.audio';
   if (providerType === 'openai') return 'https://api.openai.com/v1';
-  if (providerType === 'deepinfra') return 'https://api.deepinfra.com/v1/openai';
+  if (providerType === 'google-ai-studio') return 'https://generativelanguage.googleapis.com/v1beta';
   return '';
 }
 
@@ -84,7 +84,7 @@ export function defaultVoiceForProviderType(providerType: TtsProviderId): string
   if (providerType === 'fish-audio') return FISH_AUDIO_VOICES[0].id;
   if (providerType === 'replicate') return 'Zephyr';
   if (providerType === 'openai') return 'alloy';
-  if (providerType === 'deepinfra') return 'af_bella';
+  if (providerType === 'google-ai-studio') return 'Zephyr';
   if (providerType === 'kokoro-local') return 'af_heart';
   return 'af_sarah';
 }

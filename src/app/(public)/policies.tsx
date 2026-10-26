@@ -625,7 +625,7 @@ export const DESKTOP_POLICY: PolicyDocument = {
             </li>
             <li>
               <strong>Speech services you add:</strong> if you connect a hosted provider such as OpenAI, Replicate,
-              or DeepInfra, or a speech server of your own, the text being read aloud is sent to it, and that
+              or Google AI Studio, or a speech server of your own, the text being read aloud is sent to it, and that
               provider&apos;s own policy applies. Personal cloned voices also send their private reference sample and
               any transcript when generating narration through Fish Audio or OpenRouter. Saved samples stay in your
               app data folder until you remove the voice. The built-in voices send nothing.

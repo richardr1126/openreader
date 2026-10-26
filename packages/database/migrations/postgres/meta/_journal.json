@@ -176,6 +176,13 @@
       "when": 1793008787694,
       "tag": "0024_provider_model_options",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793025970399,
+      "tag": "0025_remove_deepinfra_providers",
+      "breakpoints": true
     }
   ]
 }

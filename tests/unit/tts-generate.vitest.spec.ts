@@ -163,7 +163,7 @@ describe('provider request text', () => {
         voice: 'af_bella',
         speed: 1,
         model: 'hexgrad/Kokoro-82M',
-        provider: 'deepinfra',
+        provider: 'custom-openai',
         apiKey: 'test-key',
       })).rejects.toThrow();
       const [input, init] = fetchMock.mock.calls[0];
@@ -172,33 +172,6 @@ describe('provider request text', () => {
     } finally {
       vi.unstubAllGlobals();
     }
-  });
-});
-
-describe('OpenAI-compatible base URL', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  test('sends a Deepinfra provider without a stored base URL to Deepinfra', async () => {
-    const fetchMock = vi.fn(async (_input: unknown, _init?: unknown) => new Response(
-      JSON.stringify({ error: { message: 'stop after the request' } }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(generateTTSBuffer({
-      text: 'deepinfra base url check',
-      voice: 'af_bella',
-      speed: 1,
-      model: 'hexgrad/Kokoro-82M',
-      provider: 'deepinfra',
-      apiKey: 'test-key',
-    })).rejects.toThrow();
-
-    const [input] = fetchMock.mock.calls[0];
-    const url = input instanceof Request ? input.url : String(input);
-    expect(url).toBe('https://api.deepinfra.com/v1/openai/audio/speech');
   });
 });
 

@@ -37,15 +37,15 @@ describe('admin provider check', () => {
     expect(items[0]).toMatchObject({ id: 'settings', status: 'error', detail: 'This provider needs an API key.' });
   });
 
-  test('checks a Deepinfra draft against its default base URL and skips speech until created', async () => {
+  test('checks a Google AI Studio draft against its default base URL and skips speech until created', async () => {
     const d = deps();
     const items = await runProviderCheck(
-      draft({ providerType: 'deepinfra', baseUrl: '', apiKey: 'secret-key', defaultModel: 'hexgrad/Kokoro-82M' }),
+      draft({ providerType: 'google-ai-studio', baseUrl: '', apiKey: 'secret-key', defaultModel: 'gemini-3.8-flash-tts' }),
       null,
       d,
       signal,
     );
-    expect(vi.mocked(d.fetch).mock.calls[0][0]).toBe('https://api.deepinfra.com/v1/openai/models');
+    expect(vi.mocked(d.fetch).mock.calls[0][0]).toBe('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash-tts');
     expect(statuses(items)).toEqual({ settings: 'ok', connection: 'ok', voices: 'ok', speech: 'skipped' });
     expect(d.synthesizePreview).not.toHaveBeenCalled();
     expect(JSON.stringify(items)).not.toContain('secret-key');

@@ -30,25 +30,16 @@ describe('tts provider catalog', () => {
       expect(getDefaultVoices('replicate', model)).toEqual([]);
     }
     expect(getDefaultVoices('kokoro-local', 'kokoro-82m')).toContain('af_heart');
-    expect(getDefaultVoices('deepinfra', 'hexgrad/Kokoro-82M')).toContain('af_heart');
   });
-  test('resolves provider models with fixed Deepinfra catalog', () => {
+  test('resolves provider models with fixed Google AI Studio catalog', () => {
     expect(resolveProviderModels('openai').map((model) => model.id)).toEqual([
       'tts-1',
       'tts-1-hd',
       'gpt-4o-mini-tts',
     ]);
 
-    expect(resolveProviderModels('deepinfra', {
-      apiKey: '',
-    }).map((model) => model.id)).toEqual([
-      'hexgrad/Kokoro-82M',
-      'canopylabs/orpheus-3b-0.1-ft',
-      'sesame/csm-1b',
-      'ResembleAI/chatterbox',
-      'Zyphra/Zonos-v0.1-hybrid',
-      'Zyphra/Zonos-v0.1-transformer',
-      'custom',
+    expect(resolveProviderModels('google-ai-studio').map((model) => model.id)).toEqual([
+      'gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts',
     ]);
   });
 
@@ -57,12 +48,10 @@ describe('tts provider catalog', () => {
     expect(getDefaultVoices('custom-openai', 'kokoro')).toContain('af_sarah');
     // Non-kokoro custom-openai models fall back to the canonical OpenAI six.
     expect(getDefaultVoices('custom-openai', 'supertonic-3')).toEqual(['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer']);
-    expect(getDefaultVoices('deepinfra', 'ResembleAI/chatterbox')).toEqual(['None']);
-    expect(getDefaultVoices('deepinfra', 'Zyphra/Zonos-v0.1-transformer')).toEqual(['random']);
     expect(supportsTtsInstructions('gpt-4o-mini-tts')).toBe(true);
     expect(supportsTtsInstructions('tts-1')).toBe(false);
     expect(providerSupportsCustomModel('openai')).toBe(false);
-    expect(providerSupportsCustomModel('deepinfra')).toBe(true);
+    expect(providerSupportsCustomModel('google-ai-studio')).toBe(false);
   });
 
   test('uses blocklist semantics for Replicate native speed support', () => {
@@ -576,11 +565,11 @@ describe('config helpers', () => {
       providerType: 'openai',
       ttsModel: 'tts-1',
       savedVoices: {
-        'deepinfra:hexgrad/Kokoro-82M': 'af_sarah',
+        'google-ai-studio:gemini-3.8-flash-tts': 'Kore',
       },
-    }, 'providerRef', 'deepinfra');
+    }, 'providerRef', 'google-ai-studio');
     expect(providerUpdate.storagePatch).toEqual({
-      providerRef: 'deepinfra',
+      providerRef: 'google-ai-studio',
       voice: '',
     });
   });
@@ -592,17 +581,17 @@ describe('config helpers', () => {
       ttsModel: 'tts-1',
       savedVoices: { 'openai:tts-1': 'alloy' },
     }, {
-      providerRef: 'deepinfra',
-      providerType: 'deepinfra',
-      ttsModel: 'hexgrad/Kokoro-82M',
-      voice: 'af_sarah',
+      providerRef: 'google-ai-studio',
+      providerType: 'google-ai-studio',
+      ttsModel: 'gemini-3.8-flash-tts',
+      voice: 'Kore',
       voiceSpeed: 1.2,
     })).toEqual({
-      providerRef: 'deepinfra',
-      providerType: 'deepinfra',
-      ttsModel: 'hexgrad/Kokoro-82M',
-      voice: 'af_sarah',
-      savedVoices: { 'openai:tts-1': 'alloy', 'deepinfra:hexgrad/Kokoro-82M': 'af_sarah' },
+      providerRef: 'google-ai-studio',
+      providerType: 'google-ai-studio',
+      ttsModel: 'gemini-3.8-flash-tts',
+      voice: 'Kore',
+      savedVoices: { 'openai:tts-1': 'alloy', 'google-ai-studio:gemini-3.8-flash-tts': 'Kore' },
       voiceSpeed: 1.2,
     });
   });
