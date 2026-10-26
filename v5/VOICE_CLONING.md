@@ -5,12 +5,36 @@ cloning belongs on both web and Swift, including provider-backed cloning.
 Web has no purchase gate. Swift reuses the existing voice-cloning Pro gate.
 Neither platform promises free provider usage or falls back to a paid model.
 
-The shared voice picker offers Your voices and a New voice action for Fish
-Audio and OpenRouter. Swift extends its existing personal-voice editor. Both
+The shared voice picker offers Your voices and the same dashed Create your own
+voice / Add another voice card above Built-in voices for Fish Audio and
+OpenRouter. Web/desktop follows Swift's existing personal-voice workflow using
+OpenReader's compact web voice rows and standard dialog controls. Both
 support recording/import, reviewing a selected 1–15.9 second clip, naming,
 an optional exact transcript, permission confirmation, selection, previews,
 rename and removal. Only endpoints advertising `supports_voice_cloning` enable
 OpenRouter creation, with variant suffixes preserved in discovery and synthesis.
+
+The editor uses the same capture, recording and review steps on every platform:
+one heading and introduction, recording tips recommending 10–15 seconds, Record
+and Import tiles, the shared read-aloud passage, sample playback and trimming,
+Name, an optional collapsed transcript for cloud providers, permission and a
+persistent Save action. Row options offer Rename and a separate confirmed Delete.
+Platform presentation follows each app's existing controls. Provider/privacy
+disclosures, actual model input limits and the native Pro gate also differ.
+Nano still requires at least ten seconds; other engines accept
+shorter references. Deleting a selected voice removes its row immediately and
+selects a preset without waiting for a catalog refresh or another selection.
+Swift also replaces the affected saved global/current-book choice immediately,
+so Done cannot restore the deleted clone. Clone IDs never become preset entries.
+The parity follow-up passed the full web unit and 75-case Chromium/WebKit
+matrix, native tests and simulator/Catalyst builds. Visible checks covered web
+capture/import/review and management, plus deleting a saved selected iOS clone
+and reopening the picker. Browser regression cases also cover deletion when
+the catalog refresh cannot reach the server.
+
+The web settings picker uses its resolved displayed model for capability checks,
+voice catalogs, favorites, previews and saving. An empty or stale saved model
+must not show Fish's free preset while checking a different raw model ID.
 
 ## Storage and execution
 

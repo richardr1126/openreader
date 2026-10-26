@@ -14,17 +14,41 @@ test(`${providerType} personal voices require sample permission and persist thro
   expect(created.status()).toBe(201);
   const { provider } = await created.json();
   try {
-    await page.goto('/app/settings?section=api');
-    await page.getByRole('button', { name: 'Provider', exact: true }).click();
-    await page.getByRole('option', { name: providerName, exact: true }).click();
-    await page.getByRole('button', { name: 'New voice', exact: true }).click();
-    const editor = page.getByRole('region', { name: 'New voice', exact: true });
-    await expect(editor.getByRole('button', { name: 'Save voice', exact: true })).toBeDisabled();
+    if (providerType === 'fish-audio') {
+      // Legacy/inherited drafts can carry a model from the previous provider.
+      // The picker already displays Fish's free preset; cloning must use it
+      // on initial load, without reselecting the displayed model.
+      const saved = await page.request.put('/api/user/state/preferences', { data: {
+        patch: { providerRef: provider.slug, providerType, ttsModel: 'kokoro', voice: '' }, clientUpdatedAtMs: Date.now(),
+      } });
+      expect(saved.ok()).toBe(true);
+      expect((await saved.json()).preferences.ttsModel).toBe('kokoro');
+      const capability = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname === '/api/tts/cloned-voices' && url.searchParams.get('providerRef') === provider.slug;
+      });
+      await page.goto('/app/settings?section=api');
+      const response = await capability;
+      expect(new URL(response.url()).searchParams.get('model')).toBe('s2.1-pro-free');
+      expect((await response.json()).supportsCloning).toBe(true);
+      await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('S2.1 Pro Free');
+      await expect(page.getByText('Voice cloning is unavailable for this model.', { exact: true })).toHaveCount(0);
+    } else {
+      await page.goto('/app/settings?section=api');
+      await page.getByRole('button', { name: 'Provider', exact: true }).click();
+      await page.getByRole('option', { name: providerName, exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Create your own voice', exact: true }).click();
+    const editor = page.getByRole('dialog', { name: 'Create your own voice', exact: true });
+    await expect(editor.getByRole('heading', { name: 'For the best result' })).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Record Read a short passage', exact: true })).toBeVisible();
+    await expect(editor.getByRole('button', { name: 'Import Use an audio file', exact: true })).toBeVisible();
+    await page.screenshot({ animations: 'disabled', path: `/private/tmp/openreader-voice-cloning/unified-web-${testInfo.project.name}.png` });
     await editor.getByLabel('Import voice sample', { exact: true }).setInputFiles({ name: 'reference.wav', mimeType: 'audio/wav',
       buffer: Buffer.from(pcmToWav(new Uint8Array(96_000))) });
     await editor.getByRole('textbox', { name: 'Voice name', exact: true }).fill('My narrator');
     await expect(editor.getByRole('slider', { name: 'Sample length', exact: true })).toBeVisible();
-    await expect(editor.getByRole('button', { name: 'Save voice', exact: true })).toBeDisabled();
+    await expect(editor.getByRole('button', { name: 'Confirm permission to save', exact: true })).toBeDisabled();
     await editor.getByRole('checkbox').check();
     await editor.getByRole('button', { name: 'Save voice', exact: true }).click();
     await expect(page.getByRole('button', { name: 'My narrator', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -34,15 +58,32 @@ test(`${providerType} personal voices require sample permission and persist thro
     await unsaved.getByRole('button', { name: 'Save', exact: true }).click(); await expect(unsaved).toBeHidden();
     await page.reload();
     await expect(page.getByRole('button', { name: 'My narrator', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await page.getByRole('button', { name: 'Manage My narrator', exact: true }).click();
-    await page.getByRole('textbox', { name: 'Rename voice', exact: true }).fill('Renamed narrator');
-    await page.getByRole('button', { name: 'Rename', exact: true }).click();
+    await page.getByRole('button', { name: 'More for My narrator', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+    const rename = page.getByRole('dialog', { name: 'Rename voice', exact: true });
+    await rename.getByRole('textbox', { name: 'Name', exact: true }).fill('Renamed narrator');
+    await rename.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Renamed narrator', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Renamed narrator', exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: `/private/tmp/openreader-voice-cloning/web-${testInfo.project.name}.png` });
-    await page.getByRole('button', { name: 'Manage Renamed narrator', exact: true }).click();
-    await page.getByRole('button', { name: 'Delete saved voice', exact: true }).click();
+    await page.getByRole('button', { name: 'More for Renamed narrator', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+    const deletion = page.getByRole('dialog', { name: 'Delete Renamed narrator?', exact: true });
+    await expect(page.getByRole('button', { name: 'Renamed narrator', exact: true })).toBeVisible();
+    // Removing a selected sample must update the list and selection even
+    // when the follow-up catalog refresh cannot reach the server.
+    const refreshRoute = '**/api/tts/cloned-voices?**';
+    await page.route(refreshRoute, route => route.abort());
+    try {
+      await deletion.getByRole('button', { name: 'Delete voice', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'Renamed narrator', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Create your own voice', exact: true })).toBeVisible();
+      await expect(page.getByRole('group', { name: 'Voices', exact: true }).getByRole('button', { pressed: true })).toHaveCount(1);
+    } finally { await page.unrouteAll({ behavior: 'wait' }); }
+    await unsaved.getByRole('button', { name: 'Save', exact: true }).click(); await expect(unsaved).toBeHidden();
+    await page.reload();
     await expect(page.getByRole('button', { name: 'Renamed narrator', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Create your own voice', exact: true })).toBeVisible();
   } finally { await admin.delete(`/api/admin/providers/${provider.id}`); await admin.dispose(); }
 });
 }

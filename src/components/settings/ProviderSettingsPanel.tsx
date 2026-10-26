@@ -93,6 +93,13 @@ export function ProviderSettingsPanel({
     catalog.data,
   ]);
 
+  // The picker can resolve an empty or stale saved model to a preset. Every
+  // consumer must use that displayed choice, including the first capability
+  // check, rather than waiting for a click to update the raw draft value.
+  const finalModel = viewModel.selectedModelId === 'custom'
+    ? customModelInput.trim()
+    : viewModel.selectedModelId;
+
   const selectedProvider = viewModel.providers.find(
     (provider) => provider.id === localProviderRef,
   ) ?? viewModel.providers[0];
@@ -110,16 +117,16 @@ export function ProviderSettingsPanel({
   const providerModelPolicy = resolveTtsProviderModelPolicy({
     providerRef: viewModel.selectedProviderRef,
     providerType: effectiveProviderType,
-    model: modelValue,
+    model: finalModel,
     sharedProviders,
   });
   const { availableVoices, voicesPending } = useVoiceManagement(
     viewModel.selectedProviderRef,
     effectiveProviderType,
-    modelValue,
+    finalModel,
   );
   const shownVoice = localVoice || availableVoices[0] || '';
-  const favorites = useVoiceFavorites(viewModel.selectedProviderRef, modelValue);
+  const favorites = useVoiceFavorites(viewModel.selectedProviderRef, finalModel);
   // A saved blend (e.g. Kokoro "a(0.5)+b(0.5)") is kept as its own option.
   const voiceOptions = shownVoice && !availableVoices.includes(shownVoice)
     ? [shownVoice, ...availableVoices]
@@ -167,13 +174,13 @@ export function ProviderSettingsPanel({
   const { play: playSample, stop: stopPreview } = preview;
   useEffect(() => stopPreview, [stopPreview]);
   const playPreview = useCallback((key: string, previewVoice: string) => {
-    const previewOptions = readModelOptions(effectiveProviderType, localModelOptions, modelValue);
+    const previewOptions = readModelOptions(effectiveProviderType, localModelOptions, finalModel);
     if (previewOptions.error) { toast.error(previewOptions.error); return; }
     void playSample(key, {
       settings: {
         providerRef: viewModel.selectedProviderRef,
         providerType: effectiveProviderType,
-        ttsModel: modelValue,
+        ttsModel: finalModel,
         ...(previewOptions.normalized ? { ttsModelOptions: previewOptions.normalized } : {}),
         voice: previewVoice,
         nativeSpeed: providerModelPolicy.supportsNativeModelSpeed ? localSpeed : 1,
@@ -189,7 +196,7 @@ export function ProviderSettingsPanel({
     localModelOptions,
     localSpeed,
     localCustomization,
-    modelValue,
+    finalModel,
     playSample,
     providerModelPolicy.supportsInstructions,
     providerModelPolicy.supportsNativeModelSpeed,
@@ -234,13 +241,6 @@ export function ProviderSettingsPanel({
     setLocalSpeed(1);
   };
 
-  const finalModel = runtimeConfig.showAllProviderModels
-    ? (viewModel.selectedModelId === 'custom' ? customModelInput.trim() : modelValue)
-    : resolveProviderDefaults({
-      providerRef: viewModel.selectedProviderRef,
-      providerType: viewModel.selectedProviderType,
-      sharedProviders,
-    }).defaultModel;
   const modelOptions = readModelOptions(effectiveProviderType, localModelOptions, finalModel);
   const selectedDefaults = providerDefaultsFor(viewModel.selectedProviderRef, viewModel.selectedProviderType, finalModel);
   const followsProviderInstructions = !!selectedDefaults.instructions && localInstructions.trim() === selectedDefaults.instructions.trim();

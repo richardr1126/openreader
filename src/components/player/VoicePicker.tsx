@@ -25,6 +25,29 @@ export interface VoicePickerPreview {
   stop: () => void;
 }
 
+/** Personal and preset voices share selection, favorites and preview controls. */
+export function VoicePickerRow({ voice, name, note, selected, onSelect, preview, actions, favorites, onError }: {
+  voice: string; name: string; note?: string; selected: boolean; onSelect: () => void;
+  preview: VoicePickerPreview; actions?: ReactNode;
+  favorites?: { voices: Set<string>; toggle: (voice: string) => Promise<void>; available: boolean };
+  onError: (message: string) => void;
+}) {
+  return <div className={cn('flex items-center gap-2 rounded-md pl-1 pr-2', selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken')}>
+    <VoicePreviewButton previewKey={voice} label={name} preview={preview} voice={voice} />
+    <button type="button" aria-label={name} aria-pressed={selected} onClick={onSelect}
+      className={cn('flex min-w-0 flex-1 items-center justify-between gap-2 rounded py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', selected ? 'font-medium text-accent' : 'text-foreground')}>
+      <span className="min-w-0"><span className="block truncate">{name}</span>{note && <span className="block text-xs text-soft">{note}</span>}</span>
+      {selected && <CheckIcon className="h-4 w-4 shrink-0 text-accent" aria-hidden />}
+    </button>
+    {favorites?.available && <IconButton size="sm" aria-pressed={favorites.voices.has(voice)}
+      aria-label={favorites.voices.has(voice) ? `Remove ${name} from favorites` : `Favorite ${name}`}
+      className={favorites.voices.has(voice) ? 'text-accent' : 'text-faint'} onClick={() => { onError(''); void favorites.toggle(voice).catch(() => onError('Could not save favorites. Please try again.')); }}>
+      <HeartIcon className="h-4 w-4" fill={favorites.voices.has(voice) ? 'currentColor' : 'none'} />
+    </IconButton>}
+    {actions}
+  </div>;
+}
+
 export function VoicePreviewButton({ previewKey, label, preview, disabled, voice }: {
   previewKey: string;
   label: string;
@@ -119,6 +142,7 @@ export function VoicePicker({
       {favoriteError && <p role="alert" className="text-xs text-warning">{favoriteError}</p>}
       {notices}
       {cloning?.providerRef && ['fish-audio', 'openrouter'].includes(cloning.providerType) && <ClonedVoiceLibrary key={`${cloning.providerRef}:${cloning.model}`} cloning={cloning} value={value} onChange={onChange} preview={preview} favorites={favorites} query={query} favoritesOnly={favoritesOnly} fallbackVoice={voices.find(v => !v.startsWith('clone:')) ?? 'default'} />}
+      {cloning?.providerRef && ['fish-audio', 'openrouter'].includes(cloning.providerType) && <h4 className="pt-2 text-sm font-semibold text-soft">Built-in voices</h4>}
       {previewError && (
         <p role="status" className="text-xs text-warning">{previewError.message}</p>
       )}
@@ -143,38 +167,8 @@ export function VoicePicker({
                   const selected = selectedVoices.includes(voiceId);
                   const name = displayVoiceName(voiceId);
                   return (
-                    <li
-                      key={voiceId}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md pl-1 pr-2',
-                        selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken',
-                      )}
-                    >
-                      <VoicePreviewButton previewKey={voiceId} label={name} preview={preview} voice={voiceId} />
-                      <button
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => pick(voiceId)}
-                        className={cn(
-                          'flex min-w-0 flex-1 items-center justify-between gap-2 rounded py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                          selected ? 'font-medium text-accent' : 'text-foreground',
-                        )}
-                      >
-                        <span className="truncate">{name}</span>
-                        {selected ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden /> : null}
-                      </button>
-                      {favorites?.available && !(groupByLanguage && voiceId.includes('+')) && (
-                        <IconButton size="sm" aria-pressed={favorites.voices.has(voiceId)}
-                          aria-label={favorites.voices.has(voiceId) ? `Remove ${name} from favorites` : `Favorite ${name}`}
-                          className={favorites.voices.has(voiceId) ? 'text-accent' : 'text-faint'}
-                          onClick={() => {
-                            setFavoriteError(null);
-                            void favorites.toggle(voiceId).catch(() => setFavoriteError('Could not save favorites. Please try again.'));
-                          }}>
-                          <HeartIcon className="h-4 w-4" fill={favorites.voices.has(voiceId) ? 'currentColor' : 'none'} />
-                        </IconButton>
-                      )}
-                    </li>
+                    <li key={voiceId}><VoicePickerRow voice={voiceId} name={name} selected={selected} onSelect={() => pick(voiceId)}
+                      preview={preview} favorites={groupByLanguage && voiceId.includes('+') ? undefined : favorites} onError={setFavoriteError} /></li>
                   );
                 })}
               </ul>

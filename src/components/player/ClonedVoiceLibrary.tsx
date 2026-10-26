@@ -4,10 +4,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ClonedVoice } from '@openreader/tts/cloned-voices';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
-import { Button, Input, cn } from '@/components/ui';
-import { HeartIcon } from '@/components/icons/Icons';
+import { Button, IconButton, Input, MenuActionItem, MenuItemsSurface, MenuRoot, MenuTrigger, ModalFrame, ModalTitle } from '@/components/ui';
+import { ChevronRightIcon, DotsHorizontalIcon, PencilIcon, PlusIcon, TrashIcon, UserPlusIcon } from '@/components/icons/Icons';
 import { CloneVoiceEditor, clonedVoiceRequest, type VoiceCloningContext } from './CloneVoiceEditor';
-import { VoicePreviewButton, type VoicePickerPreview } from './VoicePicker';
+import { VoicePickerRow, type VoicePickerPreview } from './VoicePicker';
+
+type VoiceLibrary = { voices: ClonedVoice[]; supportsCloning: boolean };
 
 export function ClonedVoiceLibrary({ cloning, value, onChange, preview, favorites, query, favoritesOnly, fallbackVoice }: {
   cloning: VoiceCloningContext; value: string; onChange: (voice: string) => void;
@@ -18,15 +20,16 @@ export function ClonedVoiceLibrary({ cloning, value, onChange, preview, favorite
   const { data: session } = useAuthSession();
   const sessionId = session?.user?.id ?? '';
   const queryClient = useQueryClient();
-  const library = useQuery<{ voices: ClonedVoice[]; supportsCloning: boolean }>({ queryKey: queryKeys.clonedVoices(sessionId, cloning.providerRef, cloning.model),
+  const libraryKey = queryKeys.clonedVoices(sessionId, cloning.providerRef, cloning.model);
+  const library = useQuery<VoiceLibrary>({ queryKey: libraryKey,
     queryFn: async ({ signal }) => {
       const response = await fetch(`/api/tts/cloned-voices?${new URLSearchParams({ providerRef: cloning!.providerRef, model: cloning!.model })}`, { signal });
       if (!response.ok) throw new Error('Could not load your voices.');
       return response.json();
-    }, enabled: !!sessionId, staleTime: 60_000 });
+    }, enabled: !!sessionId && !!cloning.model, staleTime: 60_000 });
   const personal = (library.data?.voices ?? []).filter(v => v.providerRef === cloning?.providerRef && v.model === cloning?.model);
   const [creating, setCreating] = useState(false);
-  const [managing, setManaging] = useState<string | null>(null);
+  const [managing, setManaging] = useState<{ voice: ClonedVoice; action: 'rename' | 'delete' } | null>(null);
   const [voiceName, setVoiceName] = useState('');
   const [voiceError, setVoiceError] = useState('');
   const [mutating, setMutating] = useState(false);
@@ -34,28 +37,50 @@ export function ClonedVoiceLibrary({ cloning, value, onChange, preview, favorite
     setMutating(true); setVoiceError('');
     try {
       preview.stop();
-      await clonedVoiceRequest(method, { id, name: voiceName });
+      const result = await clonedVoiceRequest(method, { id, name: voiceName });
+      // A successful deletion owns the visible list immediately. Waiting for
+      // a refetch left the removed voice selectable until the next interaction.
+      await queryClient.cancelQueries({ queryKey: queryKeys.clonedVoicesRoot(sessionId) });
+      queryClient.setQueriesData<VoiceLibrary>({ queryKey: queryKeys.clonedVoicesRoot(sessionId) }, previous => previous && ({ ...previous,
+        voices: method === 'DELETE' ? previous.voices.filter(v => v.id !== id)
+          : previous.voices.map(v => v.id === id ? result.voice : v) }));
       if (method === 'DELETE' && value === id) onChange(fallbackVoice);
-      await queryClient.invalidateQueries({ queryKey: queryKeys.clonedVoicesRoot(sessionId) }); setManaging(null);
+      setManaging(null);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clonedVoicesRoot(sessionId) });
     }
     catch (e) { setVoiceError((e as Error).message); }
     finally { setMutating(false); }
   };
-      return <div className="space-y-2 border-b border-line-soft pb-3">
-        <div className="flex items-center justify-between gap-2"><h4 className="text-sm font-medium">Your voices</h4><Button size="sm" disabled={!library.data?.supportsCloning} onClick={() => { preview.stop(); setCreating(true); }}>New voice</Button></div>
-        {library.isPending && <p role="status" className="text-xs text-soft">Checking voice cloning support…</p>}
-        {library.data && !library.data.supportsCloning && <p className="text-xs text-soft">Voice cloning is unavailable for this model.</p>}
-        {library.isError && <p role="alert" className="text-xs text-warning">Could not load your voices. <button onClick={() => void library.refetch()}>Try again</button></p>}
-        {personal.filter(v => (!favoritesOnly || favorites?.voices.has(v.id)) && v.name.toLowerCase().includes(query.toLowerCase())).map(v => <div key={v.id} className="space-y-2">
-          <div className={cn('flex items-center gap-2 rounded-md p-1', value === v.id && 'bg-accent-wash')}>
-            <VoicePreviewButton previewKey={v.id} label={v.name} preview={preview} voice={v.id} />
-            <button className="min-w-0 flex-1 truncate text-left text-sm" aria-pressed={value === v.id} onClick={() => { preview.stop(); onChange(v.id); }}>{v.name}</button>
-            {favorites?.available && <Button size="sm" aria-label={`Favorite ${v.name}`} aria-pressed={favorites.voices.has(v.id)} onClick={() => void favorites.toggle(v.id).catch(() => setVoiceError('Could not save favorites.'))}><HeartIcon className="h-4 w-4" fill={favorites.voices.has(v.id) ? 'currentColor' : 'none'} /></Button>}
-            <Button size="sm" aria-label={`Manage ${v.name}`} onClick={() => { setManaging(managing === v.id ? null : v.id); setVoiceName(v.name); }}>Edit</Button>
-          </div>
-          {managing === v.id && <div className="space-y-2 rounded-md border border-line-soft p-2"><Input aria-label="Rename voice" value={voiceName} maxLength={80} onChange={e => setVoiceName(e.target.value)} /><div className="flex flex-wrap gap-2"><Button size="sm" disabled={mutating || !voiceName.trim()} onClick={() => void mutateVoice('PATCH', v.id)}>Rename</Button><Button size="sm" disabled={mutating} onClick={() => void mutateVoice('DELETE', v.id)}>Delete saved voice</Button><Button size="sm" onClick={() => setManaging(null)}>Cancel</Button></div><p className="text-xs text-soft">Deleting removes this saved sample. Existing narration stays cached.</p></div>}
-        </div>)}
-        {voiceError && <p role="alert" className="text-xs text-warning">{voiceError}</p>}
-        {creating && cloning && <CloneVoiceEditor key={`${cloning.providerRef}:${cloning.model}`} {...cloning} onClose={() => setCreating(false)} onSave={v => { void queryClient.invalidateQueries({ queryKey: queryKeys.clonedVoicesRoot(sessionId) }); onChange(v.id); setCreating(false); }} />}
-      </div>;
+  return <div className="space-y-2">
+    <h4 className="pt-2 text-sm font-semibold text-soft">Your voices</h4>
+    {personal.filter(v => (!favoritesOnly || favorites?.voices.has(v.id)) && v.name.toLowerCase().includes(query.toLowerCase())).map(v =>
+      <VoicePickerRow key={v.id} voice={v.id} name={v.name} note="Your voice" selected={value === v.id}
+        onSelect={() => { preview.stop(); onChange(v.id); }} preview={preview} favorites={favorites} onError={setVoiceError}
+        actions={<MenuRoot><MenuTrigger as={IconButton} size="sm" aria-label={`More for ${v.name}`}><DotsHorizontalIcon className="h-4 w-4" /></MenuTrigger>
+          <MenuItemsSurface anchor="bottom end" portal className="z-[60] min-w-40">
+            <MenuActionItem onClick={() => { setVoiceName(v.name); setVoiceError(''); setManaging({ voice: v, action: 'rename' }); }}><PencilIcon className="h-4 w-4" />Rename</MenuActionItem>
+            <MenuActionItem tone="danger" onClick={() => { setVoiceError(''); setManaging({ voice: v, action: 'delete' }); }}><TrashIcon className="h-4 w-4" />Delete</MenuActionItem>
+          </MenuItemsSurface></MenuRoot>} />)}
+    {library.isPending && <p role="status" className="text-xs text-soft">Checking voice cloning…</p>}
+    {library.data && !library.data.supportsCloning && <p className="text-xs text-soft">Voice cloning is unavailable for this model.</p>}
+    {library.isError && <p role="alert" className="text-xs text-warning">Could not load your voices. <button onClick={() => void library.refetch()}>Try again</button></p>}
+    {library.data?.supportsCloning && <button type="button" aria-label={personal.length ? 'Add another voice' : 'Create your own voice'} onClick={() => { preview.stop(); setCreating(true); }}
+      className="flex w-full items-center gap-3 rounded-lg border border-dashed border-accent-line bg-surface-solid p-3 text-left hover:bg-accent-wash focus-visible:outline-accent">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent-wash text-accent">{personal.length ? <PlusIcon className="h-4 w-4" /> : <UserPlusIcon className="h-5 w-5" />}</span>
+      <span className="min-w-0 flex-1"><span className="block text-sm font-medium">{personal.length ? 'Add another voice' : 'Create your own voice'}</span><span className="block text-xs text-soft">Record or import a short sample</span></span><ChevronRightIcon className="h-4 w-4 text-soft" />
+    </button>}
+    {voiceError && !managing && <p role="alert" className="text-xs text-warning">{voiceError}</p>}
+    {managing && <ModalFrame open onClose={() => { if (!mutating) setManaging(null); }}>
+      <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (!mutating && (managing.action === 'delete' || voiceName.trim())) void mutateVoice(managing.action === 'delete' ? 'DELETE' : 'PATCH', managing.voice.id); }}>
+        <ModalTitle>{managing.action === 'rename' ? 'Rename voice' : `Delete ${managing.voice.name}?`}</ModalTitle>
+        {managing.action === 'rename' ? <Input autoFocus aria-label="Name" value={voiceName} maxLength={80} onChange={e => setVoiceName(e.target.value)} /> : <p className="text-sm text-soft">The saved sample is removed. Cached narration stays available.</p>}
+        {voiceError && <p role="alert" className="text-sm text-warning">{voiceError}</p>}
+        <div className="flex justify-end gap-3"><Button disabled={mutating} onClick={() => setManaging(null)}>Cancel</Button><Button type="submit" variant={managing.action === 'delete' ? 'danger' : 'primary'} disabled={mutating || (managing.action === 'rename' && !voiceName.trim())}>{managing.action === 'delete' ? 'Delete voice' : 'Save'}</Button></div>
+      </form>
+    </ModalFrame>}
+    {creating && <CloneVoiceEditor key={`${cloning.providerRef}:${cloning.model}`} {...cloning} onClose={() => setCreating(false)} onSave={v => {
+      queryClient.setQueryData<VoiceLibrary>(libraryKey, previous => previous && ({ ...previous, voices: [...previous.voices, v] }));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.clonedVoicesRoot(sessionId) }); onChange(v.id); setCreating(false);
+    }} />}
+  </div>;
 }
