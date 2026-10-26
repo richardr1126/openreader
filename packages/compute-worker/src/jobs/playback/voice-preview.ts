@@ -63,6 +63,7 @@ export async function synthesizeTtsVoicePreview(
         format: 'mp3',
         model: settings.ttsModel,
         instructions: settings.ttsInstructions,
+        modelOptions: settings.ttsModelOptions,
         language: settings.language,
         provider: creds.providerType,
         ...(settings.voiceCustomization ? { voiceCustomization: settings.voiceCustomization } : {}),

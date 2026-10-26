@@ -40,6 +40,7 @@ export interface AppConfigValues {
   providerType: TtsProviderType;
   ttsModel: string;
   ttsInstructions: string;
+  ttsModelOptions: string;
   savedVoices: SavedVoices;
   favoriteVoices: FavoriteVoice[];
   readerTypography: ReaderTypography;
@@ -87,6 +88,7 @@ export function getAppConfigDefaults(): AppConfigValues {
     providerType: 'unknown',
     ttsModel: '',
     ttsInstructions: '',
+    ttsModelOptions: '',
     savedVoices: {},
     favoriteVoices: [],
     readerTypography: DEFAULT_TYPOGRAPHY,

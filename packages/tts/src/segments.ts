@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { normalizeOpenRouterOptions } from './openrouter';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -26,6 +27,7 @@ function stableStringify(value: unknown): string {
 }
 
 function settingsCanonical(settings: TTSSegmentSettings): string {
+  const modelOptions = settings.providerType === 'openrouter' ? normalizeOpenRouterOptions(settings.ttsModelOptions, settings.ttsModel) : '';
   const speechText = normalizeSpeechText(settings.speechText);
   const customization = voiceCustomizationCacheKey(settings.voiceCustomization, settings.providerType);
   return stableStringify({
@@ -35,6 +37,7 @@ function settingsCanonical(settings: TTSSegmentSettings): string {
     voice: settings.voice,
     speed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,
     instructions: settings.ttsInstructions || '',
+    ...(modelOptions ? { modelOptions } : {}),
     language: settings.language || 'en',
     format: 'mp3',
     ...(speechTextEnabled(speechText) ? { speechText: { version: 1, ...speechText } } : {}),
@@ -104,6 +107,7 @@ export function buildTtsPlaybackSettingsHash(
 }
 
 export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSegmentSettings | string {
+  const modelOptions = settings.providerType === 'openrouter' ? normalizeOpenRouterOptions(settings.ttsModelOptions, settings.ttsModel) : '';
   const speechText = normalizeSpeechText(settings.speechText);
   const customization = voiceCustomizationCacheKey(settings.voiceCustomization, settings.providerType);
   const canonical: TTSSegmentSettings = {
@@ -113,6 +117,7 @@ export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSe
     voice: settings.voice,
     nativeSpeed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,
     ttsInstructions: settings.ttsInstructions || '',
+    ...(modelOptions ? { ttsModelOptions: modelOptions } : {}),
     language: settings.language || 'en',
     ...(speechTextEnabled(speechText) ? { speechText } : {}),
     ...(customization ? { voiceCustomization: effectiveVoiceCustomization(settings.voiceCustomization, settings.providerType) } : {}),

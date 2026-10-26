@@ -27,6 +27,7 @@ import {
   type TtsProviderId,
 } from '@openreader/tts/provider-catalog';
 import { defaultModelForProviderType } from '@openreader/tts/provider-policy';
+import { useOpenRouterModels } from '@/hooks/useOpenRouterModels';
 
 export interface AdminProviderMasked {
   id: string;
@@ -123,7 +124,7 @@ function requestBody(form: FormState) {
     baseUrl: form.baseUrl.trim() || null,
     ...(form.apiKey.length > 0 ? { apiKey: form.apiKey } : {}),
     defaultModel: form.defaultModel.trim() || null,
-    defaultInstructions: supportsTtsInstructions(form.defaultModel) ? form.defaultInstructions.trim() || null : null,
+    defaultInstructions: supportsTtsInstructions(form.defaultModel, form.providerType) ? form.defaultInstructions.trim() || null : null,
     enabled: form.enabled,
   };
 }
@@ -315,7 +316,8 @@ function ProviderForm({
 }) {
   const brand = PROVIDER_BRANDS[form.providerType];
   const isCustom = form.providerType === 'custom-openai';
-  const models = useMemo(() => resolveProviderModels(form.providerType), [form.providerType]);
+  const catalog = useOpenRouterModels(form.providerType === 'openrouter');
+  const models = useMemo(() => resolveProviderModels(form.providerType, { openRouterModels: catalog.data }), [form.providerType, catalog.data]);
   const supportsCustomModel = providerSupportsCustomModel(form.providerType);
   const modelIsPreset = models.some((model) => model.id === form.defaultModel);
   const selectedModelId = modelIsPreset ? form.defaultModel : supportsCustomModel ? CUSTOM_MODEL_ID : models[0]?.id ?? '';
@@ -410,7 +412,7 @@ function ProviderForm({
             placeholder={keptKey ? `Keep existing (${keptKey})` : isCustom ? 'Optional' : ''}
           />
         </Field>
-        {supportsTtsInstructions(form.defaultModel) && (
+        {supportsTtsInstructions(form.defaultModel, form.providerType) && (
           <Field label="TTS instructions" className="sm:col-span-2">
             <Textarea
               aria-label="TTS instructions"

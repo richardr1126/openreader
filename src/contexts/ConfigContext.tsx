@@ -31,6 +31,7 @@ interface ConfigContextType {
   providerType: AppConfigValues['providerType'];
   ttsModel: string;
   ttsInstructions: string;
+  ttsModelOptions: string;
   savedVoices: SavedVoices;
   favoriteVoices: AppConfigValues['favoriteVoices'];
   readerTypography: AppConfigValues['readerTypography'];
@@ -112,6 +113,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       providerType: effectiveProvider.providerType,
       ttsModel: effectiveTtsModel,
       ttsInstructions: effectiveTtsInstructions,
+      ttsModelOptions: config.ttsModelOptions,
       savedVoices: config.savedVoices,
       updateConfigKey,
       favoriteVoices: config.favoriteVoices,

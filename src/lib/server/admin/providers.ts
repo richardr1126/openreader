@@ -14,6 +14,7 @@ export const BUILT_IN_PROVIDER_IDS: readonly TtsProviderId[] = [
   'deepinfra',
   'openai',
   'fish-audio',
+  'openrouter',
   'kokoro-local',
 ];
 

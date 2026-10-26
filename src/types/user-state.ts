@@ -20,6 +20,7 @@ export const SYNCED_PREFERENCE_KEYS = [
   'providerType',
   'ttsModel',
   'ttsInstructions',
+  'ttsModelOptions',
   'savedVoices',
   'favoriteVoices',
   'readerTypography',

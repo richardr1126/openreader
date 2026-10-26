@@ -33,6 +33,7 @@ export function resolveEffectiveTtsSettings(
     providerType: creds.providerType,
     ttsModel: effectiveModel,
     ttsInstructions: resolveEffectiveTtsInstructions({
+      providerType: creds.providerType,
       model: effectiveModel,
       requestInstructions: settings.ttsInstructions,
       sharedDefaultInstructions: creds.defaultInstructions,

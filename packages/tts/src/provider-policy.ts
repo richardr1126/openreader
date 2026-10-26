@@ -1,4 +1,5 @@
 import { getMaxVoicesForProvider, isKokoroModel } from './kokoro';
+import { OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL } from './openrouter';
 import {
   getDefaultVoices,
   isBuiltInTtsProviderId,
@@ -59,6 +60,7 @@ export interface ResolveTtsModelForProviderInput {
 }
 
 export function defaultModelForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'openrouter') return OPENROUTER_DEFAULT_MODEL;
   if (providerType === 'fish-audio') return 's2.1-pro-free';
   if (providerType === 'openai') return 'tts-1';
   if (providerType === 'deepinfra') return 'hexgrad/Kokoro-82M';
@@ -68,6 +70,7 @@ export function defaultModelForProviderType(providerType: TtsProviderId): string
 }
 
 export function defaultBaseUrlForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'openrouter') return OPENROUTER_BASE_URL;
   if (providerType === 'fish-audio') return 'https://api.fish.audio';
   if (providerType === 'openai') return 'https://api.openai.com/v1';
   if (providerType === 'deepinfra') return 'https://api.deepinfra.com/v1/openai';
@@ -75,6 +78,7 @@ export function defaultBaseUrlForProviderType(providerType: TtsProviderId): stri
 }
 
 export function defaultVoiceForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'openrouter') return FISH_AUDIO_VOICES[0].id;
   if (providerType === 'fish-audio') return FISH_AUDIO_VOICES[0].id;
   if (providerType === 'replicate') return 'Zephyr';
   if (providerType === 'openai') return 'alloy';
@@ -153,7 +157,7 @@ export function resolveTtsProviderModelPolicy(input: ResolveTtsPolicyInput): Tts
   });
   const model = input.model || '';
   const isResolvedProviderType = isBuiltInTtsProviderId(providerType);
-  const isKokoro = isKokoroModel(model);
+  const isKokoro = providerType !== 'openrouter' && isKokoroModel(model);
   const maxVoices = isResolvedProviderType ? getMaxVoicesForProvider(providerType, model) : 1;
 
   return {
@@ -166,7 +170,7 @@ export function resolveTtsProviderModelPolicy(input: ResolveTtsPolicyInput): Tts
     supportsNativeModelSpeed: isResolvedProviderType
       ? supportsNativeModelSpeed(providerType, model)
       : false,
-    supportsInstructions: supportsTtsInstructions(model),
+    supportsInstructions: supportsTtsInstructions(model, providerType),
     supportsCustomModel: isResolvedProviderType
       ? providerSupportsCustomModel(providerType)
       : false,

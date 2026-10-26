@@ -7,13 +7,14 @@ function normalizeInstructionCandidate(value: string | null | undefined): string
 }
 
 export function resolveEffectiveTtsInstructions(opts: {
+  providerType?: import('./provider-catalog').TtsProviderType;
   model: string | null | undefined;
   requestInstructions?: string | null;
   sharedDefaultInstructions?: string | null;
 }): string | undefined {
   if (!resolveTtsProviderModelPolicy({
     providerRef: '',
-    providerType: 'custom-openai',
+    providerType: opts.providerType ?? 'custom-openai',
     model: opts.model,
   }).supportsInstructions) {
     return undefined;

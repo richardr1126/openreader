@@ -321,6 +321,7 @@ describe('server-state architecture', () => {
       '/api/tts/export/download',
       '/api/tts/export/events',
       '/api/tts/export/resolve',
+      '/api/tts/models',
       '/api/tts/playback/plans/[planId]/seek-layout',
       '/api/tts/segments/clear',
       '/api/tts/shared-providers',

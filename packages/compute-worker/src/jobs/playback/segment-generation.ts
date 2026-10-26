@@ -341,6 +341,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       format: 'mp3',
       model: effectiveSettings.ttsModel,
       instructions: effectiveSettings.ttsInstructions,
+      modelOptions: effectiveSettings.ttsModelOptions,
       language: effectiveSettings.language,
       provider: requestCreds.providerType,
       ...(effectiveSettings.voiceCustomization ? { voiceCustomization: effectiveSettings.voiceCustomization } : {}),

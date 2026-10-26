@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./openrouter": "./src/openrouter.ts",
     "./audio-format": "./src/audio-format.ts",
     "./audio-text": "./src/audio-text.ts",
     "./speech-text": "./src/speech-text.ts",

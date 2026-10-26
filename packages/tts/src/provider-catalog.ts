@@ -1,6 +1,7 @@
 import { isKokoroModel } from './kokoro';
+import { OPENROUTER_DEFAULT_MODEL, openRouterCapabilities, type OpenRouterSpeechModel } from './openrouter';
 
-export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'fish-audio' | 'kokoro-local';
+export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'fish-audio' | 'openrouter' | 'kokoro-local';
 export type TtsProviderType = TtsProviderId | 'unknown';
 export type TtsVoiceSource = 'static' | 'deepinfra-api' | 'custom-openai-api' | 'replicate-api';
 export type ReplicateVoiceInputKey = 'voice' | 'voice_id' | 'speaker';
@@ -33,6 +34,7 @@ export interface TtsProviderDefinition {
 
 export interface ResolveProviderModelsContext {
   apiKey?: string;
+  openRouterModels?: OpenRouterSpeechModel[];
 }
 
 export interface ResolveVoicesOptions {
@@ -176,6 +178,10 @@ const DEEPINFRA_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
 
 export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
   {
+    id: 'openrouter', kind: 'external', name: 'OpenRouter', supportsCustomModel: true,
+    models: (context) => [...(context?.openRouterModels ?? [{ id: OPENROUTER_DEFAULT_MODEL, name: 'Fish Audio: S2.1 Pro Free (free)' }]), { id: 'custom', name: 'Other' }],
+  },
+  {
     id: 'fish-audio',
     kind: 'external',
     name: 'Fish Audio',
@@ -242,8 +248,8 @@ const REPLICATE_MODELS_WITHOUT_NATIVE_SPEED = new Set([
   'qwen/qwen3-tts',
 ]);
 
-export function supportsTtsInstructions(model: string | null | undefined): boolean {
-  return !!model && MODELS_WITH_INSTRUCTIONS.has(model);
+export function supportsTtsInstructions(model: string | null | undefined, provider?: string): boolean {
+  return !!model && (provider === 'openrouter' ? openRouterCapabilities(model).instructions : MODELS_WITH_INSTRUCTIONS.has(model));
 }
 
 export function isBuiltInTtsProviderId(value: string | null | undefined): value is TtsProviderId {
@@ -275,6 +281,7 @@ export function resolveProviderType(
 }
 
 export function supportsNativeModelSpeed(provider: TtsProviderId, model: string | null | undefined): boolean {
+  if (provider === 'openrouter') return openRouterCapabilities(model || '').nativeSpeed;
   if (!model) {
     return true;
   }
@@ -301,6 +308,9 @@ export function providerSupportsCustomModel(provider: TtsProviderId): boolean {
 }
 
 export function getDefaultVoices(provider: TtsProviderId, model: string): string[] {
+  if (provider === 'openrouter') return model.startsWith('fish-audio/')
+    ? [...FISH_AUDIO_VOICES.map(({ id }) => id), 'default']
+    : openRouterCapabilities(model).automaticVoice ? ['default'] : [];
   if (provider === 'fish-audio') return FISH_AUDIO_MODELS.some(({ id }) => id === model)
     ? [...FISH_AUDIO_VOICES.map(({ id }) => id), 'default'] : [];
   if (provider === 'openai') {

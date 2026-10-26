@@ -1,5 +1,6 @@
 import { buildTtsPlaybackSettingsHash, buildTtsSegmentSettingsJson } from '@openreader/tts/segments';
 import { normalizeVoiceCustomization } from '@openreader/tts/voice-customization';
+import { normalizeOpenRouterOptions } from '@openreader/tts/openrouter';
 import { isTtsProviderType } from '@openreader/tts/provider-catalog';
 import { normalizeLanguageTag } from '@openreader/tts/language';
 import { getDocumentSkipBlockKinds } from '@/lib/server/tts/document-skip-kinds';
@@ -75,6 +76,10 @@ export function parseTtsSegmentSettings(value: unknown): TTSSegmentSettings | nu
   if (typeof rec.voice !== 'string') return null;
   if (typeof rec.nativeSpeed !== 'number' || !Number.isFinite(rec.nativeSpeed)) return null;
   if (rec.ttsInstructions !== undefined && typeof rec.ttsInstructions !== 'string') return null;
+  if (rec.ttsModelOptions !== undefined && (typeof rec.ttsModelOptions !== 'string' || rec.ttsModelOptions.length > 16384)) return null;
+  let modelOptions = '';
+  try { if (rec.providerType === 'openrouter') modelOptions = normalizeOpenRouterOptions(rec.ttsModelOptions as string | undefined, rec.ttsModel); }
+  catch { return null; }
   if (rec.language !== undefined && typeof rec.language !== 'string') return null;
   if (rec.speechText !== undefined) {
     if (!rec.speechText || typeof rec.speechText !== 'object') return null;
@@ -88,6 +93,7 @@ export function parseTtsSegmentSettings(value: unknown): TTSSegmentSettings | nu
     voice: rec.voice,
     nativeSpeed: rec.nativeSpeed,
     ...(typeof rec.ttsInstructions === 'string' ? { ttsInstructions: rec.ttsInstructions } : {}),
+    ...(modelOptions ? { ttsModelOptions: modelOptions } : {}),
     ...(typeof rec.language === 'string' ? { language: normalizeLanguageTag(rec.language) } : {}),
     ...(rec.speechText ? { speechText: normalizeSpeechText(rec.speechText) } : {}),
     ...(rec.voiceCustomization ? { voiceCustomization: normalizeVoiceCustomization(rec.voiceCustomization) } : {}),

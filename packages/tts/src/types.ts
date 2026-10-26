@@ -26,6 +26,7 @@ export interface TTSSegmentSettings {
   voice: string;
   nativeSpeed: number;
   ttsInstructions?: string;
+  ttsModelOptions?: string;
   language?: string;
   speechText?: SpeechTextOptions;
   voiceCustomization?: VoiceCustomization;

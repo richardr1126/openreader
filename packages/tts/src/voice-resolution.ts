@@ -1,4 +1,5 @@
 import { LRUCache } from 'lru-cache';
+import { fetchOpenRouterModels } from './openrouter';
 import { logTtsError, ttsLogger } from './logger';
 import {
   OPENAI_DEFAULT_VOICES,
@@ -479,6 +480,12 @@ async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise
 }
 
 export async function resolveVoices({ provider, model, apiKey = '', baseUrl = '' }: ResolveVoicesOptions): Promise<string[]> {
+  if (provider === 'openrouter') {
+    const models = await fetchOpenRouterModels();
+    return models.find(entry => entry.id === model)?.supportedVoices?.length
+      ? models.find(entry => entry.id === model)!.supportedVoices!
+      : resolveTtsProviderModelPolicy({ providerRef: provider, model }).defaultVoices;
+  }
   const providerModelPolicy = resolveTtsProviderModelPolicy({
     providerRef: provider,
     providerType: provider,

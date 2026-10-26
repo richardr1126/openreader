@@ -11125,6 +11125,10 @@
                         "type": "string",
                         "maxLength": 4000
                       },
+                      "ttsModelOptions": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
                       "language": {
                         "type": "string",
                         "minLength": 1,

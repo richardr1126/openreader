@@ -1,4 +1,5 @@
 export const queryKeys = {
+  openRouterModels: () => ['openrouter-speech-models'] as const,
   documents: (sessionId: string) => ['documents', sessionId] as const,
   documentPreview: (documentId: string, type: string, lastModified: number) => (
     ['document-preview', documentId, type, lastModified] as const

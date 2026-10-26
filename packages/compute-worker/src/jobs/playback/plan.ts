@@ -59,6 +59,7 @@ export function parseTtsSettings(value: unknown): TTSSegmentSettings {
     voice: rec.voice,
     nativeSpeed: Number(nativeSpeed),
     ttsInstructions,
+    ...(typeof rec.ttsModelOptions === 'string' ? { ttsModelOptions: rec.ttsModelOptions } : {}),
     language: typeof rec.language === 'string' ? normalizeLanguageTag(rec.language) : 'en',
     ...(rec.speechText ? { speechText: normalizeSpeechText(rec.speechText) } : {}),
     ...(rec.voiceCustomization ? { voiceCustomization: normalizeVoiceCustomization(rec.voiceCustomization) } : {}),

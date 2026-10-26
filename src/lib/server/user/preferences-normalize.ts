@@ -6,6 +6,7 @@ import { normalizeTypography, normalizeHighlightAppearance } from '@/lib/shared/
 import { normalizeSpeechText } from '@openreader/tts/speech-text';
 import { normalizeVoiceCustomization } from '@openreader/tts/voice-customization';
 import { normalizeSkipKinds } from '@/lib/shared/document-settings';
+import { normalizeOpenRouterOptions } from '@openreader/tts/openrouter';
 
 // Dropped on write. `iosBetaBannerDismissed` belonged to the first iOS banner;
 // retiring it shows the current banner again to users who dismissed the old one.
@@ -115,6 +116,14 @@ export function sanitizePreferencesPatch(
       case 'voice':
       case 'ttsInstructions':
         if (typeof value === 'string') out[key] = value;
+        break;
+      case 'ttsModelOptions':
+        if (typeof value === 'string') {
+          try {
+            const model = value.trim() ? (JSON.parse(value).model ?? rec.ttsModel ?? '') : '';
+            out.ttsModelOptions = normalizeOpenRouterOptions(value, String(model));
+          } catch { out.ttsModelOptions = ''; }
+        }
         break;
       // providerRef / providerType / ttsModel are resolved together below.
       case 'providerRef':

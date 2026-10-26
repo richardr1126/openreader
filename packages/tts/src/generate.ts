@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL, normalizeOpenRouterOptions, openRouterCapabilities, openRouterRequestOptions, pcmToWav, splitOpenRouterInput, validateOpenRouterReferences } from './openrouter';
 import Replicate from 'replicate';
 import { SpeechCreateParams } from 'openai/resources/audio/speech.mjs';
 import {
@@ -30,6 +31,7 @@ export interface ServerTTSRequest {
   format?: string;
   model?: string | null;
   instructions?: string;
+  modelOptions?: string;
   language?: string;
   provider: string;
   apiKey: string;
@@ -51,6 +53,7 @@ type ResolvedServerTTSRequest = {
   format: string;
   model: SpeechCreateParams['model'];
   instructions?: string;
+  modelOptions?: string;
   language?: string;
   provider: string;
   apiKey: string;
@@ -351,6 +354,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const provider = input.provider || 'openai';
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
   const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
+    : provider === 'openrouter' && !input.model ? OPENROUTER_DEFAULT_MODEL
     : provider === 'fish-audio' && !input.model ? 's2.1-pro-free'
     : provider === 'replicate' && !input.model ? 'google/gemini-3.1-flash-tts'
     : provider === 'kokoro-local' ? KOKORO_LOCAL_MODEL
@@ -363,7 +367,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   });
 
   const normalizedVoice = (
-    (providerType === 'replicate' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
+    providerType !== 'openrouter' && (providerType === 'replicate' || !providerModelPolicy.isKokoroModel) && input.voice.includes('+')
       ? input.voice.split('+')[0].trim()
       : input.voice
   ) as string;
@@ -382,6 +386,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
     format,
     model,
     instructions,
+    ...(provider === 'openrouter' && input.modelOptions ? { modelOptions: normalizeOpenRouterOptions(input.modelOptions, model) } : {}),
     language: input.language,
     provider,
     apiKey: input.apiKey,
@@ -399,6 +404,7 @@ function makeCacheKey(input: {
   format: string;
   text: string;
   instructions?: string;
+  modelOptions?: string;
   language?: string;
   voiceCustomization?: VoiceCustomization;
 }) {
@@ -410,6 +416,7 @@ function makeCacheKey(input: {
     format: input.format,
     text: input.text,
     instructions: input.instructions || undefined,
+    ...(input.modelOptions ? { modelOptions: input.modelOptions } : {}),
     language: input.language || undefined,
     ...(voiceCustomizationCacheKey(input.voiceCustomization, input.provider)
       ? { voiceCustomization: voiceCustomizationCacheKey(input.voiceCustomization, input.provider) } : {}),
@@ -427,6 +434,7 @@ export function buildTTSCacheKey(request: ServerTTSRequest): string {
     format: resolved.format,
     text: resolved.text,
     instructions: resolved.instructions,
+    modelOptions: resolved.modelOptions,
     language: resolved.language,
     voiceCustomization: resolved.voiceCustomization,
   });
@@ -667,6 +675,68 @@ function runLocalRequest(request: ResolvedServerTTSRequest, signal: AbortSignal)
     ...(request.voiceCustomization ? { customization: request.voiceCustomization } : {}) }, signal);
 }
 
+async function runOpenRouterRequest(
+  request: ResolvedServerTTSRequest,
+  signal: AbortSignal,
+  settings: ResolvedTtsUpstreamRuntimeSettings,
+): Promise<Buffer> {
+  const pieces = splitOpenRouterInput(request.text);
+  if (pieces.length > 1) {
+    const chunks: Buffer[] = []; let bytes = 0;
+    for (const text of pieces) {
+      signal.throwIfAborted();
+      const audio = await runOpenRouterRequest({ ...request, text }, signal, settings);
+      const normalized = await normalizeToMp3(audio, signal);
+      bytes += normalized.byteLength;
+      if (bytes > 32 * 1024 * 1024) throw new Error('OpenRouter segment exceeded the audio size limit');
+      chunks.push(normalized);
+    }
+    return Buffer.concat(chunks, bytes);
+  }
+  if (!request.apiKey) throw Object.assign(new Error('OpenRouter needs an API key.'), { status: 401 });
+  const capabilities = openRouterCapabilities(request.model);
+  const options = openRouterRequestOptions(request.modelOptions, request.model);
+  await validateOpenRouterReferences(request.model, options, signal);
+  const body = JSON.stringify({
+    ...options, model: request.model, input: request.text,
+    ...(request.voice && request.voice !== 'default' ? { voice: request.voice } : {}),
+    ...(request.instructions ? { instructions: request.instructions } : {}),
+    ...(capabilities.nativeSpeed ? { speed: Math.max(0.5, Math.min(2, request.speed)) } : {}),
+    response_format: capabilities.format,
+  });
+  const deadline = AbortSignal.any([signal, AbortSignal.timeout(settings.ttsUpstreamTimeoutMs)]);
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetch(`${OPENROUTER_BASE_URL}/audio/speech`, {
+      method: 'POST', headers: { Authorization: `Bearer ${request.apiKey}`, 'Content-Type': 'application/json' },
+      body, signal: deadline, redirect: 'error',
+    });
+    if (response.ok) {
+      if (!response.body) throw new Error('OpenRouter returned no audio');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let bytes = 0;
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          bytes += value.byteLength;
+          if (bytes > 32 * 1024 * 1024) throw new Error('OpenRouter response exceeded the audio size limit');
+          chunks.push(value);
+        }
+      } finally { await reader.cancel(); reader.releaseLock(); }
+      if (!bytes) throw new Error('OpenRouter returned no audio');
+      const audio = Buffer.concat(chunks, bytes);
+      return capabilities.format === 'pcm' ? Buffer.from(pcmToWav(audio, capabilities.pcmSampleRate)) : audio;
+    }
+    await response.body?.cancel();
+    const error = Object.assign(new Error(`OpenRouter returned HTTP ${response.status}`), {
+      status: response.status, response: { status: response.status, headers: response.headers },
+    });
+    if ((response.status !== 429 && response.status < 500) || attempt >= settings.ttsUpstreamMaxRetries) throw error;
+    await sleepWithSignal((getUpstreamRetryAfterSeconds(error) ?? Math.min(2 ** attempt, 4)) * 1000, deadline);
+  }
+}
+
 async function runFishAudioRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
@@ -737,6 +807,8 @@ async function runProviderRequest(
   const providerStartedAt = Date.now();
   const raw = request.provider === 'kokoro-local'
     ? await runLocalRequest(request, signal)
+    : request.provider === 'openrouter'
+      ? await runOpenRouterRequest(request, signal, upstreamSettings)
     : request.provider === 'fish-audio'
       ? await runFishAudioRequest(request, signal, upstreamSettings)
       : request.provider === 'replicate'
@@ -866,6 +938,7 @@ export async function generateTTSBuffer(
     format: resolved.format,
     text: resolved.text,
     instructions: resolved.instructions,
+    modelOptions: resolved.modelOptions,
     language: resolved.language,
     voiceCustomization: resolved.voiceCustomization,
   });

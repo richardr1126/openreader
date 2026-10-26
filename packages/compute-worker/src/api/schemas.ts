@@ -172,6 +172,7 @@ export const ttsVoicePreviewRequestSchema = z.object({
     voice: z.string().trim().min(1).max(512),
     nativeSpeed: z.number().min(0.5).max(3),
     ttsInstructions: z.string().max(4000).optional(),
+    ttsModelOptions: z.string().max(16384).optional(),
     language: z.string().trim().min(1).max(64).optional(),
     voiceCustomization: z.object({
       pieceCharacterLimit: z.number().int().min(50).max(450).nullable(),

@@ -1,6 +1,6 @@
 # Reader parity implementation plan
 
-Updated 2026-10-24. This is the shared implementation order for the web and
+Updated 2026-10-26. This is the shared implementation order for the web and
 Swift repositories. Platform capability parity does not introduce cross-service
 library or settings synchronization.
 
@@ -57,20 +57,130 @@ schema deployment before distribution; see the Swift architecture document.
 | 5 | Citation and bracket handling | Implemented on web and Swift: numeric/author–year citation skipping and Off/Square brackets/Parentheses/Both prose handling, with independent app defaults and per-book overrides. Source maps preserve highlighting and progress; filtered audio uses separate reusable cache variants. See `SPEECH_TEXT_HANDLING.md`. Production CloudKit schema deployment and two-device delivery remain owner follow-ups. |
 | 6 | Added web pauses | Implemented: Automatic preserves existing engine pauses (currently 0 ms added on web), with app defaults and independent book overrides. All providers support between-segment pauses; worker-local Kokoro also supports custom piece length and between-piece pauses. Boundaries are generated pieces and reader blocks, not necessarily sentences/paragraphs. See `VOICE_CUSTOMIZATION.md`. Swift is unchanged. |
 | 7 | Optional external providers on Swift | Keep on-device reading the default. Establish secure configuration, credentials, and execution contracts first; implement adapters and UI afterward using existing web provider capabilities. |
-| 8 | Fish Audio | Implemented on web and Swift through the existing provider contracts. Explicit free/paid model selection, default or custom voice reference IDs, native speed, bounded audio, retries and cancellation use the existing credential, alignment, cache and export owners. See `FISH_AUDIO.md`. |
+| 8 | Fish Audio and OpenRouter | Native Fish Audio is implemented on web and Swift; see `FISH_AUDIO.md`. Add OpenRouter on both platforms with all discovered speech models, model-specific options, capability-aware Instructions, API voice catalogs and verified fallback voices. OpenRouter remains planned; see the contract below. |
 | 9 | Optional queued voice changes | Preserve current Apply. Add a distinct queue option after specifying its interaction with generated audio, timeline reuse, and current playback. |
 
 ## Explicitly deferred or excluded
 
 - Swift DOCX and PPDocLayout/PDF classification work.
 - Additional web ONNX TTS models beyond the current Kokoro, or new providers
-  other than FishAudio.
+  other than Fish Audio and OpenRouter. Models accessed through OpenRouter are
+  included in item 8; each underlying service does not need a native adapter.
 - Web offline/chapter downloads and new cache-retention workflows. Swift already
   uses purgeable audio cache; no new retention feature is requested.
 - Export redesign, additional export formats, and new background export jobs.
 - Lookup/translation and annotations; existing bookmarks remain the reader UX.
 - Player layout changes, remappable shortcuts, and a custom Live Activity.
 - Cross-product self-hosted synchronization, Zotero integration, and WebDAV.
+
+## Item 8 continuation: OpenRouter
+
+Add OpenRouter to the existing web and Swift external-provider flows. Native
+Fish Audio remains complete; this continuation adds a separate provider choice.
+The scope is every speech model exposed by OpenRouter, including free variants,
+rather than a fixed selection of familiar models. This is an implementation
+backlog contract, not a claim that OpenRouter support has shipped.
+
+### Discovery and model capabilities
+
+- Discover models with
+  `GET https://openrouter.ai/api/v1/models?output_modalities=speech` and synthesize
+  through `POST https://openrouter.ai/api/v1/audio/speech`. Use returned model
+  IDs verbatim, including variant suffixes. Refresh the catalog without silently
+  changing saved selections, favorites or cached audio when entries disappear.
+- Resolve capabilities by provider, model and relevant endpoint. Use API
+  metadata where available and explicit, documented model rules where it is
+  incomplete. One resolved capability contract must drive both visible controls
+  and request validation on each platform. Unknown capability values must not
+  masquerade as confirmed support or exclude an otherwise usable model.
+- Expose the selected model's supported options, defaults, required values and
+  limits through the existing settings controls. Cover voice selection,
+  Instructions, synthesis speed and provider-specific options. Preserve the
+  provider slug nesting under `provider.options`; validate documented fields
+  and omit unsupported values. Changing models must not forward incompatible
+  settings from the previous model. Investigate the option contract for every
+  discovered family rather than assuming OpenAI-compatible syntax makes every
+  option portable.
+- Account for reference audio/images and multi-speaker inputs where supported
+  or required; use endpoint capability flags and model-specific validation.
+  Verify narration behavior for prompt-based models, including faithful reading
+  and alignment, before marking their reader integration complete.
+
+### Instructions and voices
+
+- Show Instructions only for a provider/model confirmed to support it, across
+  setup, previews and reader settings. Send OpenRouter directions through its
+  top-level `instructions` field. Do not apply the native Fish bracket prefix
+  as well. Keep native Fish's existing transformation and original source text
+  for alignment. Hidden instructions must not be sent or alter audio identity.
+- Populate the shared voice pickers from `supported_voices`. A null or empty
+  list means the catalog supplies no presets; investigate the model instead
+  of declaring it voiceless or borrowing another model's voices. Retain custom
+  voice IDs where accepted. Offer Automatic only when voice omission is valid.
+- For Fish models without a catalog, reuse the existing public reference IDs
+  and names (Sarah, Energetic Male, Adrian, Delia and Sheila) after verifying
+  compatibility through OpenRouter. Keep Sarah as the preferred named default
+  where verified. Check each model, including S1, independently; its presence
+  in OpenRouter is separate from its retirement in the native Fish adapter.
+  If an upstream preset/default cannot be verified, expose the required custom
+  voice/reference input with a clear explanation instead of inventing an ID.
+
+### Research checkpoint — 2026-10-26
+
+Read-only checks of the public catalog returned **36 speech models**, all with
+`supported_parameters: []`. Neither that field nor the endpoint responses
+checked provide an Instructions support flag. Endpoint responses do expose
+reference-input capabilities. Discovery alone is therefore insufficient for
+building the settings form. Recheck these observations during implementation.
+
+| Missing voice catalog | Finding and implementation follow-up |
+| --- | --- |
+| `fish-audio/drama-3`, `fish-audio/s1`, `fish-audio/s2-pro`, `fish-audio/s2.1-pro-free:free`, `fish-audio/s2.1-pro` | All five return `supported_voices: null`; the endpoint responses checked supply no preset list either. Existing native Fish references are fallback candidates, not verified OpenRouter voices. Test named/custom references and voice omission per model. |
+| `bytedance-seed/seed-audio-1-0` | Returns `supported_voices: null`. Its documented prompt mode permits voice omission. Plan an Automatic choice and investigate documented Seed speaker IDs before adding named defaults. |
+
+The free Fish model's catalog `links.details` resolves to an endpoint list
+without `:free` and returns no endpoints. Looking up
+`/api/v1/models/fish-audio/s2.1-pro-free:free/endpoints` returns its free endpoint.
+Preserve the selected variant when resolving capabilities; do not interpret the
+unqualified link as proof the free model is unavailable or substitute a paid one.
+
+OpenRouter documents Instructions for OpenAI GPT-4o mini TTS, Gemini TTS and
+Fish Audio, with Fish prefixing performed by OpenRouter. Confirm exact model
+coverage, especially S1, rather than inferring it from vendor names. Documented
+format restrictions include PCM-only Gemini/HeyGen and MP3-only MiniMax.
+Google options include `google-ai-studio.temperature` and `speech_metadata`;
+HeyGen exposes `heygen.language`. These are investigation examples, not an
+exhaustive option list. Seed's documented limits include 3,000 input characters,
+0.5–2.0 speed and 120 seconds of generated audio.
+
+Sources: [OpenRouter TTS guide](https://openrouter.ai/docs/guides/overview/multimodal/tts),
+[live speech catalog](https://openrouter.ai/api/v1/models?output_modalities=speech),
+[model endpoints API](https://openrouter.ai/docs/api/api-reference/endpoints/list-all-endpoints-for-a-model),
+and the existing native [Fish Audio contract](FISH_AUDIO.md).
+No authenticated OpenRouter synthesis was performed for this checkpoint.
+
+### Execution and acceptance
+
+Use the existing credential and execution owners: app-owned encrypted keys and
+worker credential broker on web; Keychain and direct bounded transport on Swift.
+Keep credentials out of jobs, browser responses, events and artifacts. Preserve
+canonical timelines, cancellation, alignment, reusable audio and export. Include
+effective model, voice, Instructions and synthesis options in existing audio
+identity so different output settings cannot reuse the wrong audio.
+
+Handle each model's audio format, PCM framing/sample rate and input/output limits
+through existing normalization and bounded generation. Omit unsupported synthesis
+speed; retain the existing player speed behavior. No implicit paid-model fallback.
+Use existing settings storage where suitable; any necessary schema addition
+still requires approval before implementation.
+
+Acceptance covers catalog refresh and variant IDs, voice/default/custom selection,
+Instructions visibility and single application, model-option validation, preview,
+save/reload, real narration, cancellation, cache reuse and export on both platforms.
+Add request-contract coverage for every discovered family and explicit missing
+metadata cases, plus authenticated samples for fallback voices before calling
+them verified. Exercise visible controls and run the repository's complete web
+and native validation at the implementation checkpoint.
 
 ## Current checkpoint
 

@@ -120,6 +120,7 @@ export async function resolveReaderPlayback(
       ttsModel: model,
       voice,
       nativeSpeed: policy.supportsNativeModelSpeed ? bookVoice.voiceSpeed : 1,
+      ...(provider.providerType === 'openrouter' && preferences.ttsModelOptions ? { ttsModelOptions: preferences.ttsModelOptions } : {}),
       ...(policy.supportsInstructions && (preferences.ttsInstructions || provider.defaultInstructions)
         ? { ttsInstructions: preferences.ttsInstructions || provider.defaultInstructions }
         : {}),

@@ -38,7 +38,7 @@ export interface ProviderCheckDeps {
 const PROBE_TIMEOUT_MS = 10_000;
 const SPEECH_TIMEOUT_MS = 35_000;
 const SAMPLE_TEXT = 'This is a quick provider check.';
-const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'fish-audio'];
+const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'fish-audio', 'openrouter'];
 
 function hostOf(url: string): string {
   try {
@@ -115,14 +115,17 @@ async function checkConnection(
     return item('ok', 'Replicate accepted the key and found the model.');
   }
 
-  const baseUrl = (draft.baseUrl || defaultBaseUrlForProviderType(draft.providerType)).replace(/\/+$/, '');
+  const baseUrl = (draft.providerType === 'openrouter' ? defaultBaseUrlForProviderType('openrouter')
+    : draft.baseUrl || defaultBaseUrlForProviderType(draft.providerType)).replace(/\/+$/, '');
   const host = hostOf(baseUrl);
   let response: Response;
   try {
-    response = await deps.fetch(draft.providerType === 'fish-audio' ? 'https://api.fish.audio/model?page_size=1' : `${baseUrl}/models`, {
+    response = await deps.fetch(draft.providerType === 'openrouter' ? `${baseUrl}/key`
+      : draft.providerType === 'fish-audio' ? 'https://api.fish.audio/model?page_size=1' : `${baseUrl}/models`, {
       headers: draft.apiKey ? { Authorization: `Bearer ${draft.apiKey}` } : {},
       signal: AbortSignal.any([signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
       cache: 'no-store',
+      redirect: 'error',
     });
   } catch {
     return item('error', `Could not reach ${host} from the app server.`);

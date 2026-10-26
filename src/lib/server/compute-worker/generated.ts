@@ -2574,6 +2574,7 @@ export interface paths {
                             voice: string;
                             nativeSpeed: number;
                             ttsInstructions?: string;
+                            ttsModelOptions?: string;
                             language?: string;
                             voiceCustomization?: {
                                 pieceCharacterLimit: number | null;

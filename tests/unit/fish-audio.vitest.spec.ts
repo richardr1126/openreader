@@ -16,7 +16,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('Fish Audio', () => {
   test('uses the free model explicitly and supports broker resolution', () => {
-    expect(EXTERNAL_PROVIDER_ORDER).toEqual(['openai', 'fish-audio', 'replicate', 'deepinfra', 'custom-openai']);
+    expect(EXTERNAL_PROVIDER_ORDER).toEqual(['openrouter', 'fish-audio', 'openai', 'replicate', 'deepinfra', 'custom-openai']);
     expect(resolveProviderDefaults({ providerRef: 'fish-audio' })).toMatchObject({
       providerType: 'fish-audio', defaultModel: 's2.1-pro-free', defaultVoice: FISH_AUDIO_VOICES[0].id,
     });

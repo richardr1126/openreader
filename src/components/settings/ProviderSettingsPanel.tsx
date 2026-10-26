@@ -1,6 +1,9 @@
 'use client';
 import { SpeechTextControls } from './SpeechTextControls';
 import { VoiceCustomizationControls } from './VoiceCustomizationControls';
+import { OpenRouterOptionsControls } from './OpenRouterOptionsControls';
+import { useOpenRouterModels } from '@/hooks/useOpenRouterModels';
+import { normalizeOpenRouterOptions, openRouterRequestOptions } from '@openreader/tts/openrouter';
 import { AdvancedSettings, AdvancedSettingsGroup } from './AdvancedSettings';
 import { MaxSegmentLengthControl } from './MaxSegmentLengthControl';
 import { PdfBlockKindControls } from './PdfBlockKindControls';
@@ -45,6 +48,7 @@ export function ProviderSettingsPanel({
     providerType,
     ttsModel,
     ttsInstructions,
+    ttsModelOptions,
     voice,
     voiceSpeed,
     speechText,
@@ -61,6 +65,8 @@ export function ProviderSettingsPanel({
   const [modelValue, setModelValue] = useState(ttsModel);
   const [customModelInput, setCustomModelInput] = useState('');
   const [localInstructions, setLocalInstructions] = useState(ttsInstructions);
+  const [localModelOptions, setLocalModelOptions] = useState('');
+  const catalog = useOpenRouterModels(localProviderType === 'openrouter');
   const [localVoice, setLocalVoice] = useState(voice);
   const [localSpeed, setLocalSpeed] = useState(voiceSpeed);
   const [localSpeechText, setLocalSpeechText] = useState(speechText);
@@ -76,6 +82,7 @@ export function ProviderSettingsPanel({
     customModelInput,
     showAllProviderModels: runtimeConfig.showAllProviderModels,
     sharedProviders,
+    openRouterModels: catalog.data,
   }), [
     customModelInput,
     localProviderRef,
@@ -83,6 +90,7 @@ export function ProviderSettingsPanel({
     modelValue,
     runtimeConfig.showAllProviderModels,
     sharedProviders,
+    catalog.data,
   ]);
 
   const selectedProvider = viewModel.providers.find(
@@ -120,6 +128,7 @@ export function ProviderSettingsPanel({
     if (next.providerRef !== undefined) setLocalProviderRef(next.providerRef);
     if (next.providerType !== undefined) setLocalProviderType(next.providerType);
     setModelValue(next.model);
+    setLocalModelOptions('');
     // Voices belong to a provider and model; the new list supplies the default.
     setLocalVoice('');
   };
@@ -130,13 +139,15 @@ export function ProviderSettingsPanel({
     setModelValue(ttsModel);
     setCustomModelInput(ttsModel);
     setLocalInstructions(ttsInstructions);
+    const options = openRouterRequestOptions(ttsModelOptions, ttsModel);
+    setLocalModelOptions(Object.keys(options).length ? JSON.stringify(options, null, 2) : '');
     setLocalVoice(voice);
     setLocalSpeed(voiceSpeed);
     setLocalSpeechText(speechText);
     setLocalCustomization(voiceCustomization);
     setLocalMaxSegmentLength(ttsSegmentMaxBlockLength);
     setLocalPdfSkipKinds(pdfSkipBlockKinds);
-  }, [providerRef, providerType, ttsInstructions, ttsModel, voice, voiceSpeed, speechText, voiceCustomization, ttsSegmentMaxBlockLength, pdfSkipBlockKinds]);
+  }, [providerRef, providerType, ttsInstructions, ttsModelOptions, ttsModel, voice, voiceSpeed, speechText, voiceCustomization, ttsSegmentMaxBlockLength, pdfSkipBlockKinds]);
 
   useEffect(() => {
     if (configLoading || (active && hydrated)) return;
@@ -149,11 +160,14 @@ export function ProviderSettingsPanel({
   const { play: playSample, stop: stopPreview } = preview;
   useEffect(() => stopPreview, [stopPreview]);
   const playPreview = useCallback((key: string, previewVoice: string) => {
+    const previewOptions = readModelOptions(effectiveProviderType, localModelOptions, modelValue);
+    if (previewOptions.error) { toast.error(previewOptions.error); return; }
     void playSample(key, {
       settings: {
         providerRef: viewModel.selectedProviderRef,
         providerType: effectiveProviderType,
         ttsModel: modelValue,
+        ...(previewOptions.normalized ? { ttsModelOptions: previewOptions.normalized } : {}),
         voice: previewVoice,
         nativeSpeed: providerModelPolicy.supportsNativeModelSpeed ? localSpeed : 1,
         ...(providerModelPolicy.supportsInstructions && localInstructions ? { ttsInstructions: localInstructions } : {}),
@@ -165,6 +179,7 @@ export function ProviderSettingsPanel({
   }, [
     effectiveProviderType,
     localInstructions,
+    localModelOptions,
     localSpeed,
     localCustomization,
     modelValue,
@@ -219,10 +234,12 @@ export function ProviderSettingsPanel({
       providerType: viewModel.selectedProviderType,
       sharedProviders,
     }).defaultModel;
+  const modelOptions = readModelOptions(effectiveProviderType, localModelOptions, finalModel);
   const dirty = viewModel.selectedProviderRef !== providerRef
     || viewModel.selectedProviderType !== providerType
     || finalModel !== ttsModel
     || localInstructions !== ttsInstructions
+    || !!modelOptions.error || modelOptions.normalized !== ttsModelOptions
     || localVoice !== voice
     || VOICE_CUSTOMIZATION_FIELDS.some(key => localCustomization[key] !== voiceCustomization[key])
     || localMaxSegmentLength !== ttsSegmentMaxBlockLength
@@ -245,6 +262,7 @@ export function ProviderSettingsPanel({
         providerType: viewModel.selectedProviderType,
         ttsModel: finalModel,
         ttsInstructions: localInstructions,
+        ttsModelOptions: modelOptions.normalized,
         speechText: localSpeechText,
         voiceCustomization: localCustomization,
         ttsSegmentMaxBlockLength: localMaxSegmentLength,
@@ -367,6 +385,9 @@ export function ProviderSettingsPanel({
             )}
           </div>
         </SettingRow>
+        {effectiveProviderType === 'openrouter' && <OpenRouterOptionsControls model={finalModel}
+          modelName={catalog.data?.find(model => model.id === finalModel)?.name ?? finalModel}
+          value={localModelOptions} error={modelOptions.error} onChange={setLocalModelOptions} />}
       </Section>
 
       {providerModelPolicy.supportsInstructions && (
@@ -406,7 +427,7 @@ export function ProviderSettingsPanel({
             <RangeInput
               id="default-model-speed"
               min={MODEL_SPEED_MIN}
-              max={effectiveProviderType === 'fish-audio' ? 2 : MODEL_SPEED_MAX}
+              max={effectiveProviderType === 'fish-audio' || effectiveProviderType === 'openrouter' ? 2 : MODEL_SPEED_MAX}
               step={0.1}
               value={localSpeed}
               onChange={(event) => setLocalSpeed(Number(Number(event.target.value).toFixed(2)))}
@@ -450,11 +471,18 @@ export function ProviderSettingsPanel({
       {dirty || saving ? (
         <SaveBar
           saving={saving}
-          saveDisabled={!viewModel.canSubmit || sharedProvidersLoading}
+          saveDisabled={!viewModel.canSubmit || sharedProvidersLoading || !!modelOptions.error}
           onDiscard={discard}
           onSave={() => void save()}
         />
       ) : null}
     </div>
   );
+}
+
+/** Options are bound to the OpenRouter model they were written for. */
+function readModelOptions(providerType: string, value: string, model: string): { normalized: string; error?: string } {
+  if (providerType !== 'openrouter') return { normalized: '' };
+  try { return { normalized: normalizeOpenRouterOptions(value, model) }; }
+  catch (error) { return { normalized: '', error: (error as Error).message }; }
 }

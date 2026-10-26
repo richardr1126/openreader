@@ -29,7 +29,7 @@ import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
  * sample with the draft settings and never touch the document's audio.
  */
 export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { providerRef, providerType, ttsModel, ttsInstructions, voiceCustomization } = useConfig();
+  const { providerRef, providerType, ttsModel, ttsInstructions, ttsModelOptions, voiceCustomization } = useConfig();
   const favorites = useVoiceFavorites(providerRef, ttsModel);
   const {
     voice: appliedVoice,
@@ -97,6 +97,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         providerRef,
         providerType,
         ttsModel,
+        ...(providerType === 'openrouter' && ttsModelOptions ? { ttsModelOptions } : {}),
         voice,
         nativeSpeed: draft.nativeSpeed,
         voiceCustomization: normalizeVoiceCustomization({ ...voiceCustomization, ...bookSpeechSettings.voiceCustomization }),
@@ -115,6 +116,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     providerRef,
     providerType,
     ttsInstructions,
+    ttsModelOptions,
     ttsModel,
     voiceCustomization,
     bookSpeechSettings.voiceCustomization,
@@ -186,7 +188,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               label="Model speed"
               value={draft.nativeSpeed}
               min={0.5}
-              max={policy.providerType === 'fish-audio' ? 2 : 3}
+              max={policy.providerType === 'fish-audio' || policy.providerType === 'openrouter' ? 2 : 3}
               step={0.1}
               formatter={formatModelSpeed}
               description="Changes how fast the voice speaks and regenerates audio. Playback speed in the player applies instantly."
