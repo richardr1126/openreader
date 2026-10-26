@@ -38,7 +38,7 @@ export interface ProviderCheckDeps {
 const PROBE_TIMEOUT_MS = 10_000;
 const SPEECH_TIMEOUT_MS = 35_000;
 const SAMPLE_TEXT = 'This is a quick provider check.';
-const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate'];
+const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'fish-audio'];
 
 function hostOf(url: string): string {
   try {
@@ -119,7 +119,7 @@ async function checkConnection(
   const host = hostOf(baseUrl);
   let response: Response;
   try {
-    response = await deps.fetch(`${baseUrl}/models`, {
+    response = await deps.fetch(draft.providerType === 'fish-audio' ? 'https://api.fish.audio/model?page_size=1' : `${baseUrl}/models`, {
       headers: draft.apiKey ? { Authorization: `Bearer ${draft.apiKey}` } : {},
       signal: AbortSignal.any([signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
       cache: 'no-store',

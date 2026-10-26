@@ -406,7 +406,7 @@ export function ProviderSettingsPanel({
             <RangeInput
               id="default-model-speed"
               min={MODEL_SPEED_MIN}
-              max={MODEL_SPEED_MAX}
+              max={effectiveProviderType === 'fish-audio' ? 2 : MODEL_SPEED_MAX}
               step={0.1}
               value={localSpeed}
               onChange={(event) => setLocalSpeed(Number(Number(event.target.value).toFixed(2)))}
@@ -414,6 +414,9 @@ export function ProviderSettingsPanel({
           </div>
         )}
 
+        {effectiveProviderType === 'fish-audio' && (
+          <p className="text-xs text-soft">Default lets Fish choose a voice. For consistent narration, enter a Fish voice reference ID under Custom voice ID.</p>
+        )}
         {voicesPending ? (
           <p className="text-xs text-soft">Loading voices…</p>
         ) : (

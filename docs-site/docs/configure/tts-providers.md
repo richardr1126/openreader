@@ -16,6 +16,7 @@ API keys stay on the server, encrypted (see [How saved keys are protected](./adm
 | **OpenAI** | OpenAI's speech API (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`). | API key. |
 | **Replicate** | Hosted models on Replicate, from a built-in list or any model ID. | API key. |
 | **Deepinfra** | Hosted models on DeepInfra, including Kokoro-82M. | API key. |
+| **Fish Audio** | S2.1 Pro Free, S2.1 Pro, S2 Pro, S1 and Drama 3. | API key; optional voice reference ID. |
 
 Setup guides for specific services are listed under **TTS Providers** in the sidebar.
 
@@ -69,6 +70,14 @@ A custom server needs only `POST /v1/audio/speech`. It may return MP3, WAV, OGG 
 Voice listing is optional. OpenReader tries `/v1/audio/voices`, `/v1/voices` and `/v1/styles`. If none answer, it offers the Kokoro voices for Kokoro models and the standard OpenAI voices (`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`) otherwise.
 
 For external providers, **Custom voice ID** below the voice list lets users enter an ID supplied by their provider, even when it is missing from the catalog. They can preview it, choose **Use voice**, then **Save** in settings or **Apply** in the reader. The provider must support the entered ID.
+
+### Fish Audio
+
+Add **Fish Audio** and get an API key from [Fish Audio](https://fish.audio/app/api-keys). New setups explicitly select **S2.1 Pro Free** (`s2.1-pro-free`); availability depends on your account and Fish's current service. Choose a paid model explicitly when you want to use it. OpenReader never retries a failed free-model request with a paid model.
+
+The **default** voice lets Fish choose a voice. For consistent narration across passages, copy a voice model's reference ID from Fish Audio and enter it under **Custom voice ID**. OpenReader sends that as `reference_id`; it does not import Fish's public voice library or upload voice recordings. Native generation speed supports 0.5×–2×. Audio uses the existing worker alignment, playback cache and export paths.
+
+**Check** verifies API access using Fish's voice metadata endpoint. After saving, it also generates a short sample through the worker; metadata access alone does not prove generation credit or model access. Fish's [speech API reference](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech) describes the supported models and voice IDs.
 
 ## Seed a provider from the environment
 

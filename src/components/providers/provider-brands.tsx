@@ -17,6 +17,11 @@ export interface ProviderBrand {
 }
 
 export const PROVIDER_BRANDS: Record<TtsProviderId, ProviderBrand> = {
+  'fish-audio': {
+    name: 'Fish Audio',
+    summary: 'S2.1 Pro, S2 Pro, S1 and Drama 3 with custom voice IDs',
+    apiKeyUrl: 'https://fish.audio/app/api-keys',
+  },
   openai: {
     name: 'OpenAI',
     summary: 'gpt-4o-mini-tts, tts-1 and tts-1-hd',
@@ -43,7 +48,7 @@ export const PROVIDER_BRANDS: Record<TtsProviderId, ProviderBrand> = {
 };
 
 /** External provider types in the order the add-provider picker shows them. */
-export const EXTERNAL_PROVIDER_ORDER: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'custom-openai'];
+export const EXTERNAL_PROVIDER_ORDER: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate', 'fish-audio', 'custom-openai'];
 
 type LogoSize = 'sm' | 'md' | 'lg';
 
@@ -63,6 +68,15 @@ function Tile({ size, className, children }: { size: LogoSize; className: string
 
 export function ProviderLogo({ providerType, size = 'md' }: { providerType: TtsProviderId; size?: LogoSize }) {
   switch (providerType) {
+    case 'fish-audio':
+      return (
+        <Tile size={size} className="bg-accent-wash text-accent">
+          <svg viewBox="0 0 24 24" className="h-full w-full" fill="currentColor">
+            <path d="M6 12C9 5 17 4 22 12c-5 8-13 7-16 0L1 7v10l5-5Z" />
+            <circle cx="17" cy="11" r="1" className="fill-surface" />
+          </svg>
+        </Tile>
+      );
     case 'openai':
       return (
         <Tile size={size} className="bg-white ring-1 ring-inset ring-black/10">

@@ -21,6 +21,7 @@ import { EXTERNAL_PROVIDER_ORDER, PROVIDER_BRANDS, ProviderLogo } from '@/compon
 import type { ProviderCheckItem, ProviderCheckStatus } from '@/lib/shared/provider-check';
 import {
   providerSupportsCustomModel,
+  isBuiltInTtsProviderId,
   resolveProviderModels,
   supportsTtsInstructions,
   type TtsProviderId,
@@ -76,10 +77,10 @@ export function slugify(value: string): string {
 /** The slug a new provider gets from its name, numbered past any taken one. */
 export function uniqueSlug(name: string, taken: ReadonlySet<string>): string {
   const base = slugify(name);
-  if (!base || !taken.has(base)) return base;
+  if (!base || (!taken.has(base) && !isBuiltInTtsProviderId(base))) return base;
   for (let n = 2; ; n += 1) {
     const candidate = `${base.slice(0, 64 - String(n).length - 1)}-${n}`;
-    if (!taken.has(candidate)) return candidate;
+    if (!taken.has(candidate) && !isBuiltInTtsProviderId(candidate)) return candidate;
   }
 }
 

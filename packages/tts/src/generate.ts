@@ -6,6 +6,7 @@ import {
   KOKORO_LOCAL_MODEL,
   isRetiredReplicateModel,
   replicateExecutionModel,
+  FISH_AUDIO_MODELS,
 } from './provider-catalog';
 import { defaultBaseUrlForProviderType, resolveTtsProviderModelPolicy } from './provider-policy';
 import {
@@ -350,6 +351,7 @@ function resolveTTSRequest(input: ServerTTSRequest): ResolvedServerTTSRequest {
   const provider = input.provider || 'openai';
   const providerType = isBuiltInTtsProviderId(provider) ? provider : 'openai';
   const rawModel = provider === 'deepinfra' && !input.model ? 'hexgrad/Kokoro-82M'
+    : provider === 'fish-audio' && !input.model ? 's2.1-pro-free'
     : provider === 'replicate' && !input.model ? 'google/gemini-3.1-flash-tts'
     : provider === 'kokoro-local' ? KOKORO_LOCAL_MODEL
     : input.model;
@@ -665,6 +667,65 @@ function runLocalRequest(request: ResolvedServerTTSRequest, signal: AbortSignal)
     ...(request.voiceCustomization ? { customization: request.voiceCustomization } : {}) }, signal);
 }
 
+async function runFishAudioRequest(
+  request: ResolvedServerTTSRequest,
+  signal: AbortSignal,
+  settings: ResolvedTtsUpstreamRuntimeSettings,
+): Promise<Buffer> {
+  if (!FISH_AUDIO_MODELS.some(({ id }) => id === request.model)) {
+    throw Object.assign(new Error('Choose a supported Fish Audio model in provider settings.'), { status: 422 });
+  }
+  if (!request.apiKey) {
+    throw Object.assign(new Error('Fish Audio needs an API key.'), { status: 401 });
+  }
+  const body = JSON.stringify({
+    text: request.text,
+    format: 'mp3',
+    ...(request.voice && request.voice !== 'default' ? { reference_id: request.voice } : {}),
+    prosody: { speed: Math.max(0.5, Math.min(2, request.speed)) },
+    ...(request.language ? { language: request.language } : {}),
+  });
+  const deadline = AbortSignal.any([signal, AbortSignal.timeout(settings.ttsUpstreamTimeoutMs)]);
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch('https://api.fish.audio/v1/tts', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${request.apiKey}`, 'Content-Type': 'application/json', model: request.model },
+      body,
+      signal: deadline,
+      redirect: 'error',
+    });
+    if (response.ok) {
+      if (!response.body) throw new Error('Fish Audio returned no audio');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let bytes = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          bytes += value.byteLength;
+          if (bytes > 32 * 1024 * 1024) throw new Error('Fish Audio response exceeded the audio size limit');
+          chunks.push(value);
+        }
+        if (!bytes) throw new Error('Fish Audio returned no audio');
+        return Buffer.concat(chunks, bytes);
+      } finally {
+        await reader.cancel();
+        reader.releaseLock();
+      }
+    }
+    // Never include upstream bodies: services may echo credentials or text.
+    const error = Object.assign(new Error(`Fish Audio returned HTTP ${response.status}`), {
+      status: response.status, response: { status: response.status, headers: response.headers },
+    });
+    await response.body?.cancel();
+    if ((response.status !== 429 && response.status < 500) || attempt >= settings.ttsUpstreamMaxRetries) throw error;
+    const delay = (getUpstreamRetryAfterSeconds(error) ?? 0) * 1000
+      || Math.min(OPENAI_RETRY_INITIAL_DELAY_MS * 2 ** attempt, OPENAI_RETRY_MAX_DELAY_MS);
+    await sleepWithSignal(delay, deadline);
+  }
+}
+
 async function runProviderRequest(
   request: ResolvedServerTTSRequest,
   signal: AbortSignal,
@@ -673,9 +734,11 @@ async function runProviderRequest(
   const providerStartedAt = Date.now();
   const raw = request.provider === 'kokoro-local'
     ? await runLocalRequest(request, signal)
-    : request.provider === 'replicate'
-      ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
-      : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
+    : request.provider === 'fish-audio'
+      ? await runFishAudioRequest(request, signal, upstreamSettings)
+      : request.provider === 'replicate'
+        ? await runReplicateRequest(request, signal, upstreamSettings.ttsUpstreamMaxRetries)
+        : await runOpenAiCompatibleRequest(request, signal, upstreamSettings);
   const providerMs = Date.now() - providerStartedAt;
 
   // OpenAI-compatible servers (and some Replicate models) may emit wav/ogg/etc.;

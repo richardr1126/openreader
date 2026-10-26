@@ -1,6 +1,6 @@
 import { isKokoroModel } from './kokoro';
 
-export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'kokoro-local';
+export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'fish-audio' | 'kokoro-local';
 export type TtsProviderType = TtsProviderId | 'unknown';
 export type TtsVoiceSource = 'static' | 'deepinfra-api' | 'custom-openai-api' | 'replicate-api';
 export type ReplicateVoiceInputKey = 'voice' | 'voice_id' | 'speaker';
@@ -46,6 +46,16 @@ const OPENAI_MODELS: TtsModelDefinition[] = [
   { id: 'tts-1', name: 'TTS-1' },
   { id: 'tts-1-hd', name: 'TTS-1 HD' },
   { id: 'gpt-4o-mini-tts', name: 'GPT-4o Mini TTS' },
+];
+
+// Unknown Fish model headers fall back to paid S2.1 upstream. Offer only
+// explicit supported IDs and reject unknown saved values before execution.
+export const FISH_AUDIO_MODELS: TtsModelDefinition[] = [
+  { id: 's2.1-pro-free', name: 'S2.1 Pro Free' },
+  { id: 's2.1-pro', name: 'S2.1 Pro' },
+  { id: 's2-pro', name: 'S2 Pro' },
+  { id: 's1', name: 'S1' },
+  { id: 'drama-3', name: 'Drama 3' },
 ];
 
 const CUSTOM_OPENAI_MODELS: TtsModelDefinition[] = [
@@ -152,6 +162,13 @@ const DEEPINFRA_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
 };
 
 export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
+  {
+    id: 'fish-audio',
+    kind: 'external',
+    name: 'Fish Audio',
+    supportsCustomModel: false,
+    models: () => FISH_AUDIO_MODELS,
+  },
   {
     id: 'custom-openai',
     kind: 'external',
@@ -267,6 +284,7 @@ export function providerSupportsCustomModel(provider: TtsProviderId): boolean {
 }
 
 export function getDefaultVoices(provider: TtsProviderId, model: string): string[] {
+  if (provider === 'fish-audio') return ['default'];
   if (provider === 'openai') {
     return supportsTtsInstructions(model) ? [...GPT4O_MINI_DEFAULT_VOICES] : [...OPENAI_DEFAULT_VOICES];
   }

@@ -186,7 +186,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               label="Model speed"
               value={draft.nativeSpeed}
               min={0.5}
-              max={3}
+              max={policy.providerType === 'fish-audio' ? 2 : 3}
               step={0.1}
               formatter={formatModelSpeed}
               description="Changes how fast the voice speaks and regenerates audio. Playback speed in the player applies instantly."

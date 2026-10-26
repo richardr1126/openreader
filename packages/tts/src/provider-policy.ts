@@ -58,6 +58,7 @@ export interface ResolveTtsModelForProviderInput {
 }
 
 export function defaultModelForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'fish-audio') return 's2.1-pro-free';
   if (providerType === 'openai') return 'tts-1';
   if (providerType === 'deepinfra') return 'hexgrad/Kokoro-82M';
   if (providerType === 'replicate') return 'google/gemini-3.1-flash-tts';
@@ -66,12 +67,14 @@ export function defaultModelForProviderType(providerType: TtsProviderId): string
 }
 
 export function defaultBaseUrlForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'fish-audio') return 'https://api.fish.audio';
   if (providerType === 'openai') return 'https://api.openai.com/v1';
   if (providerType === 'deepinfra') return 'https://api.deepinfra.com/v1/openai';
   return '';
 }
 
 export function defaultVoiceForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'fish-audio') return 'default';
   if (providerType === 'replicate') return 'Zephyr';
   if (providerType === 'openai') return 'alloy';
   if (providerType === 'deepinfra') return 'af_bella';
