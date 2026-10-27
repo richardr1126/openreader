@@ -27,6 +27,7 @@ test('speech defaults and independent book overrides persist without changing di
   await brackets.click();
   await page.getByRole('option', { name: 'Both', exact: true }).click();
   await page.getByRole('region', { name: 'Unsaved changes', exact: true }).getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
   await page.reload();
   await page.getByRole('button', { name: 'Advanced', exact: true }).click();
   await expect(citations).toHaveAttribute('aria-checked', 'true');
@@ -58,5 +59,5 @@ test('speech defaults and independent book overrides persist without changing di
   await expect(citations).toHaveAttribute('aria-checked', 'true');
   await expect(page.getByRole('button', { name: 'Use app default for citations', exact: true })).toHaveCount(0);
   await expect(text).toHaveText(original, { useInnerText: true });
-  await page.screenshot({ path: `/private/tmp/speech-text-web-${test.info().project.name}.png` });
+  await page.screenshot({ path: test.info().outputPath('speech-text-web.png') });
 });

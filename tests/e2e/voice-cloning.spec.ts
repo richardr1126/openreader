@@ -46,7 +46,7 @@ test(`${providerType} personal voices require sample permission and persist thro
     await expect(editor.getByRole('heading', { name: 'For the best result' })).toBeVisible();
     await expect(editor.getByRole('button', { name: 'Record Read a short passage', exact: true })).toBeVisible();
     await expect(editor.getByRole('button', { name: 'Import Use an audio file', exact: true })).toBeVisible();
-    await page.screenshot({ animations: 'disabled', path: `/private/tmp/openreader-voice-cloning/unified-web-${testInfo.project.name}.png` });
+    await page.screenshot({ animations: 'disabled', path: test.info().outputPath('unified-web.png') });
     await editor.getByLabel('Import voice sample', { exact: true }).setInputFiles({ name: 'reference.wav', mimeType: 'audio/wav',
       buffer: Buffer.from(pcmToWav(new Uint8Array(96_000))) });
     await editor.getByRole('textbox', { name: 'Voice name', exact: true }).fill('My narrator');
@@ -72,7 +72,7 @@ test(`${providerType} personal voices require sample permission and persist thro
     await rename.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Renamed narrator', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('button', { name: 'Renamed narrator', exact: true }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `/private/tmp/openreader-voice-cloning/web-${testInfo.project.name}.png` });
+    await page.screenshot({ path: test.info().outputPath('web.png') });
     // The reader dock names the personal voice, never its clone ID.
     await page.getByRole('link', { name: 'Close settings', exact: true }).click();
     await uploadLibraryFiles(page, resolve('tests/files/sample.md'));

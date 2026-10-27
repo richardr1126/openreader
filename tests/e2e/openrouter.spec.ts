@@ -78,7 +78,7 @@ test('OpenRouter discovers models, gates instructions and layers user over provi
     await expect(page.getByRole('button', { name: 'af_heart', exact: true })).toBeVisible();
     await unsaved.getByRole('button', { name: 'Discard', exact: true }).click();
     await expect(options).toHaveValue(/"temperature": 0.7/);
-    await page.screenshot({ path: `/private/tmp/openrouter-${testInfo.project.name}.png` });
+    await page.screenshot({ path: test.info().outputPath('openrouter.png') });
   } finally {
     await admin.delete(`/api/admin/providers/${provider.id}`); await admin.dispose();
   }

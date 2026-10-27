@@ -5,9 +5,9 @@ const mocks = vi.hoisted(() => ({ auth: vi.fn(), resolve: vi.fn(), list: vi.fn()
 vi.mock('@/lib/server/auth/auth', () => ({ requireAuthContext: mocks.auth }));
 vi.mock('@/lib/server/admin/resolve-credentials', () => ({ resolveTtsCredentials: mocks.resolve }));
 vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ defaultTtsProvider: 'fish' }) }));
-vi.mock('@/lib/server/tts/cloned-voices', () => ({ listClonedVoices: mocks.list, readClonedVoice: mocks.read,
-  writeClonedVoice: mocks.write, deleteClonedVoice: mocks.remove,
-  clonedVoiceSummary: ({ audio: _audio, transcript: _text, ...voice }: Record<string, unknown>) => voice }));
+vi.mock('@/lib/server/tts/cloned-voices', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/server/tts/cloned-voices')>(),
+  listClonedVoices: mocks.list, readClonedVoice: mocks.read, writeClonedVoice: mocks.write, deleteClonedVoice: mocks.remove }));
 const { POST, GET, PATCH, DELETE } = await import('@/app/api/tts/cloned-voices/route');
 const sample = { name: 'My narrator', audio: Buffer.from(pcmToWav(new Uint8Array(48_000))).toString('base64'),
   permitted: true, transcript: 'A clear sample.', providerRef: 'fish', model: 's2.1-pro-free' };
@@ -35,7 +35,7 @@ test('saves a private Fish sample without requiring upstream model creation and 
   expect(fetch).not.toHaveBeenCalled();
   expect(mocks.write).toHaveBeenCalledWith('alice', expect.objectContaining({ audio: sample.audio, providerType: 'fish-audio' }));
   const body = JSON.stringify(await response.json());
-  for (const hidden of [sample.audio, 'secret']) expect(body).not.toContain(hidden);
+  for (const hidden of [sample.audio, sample.transcript, 'secret']) expect(body).not.toContain(hidden);
   vi.unstubAllGlobals();
 });
 test('requires the spoken transcript for Fish Audio references', async () => {

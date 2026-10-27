@@ -23,6 +23,8 @@ type UseTtsPlaybackSettingsInput = {
   documentId: string | null;
   readerSettings: DocumentSettings | null;
   setReaderSettings: (settings: DocumentSettings) => void;
+  /** Reports the settings the server acknowledged, so later reader writes build on them. */
+  onSettingsSaved: (settings: DocumentSettings) => void;
   providerRef: string;
   ttsModel: string;
   defaultVoice: string;
@@ -46,6 +48,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     documentId,
     readerSettings,
     setReaderSettings,
+    onSettingsSaved,
     providerRef,
     ttsModel,
     defaultVoice,
@@ -142,7 +145,8 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         try {
           // The audio controller's snapshot does not own live font/color edits.
           // Omit those fields so the server preserves their latest values.
-          await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+          const saved = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+          onSettingsSaved(saved.settings);
         } catch (error) {
           console.error('Could not save book voice:', error);
           setReaderSettings(previous);
@@ -155,6 +159,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     defaultVoice,
     defaultVoiceSpeed,
     documentId,
+    onSettingsSaved,
     providerRef,
     readerSettings,
     restartAfterConfigUpdate,
@@ -180,7 +185,8 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     let saved = false;
     await restartAfterConfigUpdate(() => setReaderSettings(next), async () => {
       try {
-        await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+        const result = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+        onSettingsSaved(result.settings);
         saved = true;
       } catch (error) {
         console.error('Could not save book speech settings:', error);
@@ -189,7 +195,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
       }
     }, { resetPlan: true });
     return saved;
-  }, [documentId, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
+  }, [documentId, onSettingsSaved, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
 
   return {
     clearSegmentCaches,

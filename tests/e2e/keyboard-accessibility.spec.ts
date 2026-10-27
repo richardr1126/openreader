@@ -38,6 +38,7 @@ test('keyboard user controls reader panels and playback shortcuts', async ({ pag
   await expect(shortcuts).not.toBeChecked();
   await expect(keys).toBeHidden();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
   await page.goto(bookUrl);
   await expect(playButton).toBeVisible();
   await expect(playButton).not.toHaveAttribute('aria-keyshortcuts', /.+/);

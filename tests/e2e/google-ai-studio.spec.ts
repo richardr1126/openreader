@@ -45,7 +45,7 @@ test('Google AI Studio replaces the removed service and persists speech settings
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('Gemini 3.8 Flash-Lite TTS');
     await expect(page.getByRole('button', { name: 'Kore', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('textbox', { name: 'Voice instructions', exact: true })).toHaveValue('Calm, warm narration');
-    await page.screenshot({ path: `/private/tmp/google-ai-studio-${testInfo.project.name}.png` });
+    await page.screenshot({ path: test.info().outputPath('google-ai-studio.png') });
   } finally {
     await admin.delete(`/api/admin/providers/${provider.id}`); await admin.dispose();
   }

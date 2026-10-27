@@ -82,5 +82,5 @@ test('reader defaults inherit independently and speech saves preserve book displ
   await expect(pages).not.toBeChecked();
   await expect(segment).not.toBeChecked();
   await expect(page.getByRole('region', { name: 'Document text', exact: true })).toBeVisible();
-  await page.screenshot({ path: `/private/tmp/reader-defaults-fixed-${testInfo.project.name}.png` });
+  await page.screenshot({ path: test.info().outputPath('reader-defaults-fixed.png') });
 });

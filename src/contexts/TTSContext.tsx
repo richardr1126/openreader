@@ -125,6 +125,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
     plan: TtsPlaybackPlan;
     playback: ReaderPlaybackPreparation;
     initialPosition: ReadingPosition | null;
+    onSettingsSaved: (settings: DocumentSettings) => void;
   }) => void;
   /**
    * Swap in a plan the server re-planned for the open reader (voice, speed,
@@ -276,6 +277,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const ttsModel = configTTSModel;
   const [playbackPlanRequest, setPlaybackPlanRequest] = useState<TtsPlaybackPlanRequest | null>(null);
   const [readerSettings, setReaderSettings] = useState<DocumentSettings | null>(null);
+  // The reader surface owns the acknowledged document settings; speech saves report back to it.
+  const settingsSavedRef = useRef<(settings: DocumentSettings) => void>(() => {});
+  const onSettingsSaved = useCallback((settings: DocumentSettings) => settingsSavedRef.current(settings), []);
   const [detectedDocumentLanguage, setDetectedDocumentLanguage] = useState<string | null>(null);
   const documentLanguage = readerSettings?.language ?? 'auto';
   const bookVoice = resolveBookVoice({
@@ -494,8 +498,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     plan: TtsPlaybackPlan;
     playback: ReaderPlaybackPreparation;
     initialPosition: ReadingPosition | null;
+    onSettingsSaved: (settings: DocumentSettings) => void;
   }) => {
     stop();
+    settingsSavedRef.current = input.onSettingsSaved;
     setReaderSettings(input.settings);
     setDetectedDocumentLanguage(input.documentLanguage);
     setIsEPUB(input.readerType === 'epub');
@@ -580,6 +586,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     documentId,
     readerSettings,
     setReaderSettings,
+    onSettingsSaved,
     providerRef: configProviderRef,
     ttsModel,
     defaultVoice: voice,

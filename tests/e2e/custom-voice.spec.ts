@@ -31,7 +31,7 @@ test('custom voice IDs persist in defaults and remain drafts in the reader', asy
   const inputBox = (await field.boundingBox())!;
   expect(buttonBox.x).toBeGreaterThan(inputBox.x + inputBox.width);
   expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(390);
-  await page.screenshot({ path: `/private/tmp/web-custom-voice-${test.info().project.name}.png` });
+  await page.screenshot({ path: test.info().outputPath('web-custom-voice.png') });
   await page.getByRole('button', { name: originalVoice, exact: true }).click();
   await unsaved.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(unsaved).toBeHidden();

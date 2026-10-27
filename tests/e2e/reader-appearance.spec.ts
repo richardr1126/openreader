@@ -58,7 +58,7 @@ test('favorites and reader appearance persist with independent book inheritance'
   await expect(page.getByRole('spinbutton', { name: 'Letter spacing', exact: true })).toHaveValue('0.03');
   await page.getByRole('button', { name: 'Font family', exact: true }).click();
   await expect(page.getByRole('option', { name: 'Sans', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await page.screenshot({ path: `/private/tmp/reader-parity-web-settings-${test.info().project.name}.png` });
+  await page.screenshot({ path: test.info().outputPath('reader-parity-web-settings.png') });
   await page.keyboard.press('Escape');
   await unsaved.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(unsaved).toBeHidden();
@@ -84,7 +84,7 @@ test('favorites and reader appearance persist with independent book inheritance'
   await expect(text).toHaveCSS('font-family', 'system-ui, sans-serif');
   await expect(sample).toHaveCSS('font-family', 'ui-monospace, monospace');
   expect((await typographySection.boundingBox())!.height).toBe(typographyHeight);
-  await expect(settings.getByRole('button', { name: 'Use global fontFamily', exact: true })).toBeVisible();
+  await expect(settings.getByRole('button', { name: 'Use global font family', exact: true })).toBeVisible();
   await expect(settings.getByText('Use global', { exact: true })).toHaveCount(0);
   const highlightSection = settings.locator('section').filter({ has: page.getByRole('heading', { name: 'Highlight appearance', exact: true }) });
   const highlightHeight = (await highlightSection.boundingBox())!.height;
@@ -102,14 +102,14 @@ test('favorites and reader appearance persist with independent book inheritance'
   await expect(text).toHaveCSS('font-family', 'ui-monospace, monospace');
   await expect(text).toHaveCSS('--reader-word-color', '#2563eb');
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
-  await settings.getByRole('button', { name: 'Use global fontFamily', exact: true }).click();
+  await settings.getByRole('button', { name: 'Use global font family', exact: true }).click();
   await expect(sample).toHaveCSS('font-family', 'system-ui, sans-serif');
   await expect(text).toHaveCSS('font-family', 'ui-monospace, monospace');
   await expect(text).toHaveCSS('--reader-word-color', '#2563eb');
   await settings.getByRole('button', { name: 'Use global highlights', exact: true }).click();
   await settings.getByRole('button', { name: 'Discard', exact: true }).click();
   await expect(sample).toHaveCSS('font-family', 'ui-monospace, monospace');
-  await settings.getByRole('button', { name: 'Use global fontFamily', exact: true }).click();
+  await settings.getByRole('button', { name: 'Use global font family', exact: true }).click();
   await settings.getByRole('button', { name: 'Use global highlights', exact: true }).click();
   await unsaved.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(text).toHaveCSS('font-family', 'system-ui, sans-serif');
@@ -129,5 +129,5 @@ test('favorites and reader appearance persist with independent book inheritance'
   await page.setViewportSize({ width: 390, height: 844 });
   await checkPresetWidths();
   await settings.getByRole('radiogroup', { name: 'Alignment', exact: true }).scrollIntoViewIfNeeded();
-  await page.screenshot({ path: `/private/tmp/reader-typography-sidebar-${test.info().project.name}.png` });
+  await page.screenshot({ path: test.info().outputPath('reader-typography-sidebar.png') });
 });

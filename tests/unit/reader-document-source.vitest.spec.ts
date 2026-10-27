@@ -189,6 +189,21 @@ function renderProbe(readerType: ReaderType, nonce: number) {
   ));
 }
 
+test('an appearance save after an acknowledged book voice save keeps the new voice', async () => {
+  const initial = payload('pdf');
+  initial.settings.presentation = { showsLayout: true };
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'ready', payload: initial });
+  mocks.ensureCachedDocument.mockResolvedValue(sourceDocument('pdf'));
+  await act(async () => renderProbe('pdf', 0));
+  await waitFor(() => latest?.documentSource.status === 'ready');
+  await act(async () => { await latest!.updatePresentation({ presentation: {} }); });
+  const voiceOverride = { providerRef: 'fish', ttsModel: 's2.1-pro-free', voice: 'clone:new' };
+  // The voice save goes through the playback controller, not this hook.
+  act(() => latest!.acknowledgeSettings({ ...initial.settings, presentation: {}, voiceOverride }));
+  await act(async () => { await latest!.updatePresentation({ presentation: { showsLayout: true } }); });
+  expect(mocks.putDocumentSettings.mock.calls.at(-1)?.[1]).toMatchObject({ voiceOverride, presentation: { showsLayout: true } });
+});
+
 test.each(['http', 'sse'])('a delayed %s replan cannot undo a newer appearance save or restore older speech settings', async (delivery) => {
   const initial = payload('pdf');
   initial.settings.presentation = { showsLayout: true };

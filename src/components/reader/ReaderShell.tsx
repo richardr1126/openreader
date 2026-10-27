@@ -107,6 +107,7 @@ export function ReaderShell<T extends ReaderType>({
         plan: payload.plan,
         playback: payload.playback,
         initialPosition: payload.initialPosition,
+        onSettingsSaved: bootstrap.acknowledgeSettings,
       });
     },
   });

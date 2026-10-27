@@ -144,6 +144,10 @@ export function useReaderBootstrap(documentId: string | undefined) {
     lastSettingsCommit.current = { owner: surfaceOwner, settings: saved.settings };
     await query.refetch({ throwOnError: true });
   }, [query, settingsMutation, surfaceOwner]);
+  /** Records a settings write made outside this hook, such as a book voice change. */
+  const acknowledgeSettings = useCallback((settings: DocumentSettings) => {
+    lastSettingsCommit.current = { owner: surfaceOwner, settings };
+  }, [surfaceOwner]);
   // Presentation edits update the existing ready snapshot. Bootstrapping again
   // would needlessly resolve audio work for a color or font change.
   const updatePresentation = async (patch: Pick<DocumentSettings, 'typography' | 'highlightAppearance' | 'presentation'>) => {
@@ -223,6 +227,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
     retryDocumentSource,
     updateSettings,
     updatePresentation,
+    acknowledgeSettings,
     scheduleProgress,
     enableProgressPersistence,
     disableProgressPersistence,

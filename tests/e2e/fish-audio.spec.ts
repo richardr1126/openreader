@@ -60,7 +60,7 @@ test('Fish Audio offers named voices for every model and preserves voice referen
     await expect(page.getByRole('button', { name: 'Sarah', exact: true })).toBeVisible();
     await page.getByRole('searchbox', { name: 'Search voices', exact: true }).clear();
     await page.getByRole('button', { name: 'Sheila', exact: true }).scrollIntoViewIfNeeded();
-    await page.screenshot({ path: `/private/tmp/fish-voices-${testInfo.project.name}.png` });
+    await page.screenshot({ path: test.info().outputPath('fish-voices.png') });
     await page.getByText('Custom voice ID', { exact: true }).click();
     await page.getByRole('textbox', { name: 'Custom voice ID', exact: true }).fill('fish-reference-check');
     await page.getByRole('button', { name: 'Use voice', exact: true }).click();
@@ -70,7 +70,7 @@ test('Fish Audio offers named voices for every model and preserves voice referen
     await expect(page.getByRole('button', { name: 'fish-reference-check', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: 'Model', exact: true })).toContainText('S2.1 Pro Free');
     await expect(page.getByRole('textbox', { name: 'Voice instructions', exact: true })).toHaveValue('Warm, calm narration');
-    await page.screenshot({ path: `/private/tmp/fish-audio-${testInfo.project.name}.png` });
+    await page.screenshot({ path: test.info().outputPath('fish-audio.png') });
   } finally {
     await admin.delete(`/api/admin/providers/${provider.id}`);
     await admin.dispose();

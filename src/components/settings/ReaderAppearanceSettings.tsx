@@ -214,7 +214,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       suffix={key === 'sizePercent' || key === 'readingWidth' ? '%' : key === 'lineMultiplier' ? '×' : 'em'}
       onChange={(value) => change('typography', { [key]: value })} />;
   };
-  const numberRow = (key: keyof typeof TYPOGRAPHY_RANGES) => <Row label={labels[key]} key={key} actions={resetField('typography', [key], `Use global ${key}`)}>{stepper(key)}</Row>;
+  const numberRow = (key: keyof typeof TYPOGRAPHY_RANGES) => <Row label={labels[key]} key={key} actions={resetField('typography', [key], `Use global ${labels[key].toLowerCase()}`)}>{stepper(key)}</Row>;
   const fontStyle = (value: string) => ({ fontFamily: READER_FONT_FAMILIES[value as ReaderTypography['fontFamily']] || undefined });
 
   return <fieldset disabled={busy || (scope === 'book' && !book)} className="min-w-0 space-y-5" style={{ containerType: 'inline-size', containerName: 'reader-appearance' }}>
@@ -233,7 +233,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           {PREVIEW_PARAGRAPHS.map((text) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>{text}</p>)}
         </div>
       </div>
-      <Row label="Font family" actions={resetField('typography', ['fontFamily'], 'Use global fontFamily')}>
+      <Row label="Font family" actions={resetField('typography', ['fontFamily'], 'Use global font family')}>
         <div className="min-w-0 flex-1"><Select aria-label="Font family" disabled={busy} buttonClassName="h-9 rounded-full py-0 pl-3.5 text-xs font-medium"
           value={SELECT_OPTIONS.fontFamily.find((option) => option.value === draft.fontFamily)} options={SELECT_OPTIONS.fontFamily}
           renderValue={(option) => <span style={fontStyle(option.value)}>{option.label}</span>}

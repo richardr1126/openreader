@@ -63,6 +63,7 @@ test('added pauses keep Automatic defaults and independent book inheritance', as
     await expect(between).toContainText('Automatic (0 ms)');
     await choose(page, 'Between segments', '500 ms');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
     await page.reload();
     await page.getByRole('button', { name: 'Advanced', exact: true }).click();
     await expect(between).toContainText('500 ms');
@@ -74,6 +75,7 @@ test('added pauses keep Automatic defaults and independent book inheritance', as
     await choose(page, 'Piece length', '100 characters');
     await choose(page, 'Between pieces', '150 ms');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
     await page.reload();
     await page.getByRole('button', { name: 'Advanced', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Piece length', exact: true })).toContainText('100 characters');
@@ -122,7 +124,7 @@ test('added pauses keep Automatic defaults and independent book inheritance', as
     await expectInlineSetting(page, 'Piece length');
     await expectInlineSetting(page, 'Between pieces');
     await expectInlineSetting(page, 'Between segments');
-    await page.screenshot({ path: `/private/tmp/voice-customization-web-${test.info().project.name}.png` });
+    await page.screenshot({ path: test.info().outputPath('voice-customization-web.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('heading', { name: 'Added pauses', exact: true }).scrollIntoViewIfNeeded();
     for (const label of ['Piece length', 'Between pieces', 'Between segments']) {
@@ -132,7 +134,7 @@ test('added pauses keep Automatic defaults and independent book inheritance', as
         return value.scrollWidth <= value.clientWidth;
       })).toBe(true);
     }
-    await page.screenshot({ path: `/private/tmp/voice-customization-web-mobile-${test.info().project.name}.png` });
+    await page.screenshot({ path: test.info().outputPath('voice-customization-web-mobile.png') });
   } finally {
     await admin.delete(`/api/admin/providers/${provider.id}`);
     await admin.dispose();
