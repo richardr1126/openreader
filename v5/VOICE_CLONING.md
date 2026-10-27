@@ -10,15 +10,16 @@ voice / Add another voice card above Built-in voices for Fish Audio and
 OpenRouter. Web/desktop follows Swift's existing personal-voice workflow using
 OpenReader's compact web voice rows and standard dialog controls. Both
 support recording/import, reviewing a selected 1–15.9 second clip, naming,
-an optional exact transcript, permission confirmation, selection, previews,
+an exact transcript (required for Fish), permission confirmation, selection, previews,
 rename and removal. Only endpoints advertising `supports_voice_cloning` enable
 OpenRouter creation, with variant suffixes preserved in discovery and synthesis.
 
 The editor uses the same capture, recording and review steps on every platform:
 one heading and introduction, recording tips recommending 10–15 seconds, Record
 and Import tiles, the shared read-aloud passage, sample playback and trimming,
-Name, an optional collapsed transcript for cloud providers, permission and a
-persistent Save action. Row options offer Rename and a separate confirmed Delete.
+Name, the transcript (required for Fish, whose reference schema requires it, and
+collapsed and optional for OpenRouter), permission and a persistent Save action.
+A recording prefills the transcript with the passage; an import leaves it empty. Row options offer Rename and a separate confirmed Delete.
 Platform presentation follows each app's existing controls. Provider/privacy
 disclosures, actual model input limits and the native Pro gate also differ.
 Nano still requires at least ten seconds; other engines accept

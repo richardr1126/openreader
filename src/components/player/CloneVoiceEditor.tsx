@@ -53,7 +53,9 @@ export function CloneVoiceEditor({ providerRef, providerType, model, beforeCaptu
     mounted.current = false; request.current?.abort(); if (recorder.current?.state === 'recording') recorder.current.stop(); stream.current?.getTracks().forEach(track => track.stop());
     if (timer.current) clearTimeout(timer.current); void playback.current?.close();
   }; }, []);
-  const load = async (blob: Blob) => {
+  // A recording reads the shown passage, so it starts as the transcript; an
+  // import's words are unknown.
+  const load = async (blob: Blob, spoken = '') => {
     setError(''); setPermitted(false); setLoading(true); setPlaying(false);
     await playback.current?.close(); playback.current = null;
     const context = new AudioContext();
@@ -61,7 +63,7 @@ export function CloneVoiceEditor({ providerRef, providerType, model, beforeCaptu
       if (blob.size > 20 * 1024 * 1024) throw new Error('Import an audio file smaller than 20 MB.');
       const decoded = await context.decodeAudioData(await blob.arrayBuffer());
       if (decoded.duration < 1) throw new Error('Use at least one second of clear speech.');
-      if (mounted.current) { setAudio(decoded); setStart(0); setLength(Math.min(15.92, decoded.duration)); setTranscript(''); }
+      if (mounted.current) { setAudio(decoded); setStart(0); setLength(Math.min(15.92, decoded.duration)); setTranscript(spoken); }
     } catch (e) { if (mounted.current) setError((e as Error).message); }
     finally { await context.close(); if (mounted.current) setLoading(false); }
   };
@@ -76,7 +78,7 @@ export function CloneVoiceEditor({ providerRef, providerType, model, beforeCaptu
       capture.onstop = () => {
         media.getTracks().forEach(track => track.stop()); recorder.current = null;
         if (timer.current) clearTimeout(timer.current);
-        if (mounted.current) { setRecording(false); void load(new Blob(chunks, { type: capture.mimeType })); }
+        if (mounted.current) { setRecording(false); void load(new Blob(chunks, { type: capture.mimeType }), VOICE_RECORDING_SCRIPT); }
       };
       capture.start(); setRecordedSeconds(0); setRecording(true); setPermitted(false);
       timer.current = setTimeout(() => { if (capture.state === 'recording') capture.stop(); }, 16_000);
