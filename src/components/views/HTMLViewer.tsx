@@ -182,6 +182,9 @@ export function HTMLViewer({
     highlightHtmlWord(container, currentSentenceAlignment, currentWordIndex);
   }, [
     blocks,
+    // The sentence effect rebuilds the region (and clears the word) on these.
+    followingNarration,
+    readerNavigationRevision,
     highlightEnabled,
     wordHighlightEnabled,
     currentBlockKey,
