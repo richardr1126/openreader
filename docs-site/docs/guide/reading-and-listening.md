@@ -17,11 +17,16 @@ Drag the bar to jump anywhere. After a jump, **Undo scrub** returns you to where
 
 While audio is being prepared, the player says so; it only shows as playing when you can hear it.
 
+### Browsing while it reads
+
+Scrolling or turning pages yourself stops the reader from following the narration, so you can look around without interrupting playback. The **Follow narration** button beside the page controls shows whether the reader is following. While it is off, **↩ Return to narration** jumps back to the sentence being read and follows again. Tapping a sentence, jumping from the contents, or scrubbing the player also follows again.
+
 ## Voice
 
 The **Voice** button in the player opens the voice panel for the current document:
 
-- Pick a voice. Providers that support blending let you select several voices to mix them.
+- Pick a voice. **Search voices** filters a long list. Star a voice to add it to **Favorites**, then use the Favorites filter to see only those. Favorites are saved to your account for each model.
+- Providers that support blending let you select several voices to mix them.
 - **Model speed** changes how fast the voice itself speaks. It regenerates audio from your position.
 - **Preview selection** plays a short sample before you apply it.
 - For external providers, expand **Custom voice ID** to enter a voice missing from the list. Preview it or choose **Use voice**, then **Apply**. Closing the panel discards unapplied changes.
@@ -30,20 +35,70 @@ Changes in the voice panel apply **to this book only**. **Use default** returns 
 
 **Playback speed**, the speed button next to the voice button, changes the playback rate instantly and never regenerates audio.
 
+### Your own voice
+
+With a [Fish Audio](../configure/tts-provider-guides/fish-audio) provider, or an [OpenRouter](../configure/tts-provider-guides/openrouter) model that supports voice cloning, **Your voices** in the voice list offers **Create your own voice**:
+
+1. **Record** the passage shown on screen, or **Import** an audio file. One person speaking evenly for 10 to 15 seconds works best.
+2. Review the sample and trim it to between 1 and 15.9 seconds.
+3. Name the voice. The **Sample transcript** is filled with the passage you read; correct it if you said something else. Fish Audio requires it; for OpenRouter it is optional.
+4. Confirm you have permission to use the voice, then save it.
+
+The new voice appears under **Your voices**, where its menu can rename or delete it. Choose it like any other voice, then **Save** in settings or **Apply** in the reader. Deleting a voice removes its sample but keeps narration already generated with it.
+
+The sample is stored privately on your OpenReader server and is sent to the provider with each narration request. The provider's usage charges apply.
+
 ## Reader settings
 
-The settings button in the reader header opens **Reader Settings**:
+The settings button in the reader header opens **Reader Settings** for the current document. Most settings here start from your app defaults and change only this book. A reset icon beside a changed setting returns it to the app default.
 
 | Setting | What it does |
 | --- | --- |
 | **Language** | The language the document is read in. **Automatic** uses the document's metadata or detected language. The available languages depend on the voice and provider. |
-| **Show the pages / Show the book** | PDF and EPUB only. Turn off to read the text as flowing sentences. PDFs can show a single page, two pages or continuous scroll. EPUBs can use the app theme. |
-| **Highlight sentence / Highlight words** | Turn highlighting of the spoken sentence and word on or off. |
-| **Max segment length** | How much text is generated as one piece of audio. |
-| **Keyboard shortcuts** | Turns the [playback keys](./keyboard-shortcuts) on or off. |
-| **PDF Layout** | PDF only. Shows the detected blocks over the page, re-runs layout analysis, and chooses which block types (headers, footers, footnotes, titles and more) to skip when reading aloud. |
+| **Display** | PDF and EPUB only. **Show the pages / Show the book** turns the page layout on or off; off reads the text as flowing sentences. PDFs can show a single page, two pages or continuous scroll. EPUBs can use the app theme. |
+| **Typography** | Flowing text and EPUB. See [Typography](#typography). |
+| **Highlight appearance** | **Highlight segment** and **Highlight words** turn highlighting of the spoken passage and word on or off, and set their colors. See [Highlights](#highlights). |
+| **Advanced** | What is read aloud and how. See [Advanced](#advanced). |
+| **PDF Layout** | PDF only. Shows the processing status and re-runs layout analysis. |
 
-Changing the language, segment length or skipped PDF blocks changes what is spoken. OpenReader asks before applying the change, then regenerates audio from your position.
+Changing the language or anything under **Advanced** changes what is spoken. OpenReader asks before applying the change, then regenerates audio from your position. Display, typography and highlight changes never regenerate audio.
+
+### Typography
+
+**Font family** and **Text size** come first; **More typography** adds:
+
+- **Spacing**: line spacing, paragraph spacing and letter spacing, with **Compact**, **Balanced** and **Open** presets.
+- **Width**: how wide the text column is, with **Compact**, **Balanced** and **Full** presets.
+- **Alignment**: **Default**, **Left** or **Justified**.
+
+The reading preview shows the result before you save. With **Default / publisher**, EPUBs keep the book's own fonts and spacing, and other text uses the app's font. Typography doesn't apply to PDFs shown as pages.
+
+### Highlights
+
+Choose a preset (**Theme**, **Amber**, **Ocean** or **Mint**), or set the segment and word colors and opacity separately. You can turn off the segment highlight and keep the word highlight, or the other way round.
+
+### Advanced
+
+| Setting | What it does |
+| --- | --- |
+| **Citations** | Skip reference markers such as `[1, 3–5]` and `(Smith, 2024)`. Bare numbers and years are still read. |
+| **Bracketed text** | Skip text in **Square brackets**, **Parentheses** or **Both**. |
+| **PDF blocks** | PDF only. Choose which detected blocks (headers, footers, footnotes, titles and more) to skip. **Show block overlay** draws the detected blocks over the page. |
+| **Text grouping** | Built-in Kokoro only. **Piece length** sets how much text the model speaks in one pass. |
+| **Added pauses** | Extra silence **Between segments**, and for built-in Kokoro **Between pieces**. **Automatic** adds none, keeping the voice's natural pauses. Added pauses are included in audiobook exports. |
+| **Max segment length** | How much text is generated as one piece of audio. |
+
+Skipped text stays visible and highlighted words still line up with the audio. The skipping settings are off by default.
+
+## App settings
+
+**Settings** holds the defaults every book starts from:
+
+- **Model & Voice**: your default provider, model and voice, and the defaults for the **Advanced** settings above.
+- **Appearance**: the app theme, and the default typography and highlights.
+- **Reading**: whether PDFs and EPUBs open showing their pages, and [keyboard shortcuts](./keyboard-shortcuts).
+
+A book you have changed keeps its own setting; everything else follows the defaults.
 
 ## Contents and bookmarks
 

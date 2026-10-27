@@ -49,6 +49,8 @@ const sidebars: SidebarsConfig = {
             'configure/tts-provider-guides/supertonic',
             'configure/tts-provider-guides/replicate',
             'configure/tts-provider-guides/google-ai-studio',
+            'configure/tts-provider-guides/fish-audio',
+            'configure/tts-provider-guides/openrouter',
             'configure/tts-provider-guides/openai',
             'configure/tts-provider-guides/other',
           ],

@@ -16,7 +16,8 @@ API keys stay on the server, encrypted (see [How saved keys are protected](./adm
 | **OpenAI** | OpenAI's speech API (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`). | API key. |
 | **Replicate** | Hosted models on Replicate, from a built-in list or any model ID. | API key. |
 | **Google AI Studio** | Gemini 3.8 Flash TTS and Flash-Lite TTS, with style instructions and 30 prebuilt voices. | Google AI Studio API key. |
-| **Fish Audio** | S2.1 Pro Free, S2.1 Pro, S2 Pro and Drama 3. | API key; optional voice reference ID. |
+| **Fish Audio** | S2.1 Pro Free, S2.1 Pro, S2 Pro and Drama 3, with style instructions and voice cloning. | API key. |
+| **OpenRouter** | Every speech model in OpenRouter's catalog, including free variants, through one key. | API key. |
 
 Setup guides for specific services are listed under **TTS Providers** in the sidebar.
 
@@ -43,6 +44,7 @@ Under **External providers**, choose **Add provider**, pick the service, and fil
 | **Default model** | The model users start with. Choose from the service's list, or enter a custom model ID. |
 | **API key** | **Get a key** opens the service's key page. When editing, leave it blank to keep the saved key. |
 | **TTS instructions** | Only for models that accept speaking instructions, such as `gpt-4o-mini-tts`. |
+| **Model options** | OpenRouter only. Default JSON options sent with the model's requests; users can replace them (see [OpenRouter](./tts-provider-guides/openrouter#instructions-speed-and-model-options)). |
 | **Slug** (Advanced) | Generated from the display name. Users' settings store it, so it cannot change after saving. |
 | **Enabled** (Advanced) | Turn off to hide the provider from users without deleting it. |
 
@@ -71,21 +73,11 @@ Voice listing is optional. OpenReader tries `/v1/audio/voices`, `/v1/voices` and
 
 For external providers, **Custom voice ID** below the voice list lets users enter an ID supplied by their provider, even when it is missing from the catalog. They can preview it, choose **Use voice**, then **Save** in settings or **Apply** in the reader. The provider must support the entered ID.
 
-With **Fish Audio**, or an **OpenRouter** model whose endpoints support voice cloning, **Your voices → New voice** records or imports a short sample. Review and trim 1–15.9 seconds, name the voice, optionally enter the words spoken in the sample, and confirm permission to use it. Save the voice, then **Save** your settings or **Apply** in the reader. Saved voices support previews, favorites, renaming and removal in the same picker.
+## Personal voices
 
-Voice cloning has no OpenReader purchase gate on web. The iOS app retains its Pro requirement; provider charges are separate on both platforms. Both services receive the private sample when generating narration; creating a saved voice does not require Fish's upstream model-creation allowance. Web samples stay in your instance's private storage; iOS samples stay on that device and do not sync through iCloud. Removing a saved voice deletes its sample and preserves cached narration.
+With [Fish Audio](./tts-provider-guides/fish-audio), or an [OpenRouter](./tts-provider-guides/openrouter) model whose endpoints support voice cloning, users can [create their own voice](../guide/reading-and-listening#your-own-voice) from a short recording.
 
-### Fish Audio
-
-**Voice instructions** accepts a short direction such as `Warm, calm narration`. OpenReader adds it as a bracketed cue to every speech request after text filtering, without changing the displayed passage or alignment text. Changing directions generates a separate reusable audio variant.
-
-Add **Fish Audio** and get an API key from [Fish Audio](https://fish.audio/app/api-keys). New setups explicitly select **S2.1 Pro Free** (`s2.1-pro-free`); availability depends on your account and Fish's current service. Choose a paid model explicitly when you want to use it. OpenReader never retries a failed free-model request with a paid model.
-
-All four models offer **Sarah**, **Energetic Male**, **Adrian**, **Delia** and **Sheila**, with Sarah selected for new setups. These public voice references keep narration consistent across passages. Other Fish voice model IDs can be entered under **Custom voice ID**. Existing saved **default** selections still let Fish choose a voice per request; choose a named voice and Save (or Apply in the reader) to use a fixed reference. Provider voice IDs use `reference_id`; personal cloned voices use the private sample described above. Native generation speed supports 0.5×–2×. Audio uses the existing worker alignment, playback cache and export paths.
-
-The automatic **default** option stays at the bottom of the list and can be selected again at any time.
-
-**Check** verifies API access using Fish's voice metadata endpoint. After saving, it also generates a short sample through the worker; metadata access alone does not prove generation credit or model access. Fish's [speech API reference](https://docs.fish.audio/api-reference/endpoint/openapi-v1/text-to-speech) describes the supported models and voice IDs.
+Voice cloning has no OpenReader purchase gate on web. The iOS app keeps its Pro requirement; provider charges are separate on both platforms. The provider receives the private sample with each narration request; no voice is created or left on the provider's side. Web samples stay in your instance's private storage. iOS samples stay on that device and do not sync through iCloud. Removing a saved voice deletes its sample and keeps cached narration.
 
 ## Seed a provider from the environment
 
