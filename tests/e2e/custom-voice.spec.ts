@@ -32,7 +32,10 @@ test('custom voice IDs persist in defaults and remain drafts in the reader', asy
   expect(buttonBox.x).toBeGreaterThan(inputBox.x + inputBox.width);
   expect(buttonBox.x + buttonBox.width).toBeLessThanOrEqual(390);
   await page.screenshot({ path: test.info().outputPath('web-custom-voice.png') });
-  await page.getByRole('button', { name: originalVoice, exact: true }).click();
+  // A list pick adds to a Kokoro blend; Use voice replaces the selection.
+  await field.fill(originalVoice);
+  await useVoice.click();
+  await expect(page.getByRole('button', { name: originalVoice, exact: true })).toHaveAttribute('aria-pressed', 'true');
   await unsaved.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(unsaved).toBeHidden();
   await page.getByRole('link', { name: 'Close settings', exact: true }).click();
