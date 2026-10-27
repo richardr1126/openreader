@@ -245,10 +245,12 @@ export function HTMLViewer({
             maxWidth: 'none', width: `${typography.readingWidth}%`, minWidth: 'min(100%, 20rem)',
             fontFamily: READER_FONT_FAMILIES[typography.fontFamily] || undefined,
             fontSize: typography.sizePercent === 100 ? undefined : `${typography.sizePercent / 100}rem`,
-            lineHeight: typography.lineMultiplier === 1.5 ? undefined : typography.lineMultiplier,
+            // This text has no publisher styles to defer to, so spacing is
+            // always the chosen value, as the appearance preview draws it.
+            lineHeight: typography.lineMultiplier,
             letterSpacing: typography.letterSpacing ? `${typography.letterSpacing}em` : undefined,
             textAlign: typography.alignment === 'default' ? undefined : typography.alignment,
-            '--reader-paragraph-spacing': typography.paragraphSpacing === 1 ? undefined : `${typography.paragraphSpacing}em`,
+            '--reader-paragraph-spacing': `${typography.paragraphSpacing}em`,
           } as React.CSSProperties}
         >
           {renderedBlocks}

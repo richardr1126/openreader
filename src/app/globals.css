@@ -459,7 +459,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .html-container p {
-  margin-block: var(--reader-paragraph-spacing, 1.25em);
+  margin-block: var(--reader-paragraph-spacing);
 }
 
 /* Static prism gradient divider (no animation) */
