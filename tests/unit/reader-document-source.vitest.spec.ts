@@ -231,6 +231,20 @@ test.each(['http', 'sse'])('a delayed %s replan cannot undo a newer appearance s
   if (latest!.result.status === 'ready') expect(latest!.result.payload.settings.presentation).toEqual({});
 });
 
+test('an appearance save while the open reader replans succeeds without waiting for the plan', async () => {
+  const initial = payload('pdf');
+  initial.settings.pdf = { skipBlockKinds: ['header'] };
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'ready', payload: initial });
+  mocks.ensureCachedDocument.mockResolvedValue(sourceDocument('pdf'));
+  await act(async () => renderProbe('pdf', 0));
+  await waitFor(() => latest?.documentSource.status === 'ready');
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'pending', operationId: 'replan' });
+  await act(async () => { await latest!.updateSettings({ ...initial.settings, pdf: { skipBlockKinds: [] } }); });
+  await waitFor(() => latest?.replanning === true);
+  await act(async () => { await latest!.updatePresentation({ presentation: { showsLayout: true } }); });
+  expect(mocks.putDocumentSettings.mock.calls.at(-1)?.[1]).toMatchObject({ pdf: { skipBlockKinds: [] }, presentation: { showsLayout: true } });
+});
+
 describe('reader document source acquisition', () => {
   test('replaces ready state with force-operation progress without a second bootstrap POST', async () => {
     const readyPayload = payload('pdf');

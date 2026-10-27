@@ -152,11 +152,13 @@ export function useReaderBootstrap(documentId: string | undefined) {
   // would needlessly resolve audio work for a color or font change.
   const updatePresentation = async (patch: Pick<DocumentSettings, 'typography' | 'highlightAppearance' | 'presentation'>) => {
     const current = queryClient.getQueryData<ReaderBootstrapResult>(key);
-    if (current?.status !== 'ready') throw new Error('Reader settings are not ready.');
     // A replan may still be returning a snapshot from before the last speech
-    // save. Base this write on the acknowledged settings, not that older view.
+    // save. Base this write on the acknowledged settings, not that older view;
+    // the reader stays open while it replans, so the write must not wait for it.
     const baseline = lastSettingsCommit.current?.owner === surfaceOwner
-      ? lastSettingsCommit.current.settings : current.payload.settings;
+      ? lastSettingsCommit.current.settings
+      : current?.status === 'ready' ? current.payload.settings : settledForSurface?.result.payload.settings;
+    if (!baseline) throw new Error('Reader settings are not ready.');
     const saved = await settingsMutation.mutateAsync({ ...baseline, ...patch });
     lastSettingsCommit.current = { owner: surfaceOwner, settings: saved.settings };
     queryClient.setQueryData<ReaderBootstrapResult>(key, (latest) => latest?.status === 'ready'
