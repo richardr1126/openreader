@@ -16,8 +16,8 @@ describe('document settings language', () => {
   test('preserves language when PDF settings are absent', () => {
     expect(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, { language: 'fr' })).toMatchObject({
       language: 'fr',
-      pdf: DEFAULT_DOCUMENT_SETTINGS.pdf,
     });
+    expect(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, { language: 'fr' }).pdf).toBeUndefined();
   });
 });
 

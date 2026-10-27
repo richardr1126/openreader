@@ -5,7 +5,7 @@ import { uploadLibraryFiles } from './support/upload';
 
 test('Kokoro warnings follow the document across the player, settings, export, and draft voices', async ({ page, playwright }, testInfo) => {
   test.setTimeout(90_000);
-  // DeepInfra's Kokoro voice catalogue is static and multilingual. Reading
+  // Compatible Kokoro's fallback voice catalogue is static and multilingual. Reading
   // needs no provider key; this journey never requests generation or previews.
   const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
   const signIn = await admin.post('/api/auth/sign-in/email', {
@@ -16,7 +16,7 @@ test('Kokoro warnings follow the document across the player, settings, export, a
   const providerName = `Kokoro language check ${testInfo.project.name}`;
   const created = await admin.post('/api/admin/providers', { data: {
     slug: `language-check-${testInfo.project.name}`, displayName: providerName,
-    providerType: 'deepinfra', defaultModel: 'hexgrad/Kokoro-82M',
+    providerType: 'custom-openai', defaultModel: 'kokoro',
   } });
   expect(created.status()).toBe(201);
   const { provider } = await created.json();

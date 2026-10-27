@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import toast from 'react-hot-toast';
 import {
-  type TTSLocation,
   type TTSSentenceAlignment,
   type TtsPlaybackPhase,
 } from '@/types/tts';
@@ -60,7 +59,6 @@ type UseTtsPlaybackInput = {
   selectedOrdinalRef: MutableRefObject<number | null>;
   playbackRunIdRef: MutableRefObject<number>;
   setIsPlaying: (isPlaying: boolean) => void;
-  setCurrDocPage: (location: TTSLocation) => void;
   syncPlaybackLocator?: (locator: import('@/types/client').TTSSegmentLocator | null) => void;
   setSelectedOrdinal: (ordinal: number | null) => void;
   setPlaybackSeekLayout: (layout: TtsPlaybackSeekLayout | null) => void;
@@ -83,7 +81,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     selectedOrdinalRef,
     playbackRunIdRef,
     setIsPlaying,
-    setCurrDocPage,
     syncPlaybackLocator,
     setSelectedOrdinal,
     setPlaybackSeekLayout,
@@ -137,7 +134,6 @@ export function useTtsPlayback(input: UseTtsPlaybackInput) {
     playbackRunIdRef,
     playbackSessionRef,
     selectedOrdinalRef,
-    setCurrDocPage,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
     setSelectedOrdinal,

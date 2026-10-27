@@ -60,6 +60,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       baseUrl: resolved.baseUrl ?? null,
       defaultModel: resolved.adminRecord.defaultModel,
       defaultInstructions: resolved.adminRecord.defaultInstructions,
+      defaultModelOptions: resolved.adminRecord.defaultModelOptions,
     };
     return NextResponse.json(response, { headers: NO_STORE_HEADERS });
   } catch (error) {

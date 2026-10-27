@@ -3,8 +3,8 @@
 import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import type { Book, NavItem, Rendition } from 'epubjs';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
-import { useConfig } from '@/contexts/ConfigContext';
 import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
 import { hardenEpubSection } from '@/lib/client/epub/epub-section-hardening';
@@ -118,15 +118,19 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   } = epubState;
   const {
     registerLocationChangeHandler,
+    followingNarration,
   } = useTTS();
   const {
     currentSegment,
     currentSentenceAlignment,
     currentWordIndex
   } = useTTSHighlight();
-  const { epubTheme, epubHighlightEnabled, epubWordHighlightEnabled } = useConfig();
+  const { presentation: { epubTheme, highlightWords: epubWordHighlightEnabled } } = useReaderAppearance();
   const [activeRendition, setActiveRendition] = useState<Rendition>();
-  useEPUBTheme(epubTheme, activeRendition);
+  const { typography } = useReaderAppearance();
+  useEPUBTheme(epubTheme, activeRendition, typography, () => {
+    void refreshRenderedPlacement({ preservePlaybackCursor: true });
+  });
   const containerRef = useRef<HTMLDivElement>(null);
   const { isResizing, setIsResizing, dimensions } = useEPUBResize(containerRef);
 
@@ -171,7 +175,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   useLayoutEffect(() => {
     if (!isPlaybackReady) return;
     if (currentSegment) {
-      if (!highlightSegment(currentSegment)) {
+      if (!highlightSegment(currentSegment) && followingNarration) {
         onError?.(new Error('The selected worker-plan segment did not map to the rendered EPUB.'));
         return;
       }
@@ -181,6 +185,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     onReady?.();
   }, [
     currentSegment,
+    followingNarration,
     renderedTextRevision,
     highlightSegment,
     clearHighlights,
@@ -196,7 +201,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   // Word-level highlight layered on top of the block highlight. A layout effect
   // so a sentence change commits both layers before the browser paints.
   useLayoutEffect(() => {
-    if (!epubHighlightEnabled || !epubWordHighlightEnabled) {
+    if (!epubWordHighlightEnabled) {
       clearWordHighlights();
       return;
     }
@@ -220,8 +225,8 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     currentWordIndex,
     currentSegment,
     currentSentenceAlignment,
-    epubHighlightEnabled,
     epubWordHighlightEnabled,
+    renderedTextRevision,
     clearWordHighlights,
     highlightWordIndex
   ]);

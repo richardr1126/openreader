@@ -2567,6 +2567,7 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
+                        userId?: string;
                         settings: {
                             providerRef: string;
                             providerType: string;
@@ -2574,7 +2575,13 @@ export interface paths {
                             voice: string;
                             nativeSpeed: number;
                             ttsInstructions?: string;
+                            ttsModelOptions?: string;
                             language?: string;
+                            voiceCustomization?: {
+                                pieceCharacterLimit: number | null;
+                                piecePauseMilliseconds: number | null;
+                                blockPauseMilliseconds: number | null;
+                            };
                         };
                         text: string;
                     };

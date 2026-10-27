@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { normalizeVoiceCustomization } from '@openreader/tts/voice-customization';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
@@ -19,6 +20,8 @@ import {
   type VoiceSettingsDraft,
 } from '@/lib/client/tts/voice-draft';
 import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
+import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
+import { useClonedVoiceNames } from '@/hooks/useClonedVoiceNames';
 
 /**
  * The reader's voice panel. Voice and model-speed picks are a draft: they
@@ -27,7 +30,8 @@ import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
  * sample with the draft settings and never touch the document's audio.
  */
 export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
-  const { providerRef, providerType, ttsModel, ttsInstructions } = useConfig();
+  const { providerRef, providerType, ttsModel, ttsInstructions, ttsModelOptions, voiceCustomization } = useConfig();
+  const favorites = useVoiceFavorites(providerRef, ttsModel);
   const {
     voice: appliedVoice,
     voiceSpeed,
@@ -40,6 +44,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     isProcessing,
     pause,
     setBookVoiceAndRestart,
+    bookSpeechSettings,
   } = useTTS();
   const { currentSentence } = useTTSHighlight();
   const { providers } = useSharedProviders();
@@ -60,7 +65,8 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
   const [edits, setEdits] = useState<Partial<VoiceSettingsDraft>>({});
   const draft: VoiceSettingsDraft = { ...applied, ...edits };
   const pending = pendingVoiceSettings(applied, draft);
-  const pendingLines = describePendingVoiceChanges(applied, draft);
+  const clonedNames = useClonedVoiceNames(applied.voice, draft.voice);
+  const pendingLines = describePendingVoiceChanges(applied, draft, clonedNames);
 
   const preview = useVoicePreview({ isPlaying, pausePlayback: pause });
   const { stop: stopPreview } = preview;
@@ -93,8 +99,10 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         providerRef,
         providerType,
         ttsModel,
+        ...(providerType === 'openrouter' && ttsModelOptions ? { ttsModelOptions } : {}),
         voice,
         nativeSpeed: draft.nativeSpeed,
+        voiceCustomization: normalizeVoiceCustomization({ ...voiceCustomization, ...bookSpeechSettings.voiceCustomization }),
         ...(policy.supportsInstructions && ttsInstructions ? { ttsInstructions } : {}),
         language: resolveTtsLanguage({ configuredLanguage: documentLanguage, documentLanguage: detectedDocumentLanguage, voice }),
       },
@@ -110,7 +118,10 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
     providerRef,
     providerType,
     ttsInstructions,
+    ttsModelOptions,
     ttsModel,
+    voiceCustomization,
+    bookSpeechSettings.voiceCustomization,
   ]);
 
   const pickerPreview: VoicePickerPreview = { state: preview.state, play: playPreview, stop: stopPreview };
@@ -179,7 +190,7 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
               label="Model speed"
               value={draft.nativeSpeed}
               min={0.5}
-              max={3}
+              max={policy.providerType === 'fish-audio' || policy.providerType === 'openrouter' ? 2 : 3}
               step={0.1}
               formatter={formatModelSpeed}
               description="Changes how fast the voice speaks and regenerates audio. Playback speed in the player applies instantly."
@@ -209,6 +220,9 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
         >
           {/* Remounting on open starts each visit with an empty search. */}
           <VoicePicker
+            cloning={{ providerRef, providerType, model: ttsModel, beforeCapture: pause }}
+            allowCustomVoice={policy.isResolvedProviderType && policy.providerType !== 'kokoro-local'}
+            favorites={favorites}
             key={isOpen ? 'open' : 'closed'}
             voices={availableVoices}
             value={draft.voice}
@@ -216,9 +230,14 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             pickPolicy={pickPolicy}
             groupByLanguage={policy.isKokoroModel}
             preview={pickerPreview}
-            notices={languageWarnings.map((warning) => (
-              <p key={warning} className="text-xs text-warning">{warning}</p>
-            ))}
+            notices={<>
+              {policy.providerType === 'fish-audio' && draft.voice === 'default' && (
+                <p className="text-xs text-warning">Select a named voice and Apply to keep narration consistent across passages.</p>
+              )}
+              {languageWarnings.map((warning) => (
+                <p key={warning} className="text-xs text-warning">{warning}</p>
+              ))}
+            </>}
           />
         </Section>
       </div>

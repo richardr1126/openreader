@@ -308,6 +308,25 @@ export function getCbrSilenceSecond(signal?: AbortSignal): Promise<Buffer> {
   return cachedSilenceSecond;
 }
 
+/** Append only whole stream-profile frames (within half a frame of the requested pause). */
+export async function appendCbrSilence(audio: Buffer, milliseconds: number, signal?: AbortSignal): Promise<Buffer> {
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0 || audio.length === 0) return audio;
+  signal?.throwIfAborted();
+  const raw = await getCbrSilenceSecond(signal);
+  signal?.throwIfAborted();
+  const lengths = parseMp3FrameLengths(raw);
+  if (!lengths.length) throw new Error('Could not create added-pause silence');
+  const silence = raw.subarray(raw.length - lengths.reduce((sum, size) => sum + size, 0));
+  let remaining = Math.round(Math.min(2000, milliseconds) / MP3_FRAME_DURATION_MS);
+  const parts = [audio];
+  while (remaining > 0) {
+    const count = Math.min(remaining, lengths.length);
+    parts.push(silence.subarray(0, cumulativeCbrFrameBytes(lengths, count)));
+    remaining -= count;
+  }
+  return Buffer.concat(parts);
+}
+
 /**
  * Normalize a TTS buffer to a {@link STREAM_AUDIO_PROFILE} mp3. Every segment is
  * (re)encoded to the one CBR/sample-rate/channel profile — including inputs that

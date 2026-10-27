@@ -1,8 +1,9 @@
 import { isKokoroModel } from './kokoro';
+import { OPENROUTER_DEFAULT_MODEL, openRouterCapabilities, type OpenRouterSpeechModel } from './openrouter';
 
-export type TtsProviderId = 'custom-openai' | 'replicate' | 'deepinfra' | 'openai' | 'kokoro-local';
+export type TtsProviderId = 'custom-openai' | 'replicate' | 'google-ai-studio' | 'openai' | 'fish-audio' | 'openrouter' | 'kokoro-local';
 export type TtsProviderType = TtsProviderId | 'unknown';
-export type TtsVoiceSource = 'static' | 'deepinfra-api' | 'custom-openai-api' | 'replicate-api';
+export type TtsVoiceSource = 'static' | 'custom-openai-api' | 'replicate-api';
 export type ReplicateVoiceInputKey = 'voice' | 'voice_id' | 'speaker';
 
 export interface SharedProviderTypeResolverEntry {
@@ -33,6 +34,7 @@ export interface TtsProviderDefinition {
 
 export interface ResolveProviderModelsContext {
   apiKey?: string;
+  openRouterModels?: OpenRouterSpeechModel[];
 }
 
 export interface ResolveVoicesOptions {
@@ -48,6 +50,29 @@ const OPENAI_MODELS: TtsModelDefinition[] = [
   { id: 'gpt-4o-mini-tts', name: 'GPT-4o Mini TTS' },
 ];
 
+// Unknown Fish model headers fall back to paid S2.1 upstream. Offer only
+// explicit supported IDs and reject unknown saved values before execution.
+export const FISH_AUDIO_MODELS: TtsModelDefinition[] = [
+  { id: 's2.1-pro-free', name: 'S2.1 Pro Free' },
+  { id: 's2.1-pro', name: 'S2.1 Pro' },
+  { id: 's2-pro', name: 'S2 Pro' },
+  { id: 'drama-3', name: 'Drama 3' },
+];
+
+// Public voice references shared by Fish's hosted models. Persist/send the ID;
+// names are presentation only and must never become audio/cache identities.
+export const FISH_AUDIO_VOICES = [
+  { id: '933563129e564b19a115bedd57b7406a', name: 'Sarah' },
+  { id: '802e3bc2b27e49c2995d23ef70e6ac89', name: 'Energetic Male' },
+  { id: 'bf322df2096a46f18c579d0baa36f41d', name: 'Adrian' },
+  { id: 'c70cfb98867a4bfb9ae20d2401257b92', name: 'Delia' },
+  { id: 'f3a2b90078d54a65af4b95f63bc7798e', name: 'Sheila' },
+] as const;
+
+export function catalogVoiceName(voice: string): string {
+  return FISH_AUDIO_VOICES.find(({ id }) => id === voice)?.name ?? voice;
+}
+
 const CUSTOM_OPENAI_MODELS: TtsModelDefinition[] = [
   { id: 'kokoro', name: 'Kokoro' },
   { id: 'kitten-tts', name: 'KittenTTS' },
@@ -55,28 +80,27 @@ const CUSTOM_OPENAI_MODELS: TtsModelDefinition[] = [
   { id: 'custom', name: 'Other' },
 ];
 
-const DEEPINFRA_MODELS_FULL: TtsModelDefinition[] = [
-  { id: 'hexgrad/Kokoro-82M', name: 'hexgrad/Kokoro-82M' },
-  { id: 'canopylabs/orpheus-3b-0.1-ft', name: 'canopylabs/orpheus-3b-0.1-ft' },
-  { id: 'sesame/csm-1b', name: 'sesame/csm-1b' },
-  { id: 'ResembleAI/chatterbox', name: 'ResembleAI/chatterbox' },
-  { id: 'Zyphra/Zonos-v0.1-hybrid', name: 'Zyphra/Zonos-v0.1-hybrid' },
-  { id: 'Zyphra/Zonos-v0.1-transformer', name: 'Zyphra/Zonos-v0.1-transformer' },
-  { id: 'custom', name: 'Other' },
+export const GOOGLE_AI_STUDIO_MODELS: TtsModelDefinition[] = [
+  { id: 'gemini-3.8-flash-tts', name: 'Gemini 3.8 Flash TTS' },
+  { id: 'gemini-3.8-flash-lite-tts', name: 'Gemini 3.8 Flash-Lite TTS' },
 ];
 
-export const REPLICATE_KOKORO_82M_VERSIONED_MODEL =
-  'alphanumericuser/kokoro-82m:89b6fa84e4fa2dd6bd3a96be3e1f12827a3516c9fda8fddbac7a0be131c9a6f5' as const;
+/** Retain saved IDs for audio identity, but never submit this retired model. */
+export function isRetiredReplicateModel(model: string): boolean {
+  return model.trim().split(':', 1)[0] === 'alphanumericuser/kokoro-82m';
+}
+
+/** Saved v5 settings and audio keys keep their original model string. Only
+ * upstream execution/metadata follows Replicate's renamed model. */
+export function replicateExecutionModel(model: string): string {
+  return model === 'inworld/tts-1.5-mini' ? 'inworld/realtime-tts-1.5-mini' : model;
+}
 
 const REPLICATE_MODELS: TtsModelDefinition[] = [
-  {
-    id: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-    name: 'alphanumericuser/kokoro-82m',
-  },
   { id: 'google/gemini-3.1-flash-tts', name: 'google/gemini-3.1-flash-tts' },
   { id: 'minimax/speech-2.8-turbo', name: 'minimax/speech-2.8-turbo' },
   { id: 'qwen/qwen3-tts', name: 'qwen/qwen3-tts' },
-  { id: 'inworld/tts-1.5-mini', name: 'inworld/tts-1.5-mini' },
+  { id: 'inworld/realtime-tts-1.5-mini', name: 'inworld/realtime-tts-1.5-mini' },
   { id: 'custom', name: 'Other' },
 ];
 
@@ -88,17 +112,10 @@ const REPLICATE_MODELS: TtsModelDefinition[] = [
 export const KOKORO_LOCAL_MODEL = 'kokoro-82m' as const;
 const KOKORO_LOCAL_MODELS: TtsModelDefinition[] = [{ id: KOKORO_LOCAL_MODEL, name: 'Kokoro-82M' }];
 
-const DEEPINFRA_API_VOICE_MODELS = new Set([
-  'ResembleAI/chatterbox',
-  'Zyphra/Zonos-v0.1-hybrid',
-  'Zyphra/Zonos-v0.1-transformer',
-]);
-
 const DEFAULT_MODELS: TtsModelDefinition[] = [{ id: 'tts-1', name: 'TTS-1' }];
 
 export const OPENAI_DEFAULT_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'] as const;
 export const GPT4O_MINI_DEFAULT_VOICES = ['alloy', 'ash', 'coral', 'echo', 'fable', 'onyx', 'nova', 'sage', 'shimmer'] as const;
-export const CUSTOM_OPENAI_DEFAULT_VOICES = ['af_sarah', 'af_bella', 'af_nicole', 'am_adam', 'am_michael', 'bf_emma', 'bf_isabella', 'bm_george', 'bm_lewis'] as const;
 export const KOKORO_DEFAULT_VOICES = [
   'af_alloy', 'af_aoede', 'af_bella', 'af_heart', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova',
   'af_river', 'af_sarah', 'af_sky', 'am_adam', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam',
@@ -113,8 +130,6 @@ export const KOKORO_DEFAULT_VOICES = [
  * `b*`), Spanish `e*`, Hindi `h*`, Italian `i*` and Brazilian Portuguese `p*`.
  */
 export const KOKORO_LOCAL_VOICES = KOKORO_DEFAULT_VOICES.filter((voice) => /^[abehip][fm]_/.test(voice));
-export const ORPHEUS_DEFAULT_VOICES = ['tara', 'leah', 'jess', 'leo', 'dan', 'mia', 'zac'] as const;
-export const SESAME_DEFAULT_VOICES = ['conversational_a', 'conversational_b', 'read_speech_a', 'read_speech_b', 'read_speech_c', 'read_speech_d', 'none'] as const;
 
 // Replicate model voices
 export const GEMINI_FLASH_TTS_VOICES = [
@@ -133,22 +148,24 @@ export const QWEN3_TTS_VOICES = ['Aiden', 'Dylan'] as const;
 export const INWORLD_TTS_VOICES = ['Ashley', 'Dennis', 'Alex', 'Darlene'] as const;
 
 const REPLICATE_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
-  [REPLICATE_KOKORO_82M_VERSIONED_MODEL]: KOKORO_DEFAULT_VOICES,
   'google/gemini-3.1-flash-tts': GEMINI_FLASH_TTS_VOICES,
   'minimax/speech-2.8-turbo': MINIMAX_SPEECH_VOICES,
   'qwen/qwen3-tts': QWEN3_TTS_VOICES,
-  'inworld/tts-1.5-mini': INWORLD_TTS_VOICES,
-};
-const DEEPINFRA_DEFAULT_VOICES_BY_MODEL: Record<string, readonly string[]> = {
-  'hexgrad/Kokoro-82M': KOKORO_DEFAULT_VOICES,
-  'canopylabs/orpheus-3b-0.1-ft': ORPHEUS_DEFAULT_VOICES,
-  'sesame/csm-1b': SESAME_DEFAULT_VOICES,
-  'ResembleAI/chatterbox': ['None'],
-  'Zyphra/Zonos-v0.1-hybrid': ['random'],
-  'Zyphra/Zonos-v0.1-transformer': ['random'],
+  'inworld/realtime-tts-1.5-mini': INWORLD_TTS_VOICES,
 };
 
 export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
+  {
+    id: 'openrouter', kind: 'external', name: 'OpenRouter', supportsCustomModel: true,
+    models: (context) => [...(context?.openRouterModels ?? [{ id: OPENROUTER_DEFAULT_MODEL, name: 'Fish Audio: S2.1 Pro Free (free)' }]), { id: 'custom', name: 'Other' }],
+  },
+  {
+    id: 'fish-audio',
+    kind: 'external',
+    name: 'Fish Audio',
+    supportsCustomModel: false,
+    models: () => FISH_AUDIO_MODELS,
+  },
   {
     id: 'custom-openai',
     kind: 'external',
@@ -164,11 +181,11 @@ export const TTS_PROVIDER_DEFINITIONS: TtsProviderDefinition[] = [
     models: () => REPLICATE_MODELS,
   },
   {
-    id: 'deepinfra',
+    id: 'google-ai-studio',
     kind: 'external',
-    name: 'Deepinfra',
-    supportsCustomModel: true,
-    models: () => DEEPINFRA_MODELS_FULL,
+    name: 'Google AI Studio',
+    supportsCustomModel: false,
+    models: () => GOOGLE_AI_STUDIO_MODELS,
   },
   {
     id: 'openai',
@@ -195,6 +212,10 @@ const TTS_PROVIDER_TYPE_SET: ReadonlySet<TtsProviderType> = new Set([
 ]);
 
 const MODELS_WITH_INSTRUCTIONS = new Set([
+  's2-pro',
+  's2.1-pro',
+  's2.1-pro-free',
+  'drama-3',
   'gpt-4o-mini-tts',
   'google/gemini-3.1-flash-tts',
   'qwen/qwen3-tts',
@@ -205,8 +226,9 @@ const REPLICATE_MODELS_WITHOUT_NATIVE_SPEED = new Set([
   'qwen/qwen3-tts',
 ]);
 
-export function supportsTtsInstructions(model: string | null | undefined): boolean {
-  return !!model && MODELS_WITH_INSTRUCTIONS.has(model);
+export function supportsTtsInstructions(model: string | null | undefined, provider?: string): boolean {
+  if (provider === 'google-ai-studio') return GOOGLE_AI_STUDIO_MODELS.some(({ id }) => id === model);
+  return !!model && (provider === 'openrouter' ? openRouterCapabilities(model).instructions : MODELS_WITH_INSTRUCTIONS.has(model));
 }
 
 export function isBuiltInTtsProviderId(value: string | null | undefined): value is TtsProviderId {
@@ -238,6 +260,8 @@ export function resolveProviderType(
 }
 
 export function supportsNativeModelSpeed(provider: TtsProviderId, model: string | null | undefined): boolean {
+  if (provider === 'google-ai-studio') return false;
+  if (provider === 'openrouter') return openRouterCapabilities(model || '').nativeSpeed;
   if (!model) {
     return true;
   }
@@ -264,6 +288,11 @@ export function providerSupportsCustomModel(provider: TtsProviderId): boolean {
 }
 
 export function getDefaultVoices(provider: TtsProviderId, model: string): string[] {
+  if (provider === 'openrouter') return model.startsWith('fish-audio/')
+    ? [...FISH_AUDIO_VOICES.map(({ id }) => id), 'default']
+    : openRouterCapabilities(model).automaticVoice ? ['default'] : [];
+  if (provider === 'fish-audio') return FISH_AUDIO_MODELS.some(({ id }) => id === model)
+    ? [...FISH_AUDIO_VOICES.map(({ id }) => id), 'default'] : [];
   if (provider === 'openai') {
     return supportsTtsInstructions(model) ? [...GPT4O_MINI_DEFAULT_VOICES] : [...OPENAI_DEFAULT_VOICES];
   }
@@ -275,14 +304,12 @@ export function getDefaultVoices(provider: TtsProviderId, model: string): string
   }
 
   if (provider === 'replicate') {
-    return REPLICATE_DEFAULT_VOICES_BY_MODEL[model] ? [...REPLICATE_DEFAULT_VOICES_BY_MODEL[model]] : ['default'];
+    const executionModel = replicateExecutionModel(model);
+    if (isRetiredReplicateModel(model)) return [];
+    return REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel] ? [...REPLICATE_DEFAULT_VOICES_BY_MODEL[executionModel]] : ['default'];
   }
 
-  if (provider === 'deepinfra') {
-    return DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]
-      ? [...DEEPINFRA_DEFAULT_VOICES_BY_MODEL[model]]
-      : [...CUSTOM_OPENAI_DEFAULT_VOICES];
-  }
+  if (provider === 'google-ai-studio') return GOOGLE_AI_STUDIO_MODELS.some(({ id }) => id === model) ? [...GEMINI_FLASH_TTS_VOICES] : [];
 
   if (provider === 'kokoro-local') {
     return [...KOKORO_LOCAL_VOICES];
@@ -313,10 +340,7 @@ function parseReplicateModelIdentifier(model: string): {
 }
 
 export function resolveVoiceSource(provider: TtsProviderId, model: string): TtsVoiceSource {
-  if (provider === 'deepinfra' && DEEPINFRA_API_VOICE_MODELS.has(model)) {
-    return 'deepinfra-api';
-  }
-
+  if (provider === 'replicate' && isRetiredReplicateModel(model)) return 'static';
   if (provider === 'replicate' && parseReplicateModelIdentifier(model) !== null) {
     return 'replicate-api';
   }

@@ -71,6 +71,15 @@ test('anonymous user reads literal text and semantic Markdown', async ({ page })
     'https://www.openai.com',
   );
   await expect(page.getByText("console.log('hello markdown');", { exact: true })).toBeVisible();
+  // Default typography is the Balanced preset the appearance preview draws:
+  // 1.5 lines, and paragraphs a line's em apart.
+  const prose = page.locator('.html-container');
+  const metrics = await prose.locator('p').first().evaluate((paragraph) => {
+    const style = getComputedStyle(paragraph);
+    return { size: parseFloat(style.fontSize), line: parseFloat(style.lineHeight), gap: parseFloat(style.marginBottom) };
+  });
+  expect(metrics.line).toBeCloseTo(metrics.size * 1.5, 1);
+  expect(metrics.gap).toBeCloseTo(metrics.size, 1);
   await expect(page.getByRole('slider', { name: 'Playback position', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open contents', exact: true })).toBeVisible();
 });

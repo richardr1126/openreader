@@ -29,28 +29,6 @@ const KOKORO_LANGUAGE_BY_PREFIX: Readonly<Record<string, string>> = {
   zm: 'zh-CN',
 };
 
-const REPLICATE_KOKORO_LANGUAGE_CODE_BY_TAG: Readonly<Record<string, string>> = {
-  'en-US': 'a',
-  'en-GB': 'b',
-  es: 'e',
-  fr: 'f',
-  hi: 'h',
-  it: 'i',
-  ja: 'j',
-  'pt-BR': 'p',
-  'zh-CN': 'z',
-};
-
-const REPLICATE_KOKORO_LANGUAGE_CODE_BY_BASE_TAG: Readonly<Record<string, string>> = {
-  es: 'e',
-  fr: 'f',
-  hi: 'h',
-  it: 'i',
-  ja: 'j',
-  pt: 'p',
-  zh: 'z',
-};
-
 export const KOKORO_SUPPORTED_LANGUAGES = [
   'en',
   'es',
@@ -100,26 +78,6 @@ export function inferKokoroLanguageFromVoice(voice: string | null | undefined): 
   const languages = new Set(getKokoroVoiceLanguages(voice));
 
   return languages.size === 1 ? [...languages][0] : null;
-}
-
-export function resolveReplicateKokoroLanguageCode(input: {
-  language?: string | null;
-  voice?: string | null;
-}): string | null {
-  const normalizedLanguage = input.language ? normalizeLanguageTag(input.language) : null;
-  const voiceLanguage = inferKokoroLanguageFromVoice(input.voice);
-
-  for (const candidate of [normalizedLanguage, voiceLanguage]) {
-    if (!candidate) continue;
-
-    const exactCode = REPLICATE_KOKORO_LANGUAGE_CODE_BY_TAG[candidate];
-    if (exactCode) return exactCode;
-
-    const baseCode = REPLICATE_KOKORO_LANGUAGE_CODE_BY_BASE_TAG[toBaseLanguageCode(candidate)];
-    if (baseCode) return baseCode;
-  }
-
-  return null;
 }
 
 export function getKokoroVoiceLanguages(voice: string | null | undefined): string[] {

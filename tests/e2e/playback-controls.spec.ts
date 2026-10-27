@@ -78,6 +78,63 @@ async function readEpubWordHighlight(page: Page) {
   });
 }
 
+async function setHighlightMode(page: Page, sentence: boolean, words: boolean) {
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Document settings', exact: true });
+  await expect(settings).toBeInViewport({ ratio: 1 });
+  for (const [name, enabled] of [['Highlight segment', sentence], ['Highlight words', words]] as const) {
+    const toggle = settings.getByRole('switch', { name, exact: true });
+    await expect(toggle).toBeEnabled();
+    if (await toggle.getAttribute('aria-checked') !== String(enabled)) await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-checked', String(enabled));
+  }
+  const save = settings.getByRole('button', { name: 'Save', exact: true });
+  if (await save.isVisible()) {
+    await save.click();
+    await expect(save).toBeHidden();
+  }
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(settings).toBeHidden();
+}
+
+async function readEpubSegmentHighlightCount(page: Page) {
+  return page.frameLocator('iframe').locator('body').evaluate((body) => {
+    const view = body.ownerDocument.defaultView as (Window & {
+      CSS: typeof CSS & { highlights?: { get(name: string): { size: number } | undefined } };
+    }) | null;
+    return view?.CSS.highlights?.get('openreader-epub-segment')?.size ?? 0;
+  });
+}
+
+async function verifyWordOnlyPlayback(page: Page, surface: 'html' | 'pdf') {
+  await setHighlightMode(page, false, true);
+  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  const pause = page.getByRole('button', { name: 'Pause', exact: true });
+  await expect(pause).toBeVisible({ timeout: 60_000 });
+  const word = page.locator(surface === 'pdf' ? '.pdf-word-highlight-overlay' : '.openreader-html-highlight-word');
+  await expect(word.first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator(surface === 'pdf' ? '.pdf-text-highlight-overlay' : '.openreader-html-highlight-sentence')).toHaveCount(0);
+  if (surface === 'pdf') {
+    const beforeBrowsing = await readPlaybackPosition(page);
+    let newSessions = 0;
+    const watchSessions = (request: import('@playwright/test').Request) => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/tts/stream/sessions') newSessions += 1;
+    };
+    page.on('request', watchSessions);
+    await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
+    await expect(pause).toBeVisible();
+    await expect.poll(() => readPlaybackPosition(page)).toBeGreaterThan(beforeBrowsing + 1);
+    await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Return to narration', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Follow narration', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(newSessions).toBe(0);
+    page.off('request', watchSessions);
+  }
+  await pause.click();
+  await setHighlightMode(page, true, true);
+}
+
 async function countBlankEpubSegmentFrames(page: Page, durationMs: number) {
   return await page.frameLocator('iframe').locator('body').evaluate(async (body, duration) => {
     type HighlightRegistry = { get: (name: string) => { size: number } | undefined };
@@ -164,6 +221,20 @@ async function verifyEpubPlayback(page: Page) {
   // for several frames every few seconds.
   expect(await countBlankEpubSegmentFrames(page, 4_000)).toBe(0);
 
+  // Appearance switches retain the running audio and mapping while each paint
+  // layer is independently enabled or removed.
+  await setHighlightMode(page, false, true);
+  await expect.poll(() => readEpubSegmentHighlightCount(page)).toBe(0);
+  await expect.poll(() => readEpubWordHighlight(page)).not.toBe('');
+  await setHighlightMode(page, false, false);
+  await expect.poll(() => readEpubWordHighlight(page)).toBe('');
+  await setHighlightMode(page, true, false);
+  await expect.poll(() => readEpubSegmentHighlightCount(page)).toBeGreaterThan(0);
+  await expect.poll(() => readEpubWordHighlight(page)).toBe('');
+  await setHighlightMode(page, true, true);
+  await expect.poll(() => readEpubWordHighlight(page)).not.toBe('');
+  await expect(pauseButton).toBeVisible();
+
   await pauseButton.click();
   await expect(playButton).toBeVisible();
   const pausedAt = await readPlaybackPosition(page);
@@ -243,23 +314,28 @@ async function verifyEpubPlayback(page: Page) {
   await expect(playButton).toBeVisible();
   expect(preparations).toBe(1);
 
+  const beforeBrowsing = await readPlaybackPosition(page);
   await page.getByRole('button', { name: 'Next section', exact: true }).click();
   await expect(initialViewportHeading).not.toBeInViewport({ timeout: 15_000 });
+  expect(await readPlaybackPosition(page)).toBeCloseTo(beforeBrowsing, 0);
   await expect.poll(async () => Number(await position.getAttribute('max')))
     .toBeGreaterThan(documentDuration * 0.9);
   expect(await readGeneratedSegmentCount(page, session.seekLayoutUrl))
     .toBeGreaterThanOrEqual(settledGeneratedCount);
 
-  // Resume from a different EPUB section in the same canonical session. This
-  // catches stale async rendition navigation that can leave audio advancing in
-  // one spine while the rendered text and word highlight remain in another.
+  // Resume preserves browsing while the same narration timeline advances.
+  // Returning rejoins the spoken passage without seeking or re-preparing it.
   await playButton.click();
   await expect(pauseButton).toBeVisible({ timeout: 60_000 });
   const resumedAt = await readPlaybackPosition(page);
   await expect.poll(() => readPlaybackPosition(page), { timeout: 15_000 })
     .toBeGreaterThan(resumedAt + 1);
+  await expect(page.getByRole('button', { name: 'Follow narration', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  const preparationsBeforeReturn = preparations;
+  await page.getByRole('button', { name: 'Return to narration', exact: true }).click();
   await expect.poll(() => readEpubWordHighlight(page), { timeout: 15_000 })
     .not.toBe('');
+  expect(preparations).toBe(preparationsBeforeReturn);
   await pauseButton.click();
   await expect(playButton).toBeVisible();
 
@@ -279,6 +355,15 @@ test('anonymous user controls playback across every accepted document journey', 
   test.setTimeout(240_000);
   await enterAnonymousLibrary(page);
 
+  // Exercise added silence through the real provider, progressive stream,
+  // seeks and word highlighting in the consolidated playback journey.
+  await page.goto('/app/settings?section=api');
+  await page.getByRole('button', { name: 'Advanced', exact: true }).click();
+  await page.getByRole('button', { name: 'Between segments', exact: true }).click();
+  await page.getByRole('option', { name: '150 ms', exact: true }).click();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await page.getByRole('link', { name: 'Close settings', exact: true }).click();
+
   await uploadLibraryFiles(page, [
     resolve('tests/files/multilingual-sample.txt'),
     resolve('tests/files/sample.md'),
@@ -295,6 +380,8 @@ test('anonymous user controls playback across every accepted document journey', 
       timeout: 30_000,
     });
   }
+  const sourcePdfHref = await page.getByRole('link', { name: 'sample.pdf', exact: true }).getAttribute('href');
+  expect(sourcePdfHref).toBeTruthy();
 
   await page
     .getByRole('complementary')
@@ -317,6 +404,7 @@ test('anonymous user controls playback across every accepted document journey', 
     page.getByRole('link', { name: 'multilingual-sample.txt', exact: true }),
     'multilingual-sample.txt',
   );
+  await verifyWordOnlyPlayback(page, 'html');
   await startAndCancelPlayback(page);
 
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
@@ -339,7 +427,8 @@ test('anonymous user controls playback across every accepted document journey', 
   await voiceButton.click();
   const voicePanel = page.getByRole('dialog', { name: 'Voice', exact: true });
   await expect(voicePanel.getByRole('heading', { name: 'Voice', exact: true })).toBeVisible();
-  const alternativeVoiceRow = voicePanel.locator('button[aria-pressed="false"]').first();
+  const alternativeVoiceRow = voicePanel.getByRole('group').getByRole('button', { pressed: false })
+    .filter({ hasText: /\S/ }).first();
   const alternativeVoice = (await alternativeVoiceRow.textContent())?.trim();
   expect(alternativeVoice).toBeTruthy();
   await alternativeVoiceRow.click();
@@ -387,21 +476,28 @@ test('anonymous user controls playback across every accepted document journey', 
 
   await startAndCancelPlayback(page);
 
-  // Reader Settings rebuild the plan too, and the segment slider commits once
-  // on release instead of once per tick.
+  // Advanced settings draft until Save; cancelling regeneration leaves the
+  // current plan intact and Discard restores the inherited value.
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   const readerSettings = page.getByLabel('Document settings');
-  const segmentLength = readerSettings.getByRole('slider', { name: 'Max segment length', exact: true });
-  const initialSegmentLength = await segmentLength.inputValue();
-  await segmentLength.focus();
-  await segmentLength.press('ArrowRight');
+  await readerSettings.getByRole('button', { name: 'Advanced', exact: true }).click();
+  const segmentLength = readerSettings.getByRole('button', { name: 'Max segment length', exact: true });
+  // textContent is what toHaveText compares. WebKit's innerText omits text
+  // while the card is still clipped at the start of its opening transition.
+  await expect(segmentLength).toHaveText(/^\d+ characters$/);
+  const initialSegmentLength = (await segmentLength.textContent())!;
+  await segmentLength.click();
+  await page.getByRole('option', { name: '600 characters', exact: true }).click();
+  await readerSettings.getByRole('button', { name: 'Save', exact: true }).click();
   const segmentDialog = page
     .getByTestId('confirm-dialog-panel')
-    .filter({ has: page.getByRole('heading', { name: 'Change the maximum segment length?', exact: true }) });
+    .filter({ has: page.getByRole('heading', { name: 'Change advanced settings?', exact: true }) });
   await expect(segmentDialog).toHaveCSS('opacity', '1');
   await segmentDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(segmentDialog).toBeHidden();
-  await expect(segmentLength).toHaveValue(initialSegmentLength);
+  await expect(segmentLength).toHaveText('600 characters');
+  await readerSettings.getByRole('button', { name: 'Discard', exact: true }).click();
+  await expect(segmentLength).toHaveText(initialSegmentLength);
   await page.keyboard.press('Escape');
 
   await page.reload();
@@ -458,11 +554,12 @@ test('anonymous user controls playback across every accepted document journey', 
   await expect(bookTitle).toBeVisible();
   await returnToLibrary(page);
 
-  await openDocument(page, pdfLinks.nth(0), 'sample.pdf');
+  await openDocument(page, pdfLinks.and(page.locator(`[href="${sourcePdfHref}"]`)), 'sample.pdf');
+  await verifyWordOnlyPlayback(page, 'pdf');
   await startAndCancelPlayback(page);
   await returnToLibrary(page);
 
-  await openDocument(page, pdfLinks.nth(1), 'sample.pdf', 60_000);
+  await openDocument(page, pdfLinks.and(page.locator(`:not([href="${sourcePdfHref}"])`)), 'sample.pdf', 60_000);
   await startAndCancelPlayback(page);
   await returnToLibrary(page);
 });

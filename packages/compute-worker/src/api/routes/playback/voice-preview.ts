@@ -35,6 +35,12 @@ export function classifyVoicePreviewError(error: unknown): {
   if (upstreamStatus === 429) {
     return { status: 429, code: 'UPSTREAM_RATE_LIMIT', error: 'TTS provider rate limited the preview' };
   }
+  if (upstreamStatus === 401 || upstreamStatus === 403) {
+    return { status: 502, code: 'UPSTREAM_AUTH', error: 'TTS provider rejected the API key' };
+  }
+  if (upstreamStatus === 402) {
+    return { status: 502, code: 'UPSTREAM_CREDIT', error: 'TTS provider account has no remaining credit' };
+  }
   if (upstreamStatus !== undefined) {
     return { status: 502, code: 'UPSTREAM_ERROR', error: 'TTS provider rejected the preview' };
   }

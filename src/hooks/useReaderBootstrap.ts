@@ -33,12 +33,26 @@ export function useReaderBootstrap(documentId: string | undefined) {
   const pendingProgress = useRef<DocumentProgressPayload | null>(null);
   const lastProgressTimestamp = useRef(0);
   const progressPersistenceEnabled = useRef(false);
+  const surfaceOwner = `${sessionId}:${documentId ?? ''}`;
+  const lastSettingsCommit = useRef<{ owner: string; settings: DocumentSettings } | null>(null);
+  const bootstrapSettingsAtStart = useRef(lastSettingsCommit.current);
+  const preserveNewerPresentation = useCallback((snapshot: ReaderBootstrapResult, atStart: typeof lastSettingsCommit.current): ReaderBootstrapResult => {
+    const commit = lastSettingsCommit.current;
+    if (snapshot.status !== 'ready' || !commit || commit.owner !== surfaceOwner || commit === atStart) return snapshot;
+    return { ...snapshot, payload: { ...snapshot.payload, settings: { ...snapshot.payload.settings,
+      typography: commit.settings.typography, highlightAppearance: commit.settings.highlightAppearance,
+      presentation: commit.settings.presentation } } };
+  }, [surfaceOwner]);
   const query = useQuery({
     queryKey: key,
     // Bootstrap ensures durable server work. Development Strict Mode may
     // briefly remove every observer, but that must not abort the request that
     // creates/reconnects the operation or surface an ECONNRESET on the server.
-    queryFn: () => getReaderBootstrap(documentId!),
+    queryFn: async () => {
+      const atStart = lastSettingsCommit.current;
+      bootstrapSettingsAtStart.current = atStart;
+      return preserveNewerPresentation(await getReaderBootstrap(documentId!), atStart);
+    },
     enabled: !sessionPending && Boolean(documentId),
     retry: false,
     gcTime: 0,
@@ -61,7 +75,6 @@ export function useReaderBootstrap(documentId: string | undefined) {
   // A plan-affecting settings change re-plans on the server. The open reader
   // keeps its last ready surface meanwhile instead of returning to the loader;
   // only an explicit restart (such as a PDF reparse) hides it.
-  const surfaceOwner = `${sessionId}:${documentId ?? ''}`;
   const [settled, setSettled] = useState<{
     owner: string;
     result: Extract<ReaderBootstrapResult, { status: 'ready' }>;
@@ -127,9 +140,31 @@ export function useReaderBootstrap(documentId: string | undefined) {
     flushProgress();
   }, [flushProgress]);
   const updateSettings = useCallback(async (settings: DocumentSettings) => {
-    await settingsMutation.mutateAsync(settings);
+    const saved = await settingsMutation.mutateAsync(settings);
+    lastSettingsCommit.current = { owner: surfaceOwner, settings: saved.settings };
     await query.refetch({ throwOnError: true });
-  }, [query, settingsMutation]);
+  }, [query, settingsMutation, surfaceOwner]);
+  /** Records a settings write made outside this hook, such as a book voice change. */
+  const acknowledgeSettings = useCallback((settings: DocumentSettings) => {
+    lastSettingsCommit.current = { owner: surfaceOwner, settings };
+  }, [surfaceOwner]);
+  // Presentation edits update the existing ready snapshot. Bootstrapping again
+  // would needlessly resolve audio work for a color or font change.
+  const updatePresentation = async (patch: Pick<DocumentSettings, 'typography' | 'highlightAppearance' | 'presentation'>) => {
+    const current = queryClient.getQueryData<ReaderBootstrapResult>(key);
+    // A replan may still be returning a snapshot from before the last speech
+    // save. Base this write on the acknowledged settings, not that older view;
+    // the reader stays open while it replans, so the write must not wait for it.
+    const baseline = lastSettingsCommit.current?.owner === surfaceOwner
+      ? lastSettingsCommit.current.settings
+      : current?.status === 'ready' ? current.payload.settings : settledForSurface?.result.payload.settings;
+    if (!baseline) throw new Error('Reader settings are not ready.');
+    const saved = await settingsMutation.mutateAsync({ ...baseline, ...patch });
+    lastSettingsCommit.current = { owner: surfaceOwner, settings: saved.settings };
+    queryClient.setQueryData<ReaderBootstrapResult>(key, (latest) => latest?.status === 'ready'
+      ? { ...latest, payload: { ...latest.payload, settings: saved.settings } }
+      : latest);
+  };
   const restart = useCallback((input: ReaderBootstrapRestart) => {
     const operationId = input.operationId.trim();
     if (!operationId) throw new Error('Reader restart requires an operation ID.');
@@ -139,6 +174,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
       ...(input.progress ? { progress: input.progress } : {}),
     };
     setSettled(null);
+    bootstrapSettingsAtStart.current = lastSettingsCommit.current;
     queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
   }, [key, queryClient]);
   const retry = useCallback(async () => {
@@ -158,15 +194,16 @@ export function useReaderBootstrap(documentId: string | undefined) {
   useEffect(() => {
     if (!documentId || query.data?.status !== 'pending') return;
     const operationId = pendingOperationId;
+    const atStart = bootstrapSettingsAtStart.current;
     return subscribeReaderBootstrap(documentId, (snapshot) => {
       queryClient.setQueryData<ReaderBootstrapResult>(
         queryKeys.readerBootstrap(sessionId, documentId),
         snapshot.status === 'pending' && operationId
           ? { ...snapshot, operationId }
-          : snapshot,
+          : preserveNewerPresentation(snapshot, atStart),
       );
     }, { operationId });
-  }, [documentId, pendingOperationId, query.data?.status, queryClient, sessionId]);
+  }, [documentId, pendingOperationId, query.data?.status, queryClient, sessionId, preserveNewerPresentation]);
 
   const documentSource: ReaderDocumentSourceResult = result.status !== 'ready'
     ? { status: 'idle' }
@@ -191,6 +228,8 @@ export function useReaderBootstrap(documentId: string | undefined) {
     retry,
     retryDocumentSource,
     updateSettings,
+    updatePresentation,
+    acknowledgeSettings,
     scheduleProgress,
     enableProgressPersistence,
     disableProgressPersistence,

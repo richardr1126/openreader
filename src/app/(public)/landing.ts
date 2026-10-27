@@ -12,7 +12,7 @@ export const WIZARD_OF_OZ_DEMO: ReaderDemo = {
 
 export const FORMATS = ['EPUB', 'PDF', 'TXT', 'MD', 'DOCX'] as const;
 
-export const PROVIDERS = ['Kokoro', 'KittenTTS', 'Orpheus', 'OpenAI', 'Replicate', 'DeepInfra'] as const;
+export const PROVIDERS = ['Kokoro', 'KittenTTS', 'Orpheus', 'OpenAI', 'Replicate', 'Google AI Studio'] as const;
 
 export const STEPS = [
   {
@@ -21,7 +21,7 @@ export const STEPS = [
   },
   {
     title: 'Pick a voice',
-    body: 'Hosted OpenAI, Replicate, or DeepInfra, or your own Kokoro, KittenTTS, or Orpheus server. Set the language, choose a compatible voice, and tune the speed.',
+    body: 'Hosted OpenAI, Replicate, or Google AI Studio, or your own Kokoro, KittenTTS, or Orpheus server. Set the language, choose a compatible voice, and tune the speed.',
   },
   {
     title: 'Read, listen, export',

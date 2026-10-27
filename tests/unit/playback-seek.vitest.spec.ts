@@ -48,6 +48,45 @@ async function fixture() {
 }
 
 describe('playback seek ownership', () => {
+  test.each(['pdf', 'epub'] as const)('browsing a %s surface preserves the live cursor and audio owner', async (readerType) => {
+    const locator = readerType === 'pdf'
+      ? { readerType: 'pdf' as const, page: 2 }
+      : { readerType: 'epub' as const, spineIndex: 0, spineHref: 'chapter.xhtml', charOffset: 0 };
+    const segments = planCanonicalTtsSegments([
+      { sourceKey: 'one', text: 'First sentence.', locator },
+      { sourceKey: 'two', text: 'Second sentence.', locator },
+    ], { readerType, enforceSourceBoundaries: true }).segments;
+    const plan = { sessionId: 'canonical', documentId: 'book', readerType, segments: [] };
+    const input: Parameters<typeof useTtsDocumentNavigation>[0] = {
+      activeReaderType: readerType, isPlaying: true, sentences: segments.map((entry) => entry.text),
+      advanceRef: { current: null }, isPlayingRef: { current: true }, pauseEpochRef: { current: 0 },
+      playbackAnchorRef: { current: null }, playbackPlanReady: true, playbackPlanRef: { current: plan },
+      playbackSegmentsRef: { current: segments }, selectedOrdinalRef: { current: 1 },
+      cancelPendingSeek: vi.fn(), pauseActivePlayback: vi.fn(), seekPlaybackToOrdinal: vi.fn(),
+      syncActivePlaybackToOrdinal: vi.fn(), selectPlaybackSegment: vi.fn(), setCurrDocPage: vi.fn(),
+      setIsPlaying: vi.fn(), setIsProcessing: vi.fn(), setPlaybackAnchor: vi.fn(),
+      setSelectedOrdinal: vi.fn(), syncPlaybackLocator: vi.fn(),
+    };
+    let navigation!: ReturnType<typeof useTtsDocumentNavigation>;
+    function Probe() { navigation = useTtsDocumentNavigation(input); return null; }
+    await act(async () => root.render(createElement(Probe)));
+    await act(async () => {
+      if (readerType === 'pdf') navigation.setDocumentPlaybackAnchor(2, true, locator);
+      else {
+        navigation.reconcileEpubRenderedAnchor({ locator, hasReadableText: true, preservePlaybackCursor: true });
+        navigation.reconcileEpubRenderedAnchor({ locator: null, hasReadableText: false, preservePlaybackCursor: true });
+      }
+    });
+    expect(input.setCurrDocPage).toHaveBeenCalled();
+    expect(input.setSelectedOrdinal).not.toHaveBeenCalled();
+    expect(input.seekPlaybackToOrdinal).not.toHaveBeenCalled();
+    expect(input.syncActivePlaybackToOrdinal).not.toHaveBeenCalled();
+    expect(input.pauseActivePlayback).not.toHaveBeenCalled();
+    expect(input.setIsPlaying).not.toHaveBeenCalled();
+    expect(input.playbackPlanRef.current).toBe(plan);
+    expect(input.selectedOrdinalRef.current).toBe(1);
+  });
+
   test('generation progress preserves a slow seek and cached readiness hands its deadline to media positioning', async () => {
     vi.useFakeTimers();
     const f = await fixture();
@@ -103,7 +142,6 @@ describe('playback seek ownership', () => {
       advanceRef: { current: null }, isPlayingRef: { current: true }, pauseEpochRef: { current: 0 },
       playbackAnchorRef: { current: null }, playbackPlanReady: true, playbackPlanRef: { current: null },
       playbackSegmentsRef: { current: segments }, selectedOrdinalRef,
-      playbackSyncNavigationRef: { current: false }, resumeAfterLocationChangeRef: { current: false },
       cancelPendingSeek: vi.fn(), pauseActivePlayback: vi.fn(), seekPlaybackToOrdinal: seek,
       syncActivePlaybackToOrdinal: vi.fn(), selectPlaybackSegment: vi.fn(), setCurrDocPage: vi.fn(),
       setIsPlaying: vi.fn(), setIsProcessing: vi.fn(), setPlaybackAnchor: vi.fn(),

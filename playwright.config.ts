@@ -61,6 +61,10 @@ export default defineConfig({
       // developer seed file so this inline seed always applies.
       RUNTIME_SEED_JSON_PATH: '',
       RUNTIME_SEED_JSON: JSON.stringify({ version: 1, runtimeConfig: { allowAnonymousSessions: true } }),
+      // Settings journeys need a shared provider to save against. A developer
+      // API_BASE seeds the real one; without it (CI) the same provider points
+      // at an unused port, since deterministic journeys never generate audio.
+      API_BASE: process.env.API_BASE || 'http://127.0.0.1:9/v1',
     },
   },
   projects: [

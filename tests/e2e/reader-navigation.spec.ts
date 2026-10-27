@@ -115,6 +115,7 @@ test('a PDF can be read as flowing text and tapped to seek', async ({ page }) =>
   await expect(showPages).toBeChecked();
   await showPages.click();
   await expect(showPages).not.toBeChecked();
+  await page.getByRole('region', { name: 'Unsaved changes', exact: true }).getByRole('button', { name: 'Save', exact: true }).click();
   await page.getByRole('button', { name: 'Hide settings', exact: true }).click();
 
   const reader = page.getByTestId('text-reader');

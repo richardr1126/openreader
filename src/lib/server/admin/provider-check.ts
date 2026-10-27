@@ -38,7 +38,7 @@ export interface ProviderCheckDeps {
 const PROBE_TIMEOUT_MS = 10_000;
 const SPEECH_TIMEOUT_MS = 35_000;
 const SAMPLE_TEXT = 'This is a quick provider check.';
-const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'deepinfra', 'replicate'];
+const KEY_REQUIRED: readonly TtsProviderId[] = ['openai', 'google-ai-studio', 'replicate', 'fish-audio', 'openrouter'];
 
 function hostOf(url: string): string {
   try {
@@ -115,14 +115,17 @@ async function checkConnection(
     return item('ok', 'Replicate accepted the key and found the model.');
   }
 
-  const baseUrl = (draft.baseUrl || defaultBaseUrlForProviderType(draft.providerType)).replace(/\/+$/, '');
+  const baseUrl = (draft.providerType === 'openrouter' || draft.providerType === 'google-ai-studio' ? defaultBaseUrlForProviderType(draft.providerType)
+    : draft.baseUrl || defaultBaseUrlForProviderType(draft.providerType)).replace(/\/+$/, '');
   const host = hostOf(baseUrl);
   let response: Response;
   try {
-    response = await deps.fetch(`${baseUrl}/models`, {
-      headers: draft.apiKey ? { Authorization: `Bearer ${draft.apiKey}` } : {},
+    response = await deps.fetch(draft.providerType === 'google-ai-studio' ? `${baseUrl}/models/${encodeURIComponent(model)}` : draft.providerType === 'openrouter' ? `${baseUrl}/key`
+      : draft.providerType === 'fish-audio' ? 'https://api.fish.audio/model?page_size=1' : `${baseUrl}/models`, {
+      headers: draft.apiKey ? (draft.providerType === 'google-ai-studio' ? { 'x-goog-api-key': draft.apiKey } : { Authorization: `Bearer ${draft.apiKey}` }) : {},
       signal: AbortSignal.any([signal, AbortSignal.timeout(PROBE_TIMEOUT_MS)]),
       cache: 'no-store',
+      redirect: 'error',
     });
   } catch {
     return item('error', `Could not reach ${host} from the app server.`);
@@ -191,6 +194,8 @@ async function checkSpeech(
   }
   if (result.status === 504) return item('error', 'The speech sample timed out.');
   if (result.status === 503) return item('error', 'The worker could not load this provider\'s credentials.');
+  if (result.code === 'UPSTREAM_AUTH') return item('error', 'The provider rejected the API key.');
+  if (result.code === 'UPSTREAM_CREDIT') return item('error', 'The provider account has no remaining credit.');
   if (result.code === 'UPSTREAM_ERROR') {
     return item('error', 'The provider rejected the request. Check the model, voice, and instructions.');
   }

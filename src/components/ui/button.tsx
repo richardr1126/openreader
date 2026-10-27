@@ -25,7 +25,7 @@ const buttonStyles = variants({
       xs: 'h-6 rounded-md px-2 text-xs',
       sm: 'h-7 rounded-md px-2.5 text-xs',
       md: 'h-8 rounded-md px-3 text-sm',
-      lg: 'h-10 rounded-lg px-4 text-base',
+      lg: 'h-10 rounded-lg px-4 text-[1rem] leading-6',
       icon: 'h-8 w-8 rounded-md p-0 text-sm',
     },
   },

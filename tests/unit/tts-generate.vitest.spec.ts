@@ -8,7 +8,6 @@ import {
   registerLocalTtsSynthesizer,
   resolveReplicateLanguageValue,
 } from '@openreader/tts/generate';
-import { REPLICATE_KOKORO_82M_VERSIONED_MODEL } from '@openreader/tts/provider-catalog';
 
 describe('replicate output URL extraction', () => {
   test('returns direct URL string output', () => {
@@ -65,6 +64,12 @@ describe('replicate output URL extraction', () => {
 });
 
 describe('TTS upstream cache identity', () => {
+  test('retains the released Inworld model identity for saved audio', () => {
+    expect(buildTTSCacheKey({
+      text: 'A saved Inworld passage.', voice: 'Ashley', speed: 1,
+      provider: 'replicate', model: 'inworld/tts-1.5-mini', apiKey: 'test',
+    })).toBe('a025f53b850fdfdd2f1f0dcb5f35eab1bef2cf93f6a5d353c3f52a0127a36f53');
+  });
   test('includes language in the upstream audio cache key', () => {
     const request = {
       text: '同じ文章です。',
@@ -79,6 +84,39 @@ describe('TTS upstream cache identity', () => {
     expect(buildTTSCacheKey({ ...request, language: 'ja' }))
       .not.toBe(buildTTSCacheKey({ ...request, language: 'en' }));
   });
+});
+
+describe('renamed Replicate Inworld model', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test.each(['inworld/tts-1.5-mini', 'inworld/realtime-tts-1.5-mini'])(
+    'executes %s through the current SDK endpoint with native rate and language', async (model) => {
+      const calls: { url: string; body: Record<string, unknown> | null }[] = [];
+      vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const body = request.method === 'POST' ? await request.json() : null;
+        calls.push({ url: request.url, body });
+        if (request.url.endsWith('/predictions')) {
+          return new Response(JSON.stringify({ id: 'prediction1', status: 'succeeded',
+            output: 'https://replicate.delivery/inworld-check.mp3' }), { headers: { 'Content-Type': 'application/json' } });
+        }
+        if (request.url.startsWith('https://replicate.delivery/')) {
+          // Stop after verifying SDK dispatch; no transcoding or real service.
+          return new Response('', { status: 404 });
+        }
+        return new Response(JSON.stringify({ latest_version: { openapi_schema: {
+          components: { schemas: { Input: { properties: { language: { enum: ['English', 'Spanish'] } } } } },
+        } } }), { headers: { 'Content-Type': 'application/json' } });
+      });
+      await expect(generateTTSBuffer({ text: `Inworld endpoint check ${model}`, voice: 'Ashley', speed: 1.2,
+        provider: 'replicate', model, language: 'es', apiKey: 'test-key' })).rejects.toThrow();
+      const prediction = calls.find((call) => call.url.endsWith('/predictions'));
+      expect(prediction?.url).toBe('https://api.replicate.com/v1/models/inworld/realtime-tts-1.5-mini/predictions');
+      expect(prediction?.body?.input).toMatchObject({ voice_id: 'Ashley', speaking_rate: 1.2, language: 'Spanish' });
+      expect(prediction?.body?.input).not.toHaveProperty('speed');
+      expect(calls.every((call) => !call.url.includes('/inworld/tts-1.5-mini'))).toBe(true);
+    },
+  );
 });
 
 describe('Replicate language schema values', () => {
@@ -98,50 +136,17 @@ describe('Replicate language schema values', () => {
     expect(resolveReplicateLanguageValue('fr', gemini)).toBeNull();
   });
 
-  test('includes language_code for the built-in Replicate Kokoro model', async () => {
-    await expect(buildReplicateInput({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      speed: 1,
-      format: 'mp3',
-      model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-      language: 'en',
-      provider: 'replicate',
-      apiKey: 'r8_token',
-    })).resolves.toEqual({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      language_code: 'a',
-    });
-
-    await expect(buildReplicateInput({
-      text: 'Hello world',
-      voice: 'bf_emma',
-      speed: 1,
-      format: 'mp3',
-      model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-      language: 'en',
-      provider: 'replicate',
-      apiKey: 'r8_token',
-    })).resolves.toEqual({
-      text: 'Hello world',
-      voice: 'bf_emma',
-      language_code: 'b',
-    });
-
-    await expect(buildReplicateInput({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      speed: 1,
-      format: 'mp3',
-      model: REPLICATE_KOKORO_82M_VERSIONED_MODEL,
-      provider: 'replicate',
-      apiKey: 'r8_token',
-    })).resolves.toEqual({
-      text: 'Hello world',
-      voice: 'af_sarah',
-      language_code: 'a',
-    });
+  test.each(['alphanumericuser/kokoro-82m', `alphanumericuser/kokoro-82m:${'a'.repeat(64)}`])('rejects retired model %s without fetching or replacing it', async (model) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const request = { text: 'Hello world', voice: 'af_sarah', speed: 1.2, format: 'mp3', model, provider: 'replicate', apiKey: 'mock-key' };
+      const key = buildTTSCacheKey(request);
+      await expect(generateTTSBuffer(request)).rejects.toMatchObject({ status: 422, message: expect.stringContaining('Choose another model') });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(request.model).toBe(model);
+      expect(buildTTSCacheKey(request)).toBe(key);
+    } finally { vi.unstubAllGlobals(); }
   });
 });
 
@@ -158,7 +163,7 @@ describe('provider request text', () => {
         voice: 'af_bella',
         speed: 1,
         model: 'hexgrad/Kokoro-82M',
-        provider: 'deepinfra',
+        provider: 'custom-openai',
         apiKey: 'test-key',
       })).rejects.toThrow();
       const [input, init] = fetchMock.mock.calls[0];
@@ -167,33 +172,6 @@ describe('provider request text', () => {
     } finally {
       vi.unstubAllGlobals();
     }
-  });
-});
-
-describe('OpenAI-compatible base URL', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  test('sends a Deepinfra provider without a stored base URL to Deepinfra', async () => {
-    const fetchMock = vi.fn(async (_input: unknown, _init?: unknown) => new Response(
-      JSON.stringify({ error: { message: 'stop after the request' } }),
-      { status: 400, headers: { 'Content-Type': 'application/json' } },
-    ));
-    vi.stubGlobal('fetch', fetchMock);
-
-    await expect(generateTTSBuffer({
-      text: 'deepinfra base url check',
-      voice: 'af_bella',
-      speed: 1,
-      model: 'hexgrad/Kokoro-82M',
-      provider: 'deepinfra',
-      apiKey: 'test-key',
-    })).rejects.toThrow();
-
-    const [input] = fetchMock.mock.calls[0];
-    const url = input instanceof Request ? input.url : String(input);
-    expect(url).toBe('https://api.deepinfra.com/v1/openai/audio/speech');
   });
 });
 

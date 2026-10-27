@@ -78,15 +78,14 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       prefix: input.s3Prefix,
     });
     const session = await playbackStorage.sessions.getSession(parsed.sessionId);
-    if (!session) throw new Error('TTS playback export session was not found');
-    if (session.storageUserId !== parsed.storageUserId || session.documentId !== parsed.documentId) {
+    if (session && (session.storageUserId !== parsed.storageUserId || session.documentId !== parsed.documentId)) {
       throw new Error('TTS playback export session scope mismatch');
     }
-    if (session.planObjectKey !== parsed.planObjectKey) throw new Error('TTS playback export session plan key mismatch');
+    if (session && session.planObjectKey !== parsed.planObjectKey) throw new Error('TTS playback export session plan key mismatch');
     // A whole-book artifact needs a finished run. One chapter only needs its
     // own segments settled, so it can be downloaded while later chapters are
     // still generating or after a stopped/limited run.
-    if (parsed.chapterIndex === undefined && (session.status !== 'succeeded' || session.stopReason)) {
+    if (session && parsed.chapterIndex === undefined && (session.status !== 'succeeded' || session.stopReason)) {
       throw new Error(`TTS playback export session is not complete: ${session.stopReason ?? session.status}`);
     }
     const cacheEpoch = await playbackStorage.artifacts.getScopeEpoch(parsed);
@@ -95,14 +94,18 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         playbackStorage.sessions.getSession(parsed.sessionId),
         playbackStorage.artifacts.getScopeEpoch(parsed),
       ]);
-      if (!current || epoch !== cacheEpoch
-        || (current.generationRunId ?? null) !== (session.generationRunId ?? null)
-        || current.status === 'canceled' || current.status === 'failed') {
+      if (epoch !== cacheEpoch || (session
+        ? !current || (current.generationRunId ?? null) !== (session.generationRunId ?? null)
+          || current.status === 'canceled' || current.status === 'failed'
+        : Boolean(current))) {
         throw new Error('Audiobook sources were cleared or generation was replaced. Retry the export.');
       }
     };
 
-    const documentSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, parsed.planObjectKey);
+    // Reading may have filled the durable cache without ever creating an export
+    // generation session, or that session may have expired. Scope the immutable
+    // plan directly, then require every requested sidecar to be durably settled.
+    const documentSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, parsed.planObjectKey, session ? undefined : parsed);
     if (!documentSegments || documentSegments.length === 0) {
       throw new Error('TTS playback export requires a loaded canonical plan');
     }

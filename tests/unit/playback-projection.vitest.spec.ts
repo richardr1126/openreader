@@ -29,7 +29,7 @@ describe('playback locator projection', () => {
       let projection!: ReturnType<typeof usePlaybackProjection>;
       function Probe() {
         projection = usePlaybackProjection({ playbackRunIdRef: { current: 1 }, playbackSessionRef: { current: session },
-          selectedOrdinalRef: { current: 1 }, setCurrDocPage: vi.fn(), setCurrentSentenceAlignment: vi.fn(),
+          selectedOrdinalRef: { current: 1 }, setCurrentSentenceAlignment: vi.fn(),
           setCurrentWordIndex: vi.fn(), setSelectedOrdinal: vi.fn() });
         return null;
       }
@@ -112,7 +112,7 @@ describe('playback locator projection', () => {
     function Probe() {
       projection = usePlaybackProjection({
         playbackRunIdRef: { current: 1 }, playbackSessionRef: { current: session },
-        selectedOrdinalRef: { current: 1 }, setCurrDocPage: vi.fn(),
+        selectedOrdinalRef: { current: 1 },
         setCurrentSentenceAlignment: vi.fn(), setCurrentWordIndex: word, setSelectedOrdinal: vi.fn(),
       });
       return null;

@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
         ((body as Record<string, unknown>).defaultModel as string | null | undefined) ?? null,
       defaultInstructions:
         ((body as Record<string, unknown>).defaultInstructions as string | null | undefined) ?? null,
+      defaultModelOptions:
+        ((body as Record<string, unknown>).defaultModelOptions as string | null | undefined) ?? null,
       enabled: ((body as Record<string, unknown>).enabled as boolean | undefined) ?? true,
     });
     return NextResponse.json({ provider: toMasked(record) }, { status: 201 });

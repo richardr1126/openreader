@@ -2,6 +2,7 @@ import type { generateTTSBuffer } from '@openreader/tts/generate';
 import type { TTSSegmentSettings } from '@openreader/tts/types';
 import type { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
 import { resolveEffectiveTtsSettings } from './provider-settings';
+import { resolveClonedVoice } from './cloned-voice';
 import { withAbortableTimeout } from './segment-generation';
 
 /** A preview speaks one short sentence; longer text is a caller bug. */
@@ -21,6 +22,8 @@ export class TtsVoicePreviewTooLargeError extends Error {
 }
 
 export interface TtsVoicePreviewDeps {
+  readObject?: (key: string) => Promise<Uint8Array>;
+  s3Prefix?: string;
   resolveCredentials: typeof resolveTtsCredentialsFromBroker;
   synthesize: typeof generateTTSBuffer;
   /** The worker's shared provider limiter; previews wait for a slot like segments. */
@@ -40,7 +43,7 @@ export interface TtsVoicePreviewDeps {
  * this call.
  */
 export async function synthesizeTtsVoicePreview(
-  input: { settings: TTSSegmentSettings; text: string },
+  input: { settings: TTSSegmentSettings; text: string; userId?: string },
   deps: TtsVoicePreviewDeps,
   signal?: AbortSignal,
 ): Promise<Buffer> {
@@ -50,6 +53,8 @@ export async function synthesizeTtsVoicePreview(
   }
   const creds = await deps.resolveCredentials(input.settings.providerRef, signal ? { signal } : {});
   const settings = resolveEffectiveTtsSettings(input.settings, creds);
+  const resolvedVoice = await resolveClonedVoice({ settings, userId: input.userId, prefix: deps.s3Prefix ?? '',
+    readObject: deps.readObject ?? (async () => { throw new Error('Cloned voice storage is unavailable'); }) });
   const release = deps.acquireProviderCapacity
     ? await deps.acquireProviderCapacity({ providerRef: creds.providerRef, characters: text.length, signal })
     : async () => undefined;
@@ -58,13 +63,15 @@ export async function synthesizeTtsVoicePreview(
     const audio = await withAbortableTimeout(
       (synthesisSignal) => deps.synthesize({
         text,
-        voice: settings.voice,
+        ...resolvedVoice,
         speed: settings.nativeSpeed,
         format: 'mp3',
         model: settings.ttsModel,
         instructions: settings.ttsInstructions,
+        modelOptions: settings.ttsModelOptions,
         language: settings.language,
         provider: creds.providerType,
+        ...(settings.voiceCustomization ? { voiceCustomization: settings.voiceCustomization } : {}),
         apiKey: creds.apiKey,
         baseUrl: creds.baseUrl ?? undefined,
       }, synthesisSignal, { ttsUpstreamTimeoutMs: timeoutMs }),

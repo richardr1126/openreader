@@ -121,6 +121,12 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
               selected TTS provider/model settings.
             </li>
             <li>
+              <strong>Personal voices:</strong> if you record or import a voice sample, OpenReader stores the selected
+              clip, its name, and any transcript in your private user storage. During speech generation, the selected
+              Fish Audio or OpenRouter service receives the sample and transcript along with the narration text.
+              Removing the saved voice deletes its sample; already generated narration remains cached.
+            </li>
+            <li>
               <strong>Security and operations data:</strong> request metadata, error and service logs, durable job and
               operation state, pseudonymous compute-limit counters, and an anonymous-device identifier when anonymous
               compute controls apply. IP and device values used for compute-limit buckets are stored as keyed hashes
@@ -353,7 +359,7 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
 
 // The iOS app is a separate product with its own data flow, so its policy has
 // its own date rather than sharing PRIVACY_POLICY_EFFECTIVE_DATE.
-const IOS_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 20, 2026';
+const IOS_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 26, 2026';
 
 /* Claim audit (openreader-ios)
    Code-verified: PrivacyInfo.xcprivacy declares no collected data types and no tracking;
@@ -370,7 +376,7 @@ export const IOS_POLICY: PolicyDocument = {
       Store and TestFlight. The Mac version is the same app, so everything below applies to it too.
     </>
   ),
-  facts: ['No data collection', 'No accounts', 'No analytics or tracking', 'On-device speech'],
+  facts: ['No developer data collection', 'No accounts', 'No analytics or tracking', 'On-device speech by default'],
   operatorNote: {
     label: 'A separate product',
     body: (
@@ -398,7 +404,7 @@ export const IOS_POLICY: PolicyDocument = {
     {
       id: 'on-device',
       title: 'What stays on your device',
-      summary: 'Documents, speech, highlighting, and reading data all live on the device.',
+      summary: 'Your library and reading data stay on the device. External voices send content only to services you authorize.',
       body: (
         <>
           <ul>
@@ -408,7 +414,9 @@ export const IOS_POLICY: PolicyDocument = {
             </li>
             <li>
               <strong>Speech:</strong> text is turned into speech on your device by Kokoro, Supertonic, or your
-              installed system voices. No text is ever sent to a remote speech service.
+              installed system voices. If you choose an external speech provider, the narration text and your
+              instructions are sent directly to that service. For a cloned voice, the selected reference recording
+              and any transcript are sent with each speech request.
             </li>
             <li>
               <strong>Text recognition and highlighting:</strong> reading scanned PDF pages and timing word highlights
@@ -429,16 +437,25 @@ export const IOS_POLICY: PolicyDocument = {
     {
       id: 'network',
       title: 'When the app uses the network',
-      summary: 'Only for voice downloads and the free-book catalog, never with your documents.',
+      summary: 'Voice downloads, the free-book catalog, and optional speech providers you authorize.',
       body: (
         <>
           <p>
             The app connects to the internet only when you use one of the features below. Like any web request, these
-            connections reveal your IP address and basic request details to the server. None of them includes your
-            documents or any account, name, or identifier, and the developer does not use them to identify or track
-            you.
+            connections reveal your IP address and basic request details to the server. Downloads and catalog
+            requests do not include your documents. Optional external speech requests carry the content and
+            provider-account credential described below. The developer does not use these requests to identify or
+            track you.
           </p>
           <ul>
+            <li>
+              <strong>Optional external speech:</strong> choosing a service such as Fish Audio or OpenRouter sends
+              narration text, instructions, and your provider API key directly to that service after you authorize
+              it on this device. Cloned voices also send the private reference clip and any transcript during
+              generation. Provider policies and charges apply. Samples stay in the app&apos;s private storage and
+              are not synced through iCloud. Saved API keys use Keychain. Local voices send no content to a speech
+              provider.
+            </li>
             <li>
               <strong>Voice downloads (Hugging Face):</strong> the optional Kokoro and Supertonic voice models are
               downloaded from Hugging Face when you choose one, and are checked against a pinned checksum before use.
@@ -496,7 +513,7 @@ export const IOS_POLICY: PolicyDocument = {
 
 // OpenReader Desktop runs the whole stack on the owner's computer, so its policy
 // is about the network rather than an operator.
-const DESKTOP_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 20, 2026';
+const DESKTOP_PRIVACY_POLICY_EFFECTIVE_DATE = 'October 26, 2026';
 
 /* Claim audit (desktop/)
    Code-verified: runtime binds 127.0.0.1 only; Vercel Analytics, cookie banner and Resend
@@ -608,8 +625,10 @@ export const DESKTOP_POLICY: PolicyDocument = {
             </li>
             <li>
               <strong>Speech services you add:</strong> if you connect a hosted provider such as OpenAI, Replicate,
-              or DeepInfra, or a speech server of your own, the text being read aloud is sent to it, and that
-              provider&apos;s own policy applies. The built-in voices send nothing.
+              or Google AI Studio, or a speech server of your own, the text being read aloud is sent to it, and that
+              provider&apos;s own policy applies. Personal cloned voices also send their private reference sample and
+              any transcript when generating narration through Fish Audio or OpenRouter. Saved samples stay in your
+              app data folder until you remove the voice. The built-in voices send nothing.
             </li>
           </ul>
           <p>Links to other websites open in your default browser, under that browser&apos;s settings.</p>

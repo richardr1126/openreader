@@ -5,7 +5,7 @@ import toast from 'react-hot-toast';
 
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { AppConfigValues } from '@/types/config';
-import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '@/types/document-settings';
+import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings, type BookSpeechSettings } from '@/types/document-settings';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 
@@ -23,6 +23,8 @@ type UseTtsPlaybackSettingsInput = {
   documentId: string | null;
   readerSettings: DocumentSettings | null;
   setReaderSettings: (settings: DocumentSettings) => void;
+  /** Reports the settings the server acknowledged, so later reader writes build on them. */
+  onSettingsSaved: (settings: DocumentSettings) => void;
   providerRef: string;
   ttsModel: string;
   defaultVoice: string;
@@ -46,6 +48,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     documentId,
     readerSettings,
     setReaderSettings,
+    onSettingsSaved,
     providerRef,
     ttsModel,
     defaultVoice,
@@ -140,7 +143,10 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         // A failed save rolls back here instead of throwing, so the restart
         // still reacquires the plan and clears processing.
         try {
-          await putDocumentSettings(documentId, next);
+          // The audio controller's snapshot does not own live font/color edits.
+          // Omit those fields so the server preserves their latest values.
+          const saved = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+          onSettingsSaved(saved.settings);
         } catch (error) {
           console.error('Could not save book voice:', error);
           setReaderSettings(previous);
@@ -153,6 +159,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     defaultVoice,
     defaultVoiceSpeed,
     documentId,
+    onSettingsSaved,
     providerRef,
     readerSettings,
     restartAfterConfigUpdate,
@@ -171,9 +178,29 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     });
   }, [setAudioSpeed, updateConfigKey]);
 
+  const setBookSpeechSettings = useCallback(async (change: BookSpeechSettings): Promise<boolean> => {
+    if (!documentId || !readerSettings) return false;
+    const previous = readerSettings;
+    const next = { ...readerSettings, ...change };
+    let saved = false;
+    await restartAfterConfigUpdate(() => setReaderSettings(next), async () => {
+      try {
+        const result = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+        onSettingsSaved(result.settings);
+        saved = true;
+      } catch (error) {
+        console.error('Could not save book speech settings:', error);
+        setReaderSettings(previous);
+        toast.error('Could not save this book’s speech settings');
+      }
+    }, { resetPlan: true });
+    return saved;
+  }, [documentId, onSettingsSaved, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
+
   return {
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    setBookSpeechSettings,
   };
 }

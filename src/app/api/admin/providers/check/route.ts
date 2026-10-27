@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { normalizeOpenRouterOptions } from '@openreader/tts/openrouter';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
 import { requireAdminContext } from '@/lib/server/auth/admin';
 import { errorResponse } from '@/lib/server/errors/next-response';
@@ -25,6 +26,16 @@ function text(value: unknown): string {
  * a saved provider, a blank key falls back to its stored key, and an unchanged
  * provider also speaks a sample through the worker.
  */
+/** The worker speaks with the saved options, so an edited JSON draft needs saving first. */
+function draftModelOptions(draft: ProviderCheckDraft, value: unknown): string {
+  if (draft.providerType !== 'openrouter' || typeof value !== 'string') return '';
+  try {
+    return normalizeOpenRouterOptions(value, draft.defaultModel);
+  } catch {
+    return 'invalid';
+  }
+}
+
 export async function POST(req: NextRequest) {
   const ctx = await requireAdminContext(req);
   if (ctx instanceof Response) return ctx;
@@ -70,7 +81,8 @@ export async function POST(req: NextRequest) {
         matchesDraft: !keyChanged
           && sameEndpoint
           && (record.defaultModel ?? '') === draft.defaultModel
-          && (record.defaultInstructions ?? '') === draft.defaultInstructions,
+          && (record.defaultInstructions ?? '') === draft.defaultInstructions
+          && (record.defaultModelOptions ?? '') === draftModelOptions(draft, body.defaultModelOptions),
       };
     }
 

@@ -12,6 +12,7 @@ import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 import { Badge, Button, IconButton, RangeField, Section, SegmentedControl, SettingRow } from '@/components/ui';
 import { displayVoiceName, formatModelSpeed } from '@/lib/client/tts/voice-draft';
+import { useClonedVoiceNames } from '@/hooks/useClonedVoiceNames';
 import {
   triggerDownload,
   useAudiobookExport,
@@ -198,9 +199,10 @@ export function AudiobookExportModal({
     [providerRef, providerType, ttsModel],
   );
   const nativeSpeedSupported = providerModelPolicy.supportsNativeModelSpeed;
+  const clonedNames = useClonedVoiceNames(voice);
   const voiceSummary = nativeSpeedSupported && voiceSpeed !== 1
-    ? `${displayVoiceName(voice)} · ${formatModelSpeed(voiceSpeed)} model speed`
-    : displayVoiceName(voice);
+    ? `${displayVoiceName(voice, clonedNames)} · ${formatModelSpeed(voiceSpeed)} model speed`
+    : displayVoiceName(voice, clonedNames);
   const languageWarnings = useMemo(() => getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     providerType: providerModelPolicy.providerType,

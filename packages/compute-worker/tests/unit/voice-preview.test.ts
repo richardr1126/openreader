@@ -19,6 +19,7 @@ const CREDS: TtsCredentialBrokerResponse = {
   baseUrl: 'http://kokoro.internal/v1',
   defaultModel: 'kokoro',
   defaultInstructions: null,
+  defaultModelOptions: null,
 };
 const SETTINGS = {
   providerRef: 'kokoro-shared',

@@ -93,6 +93,35 @@ test('answers the WebKit two-byte media probe with a bounded partial response', 
   }
 });
 
+test('stored JSON settings retain pause headroom in the same stream layout as object settings', async () => {
+  const app = Fastify();
+  const settings = { nativeSpeed: 1, providerType: 'custom-openai', voiceCustomization: { blockPauseMilliseconds: 2000 } };
+  const session = {
+    sessionId: 'pause-headroom', userId: 'user', storageUserId: 'user', documentId: 'doc',
+    status: 'succeeded', expiresAt: Date.now() + 60_000, generationStartOrdinal: 0,
+    cursorOrdinal: 0, planObjectKey: 'plan.json', settingsJson: settings as unknown,
+  };
+  registerPlaybackAudioRoutes({ app, storage: { readObject: async () => Uint8Array.from([0xff, 0xfb]).buffer },
+    markActivity: vi.fn() } as never, {
+    readSession: async () => session,
+    readPlanSegments: async () => [{ ordinal: 0, text: 'Hi.' }],
+    readSegmentState: async () => ({ status: 'completed', audioKey: 'audio.mp3' }),
+  } as unknown as PlaybackSessionReadModel, {} as PlaybackSessionController);
+  try {
+    const token = createTtsPlaybackToken({ ...session, exp: session.expiresAt }, process.env.TTS_PLAYBACK_TOKEN_SECRET!);
+    const totals: number[] = [];
+    for (const value of [settings, JSON.stringify(settings)]) {
+      session.settingsJson = value;
+      const response = await app.inject({ method: 'GET',
+        url: `/v1/tts-playback/sessions/${session.sessionId}/audio?token=${token}`, headers: { range: 'bytes=0-1' } });
+      expect(response.statusCode).toBe(206);
+      totals.push(Number(String(response.headers['content-range']).split('/')[1]));
+    }
+    expect(totals[0]).toBeGreaterThan(32_000);
+    expect(totals[1]).toBe(totals[0]);
+  } finally { await app.close(); }
+});
+
 test.each([0, 8000])('a direct start at ordinal %i needs no remote duration catalogue', async (fromOrdinal) => {
   const app = Fastify();
   const session = {

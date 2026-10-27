@@ -655,7 +655,7 @@ describe('playback audio-first segment generation', () => {
     expect(mocks.generateTTSBuffer).not.toHaveBeenCalled();
   });
 
-  test('does not charge a segment whose audio is already cached', async () => {
+  test.each(['af_heart', 'clone:7e94cb5c-1032-44b8-84ee-8a7a6f99d629'])('does not charge or require a voice reference for cached audio (%s)', async (voice) => {
     const consumeUsage = vi.fn(async () => ({ allowed: true }));
     const onSegmentCompleted = vi.fn(async () => undefined);
     const playbackStorage = {
@@ -678,7 +678,7 @@ describe('playback audio-first segment generation', () => {
         settingsHash: 'settings-1',
         settingsJson: {
           providerRef: 'local-kokoro', providerType: 'custom-openai', ttsModel: 'kokoro',
-          voice: 'af_heart', nativeSpeed: 1, ttsInstructions: '', language: 'en',
+          voice, nativeSpeed: 1, ttsInstructions: '', language: 'en',
         },
         planning: {},
         planObjectKey: 'plan-key',

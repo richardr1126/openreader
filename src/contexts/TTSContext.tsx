@@ -60,7 +60,7 @@ import type {
   TtsPlaybackPhase,
 } from '@/types/tts';
 import type { TTSSegmentLocator } from '@/types/client';
-import type { DocumentSettings } from '@/types/document-settings';
+import type { DocumentSettings, BookSpeechSettings } from '@/types/document-settings';
 import type { ReaderPlaybackPreparation } from '@/types/reader-bootstrap';
 import { resolveBookVoice } from '@/lib/shared/document-settings';
 
@@ -96,6 +96,11 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   resolveDocumentAudioExport: (options: TtsDocumentAudioExportRequest, signal?: AbortSignal) => Promise<TtsExportResolveSnapshot>;
 
   // Control functions
+  followingNarration: boolean;
+  setFollowingNarration: (enabled: boolean) => void;
+  returnToNarration: () => void;
+  readerNavigationRevision: number;
+  browseToLocation: (location: TTSLocation) => void;
   togglePlay: () => void;
   skipForward: () => void;
   skipBackward: () => void;
@@ -109,6 +114,8 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   /** Set (or with null, reset) the open book's voice and/or model speed with one plan restart. */
   setBookVoiceAndRestart: (change: { voice?: string | null; nativeSpeed?: number | null }) => void;
+  bookSpeechSettings: BookSpeechSettings;
+  setBookSpeechSettings: (value: BookSpeechSettings) => Promise<boolean>;
   /** Reacquire the server-owned bootstrap payload after plan-affecting settings change. */
   reacquirePlaybackPlan: () => Promise<void>;
   initializeReaderSession: (input: {
@@ -118,6 +125,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
     plan: TtsPlaybackPlan;
     playback: ReaderPlaybackPreparation;
     initialPosition: ReadingPosition | null;
+    onSettingsSaved: (settings: DocumentSettings) => void;
   }) => void;
   /**
    * Swap in a plan the server re-planned for the open reader (voice, speed,
@@ -133,7 +141,6 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   clearSegmentCaches: () => void;
   /** Settings payload that identifies the document's current audio cache. */
   playbackPlanPayload: TtsPlaybackPlanPayload | null;
-  skipToLocation: (location: TTSLocation, shouldPause?: boolean) => void;
   /** Seek to a plan ordinal through the sentence-skip path; false if not in the plan. */
   skipToOrdinal: (ordinal: number) => boolean;
   playbackSegments: CanonicalTtsSegment[];
@@ -270,6 +277,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const ttsModel = configTTSModel;
   const [playbackPlanRequest, setPlaybackPlanRequest] = useState<TtsPlaybackPlanRequest | null>(null);
   const [readerSettings, setReaderSettings] = useState<DocumentSettings | null>(null);
+  // The reader surface owns the acknowledged document settings; speech saves report back to it.
+  const settingsSavedRef = useRef<(settings: DocumentSettings) => void>(() => {});
+  const onSettingsSaved = useCallback((settings: DocumentSettings) => settingsSavedRef.current(settings), []);
   const [detectedDocumentLanguage, setDetectedDocumentLanguage] = useState<string | null>(null);
   const documentLanguage = readerSettings?.language ?? 'auto';
   const bookVoice = resolveBookVoice({
@@ -284,10 +294,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const playbackRunIdRef = useRef(0);
   // Guard to coalesce rapid restarts and only resume the latest change
   const restartSeqRef = useRef(0);
-  // Preserve autoplay intent across location changes. Some browsers can emit pause
-  // events while we stop/unload between pages, which momentarily flips `isPlaying`
-  // false and can prevent automatic resume on the next page.
-  const resumeAfterLocationChangeRef = useRef(false);
   const sentenceAlignmentCacheRef = useRef<Map<string, TTSSentenceAlignment>>(new Map());
   const [currentSentenceAlignment, setCurrentSentenceAlignment] = useState<TTSSentenceAlignment | undefined>();
   const [currentWordIndex, setCurrentWordIndex] = useState<number | null>(null);
@@ -295,15 +301,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const pauseEpochRef = useRef(0);
   const playbackAnchorRef = useRef<PlaybackAnchor | null>(null);
   const [, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
-  const playbackSyncNavigationRef = useRef(false);
+  const [followingNarration, setFollowing] = useState(true);
+  const followingNarrationRef = useRef(true);
+  const [readerNavigationRevision, setReaderNavigationRevision] = useState(0);
   // The single "make the view follow the cursor" primitive. Used identically by
   // live playback (projection), the scrubber, and skip — so paused skip turns the
   // page exactly like playback. It does NOT depend on playback being active.
   const syncPlaybackLocator = useCallback((locator: TTSSegmentLocator | null) => {
-    if (!locator) return;
+    if (!locator || !followingNarrationRef.current) return;
     const page = pdfLocatorPage(locator);
     if (page !== null) {
-      playbackSyncNavigationRef.current = true;
       setCurrDocPage(page);
       return;
     }
@@ -313,6 +320,27 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
       handler(locator, 'playback-follow');
     }
   }, []);
+
+  // These commands move only the renderer. They never seek, write progress,
+  // or touch the canonical audio session and its generation window.
+  const returnToNarration = useCallback(() => {
+    followingNarrationRef.current = true;
+    setFollowing(true);
+    const segment = playbackSegmentsRef.current.find((entry) => entry.ordinal === selectedOrdinalRef.current);
+    syncPlaybackLocator(segment?.ownerLocator ?? null);
+    setReaderNavigationRevision((revision) => revision + 1);
+  }, [playbackSegmentsRef, selectedOrdinalRef, syncPlaybackLocator]);
+  const setFollowingNarration = useCallback((enabled: boolean) => {
+    if (enabled) returnToNarration();
+    else {
+      followingNarrationRef.current = false;
+      setFollowing(false);
+    }
+  }, [returnToNarration]);
+  const browseToLocation = useCallback((location: TTSLocation) => {
+    setFollowingNarration(false);
+    setCurrDocPage(location);
+  }, [setFollowingNarration]);
 
   const selectPlaybackSegment = useCallback((segment: CanonicalTtsSegment | null | undefined): boolean => {
     const ordinal = Number(segment?.ordinal);
@@ -379,7 +407,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     selectedOrdinalRef,
     playbackRunIdRef,
     setIsPlaying,
-    setCurrDocPage,
     syncPlaybackLocator,
     setSelectedOrdinal,
     setPlaybackSeekLayout,
@@ -392,8 +419,16 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const abortAudio = controllerAbortAudio;
   const cancelPendingSeek = controllerCancelPendingSeek;
   const pauseActivePlayback = controllerPauseActivePlayback;
-  const seekPlaybackTo = controllerSeekPlaybackTo;
-  const seekPlaybackToOrdinal = controllerSeekPlaybackToOrdinal;
+  const seekPlaybackTo = useCallback((seconds: number) => {
+    followingNarrationRef.current = true;
+    setFollowing(true);
+    controllerSeekPlaybackTo(seconds);
+  }, [controllerSeekPlaybackTo]);
+  const seekPlaybackToOrdinal = useCallback((ordinal: number) => {
+    followingNarrationRef.current = true;
+    setFollowing(true);
+    return controllerSeekPlaybackToOrdinal(ordinal);
+  }, [controllerSeekPlaybackToOrdinal]);
   const togglePlay = controllerTogglePlay;
 
   const {
@@ -403,7 +438,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setDocumentPlaybackAnchor,
     skipBackward,
     skipForward,
-    skipToLocation, skipToOrdinal,
+    skipToOrdinal,
   } = useTtsDocumentNavigation({
     activeReaderType,
     isPlaying,
@@ -416,8 +451,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     playbackPlanRef,
     playbackSegmentsRef,
     selectedOrdinalRef,
-    playbackSyncNavigationRef,
-    resumeAfterLocationChangeRef,
     cancelPendingSeek,
     pauseActivePlayback,
     seekPlaybackToOrdinal,
@@ -440,6 +473,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * Stops the current audio playback and resets all state
    */
   const stop = useCallback(() => {
+    followingNarrationRef.current = true;
+    setFollowing(true);
     abortAudio();
     setIsPlaying(false);
     resetPlaybackPlan();
@@ -463,8 +498,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     plan: TtsPlaybackPlan;
     playback: ReaderPlaybackPreparation;
     initialPosition: ReadingPosition | null;
+    onSettingsSaved: (settings: DocumentSettings) => void;
   }) => {
     stop();
+    settingsSavedRef.current = input.onSettingsSaved;
     setReaderSettings(input.settings);
     setDetectedDocumentLanguage(input.documentLanguage);
     setIsEPUB(input.readerType === 'epub');
@@ -534,6 +571,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     clearSegmentCaches,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    setBookSpeechSettings,
   } = useTtsPlaybackSettings({
     isPlaying,
     restartSeqRef,
@@ -548,6 +586,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     documentId,
     readerSettings,
     setReaderSettings,
+    onSettingsSaved,
     providerRef: configProviderRef,
     ttsModel,
     defaultVoice: voice,
@@ -564,6 +603,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * Provides the TTS context value to child components
    */
   const value = useMemo(() => ({
+    followingNarration, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
     isPlaying,
     isProcessing,
     canSkip,
@@ -593,6 +633,9 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrDocPages,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    bookSpeechSettings: { speechText: readerSettings?.speechText, voiceCustomization: readerSettings?.voiceCustomization,
+      playback: readerSettings?.playback, pdf: readerSettings?.pdf },
+    setBookSpeechSettings,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
@@ -605,12 +648,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     playbackPlanPayload: playbackPlanRequest?.payload ?? null,
-    skipToLocation,
     skipToOrdinal, playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,
     activeReaderType,
   }), [
+    followingNarration, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
     isPlaying,
     isProcessing,
     canSkip,
@@ -640,6 +683,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setCurrDocPages,
     setAudioPlayerSpeedAndRestart,
     setBookVoiceAndRestart,
+    readerSettings?.speechText,
+    setBookSpeechSettings,
+    readerSettings?.voiceCustomization,
+    readerSettings?.playback,
+    readerSettings?.pdf,
     reacquirePlaybackPlan,
     initializeReaderSession,
     adoptReplannedPlaybackPlan,
@@ -648,7 +696,6 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     playbackPlanRequest,
-    skipToLocation,
     skipToOrdinal, playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,

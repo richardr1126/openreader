@@ -19,7 +19,7 @@ import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useEpubDocument } from './useEpubDocument';
 import { epubTocOutline, findEpubTocTitle } from '@/lib/client/epub/toc-titles';
-import { useConfig } from '@/contexts/ConfigContext';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { PlanTextReader } from '@/components/views/HTMLViewer';
 import { ReaderPager, ReaderPosition, ReadingProgress } from '@/components/reader/ReaderNavigator';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
@@ -68,7 +68,7 @@ function EpubReader({
     payload.settings,
   );
   const language = documentSettings.language ?? 'auto';
-  const { readerShowsLayout } = useConfig();
+  const { presentation: { showsLayout: readerShowsLayout } } = useReaderAppearance();
   const [activeSidebar, setActiveSidebar] = useState<null | 'settings' | 'audiobook' | 'voice' | ReaderNavigationPanel>(null);
   const { sentenceBookmark } = useDocumentBookmarks(routeDocumentId);
   const navigationPanel = isReaderNavigationPanel(activeSidebar) ? activeSidebar : null;
@@ -76,7 +76,14 @@ function EpubReader({
     setActiveSidebar((prev) => prev === panel ? null : panel);
   }, []);
   const [containerHeight, setContainerHeight] = useState<string | null>(null);
-  const [padPct, setPadPct] = useState<number>(100); // 0..100 (100 = full width, 0 = max padding)
+  const { typography, book } = useReaderAppearance();
+  const padPct = typography.readingWidth;
+  const [widthError, setWidthError] = useState<string | null>(null);
+  const setWidth = (width: number) => {
+    setWidthError(null);
+    void book?.update({ typography: { ...book.settings.typography, readingWidth: width } })
+      .catch((error: Error) => setWidthError(error.message));
+  };
   const [maxPadPx, setMaxPadPx] = useState<number>(0);
   const didInitPadPctRef = useRef(false);
   const handleRendererError = useCallback((error: Error) => {
@@ -148,9 +155,9 @@ function EpubReader({
                 onViewBookmarks: () => setActiveSidebar('bookmarks'),
                 zoom: {
                   value: padPct,
-                  onIncrease: () => setPadPct(p => Math.min(p + 10, 100)),
-                  onDecrease: () => setPadPct(p => Math.max(p - 10, 0)),
-                  min: 0,
+                  onIncrease: () => setWidth(Math.min(padPct + 10, 100)),
+                  onDecrease: () => setWidth(Math.max(padPct - 10, 40)),
+                  min: 40,
                   max: 100,
                 },
               }}
@@ -158,6 +165,7 @@ function EpubReader({
           </div>
         ) : <DocumentHeaderMenu showAudiobookExport={canExportAudiobook} />}
       />
+      {widthError && <p role="alert">{widthError}</p>}
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight ?? 0 }}>
         {epubState.currDocData && containerHeight !== null ? (
           <div
@@ -165,7 +173,7 @@ function EpubReader({
             tabIndex={-1}
             className={rendererReady ? 'min-h-0 w-full flex-1' : 'min-h-0 w-full flex-1 opacity-0 pointer-events-none'}
             aria-hidden={!rendererReady}
-            style={{ paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 100))}px` }}
+            style={readerShowsLayout ? { paddingLeft: `${Math.round(maxPadPx * ((100 - padPct) / 60))}px`, paddingRight: `${Math.round(maxPadPx * ((100 - padPct) / 60))}px` } : undefined}
           >
             {readerShowsLayout ? (
               <EPUBViewer

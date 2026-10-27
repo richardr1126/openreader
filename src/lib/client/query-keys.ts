@@ -1,4 +1,7 @@
 export const queryKeys = {
+  clonedVoicesRoot: (sessionId: string) => ['cloned-voices', sessionId] as const,
+  clonedVoices: (sessionId: string, providerRef: string, model: string) => ['cloned-voices', sessionId, providerRef, model] as const,
+  openRouterModels: () => ['openrouter-speech-models'] as const,
   documents: (sessionId: string) => ['documents', sessionId] as const,
   documentPreview: (documentId: string, type: string, lastModified: number) => (
     ['document-preview', documentId, type, lastModified] as const

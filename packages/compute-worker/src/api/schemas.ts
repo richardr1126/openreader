@@ -165,6 +165,7 @@ export const ttsPlaybackSessionPrepareSchema = ttsPlaybackOperationCreateSchema.
 
 /** One short in-memory voice sample; never part of a playback session. */
 export const ttsVoicePreviewRequestSchema = z.object({
+  userId: z.string().trim().min(1).max(256).optional(),
   settings: z.object({
     providerRef: z.string().trim().min(1).max(256),
     providerType: z.string().refine((value): value is TtsProviderType => isTtsProviderType(value)),
@@ -172,7 +173,13 @@ export const ttsVoicePreviewRequestSchema = z.object({
     voice: z.string().trim().min(1).max(512),
     nativeSpeed: z.number().min(0.5).max(3),
     ttsInstructions: z.string().max(4000).optional(),
+    ttsModelOptions: z.string().max(16384).optional(),
     language: z.string().trim().min(1).max(64).optional(),
+    voiceCustomization: z.object({
+      pieceCharacterLimit: z.number().int().min(50).max(450).nullable(),
+      piecePauseMilliseconds: z.number().int().min(0).max(2000).nullable(),
+      blockPauseMilliseconds: z.number().int().min(0).max(2000).nullable(),
+    }).strict().optional(),
   }).strict(),
   text: z.string().trim().min(1).max(TTS_VOICE_PREVIEW_MAX_TEXT_CHARS),
 }).strict();

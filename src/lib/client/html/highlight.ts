@@ -6,7 +6,8 @@
  * dependency). The HTMLViewer renders the document once and never re-runs
  * ReactMarkdown until a new doc is loaded, so wrapping DOM nodes is safe.
  *
- * Two layers:
+ * Segment-region wrappers provide stable word mapping and scrolling regardless
+ * of whether the segment background is visible. Two independent paint layers:
  *  - `SENTENCE` — softer translucent background covering the current TTS
  *    sentence
  *  - `WORD` — saturated background on the currently-spoken word
@@ -35,6 +36,7 @@ import {
 
 export const HTML_SENTENCE_CLASS = 'openreader-html-highlight-sentence';
 export const HTML_WORD_CLASS = 'openreader-html-highlight-word';
+const HTML_SEGMENT_REGION_ATTRIBUTE = 'data-openreader-segment-region';
 
 interface DomToken {
   textNode: Text;
@@ -120,7 +122,7 @@ function isHighlightWrapper(node: Node | null): node is HTMLSpanElement {
   if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
   const el = node as Element;
   if (el.tagName !== 'SPAN') return false;
-  return el.classList.contains(HTML_SENTENCE_CLASS) || el.classList.contains(HTML_WORD_CLASS);
+  return el.hasAttribute(HTML_SEGMENT_REGION_ATTRIBUTE) || el.classList.contains(HTML_WORD_CLASS);
 }
 
 function collectDomTokens(
@@ -295,7 +297,8 @@ function wrapCharRange(chars: CharPosition[], start: number, end: number, classN
 }
 
 /**
- * Wrap the current sentence. `scope` names the blocks the plan says own it
+ * Prepare the current sentence region and optionally paint its background.
+ * `scope` names the blocks the plan says own it
  * (its block and the one it may continue into); the sentence is matched there
  * first so a long document is not searched end to end and a repeated sentence
  * resolves to the right occurrence. The whole container is the fallback.
@@ -305,6 +308,7 @@ export function highlightHtmlSentence(
   sentence: string | null | undefined,
   language?: string,
   scope: readonly HTMLElement[] = [],
+  paintSentence = true,
 ): boolean {
   clearHtmlSentenceHighlight();
   if (!container || !sentence?.trim()) return false;
@@ -321,8 +325,10 @@ export function highlightHtmlSentence(
   }
   if (!win) return false;
 
-  sentenceWraps = wrapTokenRange(domTokens, win.start, win.end, HTML_SENTENCE_CLASS);
+  // Region wrappers own stable word mapping and follow independently of paint.
+  sentenceWraps = wrapTokenRange(domTokens, win.start, win.end, paintSentence ? HTML_SENTENCE_CLASS : '');
   if (!sentenceWraps.length) return false;
+  for (const span of sentenceWraps) span.setAttribute(HTML_SEGMENT_REGION_ATTRIBUTE, '');
 
   // Capture the normalized char→DOM map AFTER the sentence wrap is in place so
   // we can resolve individual word offsets without re-walking the doc.

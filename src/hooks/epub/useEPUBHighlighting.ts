@@ -13,6 +13,7 @@ import {
 } from '@/lib/client/highlight-token-alignment';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import type { TTSSentenceAlignment } from '@/types/tts';
+import { DEFAULT_HIGHLIGHT_APPEARANCE, highlightBackground, type HighlightAppearance } from '@/lib/shared/reader-appearance';
 import {
   clearRangeHighlight,
   paintRangeHighlight,
@@ -30,7 +31,9 @@ const resolvePrimaryHighlightColor = (): string => {
 
 type UseEpubHighlightingParams = {
   epubHighlightEnabled: boolean;
+  epubWordHighlightEnabled: boolean;
   renderedTextMapsRef: MutableRefObject<EpubRenderedTextMap[]>;
+  appearance?: HighlightAppearance;
 };
 
 type UseEpubHighlightingResult = {
@@ -48,8 +51,12 @@ type UseEpubHighlightingResult = {
 
 export function useEPUBHighlighting({
   epubHighlightEnabled,
+  epubWordHighlightEnabled,
   renderedTextMapsRef,
+  appearance = DEFAULT_HIGHLIGHT_APPEARANCE,
 }: UseEpubHighlightingParams): UseEpubHighlightingResult {
+  const { segmentColor, segmentOpacity, wordColor, wordOpacity } = appearance;
+  const segmentBackground = highlightBackground({ ...DEFAULT_HIGHLIGHT_APPEARANCE, segmentColor, segmentOpacity }, 'segment', '#808080', 0.32);
   // Cache the per-segment word→region map so we don't re-align on every whisper
   // tick. Keyed by the segment + resolved region + the aligned word texts, so a
   // corrected/rebuilt alignment (even with an identical word count) misses the
@@ -97,8 +104,9 @@ export function useEPUBHighlighting({
   // paint an intermediate frame on every sentence change.
   const highlightSegment = useCallback((segment: CanonicalTtsSegment | null | undefined) => {
     if (!epubHighlightEnabled) {
-      clearHighlights();
-      return true;
+      clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
+      return !epubWordHighlightEnabled || Boolean(segment &&
+        resolveVisibleSegmentRange(renderedTextMapsRef.current, segment));
     }
     const resolved = segment
       ? resolveVisibleSegmentRange(renderedTextMapsRef.current, segment)
@@ -106,21 +114,21 @@ export function useEPUBHighlighting({
     if (!resolved || !paintHighlight(
       resolved.range,
       EPUB_SEGMENT_HIGHLIGHT,
-      'background-color: rgba(128, 128, 128, 0.32);',
+      `background-color: ${segmentBackground};`,
       0,
     )) {
-      clearHighlights();
+      clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
       return false;
     }
     return true;
-  }, [clearHighlights, epubHighlightEnabled, paintHighlight, renderedTextMapsRef]);
+  }, [clearPaintedHighlight, epubHighlightEnabled, epubWordHighlightEnabled, paintHighlight, renderedTextMapsRef, segmentBackground]);
 
   const highlightWordIndex = useCallback((
     alignment: TTSSentenceAlignment | undefined,
     wordIndex: number | null | undefined,
     segment: CanonicalTtsSegment | null | undefined
   ) => {
-    if (!epubHighlightEnabled) {
+    if (!epubWordHighlightEnabled) {
       clearWordHighlights();
       return;
     }
@@ -158,6 +166,8 @@ export function useEPUBHighlighting({
     const regionText = resolved.map.text.slice(resolved.startOffset, resolved.endOffset);
     const cacheKey = [
       segment.key,
+      wordColor,
+      wordOpacity,
       resolved.map.sourceKey,
       resolved.startOffset,
       resolved.endOffset,
@@ -203,7 +213,7 @@ export function useEPUBHighlighting({
     if (paintHighlight(
       wordRange,
       EPUB_WORD_HIGHLIGHT,
-      `background-color: color-mix(in srgb, ${resolvePrimaryHighlightColor()} 40%, transparent);`,
+      `background-color: ${highlightBackground({ ...DEFAULT_HIGHLIGHT_APPEARANCE, wordColor, wordOpacity }, 'word', resolvePrimaryHighlightColor(), 0.4)};`,
       1,
     )) {
       activeWordHighlightRef.current = { key: cacheKey, wordIndex };
@@ -212,7 +222,9 @@ export function useEPUBHighlighting({
     clearWordHighlights();
   }, [
     clearWordHighlights,
-    epubHighlightEnabled,
+    epubWordHighlightEnabled,
+    wordColor,
+    wordOpacity,
     paintHighlight,
     renderedTextMapsRef,
   ]);
@@ -236,12 +248,16 @@ export function useEPUBHighlighting({
     highlightedDocumentsRef.current.clear();
   }, [clearHighlights, renderedTextMapsRef]);
 
-  // Clear any highlight annotations when feature is disabled.
+  // Each preference owns only its painted layer.
   useEffect(() => {
     if (!epubHighlightEnabled) {
-      clearHighlights();
+      clearPaintedHighlight(EPUB_SEGMENT_HIGHLIGHT);
     }
-  }, [epubHighlightEnabled, clearHighlights]);
+  }, [epubHighlightEnabled, clearPaintedHighlight]);
+
+  useEffect(() => {
+    if (!epubWordHighlightEnabled) clearWordHighlights();
+  }, [epubWordHighlightEnabled, clearWordHighlights]);
 
   return {
     clearHighlights,

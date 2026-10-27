@@ -125,7 +125,7 @@ describe('POST /api/tts/voice-preview', () => {
     expect(response.headers.get('cache-control')).toContain('no-store');
     expect(await response.text()).toBe('mp3');
     expect(hoisted.synthesize).toHaveBeenCalledWith(
-      { settings: SETTINGS, text: 'Hello.' },
+      { settings: SETTINGS, text: 'Hello.', userId: 'user-1' },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(hoisted.finish).toHaveBeenCalledWith({ admissionId: 'adm-1', state: 'finished' });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   describePendingVoiceChanges,
+  displayVoiceName,
   formatVoiceDockLabel,
   groupVoices,
   pendingVoiceSettings,
@@ -14,6 +15,14 @@ const MULTI = { multi: true, maxVoices: 2 };
 const SINGLE = { multi: false, maxVoices: 1 };
 
 describe('voice draft', () => {
+  test('Fish names remain presentation while selection and search retain reference IDs', () => {
+    const sarah = '933563129e564b19a115bedd57b7406a';
+    expect(displayVoiceName(sarah)).toBe('Sarah');
+    expect(displayVoiceName('custom-reference')).toBe('custom-reference');
+    expect(groupVoices([sarah, 'custom-reference'], 'sarah', false)[0].voices).toEqual([sarah]);
+    expect(voiceStringFor(toggleDraftVoice(['default'], sarah, SINGLE), SINGLE)).toBe(sarah);
+    expect(formatVoiceDockLabel({ voice: sarah, nativeSpeed: 1, supportsNativeModelSpeed: true })).toBe('Sarah');
+  });
   test('dock label shows model speed only when supported and not 1x', () => {
     expect(formatVoiceDockLabel({ voice: 'af_heart', nativeSpeed: 1.1, supportsNativeModelSpeed: true }))
       .toBe('af_heart · 1.1x');
@@ -21,6 +30,14 @@ describe('voice draft', () => {
     expect(formatVoiceDockLabel({ voice: 'alloy', nativeSpeed: 1.5, supportsNativeModelSpeed: false })).toBe('alloy');
     expect(formatVoiceDockLabel({ voice: 'af_heart(0.5)+af_bella(0.5)', nativeSpeed: 1, supportsNativeModelSpeed: true }))
       .toBe('af_heart + af_bella');
+  });
+
+  test('personal voices show their saved name instead of the clone ID', () => {
+    const names = new Map([['clone:a52db5a3', 'Grandpa reading']]);
+    expect(formatVoiceDockLabel({ voice: 'clone:a52db5a3', nativeSpeed: 1, supportsNativeModelSpeed: false, clonedNames: names })).toBe('Grandpa reading');
+    expect(describePendingVoiceChanges({ voice: 'af_heart', nativeSpeed: 1 }, { voice: 'clone:a52db5a3', nativeSpeed: 1 }, names))
+      .toEqual(['Voice af_heart → Grandpa reading']);
+    expect(displayVoiceName('clone:a52db5a3')).toBe('Your voice');
   });
 
   test('describes and isolates only what changed', () => {

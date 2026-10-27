@@ -1,8 +1,11 @@
 import { createHash } from 'crypto';
+import { normalizeOpenRouterOptions } from './openrouter';
 import { mkdtemp, rm, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { preprocessSentenceForAudio } from './nlp';
+import { normalizeSpeechText, speechTextEnabled } from './speech-text';
+import { effectiveVoiceCustomization, voiceCustomizationCacheKey } from './voice-customization';
 import { locatorIdentityKey, normalizeLocator } from './locator';
 import { ffprobeAudio } from './probe';
 import type {
@@ -24,6 +27,9 @@ function stableStringify(value: unknown): string {
 }
 
 function settingsCanonical(settings: TTSSegmentSettings): string {
+  const modelOptions = settings.providerType === 'openrouter' ? normalizeOpenRouterOptions(settings.ttsModelOptions, settings.ttsModel) : '';
+  const speechText = normalizeSpeechText(settings.speechText);
+  const customization = voiceCustomizationCacheKey(settings.voiceCustomization, settings.providerType);
   return stableStringify({
     providerRef: settings.providerRef,
     providerType: settings.providerType,
@@ -31,8 +37,11 @@ function settingsCanonical(settings: TTSSegmentSettings): string {
     voice: settings.voice,
     speed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,
     instructions: settings.ttsInstructions || '',
+    ...(modelOptions ? { modelOptions } : {}),
     language: settings.language || 'en',
     format: 'mp3',
+    ...(speechTextEnabled(speechText) ? { speechText: { version: 1, ...speechText } } : {}),
+    ...(customization ? { voiceCustomization: customization } : {}),
   });
 }
 
@@ -98,6 +107,9 @@ export function buildTtsPlaybackSettingsHash(
 }
 
 export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSegmentSettings | string {
+  const modelOptions = settings.providerType === 'openrouter' ? normalizeOpenRouterOptions(settings.ttsModelOptions, settings.ttsModel) : '';
+  const speechText = normalizeSpeechText(settings.speechText);
+  const customization = voiceCustomizationCacheKey(settings.voiceCustomization, settings.providerType);
   const canonical: TTSSegmentSettings = {
     providerRef: settings.providerRef,
     providerType: settings.providerType,
@@ -105,7 +117,10 @@ export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSe
     voice: settings.voice,
     nativeSpeed: Number.isFinite(Number(settings.nativeSpeed)) ? Number(settings.nativeSpeed) : 1,
     ttsInstructions: settings.ttsInstructions || '',
+    ...(modelOptions ? { ttsModelOptions: modelOptions } : {}),
     language: settings.language || 'en',
+    ...(speechTextEnabled(speechText) ? { speechText } : {}),
+    ...(customization ? { voiceCustomization: effectiveVoiceCustomization(settings.voiceCustomization, settings.providerType) } : {}),
   };
   // Postgres jsonb accepts the object directly; SQLite text needs a canonical JSON string.
   return process.env.POSTGRES_URL ? canonical : stableStringify(canonical);

@@ -1,5 +1,8 @@
 import type { NextRequest } from 'next/server';
 import { resolveTtsLanguage } from '@openreader/tts/language';
+import { resolveEffectiveOpenRouterOptions } from '@openreader/tts/openrouter';
+import { normalizeSpeechText } from '@openreader/tts/speech-text';
+import { effectiveVoiceCustomization } from '@openreader/tts/voice-customization';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
 import { resolveProviderDefaults, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { APP_CONFIG_DEFAULTS, type AppConfigValues } from '@/types/config';
@@ -30,6 +33,7 @@ function preferenceContext(
       providerType: provider.providerType,
       defaultModel: provider.defaultModel,
       defaultInstructions: provider.defaultInstructions,
+      defaultModelOptions: provider.defaultModelOptions,
     })),
   };
 }
@@ -118,16 +122,21 @@ export async function resolveReaderPlayback(
       ttsModel: model,
       voice,
       nativeSpeed: policy.supportsNativeModelSpeed ? bookVoice.voiceSpeed : 1,
+      ...(provider.providerType === 'openrouter'
+        ? { ttsModelOptions: resolveEffectiveOpenRouterOptions(model, preferences.ttsModelOptions, provider.defaultModelOptions) }
+        : {}),
       ...(policy.supportsInstructions && (preferences.ttsInstructions || provider.defaultInstructions)
         ? { ttsInstructions: preferences.ttsInstructions || provider.defaultInstructions }
         : {}),
       language,
+      speechText: normalizeSpeechText({ ...preferences.speechText, ...settings.speechText }),
+      voiceCustomization: effectiveVoiceCustomization({ ...preferences.voiceCustomization, ...settings.voiceCustomization }, provider.providerType),
     },
     startLocation: {},
-    maxBlockLength: preferences.ttsSegmentMaxBlockLength,
+    maxBlockLength: settings.playback?.maxSegmentLength ?? preferences.ttsSegmentMaxBlockLength,
     language,
     ...(scope.readerType === 'pdf'
-      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? [] }
+      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds }
       : {}),
   };
   const planningInput = await buildTtsPlaybackPlanningInput(parsed, scope);

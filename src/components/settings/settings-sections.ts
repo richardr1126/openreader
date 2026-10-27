@@ -1,9 +1,9 @@
 import type { ComponentType, SVGProps } from 'react';
 import { CpuChipIcon, DatabaseIcon, GlobeIcon, InfoIcon, MicrophoneIcon, PaletteIcon,
-  ServerStackIcon, UserIcon, UsersIcon, WrenchIcon } from '@/components/icons/Icons';
+  ServerStackIcon, UserIcon, UsersIcon, WrenchIcon, BookIcon } from '@/components/icons/Icons';
 import type { InstallProfile } from '@/lib/shared/install-profile';
 
-export type SettingsSectionId = 'api' | 'theme' | 'account' | 'storage' | 'about' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
+export type SettingsSectionId = 'api' | 'theme' | 'reader' | 'account' | 'storage' | 'about' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
 
 export type SettingsSection = {
   id: SettingsSectionId;
@@ -21,6 +21,7 @@ export type SettingsNavGroup = { label: string; sections: SettingsSection[] };
 export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: 'api', label: 'Model & Voice', shortLabel: 'Voice', icon: MicrophoneIcon, group: 'general' },
   { id: 'theme', label: 'Appearance', shortLabel: 'Appearance', icon: PaletteIcon, group: 'general' },
+  { id: 'reader', label: 'Reading', shortLabel: 'Reading', icon: BookIcon, group: 'general' },
   { id: 'account', label: 'Account', shortLabel: 'Account', icon: UserIcon, group: 'general' },
   { id: 'storage', label: 'Storage', shortLabel: 'Storage', icon: DatabaseIcon, group: 'general' },
   { id: 'about', label: 'About', shortLabel: 'About', icon: InfoIcon, group: 'general' },
@@ -40,11 +41,11 @@ type NavLayout = ReadonlyArray<{ label: string; ids: readonly SettingsSectionId[
  */
 const NAV_LAYOUTS: Record<InstallProfile, NavLayout> = {
   server: [
-    { label: 'General', ids: ['api', 'theme', 'account', 'storage', 'about'] },
+    { label: 'General', ids: ['api', 'theme', 'reader', 'account', 'storage', 'about'] },
     { label: 'Admin', ids: ['users', 'providers', 'instance', 'compute', 'maintenance'] },
   ],
   desktop: [
-    { label: 'General', ids: ['theme', 'api', 'providers', 'storage', 'account'] },
+    { label: 'General', ids: ['theme', 'reader', 'api', 'providers', 'storage', 'account'] },
     { label: 'Advanced', ids: ['instance', 'compute', 'maintenance'] },
     { label: 'About', ids: ['about'] },
   ],

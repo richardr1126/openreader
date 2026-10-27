@@ -26,10 +26,18 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
 
   await expect(pageOne).toBeInViewport();
   await expect(previousPage).toBeDisabled();
+  const playbackPosition = page.getByRole('slider', { name: 'Playback position', exact: true });
+  const originalPosition = await playbackPosition.inputValue();
   await nextPage.click();
   await expect(page.getByText('Chapter Two', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
   await expect(nextPage).toBeDisabled();
+  await expect(playbackPosition).toHaveValue(originalPosition);
+  await expect(page.getByRole('button', { name: 'Follow narration', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: 'Return to narration', exact: true }).click();
+  await expect(page.getByRole('button', { name: '1 / 2', exact: true })).toBeVisible();
+  await expect(playbackPosition).toHaveValue(originalPosition);
+  await nextPage.click();
 
   await page.getByRole('button', { name: '2 / 2', exact: true }).click();
   const pageNumber = page.getByRole('textbox', { name: 'Page number', exact: true });
@@ -61,22 +69,25 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
     await expect(readerSettings).toBeInViewport({ ratio: 1 });
   };
   await openReaderSettings();
-  await expect(readerSettings.getByRole('radio', { name: 'Single Page', exact: true })).toBeChecked();
+  const pageMode = readerSettings.getByRole('button', { name: 'Page mode', exact: true });
+  await expect(pageMode).toHaveText('Single page');
   const documentStorage = readerSettings.getByLabel('Document storage usage', { exact: true });
   await expect(documentStorage).toContainText('Audio for current settings');
   await expect(readerSettings.getByRole('button', { name: 'Reclaim unused audio', exact: true })).toBeVisible();
   await expect(readerSettings.getByRole('button', { name: 'Delete all audio', exact: true })).toBeEnabled();
-  await readerSettings.getByRole('radio', { name: 'Two Pages', exact: true }).click();
-  await expect(readerSettings.getByRole('radio', { name: 'Two Pages', exact: true })).toBeChecked();
+  await pageMode.click();
+  await page.getByRole('option', { name: 'Two pages', exact: true }).click();
+  await expect(pageMode).toHaveText('Two pages');
+  await readerSettings.getByRole('button', { name: 'Save', exact: true }).click();
   await readerSettings.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(pageOne).toBeInViewport();
   await expect(pageTwo).toBeInViewport();
 
   await openReaderSettings();
-  await readerSettings.getByRole('radio', { name: 'Continuous Scroll', exact: true }).click();
-  await expect(
-    readerSettings.getByRole('radio', { name: 'Continuous Scroll', exact: true }),
-  ).toBeChecked();
+  await pageMode.click();
+  await page.getByRole('option', { name: 'Continuous scroll', exact: true }).click();
+  await expect(pageMode).toHaveText('Continuous scroll');
+  await readerSettings.getByRole('button', { name: 'Save', exact: true }).click();
   await readerSettings.getByRole('button', { name: 'Close', exact: true }).click();
 
   await expect(pageOne).toBeInViewport();

@@ -11,8 +11,8 @@ import {
   type TtsPlaybackGrid,
   WORD_HIGHLIGHT_LEAD_SEC,
 } from '@/lib/client/tts/playback-grid';
-import { isPdfLocator, type TTSSegmentLocator } from '@/types/client';
-import type { TTSLocation, TTSSentenceAlignment } from '@/types/tts';
+import { type TTSSegmentLocator } from '@/types/client';
+import type { TTSSentenceAlignment } from '@/types/tts';
 import { createPlaybackTimelineLoader } from '@/lib/client/tts/playback-refresh';
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { positionPlaybackMedia } from '@/lib/client/tts/playback-control';
@@ -49,7 +49,6 @@ type UsePlaybackProjectionInput = {
   playbackRunIdRef: MutableRefObject<number>;
   playbackSessionRef: MutableRefObject<PlaybackSessionState | null>;
   selectedOrdinalRef: MutableRefObject<number | null>;
-  setCurrDocPage: (location: TTSLocation) => void;
   setCurrentSentenceAlignment: (alignment: TTSSentenceAlignment | undefined) => void;
   setCurrentWordIndex: (wordIndex: number | null) => void;
   setSelectedOrdinal: (ordinal: number | null) => void;
@@ -62,7 +61,6 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     playbackRunIdRef,
     playbackSessionRef,
     selectedOrdinalRef,
-    setCurrDocPage,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
     setSelectedOrdinal,
@@ -219,7 +217,6 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
       setSelectedOrdinal(targetOrdinal);
     }
     const locator = projection.segment.locator;
-    const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;
     const locatorKey = locatorProjectionKey(locator);
     const previous = lastProjectionRef.current;
     const shouldSyncLocator = shouldSyncPlaybackLocator(previous?.locatorKey, locatorKey);
@@ -242,11 +239,9 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     setCurrentSentenceAlignment(alignment);
     setCurrentWordIndex(projection.wordIndex);
 
-    if (page !== null) setCurrDocPage(page);
     if (locator && shouldSyncLocator) syncPlaybackLocator?.(locator);
   }, [
     selectedOrdinalRef,
-    setCurrDocPage,
     setCurrentSentenceAlignment,
     setCurrentWordIndex,
     setSelectedOrdinal,

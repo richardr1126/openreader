@@ -1,62 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useConfig, ViewType } from '@/contexts/ConfigContext';
+import { ReaderAppearanceSettings } from '@/components/settings/ReaderAppearanceSettings';
+import { BookAdvancedSettings } from '@/components/settings/BookAdvancedSettings';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
+import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
 import {
-  TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN,
-  TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX,
-  TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP,
-  clampTtsSegmentMaxBlockLength,
-} from '@/types/config';
-import {
   IconButton,
-  RangeField,
   Section,
-  ToggleRow,
-  CheckItem,
-  SegmentedControl,
   Select,
 } from '@/components/ui';
 import {
-  BookIcon, DocumentIcon, EyeIcon, HighlighterIcon, KeyboardIcon, PaletteIcon, RefreshIcon, TextCursorIcon,
+  RefreshIcon,
 } from '@/components/icons/Icons';
 import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
 import { DocumentStorageSection } from '@/components/documents/DocumentStorageSection';
-import type { ParsedPdfBlockKind, PdfParseStatus } from '@/types/parsed-pdf';
+import type { PdfParseStatus } from '@/types/parsed-pdf';
 import { isForceReparseDisabled } from '@/lib/client/pdf/force-reparse';
 import { getLanguageDisplayName, getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
-
-const PDF_SKIP_KIND_OPTIONS: Array<{ kind: ParsedPdfBlockKind; label: string }> = [
-  { kind: 'header', label: 'Header' },
-  { kind: 'footer', label: 'Footer' },
-  { kind: 'footnote', label: 'Footnote' },
-  { kind: 'vision_footnote', label: 'Vision footnote' },
-  { kind: 'figure_title', label: 'Figure title' },
-  { kind: 'doc_title', label: 'Document title' },
-  { kind: 'paragraph_title', label: 'Paragraph title' },
-  { kind: 'abstract', label: 'Abstract' },
-  { kind: 'algorithm', label: 'Algorithm' },
-  { kind: 'aside_text', label: 'Aside text' },
-  { kind: 'content', label: 'Content' },
-  { kind: 'reference', label: 'Reference' },
-  { kind: 'reference_content', label: 'Reference content' },
-  { kind: 'text', label: 'Text' },
-  { kind: 'number', label: 'Number' },
-  { kind: 'formula', label: 'Formula' },
-  { kind: 'formula_number', label: 'Formula number' },
-  { kind: 'table', label: 'Table' },
-  { kind: 'chart', label: 'Chart' },
-  { kind: 'image', label: 'Image' },
-  { kind: 'seal', label: 'Seal' },
-];
-
-const viewTypeTextMapping = [
-  { id: 'single', name: 'Single Page' },
-  { id: 'dual', name: 'Two Pages' },
-  { id: 'scroll', name: 'Continuous Scroll' },
-];
 
 const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'auto', label: 'Automatic (voice or metadata)' },
@@ -74,13 +36,6 @@ const DOCUMENT_LANGUAGE_OPTIONS = [
   { value: 'tr', label: 'Turkish' },
 ];
 
-const PLAYBACK_KEYS: [string[], string][] = [
-  [['Space'], 'Play or pause'],
-  [['←', '→'], 'Skip back or forward'],
-  [['⇧←', '⇧→'], 'Previous or next page or section'],
-  [['<', '>'], 'Slower or faster'],
-];
-
 export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, language, detectedLanguage, onLanguageChange, pdf }: {
   isOpen: boolean,
   setIsOpen: (isOpen: boolean) => void,
@@ -93,29 +48,16 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
   pdf?: {
     parseStatus: PdfParseStatus | null;
     parsedOverlayEnabled: boolean;
-    skipBlockKinds: ParsedPdfBlockKind[];
     onToggleOverlay: (enabled: boolean) => void;
-    onToggleSkipKind: (kind: ParsedPdfBlockKind, enabled: boolean) => void;
     onForceReparse: () => void;
   }
 }) {
   const {
-    viewType,
-    epubTheme,
-    playbackShortcuts,
-    readerShowsLayout,
-    ttsSegmentMaxBlockLength,
-    updateConfigKey,
-    pdfHighlightEnabled,
-    epubHighlightEnabled,
-    pdfWordHighlightEnabled,
-    epubWordHighlightEnabled,
-    htmlHighlightEnabled,
-    htmlWordHighlightEnabled,
     ttsModel,
     providerType,
   } = useConfig();
-  const { voice, reacquirePlaybackPlan } = useTTS();
+  const { voice } = useTTS();
+  const { presentation } = useReaderAppearance();
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
     providerType,
@@ -125,32 +67,8 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
   });
   const selectedLanguage = DOCUMENT_LANGUAGE_OPTIONS.find((option) => option.value === language)
     ?? DOCUMENT_LANGUAGE_OPTIONS[0];
-  const selectedView = viewTypeTextMapping.find(v => v.id === viewType) || viewTypeTextMapping[0];
   const isPdfMode = !epub && !html && !!pdf;
-  const highlight = epub
-    ? { sentence: epubHighlightEnabled, word: epubWordHighlightEnabled, sentenceKey: 'epubHighlightEnabled' as const, wordKey: 'epubWordHighlightEnabled' as const }
-    : html
-      ? { sentence: htmlHighlightEnabled, word: htmlWordHighlightEnabled, sentenceKey: 'htmlHighlightEnabled' as const, wordKey: 'htmlWordHighlightEnabled' as const }
-      : { sentence: pdfHighlightEnabled, word: pdfWordHighlightEnabled, sentenceKey: 'pdfHighlightEnabled' as const, wordKey: 'pdfWordHighlightEnabled' as const };
-  const [localMaxBlockLength, setLocalMaxBlockLength] = useState(ttsSegmentMaxBlockLength);
   const { confirmPlanChange, planChangeDialog } = usePlanChangeConfirm();
-
-  // The slider only previews while dragging; the plan is rebuilt once on release.
-  const commitMaxBlockLength = () => {
-    if (localMaxBlockLength === ttsSegmentMaxBlockLength) return;
-    confirmPlanChange({
-      setting: 'the maximum segment length',
-      apply: () => {
-        void updateConfigKey('ttsSegmentMaxBlockLength', localMaxBlockLength)
-          .then(reacquirePlaybackPlan);
-      },
-      onCancel: () => setLocalMaxBlockLength(ttsSegmentMaxBlockLength),
-    });
-  };
-
-  useEffect(() => {
-    setLocalMaxBlockLength(ttsSegmentMaxBlockLength);
-  }, [ttsSegmentMaxBlockLength]);
 
   return (
     <ReaderSidebarShell
@@ -190,94 +108,9 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           </Section>
         ) : null}
 
-        {isPdfMode || epub ? (
-          <Section title="Display" variant="group">
-            <ToggleRow
-              label={isPdfMode ? 'Show the pages' : 'Show the book'}
-              icon={isPdfMode ? <DocumentIcon /> : <BookIcon />}
-              description="Turn off to read the text as flowing sentences."
-              checked={readerShowsLayout}
-              onChange={(checked) => updateConfigKey('readerShowsLayout', checked)}
-              variant="plain"
-            />
-            {isPdfMode && readerShowsLayout ? (
-              <div className="space-y-1.5">
-                <SegmentedControl
-                  value={selectedView.id as ViewType}
-                  options={viewTypeTextMapping.map((view) => ({ value: view.id as ViewType, label: view.name }))}
-                  onChange={(nextViewType) => updateConfigKey('viewType', nextViewType)}
-                  ariaLabel="Page mode"
-                  className="grid-cols-3"
-                />
-                {selectedView.id === 'scroll' ? (
-                  <p className="text-xs text-warning">Scroll mode may be slower on large PDFs.</p>
-                ) : null}
-              </div>
-            ) : null}
-            {epub && readerShowsLayout ? (
-              <ToggleRow
-                label="Use app theme"
-                icon={<PaletteIcon />}
-                checked={epubTheme}
-                onChange={(checked) => updateConfigKey('epubTheme', checked)}
-                variant="plain"
-              />
-            ) : null}
-          </Section>
-        ) : null}
+        <ReaderAppearanceSettings scope="book" showTypography={!isPdfMode || !presentation.showsLayout} />
 
-        <Section title="Highlighting" variant="group">
-          <ToggleRow
-            label="Highlight sentence"
-            icon={<HighlighterIcon />}
-            checked={highlight.sentence}
-            onChange={(checked) => updateConfigKey(highlight.sentenceKey, checked)}
-            variant="plain"
-          />
-          <ToggleRow
-            label="Highlight words"
-            icon={<TextCursorIcon />}
-            checked={highlight.word && highlight.sentence}
-            disabled={!highlight.sentence}
-            onChange={(checked) => updateConfigKey(highlight.wordKey, checked)}
-            variant="plain"
-          />
-        </Section>
-
-        <Section title="Playback" variant="group">
-          <RangeField
-            label="Max segment length"
-            value={localMaxBlockLength}
-            min={TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN}
-            max={TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX}
-            step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}
-            valueWidth="w-14"
-            onChange={(value) => setLocalMaxBlockLength(clampTtsSegmentMaxBlockLength(value))}
-            onPointerUp={commitMaxBlockLength}
-            onKeyUp={commitMaxBlockLength}
-          />
-          <ToggleRow
-            label="Keyboard shortcuts"
-            icon={<KeyboardIcon />}
-            checked={playbackShortcuts}
-            onChange={(checked) => updateConfigKey('playbackShortcuts', checked)}
-            variant="plain"
-          />
-          {playbackShortcuts ? (
-            <dl aria-label="Playback keys" className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs text-soft">
-              {PLAYBACK_KEYS.map(([keys, action]) => (
-                <div key={action} className="contents">
-                  <dt className="flex gap-1">
-                    {keys.map((key) => (
-                      <kbd key={key} className="min-w-6 rounded border border-line-soft bg-surface px-1.5 py-0.5 text-center font-mono text-[11px] text-foreground">{key}</kbd>
-                    ))}
-                  </dt>
-                  <dd>{action}</dd>
-                </div>
-              ))}
-            </dl>
-          ) : null}
-        </Section>
+        {isOpen && <BookAdvancedSettings key={documentId} pdf={isPdfMode ? pdf : undefined} />}
 
         {documentId ? <DocumentStorageSection documentId={documentId} /> : null}
 
@@ -301,32 +134,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
               </span>
             }
           >
-            <ToggleRow
-              label="Show block overlay"
-              icon={<EyeIcon />}
-              checked={pdf.parsedOverlayEnabled}
-              onChange={pdf.onToggleOverlay}
-              disabled={pdf.parseStatus !== 'ready'}
-              variant="plain"
-            />
-            <details>
-              <summary className="cursor-pointer text-sm font-medium text-foreground">
-                Skip when reading aloud
-              </summary>
-              <div className="grid grid-cols-2 gap-x-3 pt-2">
-                {PDF_SKIP_KIND_OPTIONS.map((option) => (
-                  <CheckItem
-                    key={option.kind}
-                    label={option.label}
-                    checked={pdf.skipBlockKinds.includes(option.kind)}
-                    onChange={(enabled) => confirmPlanChange({
-                      setting: 'which PDF blocks are skipped',
-                      apply: () => pdf.onToggleSkipKind(option.kind, enabled),
-                    })}
-                  />
-                ))}
-              </div>
-            </details>
+            <p className="text-xs text-soft">Reparse this document to refresh detected PDF blocks.</p>
           </Section>
         )}
       </div>

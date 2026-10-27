@@ -128,7 +128,7 @@ export function SettingsChangelogPanel({
               {isExpanded && (
                 <div className="space-y-2 pb-3 pl-6 pr-1 pt-1">
                   {body ? (
-                    <div className="space-y-2 text-sm leading-6 text-foreground [&_a]:text-accent [&_a]:transition-colors [&_a]:hover:underline [&_code]:rounded [&_code]:bg-surface-sunken [&_code]:px-1 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-surface-sunken [&_pre]:p-2 [&_ul]:pl-5">
+                    <div className="space-y-2 text-sm leading-6 text-foreground [&_a]:text-accent [&_a]:transition-colors [&_a]:hover:underline [&_code]:rounded [&_code]:bg-surface-sunken [&_code]:px-1 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-surface-sunken [&_pre]:p-2 [&_ul]:pl-5">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {body.body || '_No release notes provided._'}
                       </ReactMarkdown>

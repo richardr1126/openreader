@@ -1,12 +1,15 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
-import { CheckIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
+import { ClonedVoiceLibrary } from './ClonedVoiceLibrary';
+import type { VoiceCloningContext } from './CloneVoiceEditor';
+import { CheckIcon, HeartIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
-import { IconButton, Input, cn } from '@/components/ui';
+import { Button, IconButton, Input, cn } from '@/components/ui';
 import type { VoicePreviewState } from '@/hooks/audio/useVoicePreview';
 import {
   groupVoices,
+  displayVoiceName,
   selectedVoicesFor,
   toggleDraftVoice,
   voiceStringFor,
@@ -20,6 +23,29 @@ export interface VoicePickerPreview {
   state: VoicePreviewState;
   play: (key: string, voice: string) => void;
   stop: () => void;
+}
+
+/** Personal and preset voices share selection, favorites and preview controls. */
+export function VoicePickerRow({ voice, name, note, selected, onSelect, preview, actions, favorites, onError }: {
+  voice: string; name: string; note?: string; selected: boolean; onSelect: () => void;
+  preview: VoicePickerPreview; actions?: ReactNode;
+  favorites?: { voices: Set<string>; toggle: (voice: string) => Promise<void>; available: boolean };
+  onError: (message: string) => void;
+}) {
+  return <div className={cn('flex items-center gap-2 rounded-md pl-1 pr-2', selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken')}>
+    <VoicePreviewButton previewKey={voice} label={name} preview={preview} voice={voice} />
+    <button type="button" aria-label={name} aria-pressed={selected} onClick={onSelect}
+      className={cn('flex min-w-0 flex-1 items-center justify-between gap-2 rounded py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', selected ? 'font-medium text-accent' : 'text-foreground')}>
+      <span className="min-w-0"><span className="block truncate">{name}</span>{note && <span className="block text-xs text-soft">{note}</span>}</span>
+      {selected && <CheckIcon className="h-4 w-4 shrink-0 text-accent" aria-hidden />}
+    </button>
+    {favorites?.available && <IconButton size="sm" aria-pressed={favorites.voices.has(voice)}
+      aria-label={favorites.voices.has(voice) ? `Remove ${name} from favorites` : `Favorite ${name}`}
+      className={favorites.voices.has(voice) ? 'text-accent' : 'text-faint'} onClick={() => { onError(''); void favorites.toggle(voice).catch(() => onError('Could not save favorites. Please try again.')); }}>
+      <HeartIcon className="h-4 w-4" fill={favorites.voices.has(voice) ? 'currentColor' : 'none'} />
+    </IconButton>}
+    {actions}
+  </div>;
 }
 
 export function VoicePreviewButton({ previewKey, label, preview, disabled, voice }: {
@@ -62,6 +88,9 @@ export function VoicePicker({
   groupByLanguage,
   preview,
   notices,
+  favorites,
+  allowCustomVoice = false,
+  cloning,
 }: {
   voices: string[];
   /** The voice string: one id, or a Kokoro blend. */
@@ -72,10 +101,24 @@ export function VoicePicker({
   preview: VoicePickerPreview;
   /** Warnings shown between the search field and the list. */
   notices?: ReactNode;
+  favorites?: { voices: Set<string>; toggle: (voice: string) => Promise<void>; available: boolean };
+  allowCustomVoice?: boolean;
+  cloning?: VoiceCloningContext;
 }) {
   const [query, setQuery] = useState('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  const [customVoiceOpen, setCustomVoiceOpen] = useState(false);
+  const [customVoice, setCustomVoice] = useState(value);
   const selectedVoices = selectedVoicesFor(value, voices, pickPolicy);
-  const groups = useMemo(() => groupVoices(voices, query, groupByLanguage), [voices, query, groupByLanguage]);
+  const showCustomVoice = allowCustomVoice || selectedVoices.some((voice) => !voices.includes(voice));
+  const customSelection = customVoice.trim()
+    ? voiceStringFor(selectedVoicesFor(customVoice.trim(), [], pickPolicy), pickPolicy)
+    : '';
+  const groups = useMemo(() => groupVoices(
+    (favoritesOnly ? voices.filter((voice) => favorites?.voices.has(voice)) : voices).filter(v => !v.startsWith('clone:')),
+    query, groupByLanguage,
+  ), [voices, query, groupByLanguage, favoritesOnly, favorites?.voices]);
   const previewError = preview.state.phase === 'error' ? preview.state : null;
 
   const pick = (voiceId: string) => {
@@ -85,7 +128,7 @@ export function VoicePicker({
 
   return (
     <div className="space-y-2">
-      <Input
+      <div className="flex items-center gap-2"><Input
         type="search"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
@@ -93,14 +136,23 @@ export function VoicePicker({
         aria-label="Search voices"
         controlSize="sm"
       />
+      {favorites?.available && <Button size="sm" variant={favoritesOnly ? 'primary' : 'secondary'}
+        aria-pressed={favoritesOnly} onClick={() => setFavoritesOnly(!favoritesOnly)}>Favorites</Button>}
+      </div>
+      {favoriteError && <p role="alert" className="text-xs text-warning">{favoriteError}</p>}
       {notices}
+      {cloning?.providerRef && ['fish-audio', 'openrouter'].includes(cloning.providerType) && <ClonedVoiceLibrary key={`${cloning.providerRef}:${cloning.model}`} cloning={cloning} value={value} onChange={onChange} preview={preview} favorites={favorites} query={query} favoritesOnly={favoritesOnly} fallbackVoice={voices.find(v => !v.startsWith('clone:')) ?? 'default'} />}
+      {cloning?.providerRef && ['fish-audio', 'openrouter'].includes(cloning.providerType) && <h4 className="pt-2 text-sm font-semibold text-soft">Built-in voices</h4>}
       {previewError && (
         <p role="status" className="text-xs text-warning">{previewError.message}</p>
       )}
       {voices.length === 0 ? (
         <p className="py-2 text-sm text-soft">No voices are available for this model.</p>
       ) : groups.length === 0 ? (
-        <p className="py-2 text-sm text-soft">No voices match “{query.trim()}”.</p>
+        <div className="space-y-2 py-2 text-sm text-soft">
+          <p>{favoritesOnly && !query.trim() ? 'No favorite voices for this model.' : `No voices match “${query.trim()}”.`}</p>
+          {favoritesOnly && <Button size="sm" onClick={() => setFavoritesOnly(false)}>Show all voices</Button>}
+        </div>
       ) : (
         <div className="space-y-3 pt-1">
           {groups.map((group) => (
@@ -113,34 +165,57 @@ export function VoicePicker({
               <ul className="space-y-0.5">
                 {group.voices.map((voiceId) => {
                   const selected = selectedVoices.includes(voiceId);
+                  const name = displayVoiceName(voiceId);
                   return (
-                    <li
-                      key={voiceId}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md pl-1 pr-2',
-                        selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken',
-                      )}
-                    >
-                      <VoicePreviewButton previewKey={voiceId} label={voiceId} preview={preview} voice={voiceId} />
-                      <button
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => pick(voiceId)}
-                        className={cn(
-                          'flex min-w-0 flex-1 items-center justify-between gap-2 rounded py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                          selected ? 'font-medium text-accent' : 'text-foreground',
-                        )}
-                      >
-                        <span className="truncate">{voiceId}</span>
-                        {selected ? <CheckIcon className="h-4 w-4 shrink-0" aria-hidden /> : null}
-                      </button>
-                    </li>
+                    <li key={voiceId}><VoicePickerRow voice={voiceId} name={name} selected={selected} onSelect={() => pick(voiceId)}
+                      preview={preview} favorites={groupByLanguage && voiceId.includes('+') ? undefined : favorites} onError={setFavoriteError} /></li>
                   );
                 })}
               </ul>
             </div>
           ))}
         </div>
+      )}
+      {showCustomVoice && (
+        <details
+          className="group rounded-lg border border-line-soft bg-surface-solid"
+          open={customVoiceOpen}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setCustomVoiceOpen(open);
+            if (open) setCustomVoice(value);
+          }}
+        >
+          <summary className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Custom voice ID
+          </summary>
+          <div className="flex items-center gap-2 border-t border-line-soft p-3">
+            <Input
+              className="min-w-0 flex-1"
+              aria-label="Custom voice ID"
+              placeholder="Voice ID from your provider"
+              value={customVoice}
+              onChange={(event) => setCustomVoice(event.target.value)}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              controlSize="sm"
+            />
+            <VoicePreviewButton
+              previewKey="custom-voice"
+              label="custom voice"
+              preview={preview}
+              disabled={!customSelection}
+              voice={customSelection}
+            />
+            <Button size="sm" className="shrink-0 whitespace-nowrap" disabled={!customSelection || customSelection === value} onClick={() => {
+              preview.stop();
+              onChange(customSelection);
+            }}>
+              Use voice
+            </Button>
+          </div>
+        </details>
       )}
     </div>
   );

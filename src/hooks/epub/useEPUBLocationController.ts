@@ -23,6 +23,7 @@ type UseEpubLocationControllerParams = {
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
   resolveLocatorToCfi: (locator: TTSSegmentLocator) => Promise<string | null>;
+  followingNarrationRef: MutableRefObject<boolean>;
 };
 
 function isEpubLocatorTarget(value: EpubLocation | TTSSegmentLocator): value is TTSSegmentLocator {
@@ -41,6 +42,7 @@ export function useEPUBLocationController({
   bookRef,
   renditionRef,
   resolveLocatorToCfi,
+  followingNarrationRef,
 }: UseEpubLocationControllerParams): (
   location: EpubLocation | TTSSegmentLocator,
   intent?: EpubLocationChangeIntent,
@@ -93,6 +95,7 @@ export function useEPUBLocationController({
         return cfi;
       },
       async (cfi, pending) => {
+        if (pending.intent === 'playback-follow' && !followingNarrationRef.current) return;
         const book = bookRef.current;
         const rendition = renditionRef.current;
         if (!book?.isOpen || !rendition) return;
@@ -112,7 +115,7 @@ export function useEPUBLocationController({
         await Promise.resolve(rendition.display(cfi));
       },
     );
-  }, [bookRef, placementIntentRef, renditionRef, resolveLocatorToCfi]);
+  }, [bookRef, followingNarrationRef, placementIntentRef, renditionRef, resolveLocatorToCfi]);
 
   const handleLocationChanged = useCallback((
     location: EpubLocation | TTSSegmentLocator,

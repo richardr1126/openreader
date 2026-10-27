@@ -207,6 +207,7 @@ export const adminProviders = pgTable('admin_providers', {
   apiKeyLast4: text('api_key_last4'),
   defaultModel: text('default_model'),
   defaultInstructions: text('default_instructions'),
+  defaultModelOptions: text('default_model_options'),
   enabled: integer('enabled').notNull().default(1),
   createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
   updatedAt: bigint('updated_at', { mode: 'number' }).notNull().default(PG_NOW_MS),

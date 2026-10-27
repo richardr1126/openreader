@@ -36,6 +36,7 @@ export async function PUT(
       apiKey: rec.apiKey as string | undefined,
       defaultModel: rec.defaultModel as string | null | undefined,
       defaultInstructions: rec.defaultInstructions as string | null | undefined,
+      defaultModelOptions: rec.defaultModelOptions as string | null | undefined,
       enabled: rec.enabled as boolean | undefined,
     });
     return NextResponse.json({ provider: toMasked(updated) });

@@ -318,9 +318,11 @@ describe('server-state architecture', () => {
       '/api/internal/compute/tts-credentials',
       '/api/local-library',
       '/api/local-library/content',
+      '/api/tts/cloned-voices',
       '/api/tts/export/download',
       '/api/tts/export/events',
       '/api/tts/export/resolve',
+      '/api/tts/models',
       '/api/tts/playback/plans/[planId]/seek-layout',
       '/api/tts/segments/clear',
       '/api/tts/shared-providers',
@@ -483,7 +485,7 @@ describe('server-state architecture', () => {
     expect(context).toContain('canStartPlayback: isPlaying &&');
     expect(context).not.toContain("activeReaderType === 'epub' && sentence.trim()");
     expect(context).not.toContain("activeReaderType !== 'epub' && playbackSegment?.key");
-    expect(source('src/lib/server/reader/playback.ts')).toContain('skipBlockKinds: settings.pdf?.skipBlockKinds ?? []');
+    expect(source('src/lib/server/reader/playback.ts')).toContain('skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds');
     expect(clientTts).toContain('skipBlockKinds?: ParsedPdfBlockKind[]');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('readOptionalSkipBlockKinds(planningRec)');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds');
@@ -671,13 +673,10 @@ describe('server-state architecture', () => {
     expect(playbackSelection).not.toContain('Math.max(1, Math.floor(Number(location) || 1))');
     expect(playbackSelection).not.toContain('Number(anchor?.location');
     expect(context).toContain('const page = pdfLocatorPage(locator);');
-    expect(documentNavigation).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html') {\n        playbackSyncNavigationRef.current = false;");
-    // Cursor-follow swallow is independent of play state (paused skip follows the
-    // page exactly like playback), so the consume sites no longer gate on
-    // playbackActiveRef.
-    expect(documentNavigation).toContain('if (playbackSyncNavigationRef.current) {\n      playbackSyncNavigationRef.current = false;\n      setIsProcessing(false);\n      return;\n    }');
-    expect(documentNavigation).not.toContain('playbackSyncNavigationRef.current && playbackActiveRef.current');
-    expect(playbackProjection).toContain('const page = isPdfLocator(locator) ? Math.max(1, Math.floor(locator.page)) : null;');
+    expect(documentNavigation).not.toContain('skipToLocation');
+    // Rendered pages no longer need a swallow flag to protect the audio cursor.
+    expect(documentNavigation).not.toContain('playbackSyncNavigationRef');
+    expect(playbackProjection).not.toContain('setCurrDocPage');
     expect(playbackProjection).not.toContain('const normalizePdfPage = (page: unknown): number | null =>');
     expect(playbackProjection).not.toContain("normalizePdfPage((locator as { page?: unknown }).page)");
     expect(playbackPlan).toContain('normalizeLocator(row.locator as TTSSegmentLocator)');
@@ -691,8 +690,8 @@ describe('server-state architecture', () => {
     );
     expect(abortAudioBody).not.toContain('playbackPlanRef.current = null');
     expect(abortAudioBody).not.toContain('setPlaybackSeekLayout(null)');
-    expect(documentNavigation).toContain("if (activeReaderType === 'pdf' || activeReaderType === 'html')");
-    expect(documentNavigation).toContain('resolveFirstPlanIndexForDocumentAnchor(');
+    expect(documentNavigation).toContain('if (selectedOrdinalRef.current !== null)');
+    expect(documentNavigation).toContain('resolveDocumentAnchorSelectionOrdinal({');
     expect(playbackHook).toContain('seekPlaybackTo');
     expect(playbackSeek).toContain('await setAudioDocumentTime(audio, targetSec, pendingSeek.ordinal, startSec');
     expect(playbackProjection).toContain('const targetOrdinal = projection.segment.ordinal;');
@@ -722,7 +721,7 @@ describe('server-state architecture', () => {
     expect(context).not.toContain('?? initialSeekLayout.segments[0]');
     expect(source('src/components/player/TTSPlayer.tsx')).toContain('readyTimelineBands(playbackSeekLayout)');
     expect(source('src/lib/client/tts/playback-timeline-track.ts')).toContain('segment.generated');
-    expect(context).toContain('playbackSyncNavigationRef');
+    expect(context).toContain('followingNarrationRef');
     expect(context).toContain('syncPlaybackLocator');
     expect(context).toContain("handler(locator, 'playback-follow')");
     expect(documentNavigation).toContain('if (!preservePlaybackCursor) {');

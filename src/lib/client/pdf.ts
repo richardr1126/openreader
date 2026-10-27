@@ -112,8 +112,10 @@ let highlightPatternSeq = 0;
 type HighlightPatternOptions = {
   parsedDocument?: ParsedPdfDocument | null;
   locator?: TTSSegmentLocator | null;
+  paintSegment?: boolean;
   useBlockGeometryOnly?: boolean;
   language?: string;
+  follow?: boolean;
 };
 
 function getHighlightLayerForPage(pageElement: HTMLElement): {
@@ -153,6 +155,7 @@ function highlightParsedBlockGeometry(
   containerRef: React.RefObject<HTMLDivElement>,
   parsedDocument: ParsedPdfDocument,
   locator: TTSSegmentLocator,
+  follow = true,
 ): boolean {
   if (locator.readerType !== 'pdf') return false;
   if (!locator.blockId) return false;
@@ -194,8 +197,8 @@ function highlightParsedBlockGeometry(
     highlight.className = 'pdf-text-highlight-overlay';
     highlight.dataset.testid = 'pdf-sentence-highlight';
     highlight.style.position = 'absolute';
-    highlight.style.backgroundColor = 'grey';
-    highlight.style.opacity = '0.4';
+    highlight.style.backgroundColor = 'var(--reader-segment-color, grey)';
+    highlight.style.opacity = 'var(--reader-segment-opacity, 0.4)';
     highlight.style.pointerEvents = 'none';
     highlight.style.zIndex = '1';
     highlight.style.left = `${left}px`;
@@ -210,7 +213,7 @@ function highlightParsedBlockGeometry(
     drewAny = true;
   }
 
-  if (!drewAny || !firstRect) return drewAny;
+  if (!drewAny || !firstRect || !follow) return drewAny;
 
   const containerRect = container.getBoundingClientRect();
   const visibleTop = container.scrollTop;
@@ -373,6 +376,11 @@ export function highlightPattern(
 ): boolean {
   const seq = ++highlightPatternSeq;
   clearHighlights();
+  lastSentencePattern = null;
+  lastSentenceWordToTokenRangeMap = null;
+  lastSentenceTokenWindow = null;
+  lastSpanNodes = [];
+  lastTokens = [];
 
   if (!pattern?.trim()) return false;
   const container = containerRef.current;
@@ -381,10 +389,10 @@ export function highlightPattern(
   const cleanPattern = pattern.trim().replace(/\s+/g, ' ');
   if (!cleanPattern) return false;
   lastSentencePattern = cleanPattern;
-  lastSentenceWordToTokenRangeMap = null;
-  lastSentenceTokenWindow = null;
   const parsedDocument = options?.parsedDocument ?? null;
   const locator = options?.locator ?? null;
+  const paintSegment = options?.paintSegment ?? true;
+  const useBlockGeometryOnly = paintSegment && options?.useBlockGeometryOnly;
 
   // Canonical path: parsed block locator is required for PDF sentence
   // highlighting. Avoid broad full-page text matching fallbacks.
@@ -395,8 +403,8 @@ export function highlightPattern(
   const spanNodes = collectSpanNodesForParsedBlock(container, parsedDocument, locator) ?? [];
 
   if (!spanNodes.length) {
-    if (options?.useBlockGeometryOnly) {
-      return highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+    if (useBlockGeometryOnly) {
+      return highlightParsedBlockGeometry(containerRef, parsedDocument, locator, options?.follow);
     }
     return false;
   }
@@ -424,17 +432,18 @@ export function highlightPattern(
   if (!tokens.length) return false;
   lastTokens = tokens;
 
-  if (options?.useBlockGeometryOnly) {
+  if (useBlockGeometryOnly) {
     lastSentenceTokenWindow = {
       start: 0,
       end: tokens.length - 1,
     };
-    return highlightParsedBlockGeometry(containerRef, parsedDocument, locator);
+    return highlightParsedBlockGeometry(containerRef, parsedDocument, locator, options?.follow);
   }
 
   const patternLen = cleanPattern.length;
 
-  // Core application of highlight logic once we know the best token window (if any)
+  // Resolve the segment's text ranges for readiness, scrolling, and word mapping.
+  // Segment background painting is optional and never owns that preparation.
   const applyHighlightFromTokens = (
     tokenMatch:
       | {
@@ -524,19 +533,21 @@ export function highlightPattern(
         range.setStart(textNode, startOffset);
         range.setEnd(textNode, endOffset);
 
+        const rects = Array.from(range.getClientRects());
+        scrollIntoViewRects.push(...rects);
+        if (!paintSegment) return;
+
         const highlightTarget = getOrCreateHighlightLayer(span);
         if (!highlightTarget) return;
-
         const { layer: highlightLayer, pageRect } = highlightTarget;
-        const rects = Array.from(range.getClientRects());
 
         rects.forEach((rect) => {
           const highlight = document.createElement('div');
           highlight.className = 'pdf-text-highlight-overlay';
           highlight.dataset.testid = 'pdf-sentence-highlight';
           highlight.style.position = 'absolute';
-          highlight.style.backgroundColor = 'grey';
-          highlight.style.opacity = '0.4';
+          highlight.style.backgroundColor = 'var(--reader-segment-color, grey)';
+          highlight.style.opacity = 'var(--reader-segment-opacity, 0.4)';
           highlight.style.pointerEvents = 'none';
           highlight.style.zIndex = '1';
           highlight.style.left = `${rect.left - pageRect.left}px`;
@@ -544,8 +555,6 @@ export function highlightPattern(
           highlight.style.width = `${rect.width}px`;
           highlight.style.height = `${rect.height}px`;
           highlightLayer.appendChild(highlight);
-
-          scrollIntoViewRects.push(rect);
         });
       } catch {
         // If range creation fails for any reason, skip this segment
@@ -553,6 +562,7 @@ export function highlightPattern(
     });
 
     if (!scrollIntoViewRects.length) return false;
+    if (options?.follow === false) return true;
 
     // Scroll the first highlighted rect into view if needed
     const containerRect = container.getBoundingClientRect();
@@ -661,8 +671,8 @@ export function highlightWordIndex(
         const highlight = document.createElement('div');
         highlight.className = 'pdf-word-highlight-overlay';
         highlight.style.position = 'absolute';
-        highlight.style.backgroundColor = 'var(--accent)';
-        highlight.style.opacity = '0.4';
+        highlight.style.backgroundColor = 'var(--reader-word-color, var(--accent))';
+        highlight.style.opacity = 'var(--reader-word-opacity, 0.4)';
         highlight.style.pointerEvents = 'none';
         highlight.style.left = `${rect.left - pageRect.left}px`;
         highlight.style.top = `${rect.top - pageRect.top}px`;

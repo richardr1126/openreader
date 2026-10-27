@@ -1,0 +1,24 @@
+.wide {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.wide .controls,
+.wide .column {
+  width: 100%;
+}
+
+@container reader-appearance (min-width: 38rem) {
+  .wide {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .wide .controls {
+    width: auto;
+  }
+
+  .wide .column {
+    width: 18rem;
+  }
+}

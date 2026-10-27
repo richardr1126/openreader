@@ -1,4 +1,5 @@
 import { getMaxVoicesForProvider, isKokoroModel } from './kokoro';
+import { OPENROUTER_BASE_URL, OPENROUTER_DEFAULT_MODEL } from './openrouter';
 import {
   getDefaultVoices,
   isBuiltInTtsProviderId,
@@ -8,7 +9,7 @@ import {
   supportsNativeModelSpeed,
   supportsTtsInstructions,
   KOKORO_LOCAL_MODEL,
-  REPLICATE_KOKORO_82M_VERSIONED_MODEL,
+  FISH_AUDIO_VOICES,
   type SharedProviderTypeResolverEntry,
   type TtsProviderId,
   type TtsProviderType,
@@ -25,6 +26,7 @@ export interface ResolveTtsPolicyInput {
 export interface ProviderDefaultResolverEntry extends SharedProviderTypeResolverEntry {
   defaultModel?: string | null;
   defaultInstructions?: string | null;
+  defaultModelOptions?: string | null;
 }
 
 export interface TtsProviderModelPolicy {
@@ -47,6 +49,7 @@ export interface ResolvedProviderDefaults {
   defaultModel: string;
   defaultVoice: string;
   defaultInstructions: string;
+  defaultModelOptions: string;
 }
 
 export interface ResolveTtsModelForProviderInput {
@@ -59,22 +62,29 @@ export interface ResolveTtsModelForProviderInput {
 }
 
 export function defaultModelForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'openrouter') return OPENROUTER_DEFAULT_MODEL;
+  if (providerType === 'fish-audio') return 's2.1-pro-free';
   if (providerType === 'openai') return 'tts-1';
-  if (providerType === 'deepinfra') return 'hexgrad/Kokoro-82M';
-  if (providerType === 'replicate') return REPLICATE_KOKORO_82M_VERSIONED_MODEL;
+  if (providerType === 'google-ai-studio') return 'gemini-3.8-flash-tts';
+  if (providerType === 'replicate') return 'google/gemini-3.1-flash-tts';
   if (providerType === 'kokoro-local') return KOKORO_LOCAL_MODEL;
   return 'kokoro';
 }
 
 export function defaultBaseUrlForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'openrouter') return OPENROUTER_BASE_URL;
+  if (providerType === 'fish-audio') return 'https://api.fish.audio';
   if (providerType === 'openai') return 'https://api.openai.com/v1';
-  if (providerType === 'deepinfra') return 'https://api.deepinfra.com/v1/openai';
+  if (providerType === 'google-ai-studio') return 'https://generativelanguage.googleapis.com/v1beta';
   return '';
 }
 
 export function defaultVoiceForProviderType(providerType: TtsProviderId): string {
+  if (providerType === 'openrouter') return FISH_AUDIO_VOICES[0].id;
+  if (providerType === 'fish-audio') return FISH_AUDIO_VOICES[0].id;
+  if (providerType === 'replicate') return 'Zephyr';
   if (providerType === 'openai') return 'alloy';
-  if (providerType === 'deepinfra') return 'af_bella';
+  if (providerType === 'google-ai-studio') return 'Zephyr';
   if (providerType === 'kokoro-local') return 'af_heart';
   return 'af_sarah';
 }
@@ -113,6 +123,7 @@ export function resolveProviderDefaults(input: {
     defaultModel: sharedDefaultModel || (isBuiltInTtsProviderId(providerType) ? defaultModelForProviderType(providerType) : ''),
     defaultVoice: isBuiltInTtsProviderId(providerType) ? defaultVoiceForProviderType(providerType) : '',
     defaultInstructions: sharedDefaultInstructions,
+    defaultModelOptions: shared?.defaultModelOptions ?? '',
   };
 }
 
@@ -149,7 +160,7 @@ export function resolveTtsProviderModelPolicy(input: ResolveTtsPolicyInput): Tts
   });
   const model = input.model || '';
   const isResolvedProviderType = isBuiltInTtsProviderId(providerType);
-  const isKokoro = isKokoroModel(model);
+  const isKokoro = providerType !== 'openrouter' && isKokoroModel(model);
   const maxVoices = isResolvedProviderType ? getMaxVoicesForProvider(providerType, model) : 1;
 
   return {
@@ -162,7 +173,7 @@ export function resolveTtsProviderModelPolicy(input: ResolveTtsPolicyInput): Tts
     supportsNativeModelSpeed: isResolvedProviderType
       ? supportsNativeModelSpeed(providerType, model)
       : false,
-    supportsInstructions: supportsTtsInstructions(model),
+    supportsInstructions: supportsTtsInstructions(model, providerType),
     supportsCustomModel: isResolvedProviderType
       ? providerSupportsCustomModel(providerType)
       : false,

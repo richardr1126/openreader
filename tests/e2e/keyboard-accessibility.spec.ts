@@ -27,12 +27,19 @@ test('keyboard user controls reader panels and playback shortcuts', async ({ pag
 
   await page.getByRole('button', { name: 'Open settings', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Document settings' });
-  const shortcuts = settings.getByRole('switch', { name: 'Keyboard shortcuts' });
-  const keys = settings.getByLabel('Playback keys');
+  await expect(settings.getByRole('switch', { name: 'Keyboard shortcuts' })).toHaveCount(0);
+  const bookUrl = page.url();
+  await page.goto('/app/settings?section=reader');
+  const shortcuts = page.getByRole('switch', { name: 'Keyboard shortcuts' });
+  const keys = page.getByLabel('Playback keys');
   await expect(shortcuts).toBeChecked();
   await expect(keys).toContainText('Play or pause');
   await shortcuts.click();
   await expect(shortcuts).not.toBeChecked();
   await expect(keys).toBeHidden();
+  await page.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
+  await page.goto(bookUrl);
+  await expect(playButton).toBeVisible();
   await expect(playButton).not.toHaveAttribute('aria-keyshortcuts', /.+/);
 });

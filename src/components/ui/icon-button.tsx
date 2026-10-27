@@ -18,7 +18,7 @@ export const iconButtonStyles = variants({
       xs: 'h-5 w-5 rounded-sm text-xs',
       sm: 'h-7 w-7 rounded-md text-xs',
       md: 'h-8 w-8 rounded-md text-sm',
-      lg: 'h-10 w-10 rounded-lg text-base',
+      lg: 'h-10 w-10 rounded-lg text-[1rem] leading-6',
     },
   },
   defaults: {

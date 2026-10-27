@@ -4,6 +4,7 @@ import { db } from '@openreader/database';
 import { adminProviders } from '@openreader/database/schema';
 import { apiKeyLast4, decryptSecret, encryptSecret } from '@/lib/server/crypto/secrets';
 import { type TtsProviderId } from '@openreader/tts/provider-catalog';
+import { normalizeOpenRouterOptions } from '@openreader/tts/openrouter';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { resolvePreferredSharedProviderSlug } from '@/lib/shared/shared-provider-selection';
 import { getRuntimeConfig, setRuntimeConfigKey } from '@/lib/server/admin/settings';
@@ -11,8 +12,10 @@ import { getRuntimeConfig, setRuntimeConfigKey } from '@/lib/server/admin/settin
 export const BUILT_IN_PROVIDER_IDS: readonly TtsProviderId[] = [
   'custom-openai',
   'replicate',
-  'deepinfra',
+  'google-ai-studio',
   'openai',
+  'fish-audio',
+  'openrouter',
   'kokoro-local',
 ];
 
@@ -29,6 +32,8 @@ export interface AdminProviderRecord {
   apiKeyLast4: string | null;
   defaultModel: string | null;
   defaultInstructions: string | null;
+  /** OpenRouter request options bound to `defaultModel`; users may override them. */
+  defaultModelOptions: string | null;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
@@ -43,6 +48,8 @@ export interface AdminProviderMasked {
   apiKeyMask: string;
   defaultModel: string | null;
   defaultInstructions: string | null;
+  /** OpenRouter request options bound to `defaultModel`; users may override them. */
+  defaultModelOptions: string | null;
   enabled: boolean;
   createdAt: number;
   updatedAt: number;
@@ -54,6 +61,8 @@ export interface AdminProviderPublic {
   providerType: TtsProviderId;
   defaultModel: string | null;
   defaultInstructions: string | null;
+  /** OpenRouter request options bound to `defaultModel`; users may override them. */
+  defaultModelOptions: string | null;
 }
 
 export interface CreateAdminProviderInput {
@@ -64,6 +73,7 @@ export interface CreateAdminProviderInput {
   apiKey?: string;
   defaultModel?: string | null;
   defaultInstructions?: string | null;
+  defaultModelOptions?: string | null;
   enabled?: boolean;
 }
 
@@ -76,6 +86,7 @@ export interface UpdateAdminProviderPatch {
   apiKey?: string;
   defaultModel?: string | null;
   defaultInstructions?: string | null;
+  defaultModelOptions?: string | null;
   enabled?: boolean;
 }
 
@@ -133,6 +144,7 @@ function rowToRecord(row: Record<string, unknown>): AdminProviderRecord {
     apiKeyLast4: (row.apiKeyLast4 ?? row.api_key_last4 ?? null) as string | null,
     defaultModel: (row.defaultModel ?? row.default_model ?? null) as string | null,
     defaultInstructions: (row.defaultInstructions ?? row.default_instructions ?? null) as string | null,
+    defaultModelOptions: (row.defaultModelOptions ?? row.default_model_options ?? null) as string | null,
     enabled,
     createdAt: Number(row.createdAt ?? row.created_at ?? 0),
     updatedAt: Number(row.updatedAt ?? row.updated_at ?? 0),
@@ -150,6 +162,7 @@ export function toMasked(record: AdminProviderRecord): AdminProviderMasked {
     apiKeyMask: last4 ? `••••${last4}` : '(not set)',
     defaultModel: record.defaultModel,
     defaultInstructions: record.defaultInstructions,
+    defaultModelOptions: record.defaultModelOptions,
     enabled: record.enabled,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
@@ -163,6 +176,7 @@ export function toPublic(record: AdminProviderRecord): AdminProviderPublic {
     providerType: record.providerType,
     defaultModel: record.defaultModel,
     defaultInstructions: record.defaultInstructions,
+    defaultModelOptions: record.defaultModelOptions,
   };
 }
 
@@ -172,17 +186,30 @@ function normalizeOptionalText(value: string | null | undefined): string | null 
   return trimmed ? trimmed : null;
 }
 
-function assertInstructionsCompatibility(model: string | null, instructions: string | null): void {
+function assertInstructionsCompatibility(providerType: TtsProviderId, model: string | null, instructions: string | null): void {
   if (!instructions) return;
   if (!resolveTtsProviderModelPolicy({
     providerRef: '',
-    providerType: 'custom-openai',
+    providerType,
     model,
   }).supportsInstructions) {
     throw new AdminProviderError(
       'defaultInstructions is only supported for models that support TTS instructions.',
       400,
     );
+  }
+}
+
+/** Options exist only for OpenRouter and are rebound to the model; a changed model clears them. */
+function normalizeModelOptions(providerType: TtsProviderId, model: string | null, value: string | null | undefined): string | null {
+  if (value !== null && value !== undefined && typeof value !== 'string') {
+    throw new AdminProviderError('defaultModelOptions must be a JSON string', 400);
+  }
+  if (providerType !== 'openrouter' || !model || !value?.trim()) return null;
+  try {
+    return normalizeOpenRouterOptions(value, model) || null;
+  } catch (error) {
+    throw new AdminProviderError((error as Error).message, 400);
   }
 }
 
@@ -238,7 +265,8 @@ export async function createAdminProvider(
   const apiKey = String(input.apiKey ?? '');
   const defaultModel = normalizeOptionalText(input.defaultModel);
   const defaultInstructions = normalizeOptionalText(input.defaultInstructions);
-  assertInstructionsCompatibility(defaultModel, defaultInstructions);
+  assertInstructionsCompatibility(providerType, defaultModel, defaultInstructions);
+  const defaultModelOptions = normalizeModelOptions(providerType, defaultModel, input.defaultModelOptions);
 
   const existing = await getAdminProviderBySlug(slug);
   if (existing) {
@@ -259,6 +287,7 @@ export async function createAdminProvider(
     apiKeyLast4: apiKeyLast4(apiKey),
     defaultModel,
     defaultInstructions,
+    defaultModelOptions,
     enabled: (input.enabled ?? true) ? 1 : 0,
     createdAt: now,
     updatedAt: now,
@@ -286,7 +315,13 @@ export async function updateAdminProvider(
     patch.defaultInstructions !== undefined
       ? normalizeOptionalText(patch.defaultInstructions)
       : current.defaultInstructions;
-  assertInstructionsCompatibility(nextModel, nextInstructions);
+  const nextProviderType = patch.providerType !== undefined ? validateProviderType(patch.providerType) : current.providerType;
+  assertInstructionsCompatibility(nextProviderType, nextModel, nextInstructions);
+  update.defaultModelOptions = normalizeModelOptions(
+    nextProviderType,
+    nextModel,
+    patch.defaultModelOptions !== undefined ? patch.defaultModelOptions : current.defaultModelOptions,
+  );
 
   if (patch.slug !== undefined) {
     const slug = validateSlug(patch.slug);

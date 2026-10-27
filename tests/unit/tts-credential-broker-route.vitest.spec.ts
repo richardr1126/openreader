@@ -106,6 +106,7 @@ describe('TTS credential broker route', () => {
       baseUrl: 'https://tts.internal.example/v1',
       defaultModel: 'gpt-4o-mini-tts',
       defaultInstructions: 'Read clearly.',
+      defaultModelOptions: null,
     });
   });
 

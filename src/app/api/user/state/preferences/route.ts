@@ -51,6 +51,7 @@ async function loadPreferenceNormalizationContext(): Promise<PreferenceNormaliza
         providerType: entry.providerType,
         defaultModel: entry.defaultModel,
         defaultInstructions: entry.defaultInstructions,
+        defaultModelOptions: entry.defaultModelOptions,
       })),
   };
 }

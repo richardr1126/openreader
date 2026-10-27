@@ -6,6 +6,7 @@ import { AudioWaveIcon, InfoIcon } from '@/components/icons/Icons';
 import { getTtsLanguageCompatibilityWarnings } from '@openreader/tts/language';
 import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import { formatVoiceDockLabel } from '@/lib/client/tts/voice-draft';
+import { useClonedVoiceNames } from '@/hooks/useClonedVoiceNames';
 import { Tooltip, cn, focusRing } from '@/components/ui';
 
 /** The dock's voice button: shows the applied voice and opens the voice panel. */
@@ -16,8 +17,10 @@ export const VoicesControl = ({ disabled = false, onOpen }: {
   const { ttsModel, providerRef, providerType } = useConfig();
   const { voice, voiceSpeed, documentLanguage, detectedDocumentLanguage } = useTTS();
   const policy = resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel });
+  const clonedNames = useClonedVoiceNames(voice || '');
   const label = formatVoiceDockLabel({
     voice: voice || '',
+    clonedNames,
     nativeSpeed: voiceSpeed,
     supportsNativeModelSpeed: policy.supportsNativeModelSpeed,
   });

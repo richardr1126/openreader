@@ -74,10 +74,11 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
   );
 }
 
-function RowLabel({ id, label, info }: { id?: string; label: string; info?: ReactNode }) {
+function RowLabel({ id, label, info, action }: { id?: string; label: string; info?: ReactNode; action?: ReactNode }) {
   return (
     <span className="flex items-center gap-1">
       <span id={id} className="text-sm font-medium leading-5 text-foreground">{label}</span>
+      {action}
       {info ? <InfoTip label={label}>{info}</InfoTip> : null}
     </span>
   );
@@ -91,6 +92,7 @@ function RowLabel({ id, label, info }: { id?: string; label: string; info?: Reac
  */
 export function SettingRow({
   label,
+  labelAction,
   icon,
   description,
   info,
@@ -100,6 +102,7 @@ export function SettingRow({
   children,
 }: {
   label: string;
+  labelAction?: ReactNode;
   icon?: ReactNode;
   description?: ReactNode;
   info?: ReactNode;
@@ -112,7 +115,7 @@ export function SettingRow({
     <div className="flex min-w-0 flex-1 items-center gap-3">
       {icon ? <RowIcon>{icon}</RowIcon> : null}
       <div className="min-w-0 flex-1 space-y-0.5">
-        <RowLabel label={label} info={info} />
+        <RowLabel label={label} info={info} action={labelAction} />
         {description ? <span className="block text-xs leading-4 text-soft">{description}</span> : null}
         {meta ? <span className="block text-[11px] leading-4 text-faint">{meta}</span> : null}
       </div>
@@ -193,6 +196,7 @@ export function ToggleRow({
 
 type RangeFieldProps = {
   label: string;
+  action?: ReactNode;
   value: number;
   min: number;
   max: number;
@@ -205,6 +209,7 @@ type RangeFieldProps = {
 
 export function RangeField({
   label,
+  action,
   value,
   min,
   max,
@@ -222,9 +227,12 @@ export function RangeField({
     <div className="space-y-1.5">
       <div className="flex items-center justify-between gap-3">
         <label htmlFor={inputId} className="text-sm font-medium text-foreground">{label}</label>
-        <span className={cn(valueWidth, 'text-sm text-right text-soft tabular-nums')}>
-          {formatter(value)}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className={cn(valueWidth, 'text-sm text-right text-soft tabular-nums')}>
+            {formatter(value)}
+          </span>
+          {action}
+        </div>
       </div>
       <RangeInput
         id={inputId}

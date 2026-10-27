@@ -15,7 +15,9 @@ API keys stay on the server, encrypted (see [How saved keys are protected](./adm
 | **Custom OpenAI-like** | Any server with an OpenAI-compatible speech endpoint, such as Kokoro-FastAPI, KittenTTS-FastAPI, Orpheus-FastAPI or Supertonic. | Base URL; API key if the server requires one. |
 | **OpenAI** | OpenAI's speech API (`tts-1`, `tts-1-hd`, `gpt-4o-mini-tts`). | API key. |
 | **Replicate** | Hosted models on Replicate, from a built-in list or any model ID. | API key. |
-| **Deepinfra** | Hosted models on DeepInfra, including Kokoro-82M. | API key. |
+| **Google AI Studio** | Gemini 3.8 Flash TTS and Flash-Lite TTS, with style instructions and 30 prebuilt voices. | Google AI Studio API key. |
+| **Fish Audio** | S2.1 Pro Free, S2.1 Pro, S2 Pro and Drama 3, with style instructions and voice cloning. | API key. |
+| **OpenRouter** | Every speech model in OpenRouter's catalog, including free variants, through one key. | API key. |
 
 Setup guides for specific services are listed under **TTS Providers** in the sidebar.
 
@@ -42,6 +44,7 @@ Under **External providers**, choose **Add provider**, pick the service, and fil
 | **Default model** | The model users start with. Choose from the service's list, or enter a custom model ID. |
 | **API key** | **Get a key** opens the service's key page. When editing, leave it blank to keep the saved key. |
 | **TTS instructions** | Only for models that accept speaking instructions, such as `gpt-4o-mini-tts`. |
+| **Model options** | OpenRouter only. Default JSON options sent with the model's requests; users can replace them (see [OpenRouter](./tts-provider-guides/openrouter#instructions-speed-and-model-options)). |
 | **Slug** (Advanced) | Generated from the display name. Users' settings store it, so it cannot change after saving. |
 | **Enabled** (Advanced) | Turn off to hide the provider from users without deleting it. |
 
@@ -67,6 +70,14 @@ The compute worker, not the browser, connects to the provider, and the app serve
 A custom server needs only `POST /v1/audio/speech`. It may return MP3, WAV, OGG or FLAC; OpenReader converts other formats to MP3, so the server does not need to support `response_format`. An API key is optional.
 
 Voice listing is optional. OpenReader tries `/v1/audio/voices`, `/v1/voices` and `/v1/styles`. If none answer, it offers the Kokoro voices for Kokoro models and the standard OpenAI voices (`alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`) otherwise.
+
+For external providers, **Custom voice ID** below the voice list lets users enter an ID supplied by their provider, even when it is missing from the catalog. They can preview it, choose **Use voice**, then **Save** in settings or **Apply** in the reader. The provider must support the entered ID.
+
+## Personal voices
+
+With [Fish Audio](./tts-provider-guides/fish-audio), or an [OpenRouter](./tts-provider-guides/openrouter) model whose endpoints support voice cloning, users can [create their own voice](../guide/reading-and-listening#your-own-voice) from a short recording.
+
+Voice cloning has no OpenReader purchase gate on web. The iOS app keeps its Pro requirement; provider charges are separate on both platforms. The provider receives the private sample with each narration request. OpenReader never creates a saved voice on the provider's side; how long the provider keeps the sample depends on its own data policy. Web samples stay in your instance's private storage. iOS samples stay on that device and do not sync through iCloud. Removing a saved voice deletes its sample and keeps cached narration.
 
 ## Seed a provider from the environment
 

@@ -6,7 +6,6 @@ import {
   pdfAnchorPage,
   resolveDocumentAnchorSelectionOrdinal,
   resolveEpubPlanBackedSelection,
-  resolveFirstPlanIndexForDocumentAnchor,
   type PlaybackAnchor,
 } from '@/lib/client/tts/playback-selection';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
@@ -50,8 +49,6 @@ type UseTtsDocumentNavigationInput = {
   playbackPlanRef: MutableRefObject<TtsPlaybackPlan | null>;
   playbackSegmentsRef: MutableRefObject<CanonicalTtsSegment[]>;
   selectedOrdinalRef: MutableRefObject<number | null>;
-  playbackSyncNavigationRef: MutableRefObject<boolean>;
-  resumeAfterLocationChangeRef: MutableRefObject<boolean>;
   cancelPendingSeek: () => void;
   pauseActivePlayback: () => void;
   seekPlaybackToOrdinal: (ordinal: number) => boolean;
@@ -78,8 +75,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     playbackPlanRef,
     playbackSegmentsRef,
     selectedOrdinalRef,
-    playbackSyncNavigationRef,
-    resumeAfterLocationChangeRef,
     cancelPendingSeek,
     pauseActivePlayback,
     seekPlaybackToOrdinal,
@@ -98,7 +93,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
   }, [isPlaying, isPlayingRef]);
 
   const pause = useCallback(() => {
-    resumeAfterLocationChangeRef.current = false;
     pauseEpochRef.current += 1;
     cancelPendingSeek();
     pauseActivePlayback();
@@ -107,50 +101,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     cancelPendingSeek,
     pauseActivePlayback,
     pauseEpochRef,
-    resumeAfterLocationChangeRef,
-    setIsPlaying,
-  ]);
-
-  const skipToLocation = useCallback((location: TTSLocation, shouldPause = false) => {
-    if (playbackSyncNavigationRef.current) {
-      if (activeReaderType === 'pdf' || activeReaderType === 'html') {
-        playbackSyncNavigationRef.current = false;
-      } else {
-        setCurrDocPage(location);
-        return;
-      }
-    }
-
-    setCurrDocPage(location);
-    if (shouldPause) {
-      resumeAfterLocationChangeRef.current = false;
-      pauseActivePlayback();
-      setIsPlaying(false);
-    } else if (isPlayingRef.current) {
-      resumeAfterLocationChangeRef.current = true;
-    }
-
-    if (activeReaderType === 'pdf' || activeReaderType === 'html') {
-      const planIndex = resolveFirstPlanIndexForDocumentAnchor(
-        playbackSegmentsRef.current,
-        activeReaderType,
-        location,
-      );
-      const segment = playbackSegmentsRef.current[planIndex];
-      if (segment) {
-        if (!seekPlaybackToOrdinal(segment.ordinal)) selectPlaybackSegment(segment);
-      }
-    }
-  }, [
-    activeReaderType,
-    isPlayingRef,
-    pauseActivePlayback,
-    playbackSegmentsRef,
-    playbackSyncNavigationRef,
-    resumeAfterLocationChangeRef,
-    selectPlaybackSegment,
-    seekPlaybackToOrdinal,
-    setCurrDocPage,
     setIsPlaying,
   ]);
 
@@ -199,8 +149,9 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     setPlaybackAnchor(nextAnchor);
     setCurrDocPage(resolvedLocation);
 
-    if (playbackSyncNavigationRef.current) {
-      playbackSyncNavigationRef.current = false;
+    // Page extraction describes the visible PDF, which can now be browsed
+    // independently. Bootstrap already selected the durable playback cursor.
+    if (selectedOrdinalRef.current !== null) {
       setIsProcessing(false);
       return;
     }
@@ -224,7 +175,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     playbackAnchorRef,
     playbackPlanRef,
     playbackSegmentsRef,
-    playbackSyncNavigationRef,
     selectedOrdinalRef,
     setCurrDocPage,
     setIsProcessing,
@@ -251,12 +201,10 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     if (!playbackPlanReady || !playbackPlanRef.current) return { status: 'waiting-plan' };
 
     if (!rendered.hasReadableText) {
-      playbackSyncNavigationRef.current = false;
       if (rendered.preservePlaybackCursor) {
         setIsProcessing(false);
         return { status: 'non-text' };
       }
-      resumeAfterLocationChangeRef.current = false;
       pauseActivePlayback();
       setIsPlaying(false);
       setSelectedOrdinal(null);
@@ -268,16 +216,12 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
       plan: playbackSegmentsRef.current,
       locator: rendered.locator,
     });
-    const playbackDrivenNavigation = playbackSyncNavigationRef.current;
-    playbackSyncNavigationRef.current = false;
-    const preservePlaybackCursor = rendered.preservePlaybackCursor === true
-      || playbackDrivenNavigation;
+    const preservePlaybackCursor = rendered.preservePlaybackCursor === true;
     if (resolution.status === 'invalid-anchor' || resolution.status === 'unmapped-anchor') {
       return resolution;
     }
 
     if (rendered.shouldPause && !preservePlaybackCursor) {
-      resumeAfterLocationChangeRef.current = false;
       pauseActivePlayback();
       setIsPlaying(false);
     }
@@ -292,7 +236,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
       setSelectedOrdinal(resolution.ordinal);
       if (!rendered.shouldPause) syncActivePlaybackToOrdinal(resolution.ordinal);
     }
-    resumeAfterLocationChangeRef.current = false;
     setIsProcessing(false);
     return { status: 'selected', ordinal: resolution.ordinal };
   }, [
@@ -301,8 +244,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     playbackPlanReady,
     playbackPlanRef,
     playbackSegmentsRef,
-    playbackSyncNavigationRef,
-    resumeAfterLocationChangeRef,
     syncActivePlaybackToOrdinal,
     setCurrDocPage,
     setIsPlaying,
@@ -390,7 +331,6 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     setDocumentPlaybackAnchor,
     skipBackward,
     skipForward,
-    skipToLocation,
     skipToOrdinal,
   };
 }

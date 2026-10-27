@@ -169,6 +169,20 @@
       "when": 1792711863002,
       "tag": "0023_remove_speech_sdk_providers",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1793008787134,
+      "tag": "0024_provider_model_options",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1793025955043,
+      "tag": "0025_remove_deepinfra_providers",
+      "breakpoints": true
     }
   ]
 }

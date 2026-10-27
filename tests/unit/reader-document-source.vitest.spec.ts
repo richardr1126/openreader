@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getReaderBootstrap: vi.fn(),
   subscribeReaderBootstrap: vi.fn(),
   ensureCachedDocument: vi.fn(),
+  putDocumentSettings: vi.fn(),
 }));
 
 vi.mock('@/hooks/useAuthSession', () => ({
@@ -27,7 +28,7 @@ vi.mock('@/lib/client/cache/documents', () => ({
   ensureCachedDocument: (...args: unknown[]) => mocks.ensureCachedDocument(...args),
 }));
 vi.mock('@/lib/client/api/documents', () => ({
-  putDocumentSettings: vi.fn(async () => undefined),
+  putDocumentSettings: (...args: unknown[]) => mocks.putDocumentSettings(...args),
 }));
 vi.mock('@/lib/client/api/user-state', () => ({
   putDocumentProgress: vi.fn(async () => undefined),
@@ -164,6 +165,8 @@ beforeEach(() => {
   mocks.subscribeReaderBootstrap.mockReset();
   mocks.subscribeReaderBootstrap.mockReturnValue(() => undefined);
   mocks.ensureCachedDocument.mockReset();
+  mocks.putDocumentSettings.mockReset();
+  mocks.putDocumentSettings.mockImplementation(async (_id, settings) => ({ settings }));
 });
 
 afterEach(async () => {
@@ -185,6 +188,62 @@ function renderProbe(readerType: ReaderType, nonce: number) {
     ),
   ));
 }
+
+test('an appearance save after an acknowledged book voice save keeps the new voice', async () => {
+  const initial = payload('pdf');
+  initial.settings.presentation = { showsLayout: true };
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'ready', payload: initial });
+  mocks.ensureCachedDocument.mockResolvedValue(sourceDocument('pdf'));
+  await act(async () => renderProbe('pdf', 0));
+  await waitFor(() => latest?.documentSource.status === 'ready');
+  await act(async () => { await latest!.updatePresentation({ presentation: {} }); });
+  const voiceOverride = { providerRef: 'fish', ttsModel: 's2.1-pro-free', voice: 'clone:new' };
+  // The voice save goes through the playback controller, not this hook.
+  act(() => latest!.acknowledgeSettings({ ...initial.settings, presentation: {}, voiceOverride }));
+  await act(async () => { await latest!.updatePresentation({ presentation: { showsLayout: true } }); });
+  expect(mocks.putDocumentSettings.mock.calls.at(-1)?.[1]).toMatchObject({ voiceOverride, presentation: { showsLayout: true } });
+});
+
+test.each(['http', 'sse'])('a delayed %s replan cannot undo a newer appearance save or restore older speech settings', async (delivery) => {
+  const initial = payload('pdf');
+  initial.settings.presentation = { showsLayout: true };
+  initial.settings.pdf = { skipBlockKinds: ['header'] };
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'ready', payload: initial });
+  mocks.ensureCachedDocument.mockResolvedValue(sourceDocument('pdf'));
+  await act(async () => renderProbe('pdf', 0));
+  await waitFor(() => latest?.documentSource.status === 'ready');
+  const pending = deferred<import('@/types/reader-bootstrap').ReaderBootstrapResult>();
+  mocks.getReaderBootstrap.mockReturnValueOnce(pending.promise);
+  let saving: Promise<void> | undefined;
+  await act(async () => { saving = latest!.updateSettings({ ...initial.settings, pdf: { skipBlockKinds: [] } }); });
+  await waitFor(() => mocks.getReaderBootstrap.mock.calls.length === 2);
+  await act(async () => { await latest!.updatePresentation({ presentation: {} }); });
+  expect(mocks.putDocumentSettings.mock.calls.at(-1)?.[1]).toMatchObject({ pdf: { skipBlockKinds: [] }, presentation: {} });
+  if (delivery === 'http') {
+    await act(async () => { pending.resolve({ status: 'ready', payload: initial }); await saving; });
+  } else {
+    await act(async () => { pending.resolve({ status: 'pending', operationId: 'replan' }); await saving; });
+    await waitFor(() => mocks.subscribeReaderBootstrap.mock.calls.length > 0);
+    const snapshot = mocks.subscribeReaderBootstrap.mock.calls.at(-1)![1] as (value: unknown) => void;
+    await act(async () => snapshot({ status: 'ready', payload: initial }));
+  }
+  await waitFor(() => latest?.result.status === 'ready' && latest.result.payload.settings.presentation?.showsLayout === undefined);
+  if (latest!.result.status === 'ready') expect(latest!.result.payload.settings.presentation).toEqual({});
+});
+
+test('an appearance save while the open reader replans succeeds without waiting for the plan', async () => {
+  const initial = payload('pdf');
+  initial.settings.pdf = { skipBlockKinds: ['header'] };
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'ready', payload: initial });
+  mocks.ensureCachedDocument.mockResolvedValue(sourceDocument('pdf'));
+  await act(async () => renderProbe('pdf', 0));
+  await waitFor(() => latest?.documentSource.status === 'ready');
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'pending', operationId: 'replan' });
+  await act(async () => { await latest!.updateSettings({ ...initial.settings, pdf: { skipBlockKinds: [] } }); });
+  await waitFor(() => latest?.replanning === true);
+  await act(async () => { await latest!.updatePresentation({ presentation: { showsLayout: true } }); });
+  expect(mocks.putDocumentSettings.mock.calls.at(-1)?.[1]).toMatchObject({ pdf: { skipBlockKinds: [] }, presentation: { showsLayout: true } });
+});
 
 describe('reader document source acquisition', () => {
   test('replaces ready state with force-operation progress without a second bootstrap POST', async () => {

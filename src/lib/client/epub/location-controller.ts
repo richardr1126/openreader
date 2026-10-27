@@ -33,7 +33,7 @@ export async function drainLatestNavigation<T, U>(
 }
 
 export function shouldPreserveEpubPlaybackCursor(intent: EpubPlacementIntent): boolean {
-  return intent === 'renderer' || intent === 'playback-follow';
+  return intent !== 'initial';
 }
 
 export function isCfiWithinRenderedRange(

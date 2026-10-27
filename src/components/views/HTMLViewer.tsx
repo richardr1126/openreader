@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
-import { useConfig } from '@/contexts/ConfigContext';
+import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
+import { READER_FONT_FAMILIES } from '@/lib/shared/reader-appearance';
 import type { HtmlBlock } from '@openreader/tts/html-blocks';
 import {
   clearHtmlSentenceHighlight,
@@ -76,6 +77,9 @@ export function HTMLViewer({
     playbackPlanSegmentCount,
     playbackSegments,
     skipToOrdinal,
+    followingNarration,
+    setFollowingNarration,
+    readerNavigationRevision,
   } = useTTS();
   const {
     currentSegment,
@@ -83,13 +87,7 @@ export function HTMLViewer({
     currentSentenceAlignment,
     currentWordIndex,
   } = useTTSHighlight();
-  const config = useConfig();
-  const highlightEnabled = readerType === 'pdf'
-    ? config.pdfHighlightEnabled
-    : readerType === 'epub' ? config.epubHighlightEnabled : config.htmlHighlightEnabled;
-  const wordHighlightEnabled = highlightEnabled && (readerType === 'pdf'
-    ? config.pdfWordHighlightEnabled
-    : readerType === 'epub' ? config.epubWordHighlightEnabled : config.htmlWordHighlightEnabled);
+  const { presentation: { highlightSegment: highlightEnabled, highlightWords: wordHighlightEnabled } } = useReaderAppearance(readerType);
 
   const readySegmentRef = useRef<string | null>(null);
 
@@ -133,17 +131,17 @@ export function HTMLViewer({
     const container = contentRef.current;
     if (!container) return;
     clearHtmlSentenceHighlight();
-    if (highlightEnabled) {
+    {
       // The owning block, plus the next one a sentence may run on into.
       const owner = currentBlockKey ? container.ownerDocument.getElementById(currentBlockKey) : null;
       const scope = owner && container.contains(owner)
         ? [owner, owner.nextElementSibling].filter((element): element is HTMLElement => element instanceof HTMLElement)
         : [];
-      if (!highlightHtmlSentence(container, currentSentence, resolvedLanguage, scope)) {
+      if (!highlightHtmlSentence(container, currentSentence, resolvedLanguage, scope, highlightEnabled)) {
         onError?.(new Error('The selected worker-plan segment did not map to the rendered text.'));
         return;
       }
-      scrollSentenceIntoView(scrollRef.current);
+      if (followingNarration || readySegmentRef.current === null) scrollSentenceIntoView(scrollRef.current);
     }
     if (readySegmentRef.current !== currentSentence) {
       readySegmentRef.current = currentSentence;
@@ -151,7 +149,10 @@ export function HTMLViewer({
     }
   }, [
     blocks,
+    followingNarration,
+    readerNavigationRevision,
     highlightEnabled,
+    wordHighlightEnabled,
     currentBlockKey,
     currentSentence,
     resolvedLanguage,
@@ -161,8 +162,7 @@ export function HTMLViewer({
     onReady,
   ]);
 
-  // Word highlight is layered inside the current sentence wrap. Same
-  // scheduling pattern as the sentence effect.
+  // Word paint uses the prepared segment region even when segment paint is off.
   useLayoutEffect(() => {
     if (!wordHighlightEnabled) {
       clearHtmlWordHighlight();
@@ -181,7 +181,19 @@ export function HTMLViewer({
     if (!container) return;
     highlightHtmlWord(container, currentSentenceAlignment, currentWordIndex);
   }, [
+    blocks,
+    // The sentence effect rebuilds the region (and clears the word) on these.
+    followingNarration,
+    readerNavigationRevision,
+    highlightEnabled,
     wordHighlightEnabled,
+    currentBlockKey,
+    currentSentence,
+    resolvedLanguage,
+    playbackPlanReady,
+    playbackPlanSegmentCount,
+    onError,
+    onReady,
     currentSentenceAlignment,
     currentWordIndex,
   ]);
@@ -198,6 +210,7 @@ export function HTMLViewer({
 
   // Rendered once per block list: highlight and word updates re-render this
   // component often and must not re-render a whole book.
+  const { typography } = useReaderAppearance();
   const renderedBlocks = useMemo(() => (
     <div key={blockListId(blocks)}>
       {blocks.map((block) => (
@@ -219,10 +232,26 @@ export function HTMLViewer({
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Document text" className="flex-1 overflow-auto" data-testid="text-reader">
+      <div ref={scrollRef} tabIndex={0} role="region" aria-label="Document text" className="flex-1 overflow-auto" data-testid="text-reader"
+        onWheel={() => setFollowingNarration(false)}
+        onTouchMove={() => setFollowingNarration(false)}
+        onKeyDown={(event) => {
+          if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) setFollowingNarration(false);
+        }}>
         <div
           ref={contentRef}
-          className="html-container prose prose-base min-w-full px-4 py-4"
+          className="html-container prose prose-base px-4 py-4 mx-auto"
+          style={{
+            maxWidth: 'none', width: `${typography.readingWidth}%`, minWidth: 'min(100%, 20rem)',
+            fontFamily: READER_FONT_FAMILIES[typography.fontFamily] || undefined,
+            fontSize: typography.sizePercent === 100 ? undefined : `${typography.sizePercent / 100}rem`,
+            // This text has no publisher styles to defer to, so spacing is
+            // always the chosen value, as the appearance preview draws it.
+            lineHeight: typography.lineMultiplier,
+            letterSpacing: typography.letterSpacing ? `${typography.letterSpacing}em` : undefined,
+            textAlign: typography.alignment === 'default' ? undefined : typography.alignment,
+            '--reader-paragraph-spacing': `${typography.paragraphSpacing}em`,
+          } as React.CSSProperties}
         >
           {renderedBlocks}
         </div>

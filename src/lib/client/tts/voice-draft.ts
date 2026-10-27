@@ -1,4 +1,5 @@
 import { buildKokoroVoiceString, parseKokoroVoiceNames } from '@openreader/tts/kokoro';
+import { catalogVoiceName } from '@openreader/tts/provider-catalog';
 import {
   getKokoroVoiceLanguages,
   getLanguageDisplayName,
@@ -51,9 +52,13 @@ export function voiceStringFor(selected: string[], policy: VoicePickPolicy): str
   return policy.multi ? buildKokoroVoiceString(selected) : selected[0] ?? '';
 }
 
-/** Human-readable voice name for labels: `af_heart + af_bella` for a mix. */
-export function displayVoiceName(voice: string): string {
-  return voice.includes('+') ? parseKokoroVoiceNames(voice).join(' + ') : voice;
+/**
+ * Human-readable voice name for labels: `af_heart + af_bella` for a mix, or
+ * the saved name of a personal `clone:` voice when `clonedNames` knows it.
+ */
+export function displayVoiceName(voice: string, clonedNames?: ReadonlyMap<string, string>): string {
+  if (voice.startsWith('clone:')) return clonedNames?.get(voice) ?? 'Your voice';
+  return voice.includes('+') ? parseKokoroVoiceNames(voice).join(' + ') : catalogVoiceName(voice);
 }
 
 /** The dock label, e.g. `af_heart · 1.1x`; speed only when supported and not 1. */
@@ -61,8 +66,9 @@ export function formatVoiceDockLabel(input: {
   voice: string;
   nativeSpeed: number;
   supportsNativeModelSpeed: boolean;
+  clonedNames?: ReadonlyMap<string, string>;
 }): string {
-  const name = displayVoiceName(input.voice) || 'Voice';
+  const name = displayVoiceName(input.voice, input.clonedNames) || 'Voice';
   return input.supportsNativeModelSpeed && input.nativeSpeed !== 1
     ? `${name} · ${formatModelSpeed(input.nativeSpeed)}`
     : name;
@@ -72,10 +78,11 @@ export function formatVoiceDockLabel(input: {
 export function describePendingVoiceChanges(
   applied: VoiceSettingsDraft,
   draft: VoiceSettingsDraft,
+  clonedNames?: ReadonlyMap<string, string>,
 ): string[] {
   const changes: string[] = [];
   if (draft.voice !== applied.voice) {
-    changes.push(`Voice ${displayVoiceName(applied.voice)} → ${displayVoiceName(draft.voice)}`);
+    changes.push(`Voice ${displayVoiceName(applied.voice, clonedNames)} → ${displayVoiceName(draft.voice, clonedNames)}`);
   }
   if (draft.nativeSpeed !== applied.nativeSpeed) {
     changes.push(`Speed ${formatModelSpeed(applied.nativeSpeed)} → ${formatModelSpeed(draft.nativeSpeed)}`);
@@ -109,6 +116,7 @@ export function groupVoices(voices: string[], query: string, groupByLanguage: bo
   const matches = needle
     ? voices.filter((voiceId) => {
       if (voiceId.toLowerCase().includes(needle)) return true;
+      if (displayVoiceName(voiceId).toLowerCase().includes(needle)) return true;
       const language = groupByLanguage ? getKokoroVoiceLanguages(voiceId)[0] : undefined;
       return Boolean(language) && getLanguageDisplayName(language as string).toLowerCase().includes(needle);
     })

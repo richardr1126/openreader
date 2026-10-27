@@ -8,8 +8,7 @@ describe('kokoro voice limits', () => {
     expect(getMaxVoicesForProvider('replicate', 'hexgrad/Kokoro-82M')).toBe(1);
   });
 
-  test('keeps Deepinfra single-voice and allows multi-voice elsewhere', () => {
-    expect(getMaxVoicesForProvider('deepinfra', 'hexgrad/Kokoro-82M')).toBe(1);
+  test('allows multiple Kokoro voices on compatible servers', () => {
     expect(getMaxVoicesForProvider('custom-openai', 'kokoro')).toBe(Infinity);
   });
 

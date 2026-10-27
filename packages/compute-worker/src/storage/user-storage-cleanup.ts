@@ -1,6 +1,7 @@
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { ttsPlaybackExportArtifactScopePrefix } from './artifact-addressing';
 import { deletePrefix, storageUserHash } from './prefix-cleanup';
+import { clonedVoicesPrefix } from '@openreader/tts/cloned-voices';
 
 export type UserStorageCleanupResult = {
   deletedObjects: number;
@@ -22,6 +23,7 @@ export async function cleanupUserStorageArtifacts(input: {
   let deletedDocumentArtifacts = 0;
 
   for (const prefix of [
+    ...(namespace === null ? [clonedVoicesPrefix(s3Prefix, storageUserId)] : []),
     `${s3Prefix}/document_uploads_temp_v1/${nsSegment}users/${encodedUserId}/`,
     `${s3Prefix}/tts_playback_segments_audio_v1/${nsSegment}users/${encodedUserId}/`,
     `${s3Prefix}/account_exports_v1/${nsSegment}users/${encodedUserId}/`,

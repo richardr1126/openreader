@@ -1,7 +1,10 @@
 import { LRUCache } from 'lru-cache';
+import { fetchOpenRouterModels } from './openrouter';
 import { logTtsError, ttsLogger } from './logger';
 import {
   OPENAI_DEFAULT_VOICES,
+  isRetiredReplicateModel,
+  replicateExecutionModel,
   resolveProviderModels,
   type ReplicateVoiceInputKey,
   type ResolveVoicesOptions,
@@ -200,7 +203,8 @@ function extractReplicateLanguageInputFromOpenApiSchema(openApiSchema: unknown):
 }
 
 async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promise<unknown | null> {
-  const parsedModel = parseReplicateModelIdentifier(model);
+  if (isRetiredReplicateModel(model)) return null;
+  const parsedModel = parseReplicateModelIdentifier(replicateExecutionModel(model));
   if (!parsedModel) {
     return null;
   }
@@ -340,48 +344,6 @@ export async function resolveReplicateLanguageInput({
   return input;
 }
 
-async function fetchDeepinfraVoices(apiKey: string): Promise<string[]> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, 10_000);
-
-  try {
-    const response = await fetch('https://api.deepinfra.com/v1/voices', {
-      signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch Deepinfra voices');
-    }
-
-    const data = await response.json();
-    if (data.voices && Array.isArray(data.voices)) {
-      return data.voices
-        .filter((voice: { user_id?: string }) => voice.user_id !== 'preset')
-        .map((voice: { name: string }) => voice.name);
-    }
-    return [];
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      return [];
-    }
-    logTtsError(ttsLogger, {
-      event: 'tts.voice_resolution.deepinfra_voices_fetch.failed',
-      msg: 'Failed fetching Deepinfra voices',
-      error,
-      normalize: { code: 'TTS_VOICE_RESOLUTION_DEEPINFRA_FETCH_FAILED', errorClass: 'upstream' },
-    });
-    return [];
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
 // Custom OpenAI-compatible servers expose voices under different, non-standardized
 // routes. Probe the common ones in order until one returns a usable list.
 const CUSTOM_OPENAI_VOICE_ENDPOINTS = ['/audio/voices', '/voices', '/styles'] as const;
@@ -476,6 +438,12 @@ async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise
 }
 
 export async function resolveVoices({ provider, model, apiKey = '', baseUrl = '' }: ResolveVoicesOptions): Promise<string[]> {
+  if (provider === 'openrouter') {
+    const models = await fetchOpenRouterModels();
+    return models.find(entry => entry.id === model)?.supportedVoices?.length
+      ? models.find(entry => entry.id === model)!.supportedVoices!
+      : resolveTtsProviderModelPolicy({ providerRef: provider, model }).defaultVoices;
+  }
   const providerModelPolicy = resolveTtsProviderModelPolicy({
     providerRef: provider,
     providerType: provider,
@@ -483,14 +451,6 @@ export async function resolveVoices({ provider, model, apiKey = '', baseUrl = ''
   });
   const defaultVoices = providerModelPolicy.defaultVoices;
   const voiceSource = providerModelPolicy.voiceSource;
-
-  if (voiceSource === 'deepinfra-api') {
-    const apiVoices = await fetchDeepinfraVoices(apiKey);
-    if (apiVoices.length > 0) {
-      return [...defaultVoices, ...apiVoices];
-    }
-    return defaultVoices;
-  }
 
   if (voiceSource === 'custom-openai-api') {
     if (baseUrl) {

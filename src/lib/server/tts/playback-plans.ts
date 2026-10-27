@@ -1,4 +1,6 @@
 import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { estimateAddedPauseMs } from '@openreader/tts/voice-customization';
+import type { TTSSegmentSettings } from '@openreader/tts/types';
 import {
   buildPlaybackCbrLayout,
   estimateMsPerCharForNativeSpeed,
@@ -151,8 +153,9 @@ export function buildPlaybackGrid(input: {
     updatedAt?: number | null;
   }>;
 }) {
-  const nativeSpeed = (input.settingsJson as { nativeSpeed?: unknown } | null)?.nativeSpeed;
-  const msPerChar = estimateMsPerCharForNativeSpeed(nativeSpeed);
+  const settings = (typeof input.settingsJson === 'string'
+    ? JSON.parse(input.settingsJson) : input.settingsJson) as TTSSegmentSettings | null;
+  const msPerChar = estimateMsPerCharForNativeSpeed(settings?.nativeSpeed);
   // Real durations where a segment has been generated (so the scrubber/timeline
   // match the gapless real audio and live highlighting stays accurate), estimate
   // for the not-yet-generated tail.
@@ -162,6 +165,7 @@ export function buildPlaybackGrid(input: {
     locator: segment.locator,
     text: segment.text,
     durationMs: input.completedDurations.get(segment.ordinal) ?? null,
+    addedPauseMs: estimateAddedPauseMs(segment.text, settings?.voiceCustomization, settings?.providerType ?? ''),
   }));
   // Quantize silence slots to whole MP3 frames so the grid's startMs values match
   // the frame-accurate silence the worker emits (the byte map uses the same

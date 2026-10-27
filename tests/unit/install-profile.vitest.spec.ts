@@ -8,7 +8,7 @@ vi.mock('@/components/icons/Icons', () => {
   const icon = () => null;
   return {
     CpuChipIcon: icon, DatabaseIcon: icon, GlobeIcon: icon, InfoIcon: icon, MicrophoneIcon: icon,
-    PaletteIcon: icon, ServerStackIcon: icon, UserIcon: icon, UsersIcon: icon, WrenchIcon: icon,
+    PaletteIcon: icon, ServerStackIcon: icon, UserIcon: icon, UsersIcon: icon, WrenchIcon: icon, BookIcon: icon,
   };
 });
 import {
@@ -68,17 +68,17 @@ describe('computeLocation derivation', () => {
 describe('settings sections by install profile', () => {
   test('server keeps the General and Admin grouping', () => {
     expect(groups('server')).toEqual([
-      { label: 'General', sections: ['api:Model & Voice', 'theme:Appearance', 'account:Account', 'storage:Storage', 'about:About'] },
+      { label: 'General', sections: ['api:Model & Voice', 'theme:Appearance', 'reader:Reading', 'account:Account', 'storage:Storage', 'about:About'] },
       { label: 'Admin', sections: ['users:Users', 'providers:Providers', 'instance:Instance', 'compute:Compute', 'maintenance:Maintenance'] },
     ]);
     expect(groups('server', false)).toEqual([
-      { label: 'General', sections: ['api:Model & Voice', 'theme:Appearance', 'account:Account', 'storage:Storage', 'about:About'] },
+      { label: 'General', sections: ['api:Model & Voice', 'theme:Appearance', 'reader:Reading', 'account:Account', 'storage:Storage', 'about:About'] },
     ]);
   });
 
   test('desktop hides Users and regroups the rest under General, Advanced and About', () => {
     expect(groups('desktop')).toEqual([
-      { label: 'General', sections: ['theme:Appearance', 'api:Model & Voice', 'providers:Providers', 'storage:Library and storage', 'account:Profile'] },
+      { label: 'General', sections: ['theme:Appearance', 'reader:Reading', 'api:Model & Voice', 'providers:Providers', 'storage:Library and storage', 'account:Profile'] },
       { label: 'Advanced', sections: ['instance:Instance', 'compute:Compute', 'maintenance:Maintenance'] },
       { label: 'About', sections: ['about:About'] },
     ]);
@@ -86,7 +86,7 @@ describe('settings sections by install profile', () => {
 
   test('admin-only sections stay admin-only on every profile', () => {
     const desktopNonAdmin = groups('desktop', false).flatMap((group) => group.sections);
-    expect(desktopNonAdmin).toEqual(['theme:Appearance', 'api:Model & Voice', 'storage:Library and storage', 'account:Profile', 'about:About']);
+    expect(desktopNonAdmin).toEqual(['theme:Appearance', 'reader:Reading', 'api:Model & Voice', 'storage:Library and storage', 'account:Profile', 'about:About']);
   });
 
   test('respects the per-user provider tab flag', () => {

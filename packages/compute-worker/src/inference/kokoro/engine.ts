@@ -13,6 +13,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import { normalizeVoiceCustomization, type VoiceCustomization } from '@openreader/tts/voice-customization';
 import * as ort from 'onnxruntime-node';
 import { getOnnxThreadsPerJob } from '../../infrastructure/config';
 import type { ModelDownloadProgressHandler } from '../model-download';
@@ -92,7 +93,36 @@ function waterfallLast(tokens: MToken[], nextCount: number): number {
 }
 
 /** `KPipeline.en_tokenize`: model-sized chunks, split at the best break. */
-export function chunkTokens(tokens: MToken[]): PhonemeChunk[] {
+export function chunkTokens(tokens: MToken[], characterLimit?: number | null): PhonemeChunk[] {
+  if (characterLimit != null) {
+    // Group complete source words first. Never split a word into invented
+    // phonemes to meet a character target; the existing model limit still wins.
+    const pieces: MToken[][] = [];
+    let pending: MToken[] = [];
+    let word: MToken[] = [];
+    const addWord = () => {
+      if (pending.length && length(tokensToText([...pending, ...word])) > characterLimit) {
+        let boundary = -1;
+        for (let index = 0; index < pending.length; index += 1) {
+          if (pending[index]!.whitespace && /[.!?…]["'”’)\]]*$/.test(tokensToText(pending.slice(0, index + 1)))) boundary = index + 1;
+        }
+        const split = boundary > 0 ? boundary : pending.length;
+        pieces.push(pending.slice(0, split));
+        pending = pending.slice(split);
+        if (pending.length && length(tokensToText([...pending, ...word])) > characterLimit) {
+          pieces.push(pending); pending = [];
+        }
+      }
+      pending.push(...word); word = [];
+    };
+    for (const token of tokens) {
+      word.push(token);
+      if (token.whitespace) addWord();
+    }
+    if (word.length) addWord();
+    if (pending.length) pieces.push(pending);
+    return pieces.flatMap(piece => chunkTokens(piece));
+  }
   const chunks: PhonemeChunk[] = [];
   let pending: MToken[] = [];
   let count = 0;
@@ -434,6 +464,7 @@ export interface KokoroSynthesisRequest {
   text: string;
   voice: string;
   speed: number;
+  customization?: VoiceCustomization;
 }
 
 export interface KokoroSynthesis {
@@ -464,10 +495,11 @@ export async function synthesizeKokoro(
   const speed = Number.isFinite(request.speed) && request.speed > 0 ? request.speed : 1;
 
   const tokens = g2p.phonemize(request.text).tokens;
+  const customization = normalizeVoiceCustomization(request.customization);
   const spans = new Map<MToken, TokenSpan>();
   const audio: Float32Array[] = [];
   let sampleCount = 0;
-  for (const chunk of chunkTokens(tokens)) {
+  for (const chunk of chunkTokens(tokens, customization.pieceCharacterLimit)) {
     signal?.throwIfAborted();
     const { ids, offsets } = encodeWithOffsets(chunk.phonemes);
     if (ids.length <= 2) continue;
@@ -479,11 +511,21 @@ export async function synthesizeKokoro(
       speed: new ort.Tensor('float32', new Float32Array([speed]), [1]),
     }), signal);
     const waveform = output.waveform!.data as Float32Array;
+    if (waveform.length === 0) throw new Error('Kokoro returned empty audio');
+    if (sampleCount && customization.piecePauseMilliseconds) {
+      const silence = new Float32Array(Math.round(KOKORO_SAMPLE_RATE * customization.piecePauseMilliseconds / 1000));
+      audio.push(silence); sampleCount += silence.length;
+    }
     tokenSpans(chunk, offsets, output.duration!.data as BigInt64Array, sampleCount, spans);
     audio.push(waveform);
     sampleCount += waveform.length;
   }
   signal?.throwIfAborted();
+
+  if (sampleCount && customization.blockPauseMilliseconds) {
+    const silence = new Float32Array(Math.round(KOKORO_SAMPLE_RATE * customization.blockPauseMilliseconds / 1000));
+    audio.push(silence); sampleCount += silence.length;
+  }
 
   // Text with nothing speakable still yields a short, valid clip.
   const samples = new Float32Array(sampleCount || Math.round(KOKORO_SAMPLE_RATE / 10));

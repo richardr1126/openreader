@@ -11095,6 +11095,11 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
                   "settings": {
                     "type": "object",
                     "properties": {
@@ -11125,10 +11130,43 @@
                         "type": "string",
                         "maxLength": 4000
                       },
+                      "ttsModelOptions": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
                       "language": {
                         "type": "string",
                         "minLength": 1,
                         "maxLength": 64
+                      },
+                      "voiceCustomization": {
+                        "type": "object",
+                        "properties": {
+                          "pieceCharacterLimit": {
+                            "type": "integer",
+                            "minimum": 50,
+                            "maximum": 450,
+                            "nullable": true
+                          },
+                          "piecePauseMilliseconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2000,
+                            "nullable": true
+                          },
+                          "blockPauseMilliseconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2000,
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "pieceCharacterLimit",
+                          "piecePauseMilliseconds",
+                          "blockPauseMilliseconds"
+                        ],
+                        "additionalProperties": false
                       }
                     },
                     "required": [

@@ -14,6 +14,7 @@ import {
   resolveTtsProviderModelPolicy,
 } from '@openreader/tts/provider-policy';
 import type { SharedProviderEntry } from '@/hooks/useSharedProviders';
+import type { OpenRouterSpeechModel } from '@openreader/tts/openrouter';
 
 export interface ResolveTtsSettingsViewModelOptions {
   providerRef: string;
@@ -22,6 +23,7 @@ export interface ResolveTtsSettingsViewModelOptions {
   customModelInput: string;
   showAllProviderModels: boolean;
   sharedProviders?: SharedProviderEntry[];
+  openRouterModels?: OpenRouterSpeechModel[];
 }
 
 export interface ProviderPickerOption {
@@ -54,6 +56,7 @@ export function resolveTtsSettingsViewModel({
   customModelInput,
   showAllProviderModels,
   sharedProviders = [],
+  openRouterModels,
 }: ResolveTtsSettingsViewModelOptions): TtsSettingsViewModel {
   const sharedOptions: ProviderPickerOption[] = sharedProviders.map((entry) => ({
     id: entry.slug,
@@ -78,7 +81,7 @@ export function resolveTtsSettingsViewModel({
     ? effectiveProviderType
     : null;
 
-  const catalogModels = resolveProviderModels(knownProviderType ?? 'custom-openai');
+  const catalogModels = resolveProviderModels(knownProviderType ?? 'custom-openai', { openRouterModels });
   const providerDefaults = resolveProviderDefaults({
     providerRef: selectedProviderRef,
     providerType: selectedProviderType,
