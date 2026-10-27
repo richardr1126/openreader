@@ -77,7 +77,7 @@ For external providers, **Custom voice ID** below the voice list lets users ente
 
 With [Fish Audio](./tts-provider-guides/fish-audio), or an [OpenRouter](./tts-provider-guides/openrouter) model whose endpoints support voice cloning, users can [create their own voice](../guide/reading-and-listening#your-own-voice) from a short recording.
 
-Voice cloning has no OpenReader purchase gate on web. The iOS app keeps its Pro requirement; provider charges are separate on both platforms. The provider receives the private sample with each narration request; no voice is created or left on the provider's side. Web samples stay in your instance's private storage. iOS samples stay on that device and do not sync through iCloud. Removing a saved voice deletes its sample and keeps cached narration.
+Voice cloning has no OpenReader purchase gate on web. The iOS app keeps its Pro requirement; provider charges are separate on both platforms. The provider receives the private sample with each narration request. OpenReader never creates a saved voice on the provider's side; how long the provider keeps the sample depends on its own data policy. Web samples stay in your instance's private storage. iOS samples stay on that device and do not sync through iCloud. Removing a saved voice deletes its sample and keeps cached narration.
 
 ## Seed a provider from the environment
 
