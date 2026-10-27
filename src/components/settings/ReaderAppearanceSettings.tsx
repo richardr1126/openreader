@@ -228,7 +228,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       <div aria-label="Typography preview" role="region" className="overflow-hidden text-foreground">
         <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-wide text-faint"><span>Reading preview</span><span>Live</span></div>
         {/* Taller on wide screens so a real page of text shows; the fade marks the clip as intentional. */}
-        <div role="article" aria-label="Reading sample" className="mx-auto h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,black_75%,transparent)] sm:h-60 lg:h-80" style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || 'Georgia, serif',
+        <div role="article" aria-label="Reading sample" className="mx-auto h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,black_75%,transparent)] sm:h-60 lg:h-80" style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || undefined,
           fontSize: `${14 * draft.sizePercent / 100}px`, lineHeight: draft.lineMultiplier, letterSpacing: `${draft.letterSpacing}em`, textAlign: draft.alignment === 'default' ? 'start' : draft.alignment }}>
           {PREVIEW_PARAGRAPHS.map((text) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>{text}</p>)}
         </div>

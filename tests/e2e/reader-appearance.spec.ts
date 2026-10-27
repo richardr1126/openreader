@@ -41,6 +41,9 @@ test('favorites and reader appearance persist with independent book inheritance'
   await expect(page.locator('html')).toHaveClass(/\bsunset\b/);
   await unsaved.getByRole('button', { name: 'Discard', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Font family', exact: true })).toContainText('Default / publisher');
+  // The default font is the app's, as the text reader draws it.
+  const appFont = await page.locator('body').evaluate((body) => getComputedStyle(body).fontFamily);
+  await expect(sample).toHaveCSS('font-family', appFont);
   await expect(page.locator('html')).not.toHaveClass(/\bsunset\b/);
   await expect(sunset).toHaveAttribute('aria-pressed', 'false');
   await expect(unsaved).toBeHidden();
