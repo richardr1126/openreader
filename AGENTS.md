@@ -127,7 +127,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-09-29 the expected clean result is 869 Vitest tests and 33 local
+- As of 2026-10-28 the expected clean result is 1545 Vitest tests and 75 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.

@@ -218,7 +218,7 @@ repairs a directory a newer weed already opened without that step.
 `.github/workflows/desktop.yml` runs on pull requests that touch `desktop/`,
 `packaging/` or `packages/bootstrap/`, on demand, and when a GitHub Release is
 published. Each of macos-15, windows-2025, windows-11-arm, ubuntu-24.04 and
-ubuntu-24.04-arm builds the app with Node.js 24.21.0, stages, runs
+ubuntu-24.04-arm builds the app with Node.js 26.12.1, stages, runs
 `pnpm --dir desktop smoke`, packages and uploads the installers for seven days.
 Installers are named `OpenReader-Desktop-<version>-<arch>.<ext>` on every platform.
 
