@@ -33,6 +33,9 @@ test('tapping a sentence, contents and find in book move the Markdown reading po
   await page.getByRole('button', { name: 'Open contents', exact: true }).click();
   await expect(contents).toBeInViewport({ ratio: 1 });
   const search = contents.getByRole('searchbox', { name: 'Find in book' });
+  // The panel's controls stay inert until it finishes entering, and fill does
+  // not wait for that; the click does, as a user's would.
+  await search.click();
   await search.fill('BASIC markdown');
   await expect(contents.getByText('1 match', { exact: true })).toBeVisible();
   await contents.getByRole('list', { name: 'Search results' }).getByRole('button').first().click();
