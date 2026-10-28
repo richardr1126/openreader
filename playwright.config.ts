@@ -25,7 +25,7 @@ export default defineConfig({
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:3003',
-    trace: 'retain-on-first-failure',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
   webServer: {

@@ -57,7 +57,7 @@ beforeAll(async () => {
   process.env.DISABLE_AUTH_RATE_LIMIT = 'true';
   // Vite exposes its own BASE_URL ('/') to test workers.
   process.env.BASE_URL = 'http://localhost:3003';
-  await runMigrations({ env: { ...process.env, SQLITE_DB_PATH: databasePath, POSTGRES_URL: '' } });
+  await runMigrations({ cwd: directory, env: { ...process.env, SQLITE_DB_PATH: databasePath, POSTGRES_URL: '' } });
   vi.resetModules();
   auth = await (await import('@/lib/server/auth/auth')).getAuth();
 });

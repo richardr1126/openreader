@@ -1,15 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { signInAdmin } from './support/admin';
 import { enterAnonymousLibrary } from './support/onboarding';
 
 test('Google AI Studio replaces the removed service and persists speech settings', async ({ page, playwright }, testInfo) => {
   await enterAnonymousLibrary(page);
-  const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
-  const signIn = await admin.post('/api/auth/sign-in/email', {
-    headers: { Origin: 'http://localhost:3003' }, data: { email: 'admin-e2e@example.test', password: 'TestAccount#2026' },
-  });
-  expect(signIn.ok()).toBe(true);
+  const admin = await signInAdmin(playwright);
   const anonymousCookies = await page.context().cookies();
-  await page.context().addCookies((await admin.storageState()).cookies);
+  await page.context().addCookies(admin.cookies);
   await page.goto('/app/settings?section=providers');
   await page.getByRole('button', { name: 'Add provider', exact: true }).click();
   const services = page.getByRole('list', { name: 'Provider services' });
@@ -22,12 +19,10 @@ test('Google AI Studio replaces the removed service and persists speech settings
   await page.context().clearCookies(); await page.context().addCookies(anonymousCookies);
 
   const name = `Google AI Studio ${testInfo.project.name}`;
-  const created = await admin.post('/api/admin/providers', { data: {
+  const provider = await admin.createProvider({
     slug: `google-${testInfo.project.name}`, displayName: name, providerType: 'google-ai-studio',
     defaultModel: 'gemini-3.8-flash-tts', defaultInstructions: 'Calm narration',
-  } });
-  expect(created.status()).toBe(201);
-  const { provider } = await created.json();
+  });
   try {
     await page.goto('/app/settings?section=api');
     await page.getByRole('button', { name: 'Provider', exact: true }).click();
@@ -47,6 +42,6 @@ test('Google AI Studio replaces the removed service and persists speech settings
     await expect(page.getByRole('textbox', { name: 'Voice instructions', exact: true })).toHaveValue('Calm, warm narration');
     await page.screenshot({ path: test.info().outputPath('google-ai-studio.png') });
   } finally {
-    await admin.delete(`/api/admin/providers/${provider.id}`); await admin.dispose();
+    await admin.deleteProvider(provider.id);
   }
 });

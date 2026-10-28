@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { signInAdmin } from './support/admin';
 import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
@@ -30,19 +31,12 @@ test('added pauses keep Automatic defaults and independent book inheritance', as
   await enterAnonymousLibrary(page);
   // A local model is optional on a hosted installation. Configure one through
   // the supported admin API without changing the stack's default provider.
-  const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
-  const signIn = await admin.post('/api/auth/sign-in/email', {
-    headers: { Origin: 'http://localhost:3003' },
-    data: { email: 'admin-e2e@example.test', password: 'TestAccount#2026' },
-  });
-  expect(signIn.ok()).toBe(true);
+  const admin = await signInAdmin(playwright);
   const providerName = `Local pause check ${testInfo.project.name}`;
-  const created = await admin.post('/api/admin/providers', { data: {
+  const provider = await admin.createProvider({
     slug: `pause-check-${testInfo.project.name}`, displayName: providerName,
     providerType: 'kokoro-local', defaultModel: 'kokoro',
-  } });
-  expect(created.status()).toBe(201);
-  const { provider } = await created.json();
+  });
   try {
     await page.goto('/app/settings?section=api');
     const between = page.getByRole('button', { name: 'Between segments', exact: true });
@@ -136,7 +130,6 @@ test('added pauses keep Automatic defaults and independent book inheritance', as
     }
     await page.screenshot({ path: test.info().outputPath('voice-customization-web-mobile.png') });
   } finally {
-    await admin.delete(`/api/admin/providers/${provider.id}`);
-    await admin.dispose();
+    await admin.deleteProvider(provider.id);
   }
 });

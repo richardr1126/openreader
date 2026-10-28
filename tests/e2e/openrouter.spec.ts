@@ -1,15 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { signInAdmin } from './support/admin';
 import { enterAnonymousLibrary } from './support/onboarding';
 
 test('OpenRouter discovers models, gates instructions and layers user over provider model options', async ({ page, playwright }, testInfo) => {
   await enterAnonymousLibrary(page);
-  const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
-  const signIn = await admin.post('/api/auth/sign-in/email', {
-    headers: { Origin: 'http://localhost:3003' }, data: { email: 'admin-e2e@example.test', password: 'TestAccount#2026' },
-  });
-  expect(signIn.ok()).toBe(true);
+  const admin = await signInAdmin(playwright);
   const anonymousCookies = await page.context().cookies();
-  await page.context().addCookies((await admin.storageState()).cookies);
+  await page.context().addCookies(admin.cookies);
   await page.goto('/app/settings?section=providers');
   await page.getByRole('button', { name: 'Add provider', exact: true }).click();
   const services = page.getByRole('list', { name: 'Provider services' }).getByRole('button');
@@ -27,13 +24,11 @@ test('OpenRouter discovers models, gates instructions and layers user over provi
   await editor.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.context().clearCookies(); await page.context().addCookies(anonymousCookies);
   const name = `OpenRouter ${testInfo.project.name} ${testInfo.repeatEachIndex}`;
-  const created = await admin.post('/api/admin/providers', { data: {
+  const provider = await admin.createProvider({
     slug: `router-${testInfo.project.name}-${testInfo.repeatEachIndex}`, displayName: name, providerType: 'openrouter', defaultModel: 'fish-audio/s2.1-pro-free:free',
     defaultInstructions: 'Calm librarian',
     defaultModelOptions: '{"provider":{"options":{"fish-audio":{"temperature":0.4}}}}',
-  } });
-  expect(created.status()).toBe(201);
-  const { provider } = await created.json();
+  });
   try {
     await page.goto('/app/settings?section=api');
     await page.getByRole('button', { name: 'Provider', exact: true }).click();
@@ -80,6 +75,6 @@ test('OpenRouter discovers models, gates instructions and layers user over provi
     await expect(options).toHaveValue(/"temperature": 0.7/);
     await page.screenshot({ path: test.info().outputPath('openrouter.png') });
   } finally {
-    await admin.delete(`/api/admin/providers/${provider.id}`); await admin.dispose();
+    await admin.deleteProvider(provider.id);
   }
 });
