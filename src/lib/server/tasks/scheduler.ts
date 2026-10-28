@@ -37,14 +37,21 @@ export function startTaskScheduler(): void {
   if (started) return;
   started = true;
 
+  // Tasks run one at a time, so a tick can outlast the interval; skip the
+  // next tick rather than overlap it.
+  let ticking = false;
   const tick = async () => {
+    if (ticking) return;
+    ticking = true;
     try {
-      await runDueTasks();
+      await runDueTasks({ sequential: true });
     } catch (error) {
       serverLogger.warn(
         { event: 'tasks.scheduler.tick_failed', error: String(error) },
         'Task scheduler tick failed',
       );
+    } finally {
+      ticking = false;
     }
   };
 

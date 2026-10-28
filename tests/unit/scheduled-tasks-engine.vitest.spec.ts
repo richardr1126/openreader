@@ -68,6 +68,26 @@ beforeEach(() => {
 });
 
 describe('scheduled task engine', () => {
+  test('sequential mode claims every due task, then runs them one at a time', async () => {
+    const events: string[] = [];
+    const task = (key: string) => async () => {
+      events.push(`${key}:start`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      events.push(`${key}:end`);
+      return { summary: key };
+    };
+    const registry: TaskRegistry = {
+      a: { name: 'A', defaultIntervalMs: 1000, run: task('a') },
+      b: { name: 'B', defaultIntervalMs: 1000, run: task('b') },
+    };
+
+    await runDueTasks({ registry, sequential: true });
+
+    expect(events).toEqual(['a:start', 'a:end', 'b:start', 'b:end']);
+    const rows = await holder.db.select().from(tasks);
+    expect(rows.map((row) => row.lastStatus)).toEqual(['ok', 'ok']);
+  });
+
   test('runs a due task and records success + next run', async () => {
     const handler = vi.fn(async () => ({ summary: 'did 3 things' }));
     await seedRow({ nextRunAt: Date.now() - 1 });

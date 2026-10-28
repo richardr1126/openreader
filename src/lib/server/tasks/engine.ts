@@ -171,15 +171,19 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
  * Run every task that is due (interval elapsed or a manual run was requested),
  * claiming each first so concurrent ticks don't double-run. Safe to call from
  * any trigger: the self-host interval, a Vercel cron route, or a manual run.
+ *
+ * Every due task is claimed before any runs. `sequential` runs them one after
+ * another: on SQLite a task holding the transaction connection would otherwise
+ * stall the event loop for the busy timeout when another task writes.
  */
-export async function runDueTasks(options?: { registry?: TaskRegistry }): Promise<void> {
+export async function runDueTasks(options?: { registry?: TaskRegistry; sequential?: boolean }): Promise<void> {
   const registry = options?.registry ?? TASK_REGISTRY;
   await ensureTaskRows(registry);
 
   const now = Date.now();
   const rows = await db.select().from(scheduledTasks);
 
-  const executions: Promise<void>[] = [];
+  const claimed: Array<{ key: string; def: TaskDef; leaseOwner: string }> = [];
   for (const row of rows) {
     const def = registry[row.key];
     if (!def) continue; // orphaned row for a task no longer in the registry
@@ -190,10 +194,13 @@ export async function runDueTasks(options?: { registry?: TaskRegistry }): Promis
     if (!due) continue;
 
     const leaseOwner = await claimTask(row.key, now);
-    if (!leaseOwner) continue;
-    executions.push(executeTask(row.key, def, leaseOwner));
+    if (leaseOwner) claimed.push({ key: row.key, def, leaseOwner });
   }
-  await Promise.all(executions);
+  if (options?.sequential) {
+    for (const task of claimed) await executeTask(task.key, task.def, task.leaseOwner);
+    return;
+  }
+  await Promise.all(claimed.map((task) => executeTask(task.key, task.def, task.leaseOwner)));
 }
 
 /**
