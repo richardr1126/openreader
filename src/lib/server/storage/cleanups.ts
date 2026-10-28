@@ -74,11 +74,6 @@ async function settleRow(row: StorageCleanupRow): Promise<void> {
   ));
 }
 
-/** Drop a row queued for a delete that turned out to remove nothing. */
-export async function discardStorageCleanup(row: StorageCleanupRow): Promise<void> {
-  await settleRow(row);
-}
-
 /**
  * Run one queued cleanup. The row is dropped without a worker call when the
  * user owns the document (or the account exists) again, since its storage is

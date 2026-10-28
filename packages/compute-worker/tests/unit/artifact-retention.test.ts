@@ -45,4 +45,26 @@ describe('expireArtifactFoldersUnderRoot', () => {
       `${root}docx/ns/_default/fresh/metadata.json`,
     ]);
   });
+
+  test('keeps an object written into an expired folder between the passes', async () => {
+    const now = Date.now();
+    const root = 'p/account_exports_v1/';
+    const old = `${root}users/u/a/artifact.zip`;
+    const late = `${root}users/u/a/manifest.json`;
+    const modifiedAt = new Map([[old, now - 30 * DAY_MS]]);
+    let listings = 0;
+    const storage = {
+      async *listPrefixPages() {
+        listings += 1;
+        if (listings === 2) modifiedAt.set(late, now);
+        yield [...modifiedAt.entries()].map(([key, lastModifiedMs]) => ({ key, size: 1, lastModifiedMs }));
+      },
+      async deleteObject(key: string) { modifiedAt.delete(key); },
+    } as unknown as ArtifactStorage;
+
+    const result = await expireArtifactFoldersUnderRoot({ storage, root, maxAgeMs: DAY_MS, now });
+
+    expect(result).toEqual({ expiredArtifacts: 1, deletedObjects: 1 });
+    expect([...modifiedAt.keys()]).toEqual([late]);
+  });
 });

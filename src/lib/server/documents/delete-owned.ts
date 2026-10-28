@@ -2,11 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
-import {
-  discardStorageCleanup,
-  enqueueStorageCleanup,
-  runStorageCleanup,
-} from '@/lib/server/storage/cleanups';
+import { enqueueStorageCleanup, runStorageCleanup } from '@/lib/server/storage/cleanups';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 
@@ -44,10 +40,9 @@ export async function deleteOwnedDocument(input: {
       eq(documents.userId, input.userId),
     ))
     .returning();
-  if (!removed) {
-    if (queued) await discardStorageCleanup(queued);
-    return false;
-  }
+  // A delete that removed nothing leaves the queued row to the retry task: it
+  // may be an earlier delete's cleanup that has not succeeded yet.
+  if (!removed) return false;
 
   const cleanPlaybackCache = async () => {
     if (queued) {

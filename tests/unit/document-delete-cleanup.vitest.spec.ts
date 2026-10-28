@@ -14,7 +14,6 @@ const mocks = vi.hoisted(() => ({
       attempts: 0,
     };
   }),
-  discardStorageCleanup: vi.fn(async () => undefined),
   runStorageCleanup: vi.fn(async () => 'cleared' as const),
 }));
 
@@ -40,7 +39,6 @@ vi.mock('@openreader/database', () => ({
 
 vi.mock('@/lib/server/storage/cleanups', () => ({
   enqueueStorageCleanup: mocks.enqueueStorageCleanup,
-  discardStorageCleanup: mocks.discardStorageCleanup,
   runStorageCleanup: mocks.runStorageCleanup,
 }));
 
@@ -64,7 +62,6 @@ describe('owned document cleanup', () => {
     mocks.deleteDocumentTtsSegmentCache.mockReset();
     mocks.deleteDocumentTtsSegmentCache.mockResolvedValue(undefined);
     mocks.enqueueStorageCleanup.mockClear();
-    mocks.discardStorageCleanup.mockClear();
     mocks.runStorageCleanup.mockClear();
   });
 
@@ -86,7 +83,7 @@ describe('owned document cleanup', () => {
     expect(mocks.deleteDocumentTtsSegmentCache).not.toHaveBeenCalled();
   });
 
-  test('discards the queued cleanup and returns false when no row was owned', async () => {
+  test('leaves the queued cleanup to the retry task and returns false when no row was owned', async () => {
     mocks.deleteResults = [[]];
 
     await expect(deleteOwnedDocument({
@@ -95,7 +92,8 @@ describe('owned document cleanup', () => {
       namespace: null,
     })).resolves.toBe(false);
 
-    expect(mocks.discardStorageCleanup).toHaveBeenCalledWith(expect.objectContaining({ id: 'doc:user-1:doc-1' }));
+    // The row may be an earlier delete's pending cleanup, so it is not dropped.
+    expect(mocks.enqueueStorageCleanup).toHaveBeenCalledOnce();
     expect(mocks.runStorageCleanup).not.toHaveBeenCalled();
   });
 

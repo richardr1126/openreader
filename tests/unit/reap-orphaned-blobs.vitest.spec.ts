@@ -125,6 +125,18 @@ describe('reap-orphaned-blobs', () => {
     expect(result.reaped).toBe(1);
   });
 
+  test('keeps derived artifacts when preview rows cannot be deleted, so the next run retries', async () => {
+    mocks.list.mockResolvedValue([]);
+    mocks.listDerived.mockResolvedValue({ documentIds: ['derived-only'] });
+    mocks.deletePreviewRows.mockRejectedValueOnce(new Error('db unavailable'));
+
+    await expect(reapOrphanedBlobs(context())).rejects.toThrow('Failed to reap 1 orphaned blob(s)');
+
+    expect(mocks.clearPdfLayout).not.toHaveBeenCalled();
+    expect(mocks.clearPreviews).not.toHaveBeenCalled();
+    expect(mocks.clearPlans).not.toHaveBeenCalled();
+  });
+
   test('reaps nothing when every old blob still has an owner', async () => {
     const now = Date.now();
     mocks.list.mockResolvedValue([{ id: 'kept', lastModifiedMs: now - TWO_HOURS }]);

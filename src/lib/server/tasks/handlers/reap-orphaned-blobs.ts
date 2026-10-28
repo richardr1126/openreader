@@ -67,14 +67,15 @@ export async function reapOrphanedBlobs(context: TaskContext): Promise<TaskResul
           .limit(1);
         if (owner) continue;
 
+        // Preview rows go first and the source blob last: while the blob or a
+        // derived object exists the document stays a candidate, so a failure
+        // in any step is retried next run.
+        await deleteDocumentPreviewRows(documentId, null);
         await Promise.all([
           client.clearPdfLayoutArtifacts({ documentId, namespace: null }, { signal: context.signal }),
           client.clearDocumentPreviewArtifacts({ documentId, namespace: null }, { signal: context.signal }),
           client.clearTtsPlaybackPlans({ documentId }, { signal: context.signal }),
         ]);
-        // The source blob goes last: while it exists the document stays a
-        // candidate, so a failure in any earlier step is retried next run.
-        await deleteDocumentPreviewRows(documentId, null);
         if (blobIds.has(documentId)) await deleteDocumentBlob(documentId, null);
         reaped += 1;
       } catch (error) {
