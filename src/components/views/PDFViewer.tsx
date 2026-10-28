@@ -257,6 +257,17 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       return;
     }
 
+    // An image-only cover can be ready while narration starts on a later
+    // page. There is no highlight to paint on this surface, even when its
+    // extracted text is empty.
+    const activeLocator = currentSegment?.ownerLocator ?? null;
+    if (activeLocator?.readerType === 'pdf' && activeLocator.page !== currDocPage) {
+      clearHighlights();
+      clearWordHighlights();
+      commitSurfacePart(surfaceKey, 'highlight');
+      return;
+    }
+
     if (!currentSentence || !currentSegment || !currDocText) {
       sentenceHighlightSeqRef.current += 1;
       clearHighlights();
@@ -272,13 +283,6 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     const seq = ++sentenceHighlightSeqRef.current;
     const isLayoutChange = layoutKey !== lastSentenceLayoutKeyRef.current;
     lastSentenceLayoutKeyRef.current = layoutKey;
-    const activeLocator = currentSegment?.ownerLocator ?? null;
-    if (activeLocator?.readerType === 'pdf' && activeLocator.page !== currDocPage) {
-      clearHighlights();
-      clearWordHighlights();
-      commitSurfacePart(surfaceKey, 'highlight');
-      return;
-    }
     const hasParsedBlockLocator =
       !!parsedDocument
       && activeLocator?.readerType === 'pdf'

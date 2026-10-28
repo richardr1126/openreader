@@ -89,11 +89,23 @@ export function resolveDocumentAnchorSelectionOrdinal(input: {
     if (belongsToAnchor) return selected.ordinal;
   }
 
-  const firstIndex = resolveFirstPlanIndexForDocumentAnchor(
+  let firstIndex = resolveFirstPlanIndexForDocumentAnchor(
     input.plan,
     input.readerType,
     input.location,
   );
+  // A cover or an empty page has no segment of its own. Keep the visible
+  // page, but anchor narration at the next readable passage so opening the
+  // reader does not depend on a position having been saved already.
+  if (firstIndex < 0 && input.readerType === 'pdf') {
+    const page = pdfAnchorPage(input.location);
+    if (page !== null) {
+      firstIndex = input.plan.findIndex((segment) => {
+        const segmentPage = pdfLocatorPage(segment.ownerLocator);
+        return segmentPage !== null && segmentPage > page;
+      });
+    }
+  }
   return input.plan[firstIndex]?.ordinal ?? null;
 }
 

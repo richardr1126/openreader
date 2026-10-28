@@ -82,6 +82,27 @@ describe('playback plan selection', () => {
     })).toBe(9);
   });
 
+  test('selects the next readable PDF passage after a cover or an empty page', () => {
+    const plan = [
+      segment(0, { readerType: 'pdf', page: 3 }),
+      segment(1, { readerType: 'pdf', page: 3 }),
+      segment(2, { readerType: 'pdf', page: 5 }),
+    ];
+    const select = (location: number | string, selectedOrdinal: number | null = null) => (
+      resolveDocumentAnchorSelectionOrdinal({ plan, readerType: 'pdf', location, selectedOrdinal })
+    );
+
+    expect(select(1)).toBe(0);
+    expect(select(2)).toBe(0);
+    expect(select(3, 1)).toBe(1);
+    expect(select(4, 1)).toBe(2);
+    expect(select(6)).toBeNull();
+    expect(select('1')).toBeNull();
+    expect(resolveDocumentAnchorSelectionOrdinal({
+      plan: [], readerType: 'pdf', location: 1, selectedOrdinal: null,
+    })).toBeNull();
+  });
+
   test('treats the legacy HTML document root as an anchor for block-located plans', () => {
     const plan = [
       segment(8, { readerType: 'html', location: 'b-0000' }),

@@ -452,10 +452,13 @@ test('anonymous user controls playback across every accepted document journey', 
   await voicePanel.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(voicePanel).toBeHidden();
   await voiceButton.click();
+  // Keyboard input does not wait for the sliding panel's inert controls.
+  await expect(voicePanel).toBeInViewport({ ratio: 1 });
   await expect(modelSpeed).toHaveValue('1');
   await expect(pendingChanges).toBeHidden();
   await modelSpeed.focus();
   await modelSpeed.press('ArrowRight');
+  await expect(pendingChanges).toContainText('Speed 1x → 1.1x');
   await pendingChanges.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect(voiceButton).toHaveAttribute('aria-label', / · 1\.1x$/);
   const changedVoiceLabel = await voiceButton.getAttribute('aria-label');

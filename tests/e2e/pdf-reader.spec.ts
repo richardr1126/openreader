@@ -4,6 +4,49 @@ import { expect, test } from '@playwright/test';
 import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
+for (const showsLayout of [true, false]) {
+  test(`PDF with an image-only cover opens without a saved position in ${showsLayout ? 'layout' : 'text'} view`, async ({ page }) => {
+    test.setTimeout(75_000);
+    await enterAnonymousLibrary(page);
+    if (!showsLayout) {
+      await page.goto('/app/settings?section=reader');
+      await page.getByRole('switch', { name: 'Show the pages', exact: true }).click();
+      await page.getByRole('region', { name: 'Unsaved changes', exact: true })
+        .getByRole('button', { name: 'Save', exact: true }).click();
+      await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
+      await page.getByRole('link', { name: 'Close settings', exact: true }).click();
+    }
+    await uploadLibraryFiles(page, resolve('tests/files/cover-first.pdf'));
+    await page.getByRole('link', { name: 'cover-first.pdf', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole('progressbar', { name: 'Opening document', exact: true })).toBeHidden();
+    if (showsLayout) {
+      await expect(page.getByRole('region', { name: 'PDF page 1', exact: true })).toBeInViewport();
+      await expect(page.getByRole('button', { name: '1 / 3', exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Next page', exact: true }).click();
+    }
+    await expect(page.getByText('Reading begins after the illustrated cover.', { exact: true })).toBeVisible();
+
+    // The initial fallback must not override a cursor saved later in the book.
+    const position = page.getByRole('slider', { name: 'Playback position', exact: true });
+    const savedPosition = page.waitForResponse((response) => (
+      response.url().endsWith('/api/user/state/progress')
+      && response.request().method() === 'PUT'
+      && response.request().postDataJSON()?.segmentOrdinal > 0
+      && response.ok()
+    ));
+    await position.focus();
+    await position.press('End');
+    await position.press('Enter');
+    await expect(page.getByText('This is the final page of the document.', { exact: true })).toBeVisible();
+    await savedPosition;
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Play', exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(position).not.toHaveValue('0');
+    await expect(page.getByText('This is the final page of the document.', { exact: true })).toBeVisible();
+  });
+}
+
 test('anonymous user opens a PDF and reads its visible page content', async ({ page }) => {
   test.setTimeout(75_000);
   await enterAnonymousLibrary(page);
