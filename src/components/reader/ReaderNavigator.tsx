@@ -4,9 +4,9 @@ import { useRef, useState, type ReactNode } from 'react';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
 import { usePageTurnKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
-import { ChevronLeftIcon, ChevronRightIcon } from '@/components/icons/Icons';
+import { ChevronLeftIcon, ChevronRightIcon, CrosshairIcon, ReturnIcon } from '@/components/icons/Icons';
 import {
-  IconButton, Input, PopoverRoot, PopoverSurface, PopoverTrigger, Tooltip,
+  IconButton, Input, PopoverRoot, PopoverSurface, PopoverTrigger, Tooltip, cn,
 } from '@/components/ui';
 
 const pillStepButton = 'h-6 w-6 rounded-full';
@@ -14,18 +14,23 @@ const pillStepButton = 'h-6 w-6 rounded-full';
 export function ReaderFollowControls() {
   const { followingNarration, setFollowingNarration, returnToNarration } = useTTS();
   return (
-    <div className="flex items-center gap-1 border-l border-line-soft px-1">
-      <button type="button" aria-pressed={followingNarration}
-        onClick={() => setFollowingNarration(!followingNarration)}
-        className="whitespace-nowrap rounded-full px-2 py-1 text-xs hover:bg-accent-wash aria-pressed:text-accent">
-        Follow narration
-      </button>
+    <div className="flex items-center gap-0.5 border-l border-line-soft pl-0.5">
+      <Tooltip label="Follow narration" side="top">
+        <IconButton
+          aria-label="Follow narration"
+          aria-pressed={followingNarration}
+          onClick={() => setFollowingNarration(!followingNarration)}
+          size="sm"
+          className={cn(pillStepButton, 'aria-pressed:bg-accent-wash aria-pressed:text-accent')}
+        >
+          <CrosshairIcon aria-hidden="true" className="h-3.5 w-3.5" />
+        </IconButton>
+      </Tooltip>
       {!followingNarration && (
         <Tooltip label="Return to narration" side="top">
-          <button type="button" aria-label="Return to narration" onClick={returnToNarration}
-            className="rounded-full px-2 py-1 text-xs text-accent hover:bg-accent-wash">
-            <span aria-hidden="true">↩</span>
-          </button>
+          <IconButton aria-label="Return to narration" onClick={returnToNarration} size="sm" className={pillStepButton}>
+            <ReturnIcon aria-hidden="true" className="h-3.5 w-3.5" />
+          </IconButton>
         </Tooltip>
       )}
     </div>

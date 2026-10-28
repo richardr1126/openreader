@@ -1091,3 +1091,22 @@ export function TextCursorIcon(props: React.SVGProps<SVGSVGElement>) {
     </OutlineIcon>
   );
 }
+
+export function CrosshairIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <circle cx="12" cy="12" r="6.5" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" />
+    </OutlineIcon>
+  );
+}
+
+export function ReturnIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <path d="M9 6 4.5 10.5 9 15" />
+      <path d="M4.5 10.5h10a5 5 0 0 1 0 10H12" />
+    </OutlineIcon>
+  );
+}
