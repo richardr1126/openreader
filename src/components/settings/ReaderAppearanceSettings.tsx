@@ -9,9 +9,8 @@ import styles from './ReaderAppearanceSettings.module.css';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { ReaderPresentationControls } from './ReaderPresentationControls';
-import { getHighlightVisibility, resolveReaderPresentation, type HighlightVisibility } from '@/lib/shared/reader-presentation';
+import { appHighlightLayers, getHighlightVisibility, resolveReaderPresentation, setAppHighlightLayers, type HighlightVisibility } from '@/lib/shared/reader-presentation';
 import type { ReaderPresentation } from '@/lib/shared/reader-presentation';
-import type { ReaderType } from '@/types/user-state';
 import {
   DEFAULT_TYPOGRAPHY, DEFAULT_HIGHLIGHT_APPEARANCE, HIGHLIGHT_PRESETS, TYPOGRAPHY_RANGES,
   normalizeTypography, normalizeHighlightAppearance, type ReaderTypography, type HighlightAppearance,
@@ -153,17 +152,13 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
     ...normalizeTypography({ ...config.readerTypography, ...ownTypography }),
     ...normalizeHighlightAppearance({ ...config.highlightAppearance, ...ownHighlights }),
   };
-  const [highlightFormat, setHighlightFormat] = useState<ReaderType>('pdf');
-  const format = scope === 'book' ? readerType : highlightFormat;
-  const prefix = format === 'pdf' ? 'pdf' : format === 'epub' ? 'epub' : 'html';
   const visibility = pending.highlightVisibility ?? getHighlightVisibility(config);
-  const presentation = resolveReaderPresentation({ ...config, ...visibility }, format, scope === 'book' ? pending.presentation : undefined);
+  const presentation = scope === 'book'
+    ? resolveReaderPresentation(config, readerType, pending.presentation)
+    : { ...resolveReaderPresentation(config, readerType), ...appHighlightLayers(visibility) };
   const changePresentation = (patch: Partial<ReaderPresentation>) => {
     if (scope === 'book') setPending({ ...pending, presentation: { ...pending.presentation, ...patch } });
-    else setPending({ ...pending, highlightVisibility: { ...visibility,
-      ...(patch.highlightSegment === undefined ? {} : { [`${prefix}HighlightEnabled`]: patch.highlightSegment }),
-      ...(patch.highlightWords === undefined ? {} : { [`${prefix}WordHighlightEnabled`]: patch.highlightWords }),
-    } });
+    else setPending({ ...pending, highlightVisibility: setAppHighlightLayers(visibility, patch) });
   };
   const resetPresentation = (key: keyof ReaderPresentation) => {
     const next = { ...pending.presentation }; delete next[key]; setPending({ ...pending, presentation: next });
@@ -197,13 +192,13 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
   const typographyChanged = scope === 'book' ? Object.keys(ownTypography).length > 0 : JSON.stringify(ownTypography) !== JSON.stringify(DEFAULT_TYPOGRAPHY);
   const highlightsChanged = scope === 'book'
     ? Object.keys(ownHighlights).length > 0 || pending.presentation?.highlightSegment !== undefined || pending.presentation?.highlightWords !== undefined
-    : JSON.stringify(ownHighlights) !== JSON.stringify(DEFAULT_HIGHLIGHT_APPEARANCE) || !presentation.highlightSegment || !presentation.highlightWords;
+    : JSON.stringify(ownHighlights) !== JSON.stringify(DEFAULT_HIGHLIGHT_APPEARANCE) || Object.values(visibility).some(shown => !shown);
   const resetHighlights = () => {
     if (scope === 'book') {
       const next = { ...pending.presentation }; delete next.highlightSegment; delete next.highlightWords;
       setPending({ ...pending, highlightAppearance: {}, presentation: next });
     } else setPending({ ...pending, highlightAppearance: DEFAULT_HIGHLIGHT_APPEARANCE,
-      highlightVisibility: { ...visibility, [`${prefix}HighlightEnabled`]: true, [`${prefix}WordHighlightEnabled`]: true } });
+      highlightVisibility: setAppHighlightLayers(visibility, { highlightSegment: true, highlightWords: true }) });
   };
   const change = (kind: 'typography' | 'highlightAppearance', patch: Partial<Values>) => {
     setPending({ ...pending, [kind]: { ...pending[kind], ...patch } });
@@ -272,9 +267,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
     </Section>}
     <Section title="Highlight appearance" variant="group" action={highlightsChanged &&
       <ResetIcon label={scope === 'book' ? 'Use global highlights' : 'Reset highlight appearance'} onClick={resetHighlights} />}>
-      {scope === 'global' && <SegmentedControl ariaLabel="Highlight document format" value={highlightFormat} onChange={setHighlightFormat}
-        options={[{ value: 'pdf', label: 'PDF' }, { value: 'epub', label: 'EPUB' }, { value: 'html', label: 'Text' }]} className="grid-cols-3" />}
-      <ReaderPresentationControls highlights readerType={format} value={presentation} overrides={scope === 'book' ? pending.presentation : undefined}
+      <ReaderPresentationControls highlights readerType={readerType} value={presentation} overrides={scope === 'book' ? pending.presentation : undefined}
         onChange={changePresentation} onReset={resetPresentation} />
       <div><p aria-label="Highlight preview" className="rounded-md px-3 py-2 text-sm text-foreground" style={{ backgroundColor: presentation.highlightSegment ? highlightBackground(draft, 'segment') : undefined }}>Read at your own pace, <span className="rounded-sm" style={{ backgroundColor: presentation.highlightWords ? highlightBackground(draft, 'word') : undefined }}>word</span> by word.</p></div>
       <Row label="Preset" wide>

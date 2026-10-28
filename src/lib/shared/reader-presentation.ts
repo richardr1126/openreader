@@ -18,6 +18,27 @@ export function getHighlightVisibility(config: HighlightVisibility): HighlightVi
   };
 }
 
+type HighlightLayers = Pick<ReaderPresentation, 'highlightSegment' | 'highlightWords'>;
+const HIGHLIGHT_FORMATS = ['pdf', 'epub', 'html'] as const;
+
+/** The app default shows a layer while any format shows it. */
+export function appHighlightLayers(visibility: HighlightVisibility): HighlightLayers {
+  return {
+    highlightSegment: HIGHLIGHT_FORMATS.some(format => visibility[`${format}HighlightEnabled`]),
+    highlightWords: HIGHLIGHT_FORMATS.some(format => visibility[`${format}WordHighlightEnabled`]),
+  };
+}
+
+/** Changing an app default layer sets it for every format. */
+export function setAppHighlightLayers(visibility: HighlightVisibility, patch: Partial<HighlightLayers>): HighlightVisibility {
+  const next = { ...visibility };
+  for (const format of HIGHLIGHT_FORMATS) {
+    if (patch.highlightSegment !== undefined) next[`${format}HighlightEnabled`] = patch.highlightSegment;
+    if (patch.highlightWords !== undefined) next[`${format}WordHighlightEnabled`] = patch.highlightWords;
+  }
+  return next;
+}
+
 export function normalizeReaderPresentationOverride(value: unknown): Partial<ReaderPresentation> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const record = value as Record<string, unknown>;
