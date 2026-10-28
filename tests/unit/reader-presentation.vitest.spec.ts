@@ -29,6 +29,8 @@ describe('reader defaults and book inheritance', () => {
     const mixed = getHighlightVisibility({ ...getAppConfigDefaults(), pdfHighlightEnabled: false, pdfWordHighlightEnabled: false,
       epubWordHighlightEnabled: false, htmlWordHighlightEnabled: false });
     expect(appHighlightLayers(mixed)).toEqual({ highlightSegment: true, highlightWords: false });
+    expect(appHighlightLayers(getHighlightVisibility({ ...getAppConfigDefaults(), pdfWordHighlightEnabled: false,
+      htmlWordHighlightEnabled: false }))).toEqual({ highlightSegment: true, highlightWords: true });
     const words = setAppHighlightLayers(mixed, { highlightWords: true });
     expect(words).toEqual({ ...mixed, pdfWordHighlightEnabled: true, epubWordHighlightEnabled: true, htmlWordHighlightEnabled: true });
     expect(setAppHighlightLayers(words, { highlightSegment: false })).toMatchObject({
