@@ -1,16 +1,12 @@
 import { expect, test } from '@playwright/test';
+import { signInAdmin } from './support/admin';
 import { enterAnonymousLibrary } from './support/onboarding';
 
 test('Fish Audio offers named voices for every model and preserves voice references', async ({ page, playwright }, testInfo) => {
   await enterAnonymousLibrary(page);
-  const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
-  const signIn = await admin.post('/api/auth/sign-in/email', {
-    headers: { Origin: 'http://localhost:3003' },
-    data: { email: 'admin-e2e@example.test', password: 'TestAccount#2026' },
-  });
-  expect(signIn.ok()).toBe(true);
+  const admin = await signInAdmin(playwright);
   const anonymousCookies = await page.context().cookies();
-  await page.context().addCookies((await admin.storageState()).cookies);
+  await page.context().addCookies(admin.cookies);
   await page.goto('/app/settings?section=providers');
   await page.getByRole('button', { name: 'Add provider', exact: true }).click();
   await page.getByRole('button', { name: /Fish Audio S2/ }).click();
@@ -23,12 +19,10 @@ test('Fish Audio offers named voices for every model and preserves voice referen
   await page.context().clearCookies();
   await page.context().addCookies(anonymousCookies);
   const name = `Fish Audio ${testInfo.project.name}`;
-  const created = await admin.post('/api/admin/providers', { data: {
+  const provider = await admin.createProvider({
     slug: `fish-${testInfo.project.name}`, displayName: name, providerType: 'fish-audio',
     defaultModel: 's2.1-pro-free',
-  } });
-  expect(created.status()).toBe(201);
-  const { provider } = await created.json();
+  });
   try {
     await page.goto('/app/settings?section=api');
     await page.getByRole('button', { name: 'Provider', exact: true }).click();
@@ -72,7 +66,6 @@ test('Fish Audio offers named voices for every model and preserves voice referen
     await expect(page.getByRole('textbox', { name: 'Voice instructions', exact: true })).toHaveValue('Warm, calm narration');
     await page.screenshot({ path: test.info().outputPath('fish-audio.png') });
   } finally {
-    await admin.delete(`/api/admin/providers/${provider.id}`);
-    await admin.dispose();
+    await admin.deleteProvider(provider.id);
   }
 });

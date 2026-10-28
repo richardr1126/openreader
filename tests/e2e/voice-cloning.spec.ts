@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { pcmToWav } from '@openreader/tts/openrouter';
 import { resolve } from 'node:path';
+import { signInAdmin } from './support/admin';
 import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
@@ -8,14 +9,10 @@ for (const providerType of ['fish-audio', 'openrouter'] as const) {
 test(`${providerType} personal voices require sample permission and persist through selection, rename and removal`, async ({ page, playwright }, testInfo) => {
   test.setTimeout(90_000);
   await enterAnonymousLibrary(page);
-  const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
-  expect((await admin.post('/api/auth/sign-in/email', { headers: { Origin: 'http://localhost:3003' },
-    data: { email: 'admin-e2e@example.test', password: 'TestAccount#2026' } })).ok()).toBe(true);
+  const admin = await signInAdmin(playwright);
   const providerName = `Cloning ${providerType} ${testInfo.project.name}`;
-  const created = await admin.post('/api/admin/providers', { data: { slug: `cloning-${providerType}-${testInfo.project.name}`,
-    displayName: providerName, providerType, defaultModel: providerType === 'fish-audio' ? 's2.1-pro-free' : 'fish-audio/s2.1-pro-free:free', apiKey: 'cloning-test-placeholder' } });
-  expect(created.status()).toBe(201);
-  const { provider } = await created.json();
+  const provider = await admin.createProvider({ slug: `cloning-${providerType}-${testInfo.project.name}`,
+    displayName: providerName, providerType, defaultModel: providerType === 'fish-audio' ? 's2.1-pro-free' : 'fish-audio/s2.1-pro-free:free', apiKey: 'cloning-test-placeholder' });
   try {
     if (providerType === 'fish-audio') {
       // Legacy/inherited drafts can carry a model from the previous provider.
@@ -97,6 +94,6 @@ test(`${providerType} personal voices require sample permission and persist thro
     await page.reload();
     await expect(page.getByRole('button', { name: 'Renamed narrator', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Create your own voice', exact: true })).toBeVisible();
-  } finally { await admin.delete(`/api/admin/providers/${provider.id}`); await admin.dispose(); }
+  } finally { await admin.deleteProvider(provider.id); }
 });
 }

@@ -1,5 +1,6 @@
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { signInAdmin } from './support/admin';
 import { enterAnonymousLibrary } from './support/onboarding';
 import { uploadLibraryFiles } from './support/upload';
 
@@ -7,19 +8,12 @@ test('Kokoro warnings follow the document across the player, settings, export, a
   test.setTimeout(90_000);
   // Compatible Kokoro's fallback voice catalogue is static and multilingual. Reading
   // needs no provider key; this journey never requests generation or previews.
-  const admin = await playwright.request.newContext({ baseURL: 'http://localhost:3003' });
-  const signIn = await admin.post('/api/auth/sign-in/email', {
-    headers: { Origin: 'http://localhost:3003' },
-    data: { email: 'admin-e2e@example.test', password: 'TestAccount#2026' },
-  });
-  expect(signIn.ok()).toBe(true);
+  const admin = await signInAdmin(playwright);
   const providerName = `Kokoro language check ${testInfo.project.name}`;
-  const created = await admin.post('/api/admin/providers', { data: {
+  const provider = await admin.createProvider({
     slug: `language-check-${testInfo.project.name}`, displayName: providerName,
     providerType: 'custom-openai', defaultModel: 'kokoro',
-  } });
-  expect(created.status()).toBe(201);
-  const { provider } = await created.json();
+  });
   try {
     await enterAnonymousLibrary(page);
     await page.goto('/app/settings?section=api');
@@ -49,7 +43,9 @@ test('Kokoro warnings follow the document across the player, settings, export, a
     await page.getByRole('button', { name: /^Voice: / }).click();
     const voices = page.getByRole('dialog', { name: 'Voice', exact: true });
     await expect(voices.getByText(mismatch, { exact: true })).toBeVisible();
-    await voices.getByRole('button', { name: 'ff_siwis', exact: true }).click();
+    const frenchVoice = voices.getByRole('button', { name: 'ff_siwis', exact: true });
+    await frenchVoice.click();
+    await expect(frenchVoice).toHaveAttribute('aria-pressed', 'true');
     await expect(voices.getByText(mismatch, { exact: true })).toHaveCount(0);
     // A draft does not change the applied voice or its warning until Apply.
     await expect(warning).toBeVisible();
@@ -65,8 +61,7 @@ test('Kokoro warnings follow the document across the player, settings, export, a
       .getByRole('button', { name: 'Change and regenerate', exact: true }).click();
     await expect(settings.getByText("Kokoro's built-in voice catalog does not include Turkish. Choose another model.", { exact: true })).toBeVisible();
   } finally {
-    await admin.delete(`/api/admin/providers/${provider.id}`);
-    await admin.dispose();
+    await admin.deleteProvider(provider.id);
   }
 });
 
