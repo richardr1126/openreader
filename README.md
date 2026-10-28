@@ -53,6 +53,7 @@ Want to self-host for several people instead? **Get started in the [docs](https:
 | Install the desktop app | [Download](https://openreader.richardr.dev/download) · [Desktop App docs](https://docs.openreader.richardr.dev/desktop-app) |
 | Run with Docker Compose | [Docker Compose](https://docs.openreader.richardr.dev/deploy/docker-compose) |
 | Deploy on Vercel | [Vercel Deployment](https://docs.openreader.richardr.dev/deploy/vercel-deployment) |
+| Deploy on RepoCloud | [One-click template](https://repocloud.io/details/OpenReader/) |
 | Deploy external compute worker | [Compute Worker (NATS JetStream)](https://docs.openreader.richardr.dev/deploy/compute-worker) |
 | Develop locally | [Local Development](https://docs.openreader.richardr.dev/deploy/local-development) |
 | Configure auth | [Auth](https://docs.openreader.richardr.dev/configure/auth) |
