@@ -3,7 +3,7 @@ import { hashOpKey } from '../../infrastructure/nats-adapters';
 import type { AccountExportArtifactMetadata, WorkerOperationRequest } from '../../operations/contracts';
 import { buildAccountExportOperationKey } from '../../operations/keys';
 import { accountExportMetadataArtifactKey } from '../../storage/artifact-addressing';
-import { expireExportArtifactsUnderRoot } from '../../storage/export-retention';
+import { expireArtifactFoldersUnderRoot } from '../../storage/artifact-retention';
 import { toComputeOperation } from '../compute-operation';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
@@ -12,7 +12,7 @@ import {
   accountExportResolveSchema,
   apiErrorResponseSchema,
   computeOperationSchema,
-  exportRetentionSchema,
+  artifactRetentionSchema,
   jsonSchema,
 } from '../schemas';
 
@@ -99,7 +99,7 @@ export function registerAccountExportRoutes(context: ComputeWorkerRouteContext):
 export function registerAccountExportRetentionRoute(context: ComputeWorkerRouteContext): void {
   const { app } = context;
   const retentionRouteSchema = {
-    body: jsonSchema(exportRetentionSchema),
+    body: jsonSchema(artifactRetentionSchema),
     response: {
       200: {
         type: 'object',
@@ -110,14 +110,14 @@ export function registerAccountExportRetentionRoute(context: ComputeWorkerRouteC
     },
   };
   const retentionHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-    const parsed = exportRetentionSchema.safeParse(request.body);
+    const parsed = artifactRetentionSchema.safeParse(request.body);
     if (!parsed.success) {
       reply.code(400);
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
-    return expireExportArtifactsUnderRoot({
+    return expireArtifactFoldersUnderRoot({
       storage: context.storage,
-      exportRoot: `${context.s3Prefix}/account_exports_v1/`,
+      root: `${context.s3Prefix}/account_exports_v1/`,
       maxAgeMs: parsed.data.maxAgeMs,
     });
   };

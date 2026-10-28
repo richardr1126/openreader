@@ -218,6 +218,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       listPrefixPages: async function* () {
         yield await storageDisabled();
       },
+      listChildPrefixes: storageDisabled,
       putObject: storageDisabled,
       putFile: storageDisabled,
       putParsedPdf: storageDisabled,

@@ -26,7 +26,7 @@ async function ensureTaskRows(registry: TaskRegistry = TASK_REGISTRY): Promise<v
       .insert(scheduledTasks)
       .values({
         key,
-        enabled: true,
+        enabled: def.defaultEnabled ?? true,
         intervalMs: def.defaultIntervalMs,
         lastStatus: 'idle',
         nextRunAt: now,
@@ -63,12 +63,39 @@ async function claimTask(key: string, now: number): Promise<string | null> {
   return claimed[0]?.leaseOwner === leaseOwner ? leaseOwner : null;
 }
 
+// `last_result_json` holds the plain summary, or `{summary, cursor}` while a
+// bounded task has more to do.
+function encodeStoredResult(summary: string | null, cursor: string | null): string | null {
+  return cursor === null ? summary : JSON.stringify({ summary, cursor });
+}
+
+function decodeStoredResult(raw: string | null | undefined): { summary: string | null; cursor: string | null } {
+  if (!raw) return { summary: null, cursor: null };
+  if (raw.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(raw) as { summary?: unknown; cursor?: unknown };
+      if (typeof parsed.cursor === 'string') {
+        return { summary: typeof parsed.summary === 'string' ? parsed.summary : null, cursor: parsed.cursor };
+      }
+    } catch {
+      // A plain summary that happens to start with a brace.
+    }
+  }
+  return { summary: raw, cursor: null };
+}
+
+async function readTaskCursor(key: string): Promise<string | null> {
+  const [row] = await db.select({ lastResultJson: scheduledTasks.lastResultJson })
+    .from(scheduledTasks).where(eq(scheduledTasks.key, key)).limit(1);
+  return decodeStoredResult(row?.lastResultJson).cursor;
+}
+
 async function finishTask(
   key: string,
   leaseOwner: string,
   outcome:
-    | { status: 'ok'; startedAt: number; summary: string | null }
-    | { status: 'error'; startedAt: number; error: unknown },
+    | { status: 'ok'; startedAt: number; summary: string | null; cursor: string | null; disable: boolean }
+    | { status: 'error'; startedAt: number; error: unknown; cursor: string | null },
 ): Promise<void> {
   const now = Date.now();
   await db
@@ -78,7 +105,9 @@ async function finishTask(
       lastRunAt: now,
       lastDurationMs: now - outcome.startedAt,
       lastError: outcome.status === 'error' ? String(outcome.error) : null,
-      lastResultJson: outcome.status === 'ok' && outcome.summary ? outcome.summary : null,
+      // A failed run keeps the cursor it started from so progress is not lost.
+      lastResultJson: encodeStoredResult(outcome.status === 'ok' ? outcome.summary : null, outcome.cursor),
+      ...(outcome.status === 'ok' && outcome.disable ? { enabled: false } : {}),
       // Schedule the next run off the row's (possibly user-edited) interval.
       nextRunAt: sql`${now} + ${scheduledTasks.intervalMs}`,
       leaseOwner: null,
@@ -99,9 +128,11 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
   const startedAt = Date.now();
   const maxRunMs = def.maxRunMs ?? DEFAULT_TASK_MAX_RUN_MS;
   const controller = new AbortController();
+  const cursor = await readTaskCursor(key);
   const context: TaskContext = {
     signal: controller.signal,
     deadlineAt: startedAt + maxRunMs,
+    cursor,
   };
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -116,7 +147,13 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
       }),
     ]);
     const summary = result && typeof result.summary === 'string' ? result.summary : null;
-    await finishTask(key, leaseOwner, { status: 'ok', startedAt, summary });
+    await finishTask(key, leaseOwner, {
+      status: 'ok',
+      startedAt,
+      summary,
+      cursor: result && typeof result.cursor === 'string' ? result.cursor : null,
+      disable: result?.disableTask === true,
+    });
   } catch (error) {
     logDegraded(serverLogger, {
       event: 'tasks.run.failed',
@@ -124,7 +161,7 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
       step: key,
       error,
     });
-    await finishTask(key, leaseOwner, { status: 'error', startedAt, error });
+    await finishTask(key, leaseOwner, { status: 'error', startedAt, error, cursor });
   } finally {
     if (timeout) clearTimeout(timeout);
   }
@@ -191,7 +228,7 @@ export async function updateTask(
     .insert(scheduledTasks)
     .values({
       key,
-      enabled: typeof set.enabled === 'boolean' ? set.enabled : true,
+      enabled: typeof set.enabled === 'boolean' ? set.enabled : def.defaultEnabled ?? true,
       intervalMs: typeof set.intervalMs === 'number' ? set.intervalMs : def.defaultIntervalMs,
       lastStatus: 'idle',
       nextRunAt: now,
@@ -237,7 +274,7 @@ export async function listTasks(registry: TaskRegistry = TASK_REGISTRY): Promise
       lastRunAt: row?.lastRunAt != null ? Number(row.lastRunAt) : null,
       lastDurationMs: row?.lastDurationMs != null ? Number(row.lastDurationMs) : null,
       lastError: row?.lastError ?? null,
-      lastResult: row?.lastResultJson ?? null,
+      lastResult: decodeStoredResult(row?.lastResultJson).summary,
       nextRunAt: row?.nextRunAt != null ? Number(row.nextRunAt) : null,
       running: row?.lastStatus === 'running',
     };

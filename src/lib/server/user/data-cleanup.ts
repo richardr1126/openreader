@@ -20,6 +20,9 @@ import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/c
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 import { deriveComputeScopeKey } from '@/lib/server/compute-limits/policy';
+import { enqueueStorageCleanup } from '@/lib/server/storage/cleanups';
+
+const ACCOUNT_CLEANUP_SECOND_PASS_DELAY_MS = 15 * 60 * 1000;
 
 export async function deleteUserStorageData(
   userId: string,
@@ -99,6 +102,17 @@ export async function deleteUserStorageData(
   // Namespaced cleanup is a storage-only pass; database rows are global and are
   // only removed on the canonical (non-namespaced) pass.
   if (namespace === null) {
+    // A playback job that was mid-write can land an object after the sweep
+    // above. A delayed second pass clears it once the account row is gone; if
+    // the delete is abandoned the queued row sees the user and drops itself.
+    if (s3Enabled) {
+      await enqueueStorageCleanup({
+        userId,
+        documentId: null,
+        notBeforeMs: Date.now() + ACCOUNT_CLEANUP_SECOND_PASS_DELAY_MS,
+      });
+    }
+
     await database.delete(computeLimitBuckets).where(and(
       eq(computeLimitBuckets.scopeType, 'user'),
       eq(computeLimitBuckets.scopeKey, deriveComputeScopeKey('user', userId)),

@@ -3,6 +3,9 @@ import { reapOrphanedBlobs } from './handlers/reap-orphaned-blobs';
 import { cleanupTempUploads } from './handlers/cleanup-temp-uploads';
 import { expireExportArtifacts } from './handlers/expire-export-artifacts';
 import { pruneComputeLimits } from './handlers/prune-compute-limits';
+import { retryStorageCleanups } from './handlers/retry-storage-cleanups';
+import { expireAnonymousUsers } from './handlers/expire-anonymous-users';
+import { scanOrphanedStorage } from './handlers/scan-orphaned-storage';
 
 /**
  * The catalog of scheduled tasks. Each key is the stable task id stored in the
@@ -19,7 +22,7 @@ export const TASK_REGISTRY: TaskRegistry = {
   },
   'cleanup-temp-uploads': {
     name: 'Clean up expired uploads',
-    description: 'Remove temporary upload objects past their TTL.',
+    description: 'Remove temporary uploads and DOCX conversions past their TTL.',
     defaultIntervalMs: 60 * 60 * 1000,
     maxRunMs: 45_000,
     run: cleanupTempUploads,
@@ -37,5 +40,28 @@ export const TASK_REGISTRY: TaskRegistry = {
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     maxRunMs: 30_000,
     run: pruneComputeLimits,
+  },
+  'retry-storage-cleanups': {
+    name: 'Retry storage cleanup',
+    description: 'Delete audio and exports left by deleted documents and accounts, including retries and the delayed second pass.',
+    defaultIntervalMs: 15 * 60 * 1000,
+    maxRunMs: 45_000,
+    run: retryStorageCleanups,
+  },
+  'expire-anonymous-users': {
+    name: 'Delete idle guest accounts',
+    description: 'Delete guest accounts and their data after the idle period set under Guest sessions.',
+    defaultIntervalMs: 24 * 60 * 60 * 1000,
+    defaultEnabled: false,
+    maxRunMs: 45_000,
+    run: expireAnonymousUsers,
+  },
+  // ONE-TIME: disables itself after a complete pass. Remove with its handler.
+  'scan-orphaned-storage': {
+    name: 'Find leftover storage',
+    description: 'One-time scan that queues cleanup for audio and exports left by earlier deletes.',
+    defaultIntervalMs: 10 * 60 * 1000,
+    maxRunMs: 45_000,
+    run: scanOrphanedStorage,
   },
 };

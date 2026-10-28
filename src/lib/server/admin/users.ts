@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, like, max, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, like, lt, max, notExists, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { runInDbTransaction } from '@openreader/database/run-in-transaction';
 import { computeLimitEvents, documents } from '@openreader/database/schema';
@@ -339,8 +339,13 @@ export async function deleteManagedUser(input: {
  * sessions — all inside one locked transaction. Idempotent: re-marking an
  * already-marked account skips the guard so a resumed deletion can proceed.
  */
-async function requestUserDeletion(targetUserId: string): Promise<void> {
-  await withAdminMutationLock(async (conn) => {
+async function requestUserDeletion(targetUserId: string, onlyIf?: SQL): Promise<boolean> {
+  return withAdminMutationLock(async (conn) => {
+    if (onlyIf) {
+      const [eligible] = await conn.select({ id: user.id }).from(user)
+        .where(and(eq(user.id, targetUserId), onlyIf)).limit(1);
+      if (!eligible) return false;
+    }
     const target = await getTargetUser(targetUserId, conn);
     if (!target) throw new AdminUserManagementError('User not found.', 404);
     if (target.deletionRequestedAt === null && target.isAdmin) {
@@ -350,6 +355,7 @@ async function requestUserDeletion(targetUserId: string): Promise<void> {
       .set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
       .where(eq(user.id, target.id));
     await conn.delete(session).where(eq(session.userId, target.id));
+    return true;
   });
 }
 
@@ -361,6 +367,39 @@ async function requestUserDeletion(targetUserId: string): Promise<void> {
 async function finalizeUserDeletion(targetUserId: string): Promise<void> {
   await deleteUserStorageData(targetUserId, null);
   await database.delete(user).where(eq(user.id, targetUserId));
+}
+
+// A guest is idle when neither the account nor any of its sessions has been
+// touched since `idleBefore`.
+function idleAnonymousUserCondition(idleBefore: Date) {
+  return and(
+    eq(user.isAnonymous, true),
+    isNull(user.deletionRequestedAt),
+    lt(user.updatedAt, idleBefore),
+    notExists(database.select({ id: session.id }).from(session).where(and(
+      eq(session.userId, user.id),
+      gte(session.updatedAt, idleBefore),
+    ))),
+  );
+}
+
+export async function listIdleAnonymousUserIds(idleBefore: Date, limit: number): Promise<string[]> {
+  const rows = await database.select({ id: user.id }).from(user)
+    .where(idleAnonymousUserCondition(idleBefore))
+    .orderBy(asc(user.updatedAt))
+    .limit(limit) as Array<{ id: string }>;
+  return rows.map((row) => String(row.id));
+}
+
+/**
+ * Delete one guest account through the same two-phase path as an admin delete.
+ * Idleness is re-checked under the mutation lock, so a guest who just returned
+ * is kept; once marked, its sessions are gone and it cannot return mid-delete.
+ */
+export async function deleteIdleAnonymousUser(targetUserId: string, idleBefore: Date): Promise<boolean> {
+  if (!await requestUserDeletion(targetUserId, idleAnonymousUserCondition(idleBefore))) return false;
+  await finalizeUserDeletion(targetUserId);
+  return true;
 }
 
 /**

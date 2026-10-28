@@ -7437,6 +7437,33 @@
         }
       }
     },
+    "/v1/document-derived/ids": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "documentIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "documentIds"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/tts-playback/plans/clear": {
       "post": {
         "requestBody": {
@@ -7557,6 +7584,180 @@
                   "required": [
                     "deletedObjects",
                     "deletedDocumentArtifacts"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/user-storage/scopes": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "root": {
+                    "type": "string",
+                    "enum": [
+                      "playback-audio",
+                      "playback-exports",
+                      "playback-sidecars",
+                      "account-exports",
+                      "cloned-voices"
+                    ]
+                  },
+                  "startAfter": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024,
+                    "nullable": true
+                  },
+                  "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 200
+                  }
+                },
+                "required": [
+                  "root",
+                  "startAfter",
+                  "limit"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "user": {
+                            "type": "string"
+                          },
+                          "documentIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "user",
+                          "documentIds"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "nextStartAfter": {
+                      "type": "string",
+                      "nullable": true
+                    }
+                  },
+                  "required": [
+                    "users",
+                    "nextStartAfter"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/user-storage/sidecars/clear": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "storageUserHash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "storageUserHash"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "deletedObjects": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "deletedObjects"
                   ]
                 }
               }
@@ -18023,6 +18224,74 @@
                     "operation"
                   ],
                   "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/document-conversions/expire": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "maxAgeMs": {
+                    "type": "integer",
+                    "minimum": 3600000,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "maxAgeMs"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expiredArtifacts": {
+                      "type": "number"
+                    },
+                    "deletedObjects": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "expiredArtifacts",
+                    "deletedObjects"
+                  ]
                 }
               }
             }

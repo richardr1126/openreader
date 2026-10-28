@@ -2,16 +2,27 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
+import {
+  discardStorageCleanup,
+  enqueueStorageCleanup,
+  runStorageCleanup,
+} from '@/lib/server/storage/cleanups';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
+
+// The inline run normally settles the queued row; the retry task only takes it
+// over after this delay, so it never sees the document before the delete lands.
+const QUEUED_CLEANUP_RETRY_DELAY_MS = 5 * 60 * 1000;
 
 /**
  * Remove a user's ownership of a document.
  *
- * Only the per-user TTS segment cache is cleaned inline (it is keyed by userId
- * and not reachable afterwards). The shared, content-addressed document blob and
- * its previews are reclaimed by the `reap-orphaned-blobs` task once no owner
- * remains, so there is no inline blob deletion, last-owner check, or lock.
+ * Only the per-user playback storage is cleaned (it is keyed by userId and not
+ * reachable afterwards). Its cleanup is queued before the row delete, so a
+ * crash in between still leaves a row the `retry-storage-cleanups` task runs,
+ * and is then run inline. No transaction is held: SQLite would keep its write
+ * lock across the awaits. The shared, content-addressed document blob and its
+ * previews are reclaimed by the `reap-orphaned-blobs` task once no owner remains.
  */
 export async function deleteOwnedDocument(input: {
   userId: string;
@@ -19,6 +30,13 @@ export async function deleteOwnedDocument(input: {
   namespace: string | null;
   scheduleCleanup?: (task: () => Promise<void>) => void;
 }): Promise<boolean> {
+  const queued = input.namespace === null
+    ? await enqueueStorageCleanup({
+      userId: input.userId,
+      documentId: input.documentId,
+      notBeforeMs: Date.now() + QUEUED_CLEANUP_RETRY_DELAY_MS,
+    })
+    : null;
   const [removed] = await db
     .delete(documents)
     .where(and(
@@ -26,9 +44,16 @@ export async function deleteOwnedDocument(input: {
       eq(documents.userId, input.userId),
     ))
     .returning();
-  if (!removed) return false;
+  if (!removed) {
+    if (queued) await discardStorageCleanup(queued);
+    return false;
+  }
 
   const cleanPlaybackCache = async () => {
+    if (queued) {
+      await runStorageCleanup(queued);
+      return;
+    }
     await deleteDocumentTtsSegmentCache(input).catch((error) => {
       logDegraded(serverLogger, {
         event: 'documents.delete_owned.tts_cache_cleanup.failed',

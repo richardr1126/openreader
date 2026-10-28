@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
-import { userDocumentProgress } from '@openreader/database/schema';
+import { documents, userDocumentProgress } from '@openreader/database/schema';
 import type { DocumentProgressRecord } from '@/types/user-state';
 import { isValidDocumentId } from '@/lib/server/documents/blobstore';
 import { resolveUserStateScope } from '@/lib/server/user/resolve-state-scope';
@@ -103,6 +103,17 @@ export async function PUT(req: NextRequest) {
     const position = parseReadingPositionInput(body);
     if (!position) {
       return NextResponse.json({ error: 'Invalid reading position' }, { status: 400 });
+    }
+
+    // Progress cascades with the document row, so it can only be kept for a
+    // document the user still owns.
+    const [owned] = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.id, documentId), eq(documents.userId, scope.ownerUserId)))
+      .limit(1);
+    if (!owned) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
     const progress =

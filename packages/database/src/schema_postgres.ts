@@ -129,6 +129,11 @@ export const documentSettings = pgTable('document_settings', {
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.documentId, table.userId] }),
+  foreignKey({
+    name: 'document_settings_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
   index('idx_document_settings_user_id').on(table.userId),
 ]);
 
@@ -147,6 +152,11 @@ export const userDocumentProgress = pgTable('user_document_progress', {
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 }, (table) => [
   primaryKey({ columns: [table.userId, table.documentId] }),
+  foreignKey({
+    name: 'user_document_progress_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
   index('idx_user_document_progress_user_id_updated_at').on(table.userId, table.updatedAt),
 ]);
 
@@ -243,3 +253,20 @@ export const documentBlobLeases = pgTable('document_blob_leases', {
   leaseOwner: text('lease_owner').notNull(),
   leaseUntilMs: bigint('lease_until_ms', { mode: 'number' }).notNull(),
 });
+
+// Durable queue of user-scoped object storage the compute worker still has to
+// delete. A row is written in the same transaction that removes the owning
+// document or account, so cleanup survives a failed worker call; the
+// `retry-storage-cleanups` task drains whatever is left. No user FK: the row
+// must outlive the account it cleans up. A null document id is the whole user.
+export const storageCleanups = pgTable('storage_cleanups', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  documentId: text('document_id'),
+  notBeforeMs: bigint('not_before_ms', { mode: 'number' }).notNull(),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  createdAtMs: bigint('created_at_ms', { mode: 'number' }).notNull(),
+}, (table) => [
+  index('idx_storage_cleanups_not_before').on(table.notBeforeMs),
+]);

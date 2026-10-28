@@ -14,6 +14,7 @@ import { resolveStorageTransport } from '@openreader/runtime-config/storage-tran
 export interface StoredObjectSummary {
   key: string;
   size: number;
+  lastModifiedMs: number;
 }
 
 export interface ArtifactStorage {
@@ -26,6 +27,12 @@ export interface ArtifactStorage {
    * so size aggregation never holds a whole prefix listing in memory.
    */
   listPrefixPages(prefix: string): AsyncIterable<StoredObjectSummary[]>;
+  /**
+   * Names of the immediate child "folders" of `prefix` (which must end in
+   * `/`), in key order, without listing the objects inside them. Pass the last
+   * name returned as `startAfter` to continue.
+   */
+  listChildPrefixes(prefix: string, options?: { startAfter?: string; limit?: number }): Promise<string[]>;
   putObject(key: string, body: Buffer | Uint8Array, contentType?: string): Promise<void>;
   /** Upload a derived file without materializing the entire artifact in memory. */
   putFile(key: string, path: string, contentType: string): Promise<void>;
@@ -159,11 +166,46 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
         }));
         const page: StoredObjectSummary[] = [];
         for (const item of response.Contents ?? []) {
-          if (typeof item.Key === 'string') page.push({ key: item.Key, size: Math.max(0, Number(item.Size) || 0) });
+          if (typeof item.Key === 'string') {
+            page.push({
+              key: item.Key,
+              size: Math.max(0, Number(item.Size) || 0),
+              lastModifiedMs: item.LastModified?.getTime() ?? 0,
+            });
+          }
         }
         if (page.length > 0) yield page;
         continuationToken = response.NextContinuationToken;
       } while (continuationToken);
+    },
+    async listChildPrefixes(prefix, options) {
+      const safePrefix = safeKey(prefix);
+      if (!safePrefix.endsWith('/')) throw new Error('Child prefix listing requires a trailing slash');
+      const limit = options?.limit ?? Number.POSITIVE_INFINITY;
+      const names: string[] = [];
+      // S3 orders children by their `name/` prefix, and the cursor is the last
+      // name in that order. A sibling such as `name-` sorts before `name/`, so
+      // it was already returned; '0' is the byte right after '/', so this skips
+      // exactly the keys inside the `startAfter` folder.
+      const startAfter = options?.startAfter ? `${safePrefix}${options.startAfter}0` : undefined;
+      let continuationToken: string | undefined;
+      do {
+        const response = await config.client.send(new ListObjectsV2Command({
+          Bucket: config.bucket,
+          Prefix: safePrefix,
+          Delimiter: '/',
+          ContinuationToken: continuationToken,
+          StartAfter: continuationToken ? undefined : startAfter,
+          MaxKeys: Number.isFinite(limit) ? Math.min(1000, Math.max(1, limit - names.length)) : undefined,
+        }));
+        for (const common of response.CommonPrefixes ?? []) {
+          if (typeof common.Prefix !== 'string') continue;
+          names.push(common.Prefix.slice(safePrefix.length, -1));
+          if (names.length >= limit) return names;
+        }
+        continuationToken = response.NextContinuationToken;
+      } while (continuationToken);
+      return names;
     },
     async putObject(key, body, contentType) {
       await config.client.send(new PutObjectCommand({

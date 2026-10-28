@@ -277,6 +277,35 @@ export const userStorageCleanupSchema = z.object({
   documentIds: z.array(z.string().trim().regex(/^[a-f0-9]{64}$/i)).max(100),
 }).strict();
 
+// ONE-TIME (scan-orphaned-storage): remove with that task.
+export const userStorageScopeRootSchema = z.enum([
+  'playback-audio',
+  'playback-exports',
+  'playback-sidecars',
+  'account-exports',
+  'cloned-voices',
+]);
+
+export const userStorageScopesSchema = z.object({
+  root: userStorageScopeRootSchema,
+  startAfter: z.string().min(1).max(1024).nullable(),
+  limit: z.number().int().min(1).max(200),
+}).strict();
+
+export const userStorageScopesResponseSchema = z.object({
+  users: z.array(z.object({
+    key: z.string(),
+    /** Decoded user id, or the storage user hash for `playback-sidecars`. */
+    user: z.string(),
+    documentIds: z.array(z.string()),
+  })),
+  nextStartAfter: z.string().nullable(),
+});
+
+export const userStorageSidecarsClearSchema = z.object({
+  storageUserHash: z.string().trim().regex(/^[a-f0-9]{64}$/i),
+}).strict();
+
 export const ttsPlaybackExportFormatSchema = z.enum(['mp3', 'm4b']);
 
 export const ttsPlaybackExportArtifactCreateSchema = z.object({
@@ -316,7 +345,7 @@ export const ttsPlaybackPlansClearSchema = z.object({
   documentId: documentIdSchema,
 }).strict();
 
-export const exportRetentionSchema = z.object({
+export const artifactRetentionSchema = z.object({
   // Floor of one hour so a misconfigured caller cannot sweep artifacts that
   // clients are actively downloading right after preparation.
   maxAgeMs: z.number().int().min(60 * 60 * 1000),

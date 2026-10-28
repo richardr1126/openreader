@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   deleteDocumentPreviewRows: vi.fn(async () => undefined),
   isComputeWorkerAvailable: vi.fn(() => true),
   cleanupUserStorage: vi.fn(async () => ({ deletedObjects: 0, deletedDocumentArtifacts: 0 })),
+  enqueueStorageCleanup: vi.fn(async () => undefined),
 }));
 
 function resultBuilder(result: unknown[]) {
@@ -49,6 +50,10 @@ vi.mock('@/lib/server/compute-worker/client', () => ({
   getComputeWorkerClient: () => ({ cleanupUserStorage: mocks.cleanupUserStorage }),
 }));
 
+vi.mock('@/lib/server/storage/cleanups', () => ({
+  enqueueStorageCleanup: mocks.enqueueStorageCleanup,
+}));
+
 vi.mock('@/lib/server/logger', () => ({
   hashForLog: () => 'hash',
   serverLogger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -80,6 +85,12 @@ describe('user data cleanup', () => {
     // Shared document storage is reclaimed by the reap-orphaned-blobs task, not here.
     expect(mocks.deleteDocumentPreviewRows).not.toHaveBeenCalled();
     expect(mocks.cleanupUserStorage).toHaveBeenCalledWith({ storageUserId: 'user-1', namespace: null, documentIds: [] });
+    // A delayed second pass catches objects a mid-write playback job lands after the sweep.
+    expect(mocks.enqueueStorageCleanup).toHaveBeenCalledWith({
+      userId: 'user-1',
+      documentId: null,
+      notBeforeMs: expect.any(Number),
+    });
     // Admissions/events cascade with the user; HMAC-keyed buckets and verification are explicit.
     expect(mocks.deleteWhere).toHaveBeenCalledTimes(2);
   });

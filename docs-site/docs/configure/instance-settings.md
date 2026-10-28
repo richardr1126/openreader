@@ -19,6 +19,7 @@ description: Defaults and site-wide features in Settings → Admin → Instance.
 | --- | --- | --- |
 | **New account sign-ups** | `signupPolicy` | `open`, `approval` or `closed`. See [Users and Sign-in](./auth#sign-ups-and-guests). |
 | **Guest sessions** | `allowAnonymousSessions` | Lets visitors use the app without an account. Off by default. |
+| **Guest idle period** | `anonymousUserIdleDays` | Days without a session before [Delete idle guest accounts](./maintenance#scheduled-tasks) removes a guest and its data. That task is off by default. Default 90. |
 | **Audiobook export** | `enableAudiobookExport` | Shows [audiobook export](../guide/audiobook-export) in the reader. |
 | **DOCX upload conversion** | `enableDocxConversion` | Accepts `.docx` uploads and converts them to PDF on the compute worker. |
 | **Changelog feed URL** | `changelogFeedUrl` | Where the changelog in Settings is loaded from. |
