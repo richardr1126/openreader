@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useRef, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon } from '@/components/icons/Icons';
 import { useReaderSidebarBounds } from '@/hooks/useReaderSidebarBounds';
@@ -34,11 +34,12 @@ export function ReaderSidebarShell({
   const bounds = useReaderSidebarBounds(isOpen);
   const closeRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLElement>(null);
+  const [interactive, setInteractive] = useState(isOpen);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !interactive) return;
     const previous = document.activeElement as HTMLElement | null;
-    // The panel mounts through a transition, possibly after this effect runs.
+    // Focus only once the panel has reached its final position and is not inert.
     const frame = requestAnimationFrame(() => {
       // Keep an autofocus field or a control the user has already chosen.
       if (panelRef.current?.contains(document.activeElement)) return;
@@ -52,7 +53,7 @@ export function ReaderSidebarShell({
         if (previous?.isConnected) previous.focus();
       }
     };
-  }, [isOpen]);
+  }, [isOpen, interactive]);
 
   return (
     <Transition show={isOpen} as={Fragment}>
@@ -86,9 +87,15 @@ export function ReaderSidebarShell({
           leave="transition ease-standard duration-base"
           leaveFrom="translate-x-0"
           leaveTo="translate-x-full"
+          beforeEnter={() => setInteractive(false)}
+          afterEnter={() => setInteractive(true)}
+          beforeLeave={() => setInteractive(false)}
         >
           <aside
             ref={panelRef}
+            // A delayed animation can look stationary before it starts. Prevent
+            // a press there from losing its release as the panel slides away.
+            inert={!isOpen || !interactive}
             data-reader-sidebar-panel
             role="dialog"
             aria-label={ariaLabel}
