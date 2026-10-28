@@ -16,7 +16,7 @@ vi.mock('@openreader/database', () => ({
 // Keep the error-path test from printing the expected failure to the console.
 vi.mock('@/lib/server/errors/logging', () => ({ logDegraded: vi.fn() }));
 
-import { runDueTasks, updateTask } from '../../src/lib/server/tasks/engine';
+import { listTasks, runDueTasks, updateTask } from '../../src/lib/server/tasks/engine';
 import type { TaskRegistry } from '../../src/lib/server/tasks/types';
 
 const tasks = sqliteSchema.scheduledTasks;
@@ -57,7 +57,7 @@ async function readRow() {
   return rows[0];
 }
 
-function registryWith(run: () => Promise<{ summary?: string } | void>): TaskRegistry {
+function registryWith(run: TaskRegistry[string]['run']): TaskRegistry {
   return { [KEY]: { name: 'Test task', defaultIntervalMs: 1000, run } };
 }
 
@@ -68,6 +68,26 @@ beforeEach(() => {
 });
 
 describe('scheduled task engine', () => {
+  test('sequential mode claims every due task, then runs them one at a time', async () => {
+    const events: string[] = [];
+    const task = (key: string) => async () => {
+      events.push(`${key}:start`);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      events.push(`${key}:end`);
+      return { summary: key };
+    };
+    const registry: TaskRegistry = {
+      a: { name: 'A', defaultIntervalMs: 1000, run: task('a') },
+      b: { name: 'B', defaultIntervalMs: 1000, run: task('b') },
+    };
+
+    await runDueTasks({ registry, sequential: true });
+
+    expect(events).toEqual(['a:start', 'a:end', 'b:start', 'b:end']);
+    const rows = await holder.db.select().from(tasks);
+    expect(rows.map((row) => row.lastStatus)).toEqual(['ok', 'ok']);
+  });
+
   test('runs a due task and records success + next run', async () => {
     const handler = vi.fn(async () => ({ summary: 'did 3 things' }));
     await seedRow({ nextRunAt: Date.now() - 1 });
@@ -221,6 +241,51 @@ describe('scheduled task engine', () => {
 
     expect(handler).toHaveBeenCalledTimes(1);
     expect((await readRow()).lastError).toContain('runtime limit');
+  });
+
+  test('hands the stored cursor to the next run and shows only the summary', async () => {
+    const handler = vi.fn()
+      .mockResolvedValueOnce({ summary: 'first page', cursor: 'page-2' })
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce({ summary: 'done' });
+    const registry = registryWith(handler);
+    await seedRow({ nextRunAt: Date.now() - 1 });
+
+    await runDueTasks({ registry });
+    expect((await listTasks(registry))[0].lastResult).toBe('first page');
+
+    await holder.db.update(tasks).set({ runRequested: true }).where(eq(tasks.key, KEY));
+    await runDueTasks({ registry });
+    await holder.db.update(tasks).set({ runRequested: true }).where(eq(tasks.key, KEY));
+    await runDueTasks({ registry });
+
+    expect(handler.mock.calls.map(([context]) => context.cursor)).toEqual([null, 'page-2', 'page-2']);
+    expect((await readRow()).lastResultJson).toBe('done');
+  });
+
+  test('a task can disable itself when its work is complete', async () => {
+    await seedRow({ nextRunAt: Date.now() - 1 });
+
+    await runDueTasks({ registry: registryWith(async () => ({ summary: 'finished', disableTask: true })) });
+
+    const row = await readRow();
+    expect(row.enabled).toBe(false);
+    expect(row.lastStatus).toBe('ok');
+  });
+
+  test('seeds tasks registered as disabled by default', async () => {
+    const registry: TaskRegistry = {
+      [KEY]: { name: 'Opt-in task', defaultIntervalMs: 1000, defaultEnabled: false, run: vi.fn() },
+    };
+
+    expect((await listTasks(registry))[0].enabled).toBe(false);
+  });
+
+  test('keeps an opt-in task disabled when only its interval is edited', async () => {
+    await updateTask('expire-anonymous-users', { intervalMs: 2000 });
+
+    const [row] = await holder.db.select().from(tasks).where(eq(tasks.key, 'expire-anonymous-users'));
+    expect(row.enabled).toBe(false);
   });
 
   test('rejects non-positive intervals at the database boundary', async () => {

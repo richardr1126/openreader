@@ -374,6 +374,13 @@ export function AdminFeaturesPanel({
           meta={renderSource('allowAnonymousSessions')}
           variant="plain"
         />
+        {numberRow({
+          key: 'anonymousUserIdleDays',
+          label: 'Guest idle period',
+          icon: <HourglassIcon />,
+          info: 'Guest accounts idle this long are deleted when the Delete idle guest accounts task is on.',
+          unit: 'days',
+        })}
         </> : null}
         <ToggleRow
           label="Audiobook export"

@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   clearPdfLayout: vi.fn(async () => ({ deletedParsedObjects: 0 })),
   clearPreviews: vi.fn(async () => ({ deletedPreviewObjects: 0 })),
   clearPlans: vi.fn(async () => ({ deletedPlanObjects: 0 })),
+  listDerived: vi.fn(async () => ({ documentIds: [] as string[] })),
+  deletePreviewRows: vi.fn(async () => undefined),
   owned: [] as Array<{ id: string }>,
   ownedAfterLease: [] as Array<{ id: string }>,
   leaseRelease: vi.fn(async () => undefined),
@@ -18,6 +20,7 @@ vi.mock('@/lib/server/compute-worker/client', () => ({
     clearPdfLayoutArtifacts: mocks.clearPdfLayout,
     clearDocumentPreviewArtifacts: mocks.clearPreviews,
     clearTtsPlaybackPlans: mocks.clearPlans,
+    listDocumentDerivedIds: mocks.listDerived,
   }),
 }));
 vi.mock('@/lib/server/documents/blobstore', () => ({
@@ -25,7 +28,7 @@ vi.mock('@/lib/server/documents/blobstore', () => ({
   deleteDocumentBlob: mocks.del,
 }));
 vi.mock('@/lib/server/documents/previews', () => ({
-  deleteDocumentPreviewRows: vi.fn(async () => undefined),
+  deleteDocumentPreviewRows: mocks.deletePreviewRows,
 }));
 vi.mock('@/lib/server/documents/blob-lease', () => ({
   tryAcquireDocumentBlobLease: vi.fn(async () => ({
@@ -53,7 +56,7 @@ vi.mock('@openreader/database', () => ({
 import { reapOrphanedBlobs } from '../../src/lib/server/tasks/handlers/reap-orphaned-blobs';
 
 const TWO_HOURS = 2 * 60 * 60 * 1000;
-const context = () => ({ signal: new AbortController().signal, deadlineAt: Date.now() + 60_000 });
+const context = () => ({ signal: new AbortController().signal, deadlineAt: Date.now() + 60_000, cursor: null });
 
 beforeEach(() => {
   mocks.list.mockReset();
@@ -62,6 +65,9 @@ beforeEach(() => {
   mocks.clearPdfLayout.mockClear();
   mocks.clearPreviews.mockClear();
   mocks.clearPlans.mockClear();
+  mocks.listDerived.mockReset();
+  mocks.listDerived.mockResolvedValue({ documentIds: [] });
+  mocks.deletePreviewRows.mockClear();
   mocks.owned = [];
   mocks.ownedAfterLease = [];
   mocks.leaseRelease.mockClear();
@@ -93,12 +99,42 @@ describe('reap-orphaned-blobs', () => {
       { documentId: 'orphan-old' },
       { signal: expect.any(AbortSignal) },
     );
-    for (const clear of [mocks.clearPdfLayout, mocks.clearPreviews, mocks.clearPlans]) {
+    // The source blob goes last so a failed earlier step keeps the document a candidate.
+    for (const clear of [mocks.clearPdfLayout, mocks.clearPreviews, mocks.clearPlans, mocks.deletePreviewRows]) {
       expect(clear.mock.invocationCallOrder[0]).toBeLessThan(mocks.del.mock.invocationCallOrder[0]);
     }
     expect(result.reaped).toBe(1);
     expect(result.scanned).toBe(3);
     expect(result.candidates).toBe(2);
+  });
+
+  test('reaps derived artifacts whose source blob is already gone', async () => {
+    const now = Date.now();
+    mocks.list.mockResolvedValue([{ id: 'uploading', lastModifiedMs: now - 60_000 }]);
+    mocks.listDerived.mockResolvedValue({ documentIds: ['derived-only', 'uploading'] });
+
+    const result = await reapOrphanedBlobs(context());
+
+    expect(mocks.clearPreviews).toHaveBeenCalledTimes(1);
+    expect(mocks.clearPreviews).toHaveBeenCalledWith(
+      { documentId: 'derived-only', namespace: null },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(mocks.deletePreviewRows).toHaveBeenCalledWith('derived-only', null);
+    expect(mocks.del).not.toHaveBeenCalled();
+    expect(result.reaped).toBe(1);
+  });
+
+  test('keeps derived artifacts when preview rows cannot be deleted, so the next run retries', async () => {
+    mocks.list.mockResolvedValue([]);
+    mocks.listDerived.mockResolvedValue({ documentIds: ['derived-only'] });
+    mocks.deletePreviewRows.mockRejectedValueOnce(new Error('db unavailable'));
+
+    await expect(reapOrphanedBlobs(context())).rejects.toThrow('Failed to reap 1 orphaned blob(s)');
+
+    expect(mocks.clearPdfLayout).not.toHaveBeenCalled();
+    expect(mocks.clearPreviews).not.toHaveBeenCalled();
+    expect(mocks.clearPlans).not.toHaveBeenCalled();
   });
 
   test('reaps nothing when every old blob still has an owner', async () => {

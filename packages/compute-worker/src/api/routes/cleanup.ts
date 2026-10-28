@@ -4,9 +4,12 @@ import {
   clearDocumentPreviewArtifacts,
   clearPdfLayoutArtifacts,
   clearTtsPlaybackPlanArtifacts,
+  listDocumentDerivedIds,
 } from '../../storage/document-derived-cleanup';
+import { ttsPlaybackResetScopeFromOperationKey } from '../../operations/keys';
 import { ttsPlaybackPlanArtifactPrefix } from '../../storage/artifact-addressing';
 import { cleanupUserStorageArtifacts } from '../../storage/user-storage-cleanup';
+import { clearUserSidecarsByHash, listUserStorageScopes } from '../../storage/user-storage-scan';
 import { collectStorageUsage, reclaimableVariants } from '../../storage/storage-usage';
 import { invalidatePlaybackOperationsForScope } from '../playback/operation-invalidation';
 import type { PlaybackSessionReadModel } from '../playback/session-read-model';
@@ -21,6 +24,9 @@ import {
   ttsPlaybackCacheReclaimSchema,
   ttsPlaybackPlansClearSchema,
   userStorageCleanupSchema,
+  userStorageScopesResponseSchema,
+  userStorageScopesSchema,
+  userStorageSidecarsClearSchema,
   userStorageUsageResponseSchema,
   userStorageUsageSchema,
 } from '../schemas';
@@ -32,6 +38,46 @@ export function registerCleanupRoutes(
   readModel: PlaybackSessionReadModel,
 ): void {
   const { app, deps, storage, playbackStorage, s3Prefix } = context;
+
+  // Stop everything that could still write into a scope: bump its epoch,
+  // cancel sessions, drop cached sidecars and fail in-flight operations.
+  const cancelPlaybackScope = async (
+    playbackStorage: TtsPlaybackStorage,
+    scope: TtsPlaybackResetScope,
+    now: number,
+    timed: <T>(phase: string, run: () => Promise<T>) => Promise<T> = (_phase, run) => run(),
+  ) => {
+    await playbackStorage.artifacts.incrementScopeEpoch(scope, now);
+    const invalidatedPlaybackSessions = await timed('cancel_sessions', () => (
+      playbackStorage.sessions.cancelSessionsForScope(scope, now)
+    ));
+    readModel.invalidateSidecarsForScope(scope);
+    const invalidatedJobOperations = await timed('invalidate_operations', () => invalidatePlaybackOperationsForScope({
+      scope,
+      now,
+      operationStateStore: deps.operationStateStore,
+      orchestrator: deps.orchestrator,
+      readSession: readModel.readSession,
+    }));
+    return { invalidatedPlaybackSessions, invalidatedJobOperations };
+  };
+
+  // Documents a user still has playback sessions or export operations for, so
+  // account cleanup can cancel them before deleting the user's objects.
+  const listUserPlaybackDocumentIds = async (
+    playbackStorage: TtsPlaybackStorage,
+    storageUserId: string,
+  ): Promise<string[]> => {
+    const documentIds = new Set<string>();
+    for (const session of await playbackStorage.sessions.listSessions()) {
+      if (session.storageUserId === storageUserId) documentIds.add(session.documentId);
+    }
+    for (const state of await deps.operationStateStore.listOpStates?.() ?? []) {
+      const keyScope = ttsPlaybackResetScopeFromOperationKey(state.opKey);
+      if (keyScope?.storageUserId === storageUserId) documentIds.add(keyScope.documentId);
+    }
+    return [...documentIds];
+  };
 
   const resetPlaybackScope = async (
     playbackStorage: TtsPlaybackStorage,
@@ -53,18 +99,9 @@ export function registerCleanupRoutes(
         throw error;
       }
     };
-    await playbackStorage.artifacts.incrementScopeEpoch(scope, now);
-    const invalidatedPlaybackSessions = await timed('cancel_sessions', () => (
-      playbackStorage.sessions.cancelSessionsForScope(scope, now)
-    ));
-    readModel.invalidateSidecarsForScope(scope);
-    const invalidatedJobOperations = await timed('invalidate_operations', () => invalidatePlaybackOperationsForScope({
-      scope,
-      now,
-      operationStateStore: deps.operationStateStore,
-      orchestrator: deps.orchestrator,
-      readSession: readModel.readSession,
-    }));
+    const { invalidatedPlaybackSessions, invalidatedJobOperations } = await cancelPlaybackScope(
+      playbackStorage, scope, now, timed,
+    );
     const deleted = await timed('delete_objects', () => clearTtsPlaybackArtifacts({
       storage,
       s3Prefix,
@@ -247,6 +284,18 @@ export function registerCleanupRoutes(
     return { deletedPreviewObjects };
   });
 
+  app.get('/v1/document-derived/ids', {
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: { documentIds: { type: 'array', items: { type: 'string' } } },
+          required: ['documentIds'],
+        },
+      },
+    },
+  }, async () => ({ documentIds: await listDocumentDerivedIds({ storage, s3Prefix }) }));
+
   app.post('/v1/tts-playback/plans/clear', {
     schema: {
       body: jsonSchema(ttsPlaybackPlansClearSchema),
@@ -294,6 +343,52 @@ export function registerCleanupRoutes(
       reply.code(400);
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
+    const { storageUserId } = parsed.data;
+    if (playbackStorage && parsed.data.namespace === null) {
+      const now = Date.now();
+      for (const documentId of await listUserPlaybackDocumentIds(playbackStorage, storageUserId)) {
+        await cancelPlaybackScope(playbackStorage, { storageUserId, documentId }, now);
+      }
+    }
     return cleanupUserStorageArtifacts({ storage, s3Prefix, ...parsed.data });
+  });
+
+  // ONE-TIME (scan-orphaned-storage): remove both routes with that task.
+  app.post('/v1/user-storage/scopes', {
+    schema: {
+      body: jsonSchema(userStorageScopesSchema),
+      response: {
+        200: jsonSchema(userStorageScopesResponseSchema),
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = userStorageScopesSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    return listUserStorageScopes({ storage, s3Prefix, ...parsed.data });
+  });
+
+  app.post('/v1/user-storage/sidecars/clear', {
+    schema: {
+      body: jsonSchema(userStorageSidecarsClearSchema),
+      response: {
+        200: {
+          type: 'object',
+          properties: { deletedObjects: { type: 'number' } },
+          required: ['deletedObjects'],
+        },
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = userStorageSidecarsClearSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    return { deletedObjects: await clearUserSidecarsByHash({ storage, s3Prefix, ...parsed.data }) };
   });
 }

@@ -6,6 +6,7 @@ import {
   documentSettings,
   documents,
   userDocumentBookmarks,
+  userDocumentProgress,
 } from '@openreader/database/schema-sqlite';
 import { transferUserDocumentSettings, transferUserDocuments } from '../../src/lib/server/user/claim-data';
 
@@ -44,6 +45,28 @@ describe('transferUserDocuments', () => {
         created_at INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (id, user_id),
+        FOREIGN KEY (document_id, user_id) REFERENCES documents(id, user_id) ON DELETE cascade
+      );
+      CREATE TABLE user_document_progress (
+        user_id TEXT NOT NULL,
+        document_id TEXT NOT NULL,
+        segment_key TEXT,
+        segment_ordinal INTEGER NOT NULL DEFAULT 0,
+        progress REAL,
+        client_updated_at_ms INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER,
+        updated_at INTEGER,
+        PRIMARY KEY (user_id, document_id),
+        FOREIGN KEY (document_id, user_id) REFERENCES documents(id, user_id) ON DELETE cascade
+      );
+      CREATE TABLE document_settings (
+        document_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        client_updated_at_ms INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER,
+        updated_at INTEGER,
+        PRIMARY KEY (document_id, user_id),
         FOREIGN KEY (document_id, user_id) REFERENCES documents(id, user_id) ON DELETE cascade
       );
     `);
@@ -93,8 +116,22 @@ describe('transferUserDocuments', () => {
       snippet: 'Kept across the claim',
     });
 
+    await db.insert(userDocumentProgress).values({
+      userId: fromUserId,
+      documentId: 'doc-b',
+      segmentKey: 'v7:read',
+      segmentOrdinal: 4,
+      clientUpdatedAtMs: 5,
+    });
+    await db.insert(documentSettings).values({
+      documentId: 'doc-a',
+      userId: fromUserId,
+      dataJson: '{"source":"anon"}',
+      clientUpdatedAtMs: 5,
+    });
+
     const transferred = await transferUserDocuments(fromUserId, toUserId, { db });
-    expect(transferred).toBe(2);
+    expect(transferred).toEqual({ documents: 2, progress: 1, documentSettings: 1 });
 
     const remainingFrom = await db.select().from(documents).where(eq(documents.userId, fromUserId));
     expect(remainingFrom.length).toBe(0);
@@ -106,6 +143,11 @@ describe('transferUserDocuments', () => {
     // The source document row cascades its bookmarks, so they must move first.
     const bookmarks = await db.select().from(userDocumentBookmarks);
     expect(bookmarks.map((row) => [row.id, row.userId, row.documentId])).toEqual([['mark-1', toUserId, 'doc-b']]);
+    // Progress and settings cascade the same way.
+    const progress = await db.select().from(userDocumentProgress);
+    expect(progress.map((row) => [row.userId, row.documentId, row.segmentOrdinal])).toEqual([[toUserId, 'doc-b', 4]]);
+    const settings = await db.select().from(documentSettings);
+    expect(settings.map((row) => [row.userId, row.documentId])).toEqual([[toUserId, 'doc-a']]);
   });
 
   test('moves document settings while preserving newer destination settings', async () => {

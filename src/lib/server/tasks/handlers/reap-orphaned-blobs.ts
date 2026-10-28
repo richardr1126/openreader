@@ -16,68 +16,67 @@ const GRACE_MS = 60 * 60 * 1000;
 const OWNERSHIP_CHECK_BATCH = 200;
 
 /**
- * Delete content-addressed document blobs that no longer have any owner.
+ * Delete content-addressed document blobs that no longer have any owner, with
+ * their derived artifacts and preview rows.
  *
  * Reference count = ownership rows in `documents`. A blob with zero rows and
  * age past the grace window is an orphan (e.g. left by a failed inline delete)
- * and is safe to remove. Production data is non-namespaced.
+ * and is safe to remove. Derived artifacts whose source blob is already gone
+ * (a job that finished after its source was reaped) are reaped the same way.
+ * Production data is non-namespaced.
  */
 export async function reapOrphanedBlobs(context: TaskContext): Promise<TaskResult> {
   if (!isS3Configured()) {
     return { summary: 'Skipped: object storage not configured', reaped: 0 };
   }
+  if (!isComputeWorkerAvailable()) {
+    return { summary: 'Skipped: compute worker not configured', reaped: 0 };
+  }
+  const client = getComputeWorkerClient();
 
   const now = Date.now();
   const blobs = await listDocumentSourceBlobs(null, { signal: context.signal });
-  const candidates = blobs.filter((blob) => now - blob.lastModifiedMs > GRACE_MS);
+  const blobIds = new Set(blobs.map((blob) => blob.id));
+  const { documentIds: derivedIds } = await client.listDocumentDerivedIds({ signal: context.signal });
+  const candidates = [
+    ...blobs.filter((blob) => now - blob.lastModifiedMs > GRACE_MS).map((blob) => blob.id),
+    ...derivedIds.filter((id) => !blobIds.has(id)),
+  ];
 
   let reaped = 0;
   const failures: unknown[] = [];
   for (let i = 0; i < candidates.length; i += OWNERSHIP_CHECK_BATCH) {
     context.signal.throwIfAborted();
-    const chunk = candidates.slice(i, i + OWNERSHIP_CHECK_BATCH);
-    const ids = chunk.map((c) => c.id);
+    const ids = candidates.slice(i, i + OWNERSHIP_CHECK_BATCH);
     const ownedRows = await db
       .select({ id: documents.id })
       .from(documents)
       .where(inArray(documents.id, ids));
     const owned = new Set(ownedRows.map((row: { id: string }) => row.id));
 
-    for (const candidate of chunk) {
+    for (const documentId of ids) {
       context.signal.throwIfAborted();
-      if (owned.has(candidate.id)) continue;
-      const lease = await tryAcquireDocumentBlobLease(candidate.id);
+      if (owned.has(documentId)) continue;
+      const lease = await tryAcquireDocumentBlobLease(documentId);
       if (!lease) continue;
       try {
         const [owner] = await db
           .select({ id: documents.id })
           .from(documents)
-          .where(inArray(documents.id, [candidate.id]))
+          .where(inArray(documents.id, [documentId]))
           .limit(1);
         if (owner) continue;
 
-        // A failure to clear worker-owned derived artifacts leaves the source
-        // blob in place so the entire document cleanup can be retried.
-        if (!isComputeWorkerAvailable()) {
-          throw new Error('Compute worker is required to clear document-derived artifacts');
-        }
-        const client = getComputeWorkerClient();
+        // Preview rows go first and the source blob last: while the blob or a
+        // derived object exists the document stays a candidate, so a failure
+        // in any step is retried next run.
+        await deleteDocumentPreviewRows(documentId, null);
         await Promise.all([
-          client.clearPdfLayoutArtifacts(
-            { documentId: candidate.id, namespace: null },
-            { signal: context.signal },
-          ),
-          client.clearDocumentPreviewArtifacts(
-            { documentId: candidate.id, namespace: null },
-            { signal: context.signal },
-          ),
-          client.clearTtsPlaybackPlans(
-            { documentId: candidate.id },
-            { signal: context.signal },
-          ),
+          client.clearPdfLayoutArtifacts({ documentId, namespace: null }, { signal: context.signal }),
+          client.clearDocumentPreviewArtifacts({ documentId, namespace: null }, { signal: context.signal }),
+          client.clearTtsPlaybackPlans({ documentId }, { signal: context.signal }),
         ]);
-        await deleteDocumentBlob(candidate.id, null);
-        await deleteDocumentPreviewRows(candidate.id, null);
+        if (blobIds.has(documentId)) await deleteDocumentBlob(documentId, null);
         reaped += 1;
       } catch (error) {
         failures.push(error);
@@ -85,7 +84,7 @@ export async function reapOrphanedBlobs(context: TaskContext): Promise<TaskResul
           event: 'tasks.reap_orphaned_blobs.delete_failed',
           msg: 'Failed to reap orphaned document storage',
           step: 'reap_orphaned_blob',
-          context: { documentId: candidate.id },
+          context: { documentId },
           error,
         });
       } finally {
@@ -99,7 +98,7 @@ export async function reapOrphanedBlobs(context: TaskContext): Promise<TaskResul
   }
 
   return {
-    summary: `Reaped ${reaped} orphaned blob(s)`,
+    summary: `Reaped ${reaped} orphaned document(s)`,
     scanned: blobs.length,
     candidates: candidates.length,
     reaped,

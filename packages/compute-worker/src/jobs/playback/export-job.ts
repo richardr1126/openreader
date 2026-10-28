@@ -3,7 +3,7 @@ import { mkdtemp, open, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { isNotFound } from '../../infrastructure/storage';
+import { isNotFound, type ArtifactStorage } from '../../infrastructure/storage';
 
 import type { TtsPlaybackExportArtifactMetadata, TtsPlaybackExportArtifactRequest, TtsPlaybackExportArtifactResult, TtsPlaybackExportProgress } from '../../operations/contracts';
 import type { TtsPlaybackSegmentMetadata } from '../../playback/storage';
@@ -44,6 +44,31 @@ export function resolveTtsPlaybackExportSegmentSource(
     return { kind: 'silence', durationMs: SKIPPED_SEGMENT_PAUSE_MS };
   }
   throw new Error(`TTS playback export segment ${ordinal} is not durably settled`);
+}
+
+// A build that dies between upload and commit leaves its output beside the
+// metadata. The next commit removes it with the previous output; the margin
+// keeps a concurrent build's freshly uploaded file.
+const SUPERSEDED_OUTPUT_MARGIN_MS = 10 * 60 * 1000;
+
+export async function deleteSupersededExportOutputs(input: {
+  storage: ArtifactStorage;
+  objectKey: string;
+  previousObjectKey: string | null;
+  buildStartedAt: number;
+}): Promise<number> {
+  const directory = input.objectKey.slice(0, input.objectKey.lastIndexOf('/') + 1);
+  const cutoff = input.buildStartedAt - SUPERSEDED_OUTPUT_MARGIN_MS;
+  const stale = new Set<string>();
+  if (input.previousObjectKey && input.previousObjectKey !== input.objectKey) stale.add(input.previousObjectKey);
+  for await (const page of input.storage.listPrefixPages(directory)) {
+    for (const object of page) {
+      if (object.key === input.objectKey || object.lastModifiedMs >= cutoff) continue;
+      if (object.key.slice(directory.length).startsWith('artifact')) stale.add(object.key);
+    }
+  }
+  await Promise.all([...stale].map((key) => input.storage.deleteObject(key)));
+  return stale.size;
 }
 
 export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
@@ -164,6 +189,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     }
 
+    const buildStartedAt = Date.now();
     const workDir = await mkdtemp(join(tmpdir(), 'openreader-audiobook-export-'));
     // Each build owns its output key. An interrupted upload can safely remove
     // its file without deleting a replacement build's newly published audio.
@@ -258,11 +284,14 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       await input.storage.putObject(metadataKey, Buffer.from(JSON.stringify(metadata)), 'application/json');
       await assertCurrentSource();
       committed = true;
-      if (existingMetadata && existingMetadata.objectKey !== objectKey) {
-        await input.storage.deleteObject(existingMetadata.objectKey).catch((error) => {
-          input.logger?.warn({ artifactId: parsed.artifactId, error: String(error) }, 'tts.export.old_output_cleanup_failed');
-        });
-      }
+      await deleteSupersededExportOutputs({
+        storage: input.storage,
+        objectKey,
+        previousObjectKey: existingMetadata?.objectKey ?? null,
+        buildStartedAt,
+      }).catch((error) => {
+        input.logger?.warn({ artifactId: parsed.artifactId, error: String(error) }, 'tts.export.old_output_cleanup_failed');
+      });
       await reportProgress({
         phase: 'uploading',
         completedSegments: plannedSegments.length,

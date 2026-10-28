@@ -82,6 +82,7 @@ function createFixture(planLength = 100) {
     async deleteObject() {},
     async listPrefix() { return []; },
     async *listPrefixPages() {},
+    async listChildPrefixes() { return []; },
     async putObject() {},
     async putFile() {},
     async putParsedPdf() { throw new Error('unused'); },

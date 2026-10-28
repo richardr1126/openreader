@@ -51,11 +51,9 @@ export async function claimAnonymousData(
     .where(eq(documents.userId, unclaimedUserId)) as Array<{ id: string }>;
 
   const foldersClaimed = await transferUserFolders(unclaimedUserId, userId);
-  const [documentsClaimed, preferencesClaimed, progressClaimed, documentSettingsClaimed, onboardingClaimed] = await Promise.all([
+  const [documentsClaimed, preferencesClaimed, onboardingClaimed] = await Promise.all([
     transferUserDocuments(unclaimedUserId, userId, { namespace }),
     transferUserPreferences(unclaimedUserId, userId),
-    transferUserProgress(unclaimedUserId, userId),
-    transferUserDocumentSettings(unclaimedUserId, userId),
     transferUserOnboarding(unclaimedUserId, userId),
   ]);
   await db.delete(userFolders).where(eq(userFolders.userId, unclaimedUserId));
@@ -84,10 +82,10 @@ export async function claimAnonymousData(
   }
 
   return {
-    documents: documentsClaimed,
+    documents: documentsClaimed.documents,
     preferences: preferencesClaimed,
-    progress: progressClaimed,
-    documentSettings: documentSettingsClaimed,
+    progress: documentsClaimed.progress,
+    documentSettings: documentsClaimed.documentSettings,
     folders: foldersClaimed,
     onboarding: onboardingClaimed,
   };
@@ -116,45 +114,39 @@ export async function transferUserOnboarding(fromUserId: string, toUserId: strin
  * Transfer documents from one userId to another.
  *
  * This is used when an anonymous user upgrades to an authenticated account.
- * The source document blob is shared; bookmarks move with their documents.
- * TTS playback artifacts are session-scoped
- * in worker storage and are intentionally not transferred between users.
- *
- * @returns number of document rows transferred
+ * The source document blob is shared. Progress, settings and bookmarks cascade
+ * with their document row, so they move to the destination copies before the
+ * source rows are removed. TTS playback artifacts are session-scoped in worker
+ * storage and are intentionally not transferred between users.
  */
 export async function transferUserDocuments(
   fromUserId: string,
   toUserId: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   options?: { db?: any; namespace?: string | null; transferTts?: boolean; skipStorage?: boolean },
-): Promise<number> {
-  if (!fromUserId || !toUserId) return 0;
-  if (fromUserId === toUserId) return 0;
+): Promise<{ documents: number; progress: number; documentSettings: number }> {
+  const none = { documents: 0, progress: 0, documentSettings: 0 };
+  if (!fromUserId || !toUserId) return none;
+  if (fromUserId === toUserId) return none;
 
   const database = options?.db ?? db;
   const rows = await database.select().from(documents).where(eq(documents.userId, fromUserId));
-  if (rows.length === 0) return 0;
+  if (rows.length === 0) return none;
 
   for (const row of rows) {
     await database
       .insert(documents)
       .values({ ...row, userId: toUserId })
       .onConflictDoNothing();
-    // Bookmarks cascade with their document row, so re-point them at the
-    // destination copy before the source row is removed.
-    await database
-      .update(userDocumentBookmarks)
-      .set({ userId: toUserId })
-      .where(and(
-        eq(userDocumentBookmarks.userId, fromUserId),
-        eq(userDocumentBookmarks.documentId, row.id),
-      ));
-    await database.delete(documents).where(and(
-      eq(documents.userId, fromUserId),
-      eq(documents.id, row.id),
-    ));
   }
-  return rows.length;
+  const progress = await transferUserProgress(fromUserId, toUserId, { db: database });
+  const documentSettingsMoved = await transferUserDocumentSettings(fromUserId, toUserId, { db: database });
+  await database
+    .update(userDocumentBookmarks)
+    .set({ userId: toUserId })
+    .where(eq(userDocumentBookmarks.userId, fromUserId));
+  await database.delete(documents).where(eq(documents.userId, fromUserId));
+  return { documents: rows.length, progress, documentSettings: documentSettingsMoved };
 }
 
 export async function transferUserPreferences(fromUserId: string, toUserId: string): Promise<number> {
@@ -195,18 +187,22 @@ export async function transferUserPreferences(fromUserId: string, toUserId: stri
   return 1;
 }
 
-export async function transferUserProgress(fromUserId: string, toUserId: string): Promise<number> {
-  if (!fromUserId || !toUserId) return 0;
-  if (fromUserId === toUserId) return 0;
+async function transferUserProgress(
+  fromUserId: string,
+  toUserId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  options: { db: any },
+): Promise<number> {
+  const database = options.db;
 
-  const fromRows = (await db
+  const fromRows = (await database
     .select()
     .from(userDocumentProgress)
     .where(eq(userDocumentProgress.userId, fromUserId))) as UserDocumentProgressRow[];
   if (fromRows.length === 0) return 0;
 
   const documentIds = fromRows.map((row) => row.documentId);
-  const toRows = (await db
+  const toRows = (await database
     .select()
     .from(userDocumentProgress)
     .where(and(
@@ -224,7 +220,7 @@ export async function transferUserProgress(fromUserId: string, toUserId: string)
     const toUpdated = Number(existing?.clientUpdatedAtMs ?? 0);
     if (existing && fromUpdated <= toUpdated) continue;
 
-    await db
+    await database
       .insert(userDocumentProgress)
       .values({
         ...row,
@@ -242,7 +238,7 @@ export async function transferUserProgress(fromUserId: string, toUserId: string)
       });
   }
 
-  await db.delete(userDocumentProgress).where(eq(userDocumentProgress.userId, fromUserId));
+  await database.delete(userDocumentProgress).where(eq(userDocumentProgress.userId, fromUserId));
   return fromRows.length;
 }
 

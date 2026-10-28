@@ -169,6 +169,7 @@ These are read only while no providers exist and the seed below has no `provider
   "runtimeConfig": {
     "signupPolicy": "open",
     "allowAnonymousSessions": false,
+    "anonymousUserIdleDays": 90,
     "defaultTtsProvider": "default-openai",
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,

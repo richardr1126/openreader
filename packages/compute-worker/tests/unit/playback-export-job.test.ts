@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
 
 import type { ArtifactStorage } from '../../src/infrastructure/storage';
-import { createTtsPlaybackExportHandler } from '../../src/jobs/playback/export-job';
+import { listMemoryChildPrefixes } from '../fixtures/memory-storage';
+import { createTtsPlaybackExportHandler, deleteSupersededExportOutputs } from '../../src/jobs/playback/export-job';
 
 const { getCbrSilenceSecond } = vi.hoisted(() => ({
   getCbrSilenceSecond: vi.fn(async () => Buffer.from('pause')),
@@ -15,6 +16,11 @@ class MemoryStorage implements ArtifactStorage {
     this.objects.set(key, await readFile(path));
   }
   readonly objects = new Map<string, Buffer>();
+  readonly modifiedAt = new Map<string, number>();
+
+  async listChildPrefixes(prefix: string, options?: { startAfter?: string; limit?: number }) {
+    return listMemoryChildPrefixes(this.objects.keys(), prefix, options);
+  }
 
   async readObject(key: string): Promise<ArrayBuffer> {
     const value = this.objects.get(key);
@@ -37,7 +43,7 @@ class MemoryStorage implements ArtifactStorage {
   async *listPrefixPages(prefix: string) {
     yield [...this.objects.entries()]
       .filter(([key]) => key.startsWith(prefix))
-      .map(([key, value]) => ({ key, size: value.byteLength }));
+      .map(([key, value]) => ({ key, size: value.byteLength, lastModifiedMs: this.modifiedAt.get(key) ?? 0 }));
   }
 
   async putObject(key: string, body: Buffer | Uint8Array): Promise<void> {
@@ -349,5 +355,37 @@ describe('TTS playback export job', () => {
     } as never);
 
     await expect(run(request, 0)).rejects.toThrow('session is not complete: usage_limit');
+  });
+});
+
+describe('deleteSupersededExportOutputs', () => {
+  test('removes the previous and crashed build outputs but keeps a concurrent build', async () => {
+    const storage = new MemoryStorage();
+    const dir = 'p/tts_playback_exports_v1/users/u/docs/d/abc/';
+    const now = Date.now();
+    for (const [name, modifiedAt] of [
+      ['artifact-new.mp3', now],
+      ['artifact-previous.mp3', now - 60_000],
+      ['artifact-crashed.mp3', now - 60 * 60_000],
+      ['artifact-concurrent.mp3', now - 60_000],
+      ['metadata.json', now - 60 * 60_000],
+    ] as const) {
+      storage.objects.set(`${dir}${name}`, Buffer.from(name));
+      storage.modifiedAt.set(`${dir}${name}`, modifiedAt);
+    }
+
+    const deleted = await deleteSupersededExportOutputs({
+      storage,
+      objectKey: `${dir}artifact-new.mp3`,
+      previousObjectKey: `${dir}artifact-previous.mp3`,
+      buildStartedAt: now,
+    });
+
+    expect(deleted).toBe(2);
+    expect([...storage.objects.keys()].sort()).toEqual([
+      `${dir}artifact-concurrent.mp3`,
+      `${dir}artifact-new.mp3`,
+      `${dir}metadata.json`,
+    ]);
   });
 });

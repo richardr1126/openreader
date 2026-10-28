@@ -2,10 +2,16 @@ import { describe, expect, test } from 'vitest';
 import { createHash } from 'node:crypto';
 import { collectStorageUsage, reclaimableVariants } from '../../src/storage/storage-usage';
 import type { ArtifactStorage } from '../../src/infrastructure/storage';
+import { listMemoryChildPrefixes } from '../fixtures/memory-storage';
 
 class MemoryStorage implements ArtifactStorage {
   async putFile(): Promise<void> { throw new Error('not implemented'); }
   readonly objects = new Map<string, Buffer>();
+  readonly modifiedAt = new Map<string, number>();
+
+  async listChildPrefixes(prefix: string, options?: { startAfter?: string; limit?: number }) {
+    return listMemoryChildPrefixes(this.objects.keys(), prefix, options);
+  }
   listedPages = 0;
 
   constructor(private readonly pageSize = 2) {}
@@ -31,7 +37,7 @@ class MemoryStorage implements ArtifactStorage {
   async *listPrefixPages(prefix: string) {
     const matches = [...this.objects.entries()]
       .filter(([key]) => key.startsWith(prefix))
-      .map(([key, value]) => ({ key, size: value.byteLength }));
+      .map(([key, value]) => ({ key, size: value.byteLength, lastModifiedMs: this.modifiedAt.get(key) ?? 0 }));
     for (let index = 0; index < matches.length; index += this.pageSize) {
       this.listedPages += 1;
       yield matches.slice(index, index + this.pageSize);

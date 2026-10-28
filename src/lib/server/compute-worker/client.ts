@@ -39,6 +39,14 @@ export type TtsVoicePreviewResult =
   | { ok: true; audio: ArrayBuffer }
   | { ok: false; status: number; code: string | null; retryAfterMs: number | null };
 
+// ONE-TIME (scan-orphaned-storage): remove with that task.
+export type UserStorageScopeRoot =
+  | 'playback-audio'
+  | 'playback-exports'
+  | 'playback-sidecars'
+  | 'account-exports'
+  | 'cloned-voices';
+
 class WorkerHttpError extends Error {
   constructor(
     message: string,
@@ -342,10 +350,35 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/user-storage/cleanup', input);
   }
 
+  // ONE-TIME (scan-orphaned-storage): remove with that task.
+  listUserStorageScopes(input: {
+    root: UserStorageScopeRoot;
+    startAfter: string | null;
+    limit: number;
+  }, init?: { signal?: AbortSignal }): Promise<{
+    users: Array<{ key: string; user: string; documentIds: string[] }>;
+    nextStartAfter: string | null;
+  }> {
+    return this.requestJson('POST', '/v1/user-storage/scopes', input, init);
+  }
+
+  // ONE-TIME (scan-orphaned-storage): remove with that task.
+  clearUserSidecarsByHash(input: {
+    storageUserHash: string;
+  }, init?: { signal?: AbortSignal }): Promise<{ deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/user-storage/sidecars/clear', input, init);
+  }
+
   expireAccountExportArtifacts(input: {
     maxAgeMs: number;
   }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
     return this.requestJson('POST', '/v1/account-exports/expire', input, init);
+  }
+
+  expireDocumentConversionArtifacts(input: {
+    maxAgeMs: number;
+  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
+    return this.requestJson('POST', '/v1/document-conversions/expire', input, init);
   }
 
   clearPdfLayoutArtifacts(input: {
@@ -360,6 +393,10 @@ export class ComputeWorkerClient {
     namespace: string | null;
   }, init?: { signal?: AbortSignal }): Promise<{ deletedPreviewObjects: number }> {
     return this.requestJson('POST', '/v1/document-previews/clear', input, init);
+  }
+
+  listDocumentDerivedIds(init?: { signal?: AbortSignal }): Promise<{ documentIds: string[] }> {
+    return this.requestJson('GET', '/v1/document-derived/ids', undefined, init);
   }
 
   clearTtsPlaybackPlans(input: {

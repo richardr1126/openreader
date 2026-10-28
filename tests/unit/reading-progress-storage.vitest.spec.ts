@@ -153,6 +153,10 @@ function request(method: string, body?: unknown, query = ''): NextRequest {
 describe('progress route', () => {
   beforeEach(() => {
     state.sqlite = migratedDatabase([[DOC('a'), 'pdf', '2:3', 0.1]]);
+    state.sqlite.exec(`
+      INSERT INTO documents (id, user_id, name, type, size, last_modified, file_path)
+      VALUES ('${DOC('a')}', 'reader', 'A', 'pdf', 1, 1, 'a'), ('${DOC('b')}', 'reader', 'B', 'pdf', 1, 1, 'b');
+    `);
     state.db = drizzle(state.sqlite);
     state.userId = 'reader';
   });
@@ -191,6 +195,14 @@ describe('progress route', () => {
       documentId: DOC('a'), segmentKey: 'v7:x', segmentOrdinal: 0, clientUpdatedAtMs: 50,
     }))).json();
     expect(stale).toMatchObject({ applied: false, progress: { segmentKey: null, segmentOrdinal: 3 } });
+  });
+
+  test('does not store progress for a document the user does not own', async () => {
+    const response = await putProgress(request('PUT', {
+      documentId: DOC('c'), segmentKey: 'v7:x', segmentOrdinal: 1, clientUpdatedAtMs: 1_000,
+    }));
+    expect(response.status).toBe(404);
+    expect(storedRows(state.sqlite)).not.toHaveProperty(DOC('c'));
   });
 
   test('rejects a position without a segment key', async () => {
