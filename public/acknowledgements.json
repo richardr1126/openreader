@@ -5267,7 +5267,7 @@
       "role": "ONNXRuntime JavaScript API library",
       "url": "https://github.com/Microsoft/onnxruntime",
       "versions": [
-        "1.31.1"
+        "1.30.0"
       ],
       "notice": "By fs-eire.",
       "copyright": [],
@@ -5280,7 +5280,7 @@
       "role": "ONNXRuntime Node.js binding",
       "url": "https://github.com/Microsoft/onnxruntime",
       "versions": [
-        "1.31.1"
+        "1.30.0"
       ],
       "notice": "By fs-eire.",
       "copyright": [],

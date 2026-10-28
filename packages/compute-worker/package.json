@@ -29,7 +29,7 @@
     "fastify": "^5.12.7",
     "jszip": "^3.10.2",
     "linkedom": "^0.18.14",
-    "onnxruntime-node": "^1.31.1",
+    "onnxruntime-node": "1.30.0",
     "pdfjs-dist": "4.8.69",
     "pino-pretty": "^13.2.0",
     "resend": "^6.35.0",
