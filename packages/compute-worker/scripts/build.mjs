@@ -56,7 +56,7 @@ const result = await build({
   splitting: true,
   format: 'esm',
   platform: 'node',
-  target: 'node22',
+  target: 'node26',
   sourcemap: true,
   metafile: true,
   logLevel: 'warning',
