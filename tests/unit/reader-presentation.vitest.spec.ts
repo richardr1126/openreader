@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { getAppConfigDefaults } from '@/types/config';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { mergeDocumentSettings, preserveDocumentAppearance } from '@/lib/shared/document-settings';
-import { normalizeReaderPresentationOverride, resolveReaderPresentation } from '@/lib/shared/reader-presentation';
+import { appHighlightLayers, getHighlightVisibility, normalizeReaderPresentationOverride, resolveReaderPresentation, setAppHighlightLayers } from '@/lib/shared/reader-presentation';
 import { sanitizePreferencesPatch } from '@/lib/server/user/preferences-normalize';
 
 const context = { showAllProviderModels: true, sharedProviders: [] };
@@ -23,6 +23,18 @@ describe('reader defaults and book inheritance', () => {
     expect(resolveReaderPresentation(config, 'pdf')).toMatchObject({ showsLayout: false, highlightSegment: false, highlightWords: true });
     expect(resolveReaderPresentation(config, 'epub')).toMatchObject({ showsLayout: true, highlightSegment: true, highlightWords: false });
     expect(resolveReaderPresentation(config, 'html')).toMatchObject({ showsLayout: false, highlightSegment: true, highlightWords: true });
+  });
+
+  test('one app highlight switch per layer shows any format and sets every format', () => {
+    const mixed = getHighlightVisibility({ ...getAppConfigDefaults(), pdfHighlightEnabled: false, pdfWordHighlightEnabled: false,
+      epubWordHighlightEnabled: false, htmlWordHighlightEnabled: false });
+    expect(appHighlightLayers(mixed)).toEqual({ highlightSegment: true, highlightWords: false });
+    expect(appHighlightLayers(getHighlightVisibility({ ...getAppConfigDefaults(), pdfWordHighlightEnabled: false,
+      htmlWordHighlightEnabled: false }))).toEqual({ highlightSegment: true, highlightWords: true });
+    const words = setAppHighlightLayers(mixed, { highlightWords: true });
+    expect(words).toEqual({ ...mixed, pdfWordHighlightEnabled: true, epubWordHighlightEnabled: true, htmlWordHighlightEnabled: true });
+    expect(setAppHighlightLayers(words, { highlightSegment: false })).toMatchObject({
+      pdfHighlightEnabled: false, epubHighlightEnabled: false, htmlHighlightEnabled: false });
   });
 
   test('explicit false and independent resets survive unrelated book edits', () => {
