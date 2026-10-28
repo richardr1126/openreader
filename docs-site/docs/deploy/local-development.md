@@ -33,7 +33,7 @@ brew install --cask libreoffice   # optional
 Install Node.js 26 (for example with [nvm](https://github.com/nvm-sh/nvm)), then:
 
 ```bash
-corepack enable
+npm install -g pnpm   # Node.js 25 and later no longer bundle Corepack
 mkdir -p "$HOME/.local/bin" && cd /tmp
 
 # SeaweedFS 4.48, the version Docker ships

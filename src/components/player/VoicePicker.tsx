@@ -180,13 +180,10 @@ export function VoicePicker({
         <details
           className="group rounded-lg border border-line-soft bg-surface-solid"
           open={customVoiceOpen}
-          onToggle={(event) => {
-            const open = event.currentTarget.open;
-            setCustomVoiceOpen(open);
-            if (open) setCustomVoice(value);
-          }}
+          onToggle={(event) => setCustomVoiceOpen(event.currentTarget.open)}
         >
-          <summary className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          {/* Reset on the opening click: the toggle event fires a task later and would overwrite typing. */}
+          <summary onClick={() => { if (!customVoiceOpen) setCustomVoice(value); }} className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Custom voice ID
           </summary>
           <div className="flex items-center gap-2 border-t border-line-soft p-3">
