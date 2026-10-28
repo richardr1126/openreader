@@ -16,7 +16,7 @@
     "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
-    "electron": "44.9.3",
+    "electron": "44.10.0",
     "electron-builder": "26.18.0"
   },
   "dependencies": {

@@ -16,10 +16,11 @@ allowBuilds:
 
 overrides:
   '@types/localforage': npm:empty-module@0.0.2
+  '@tailwindcss/typography>postcss-selector-parser': ^6.1.5
   '@xmldom/xmldom': ^0.9.8
   kysely: 0.28.18
   lodash: ^4.17.23
-  postcss: 8.5.31
+  postcss: 8.5.32
   vite: 8.3.5
 
 strictDepBuilds: false

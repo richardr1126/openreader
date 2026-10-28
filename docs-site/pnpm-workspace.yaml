@@ -4,3 +4,8 @@ packages:
 allowBuilds:
   core-js: true
   core-js-pure: true
+
+overrides:
+  serialize-javascript: ^7.1.3
+  tinypool: ^2.2.0
+  uuid: ^11.1.1

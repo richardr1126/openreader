@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "lru-cache": "^11.5.3",
-    "openai": "^7.42.0",
+    "openai": "^7.45.1",
     "pino": "^10.4.0",
     "pino-pretty": "^13.2.0",
     "replicate": "^1.4.0"
