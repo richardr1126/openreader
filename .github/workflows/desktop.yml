@@ -72,7 +72,7 @@ jobs:
       # The staged runtime bundles the Node.js that runs staging.
       - uses: actions/setup-node@v5
         with:
-          node-version: 24.21.0
+          node-version: 26.12.1
           package-manager-cache: false
       - uses: pnpm/action-setup@v6
       - name: Install fpm

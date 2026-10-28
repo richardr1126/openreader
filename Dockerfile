@@ -11,12 +11,12 @@ FROM nats:2.11-alpine AS nats-builder
 RUN cp "$(command -v nats-server)" /tmp/nats-server
 
 # Stage 1c: fetch the pinned LGPL ffmpeg, verify its SHA-256, and smoke-test it.
-FROM node:lts-slim AS ffmpeg-fetch
+FROM node:26-slim AS ffmpeg-fetch
 COPY packaging /packaging
 RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
 
 # Stage 2: build the Next.js app
-FROM node:lts-slim AS app-builder
+FROM node:26-slim AS app-builder
 
 # Install pnpm globally
 RUN npm install -g pnpm@10.34.7
@@ -57,7 +57,7 @@ RUN mkdir -p /app/THIRD_PARTY_LICENSES && \
 
 
 # Stage 3: minimal runtime image
-FROM node:lts-slim AS runner
+FROM node:26-slim AS runner
 
 # Add runtime OS dependencies:
 # - libreoffice-writer-nogui: required for headless DOCX → PDF conversion

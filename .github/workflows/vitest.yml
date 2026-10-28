@@ -16,7 +16,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v5
         with:
-          node-version: lts/*
+          node-version: 26
           package-manager-cache: false
       - uses: pnpm/action-setup@v6
       - name: Install dependencies
