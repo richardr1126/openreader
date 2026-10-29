@@ -50,11 +50,11 @@ export function VoiceCustomizationControls({ value, local, onChange, overrides, 
   };
   return <>
     {local && <AdvancedSettingsGroup title="Text grouping">
-      {control('pieceCharacterLimit', 'Piece length', 'Automatic preserves the model’s existing split policy. A custom character target prefers sentence and word boundaries within each narration segment. Model limits still apply; your reading position stays the same.')}
+      {control('pieceCharacterLimit', 'Piece length', 'Splits each segment into pieces of about this many characters, at sentence or word boundaries. Model limits still apply.')}
     </AdvancedSettingsGroup>}
     <AdvancedSettingsGroup title="Added pauses">
-      {local && control('piecePauseMilliseconds', 'Between pieces', 'Silence between successful model-generated pieces, including joins inside a sentence. Automatic keeps the current 0 ms of added silence. A custom piece length can create more joins. Natural pauses produced by the voice remain.')}
-      {control('blockPauseMilliseconds', 'Between segments', 'Silence after each narration segment, including audiobook exports. Segments are reader blocks, not necessarily sentences or paragraphs. Automatic keeps the current 0 ms of added silence. Zero preserves the voice’s natural pauses. Player speed also changes the length of added pauses.')}
+      {local && control('piecePauseMilliseconds', 'Between pieces', 'Silence added where pieces join, including inside a sentence. The voice’s own pauses remain.')}
+      {control('blockPauseMilliseconds', 'Between segments', 'Silence added after each segment, including in audiobook exports. Player speed scales it too.')}
     </AdvancedSettingsGroup>
   </>;
 }

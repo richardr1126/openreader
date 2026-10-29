@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState, type ReactNode } from 'react';
-import { CheckItem } from '@/components/ui';
+import { CheckItem, InfoTip } from '@/components/ui';
 import { DisclosureIcon, RefreshIcon } from '@/components/icons/Icons';
 import { AnimatedCollapse } from './ExpandableSettingsCard';
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
@@ -30,6 +30,7 @@ export function PdfBlockKindControls({ value, onChange, onReset, children }: {
         className="flex min-h-8 flex-1 items-center gap-2 text-left text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         <DisclosureIcon className={`h-3.5 w-3.5 text-faint transition-transform duration-300 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} aria-hidden />PDF block kinds
       </button>
+      <InfoTip label="PDF block kinds">Checked kinds are skipped when reading aloud. They still show in page view.</InfoTip>
       {onReset && <button type="button" aria-label="Use app default for PDF block kinds" title="Use app default"
         onClick={onReset}
         className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded align-middle text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">

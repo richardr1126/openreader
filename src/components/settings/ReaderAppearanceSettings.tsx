@@ -33,8 +33,9 @@ const SPACING_PRESETS = [
   { label: 'Open', lineMultiplier: 1.9, paragraphSpacing: 1.5, letterSpacing: 0.03 },
 ] as const;
 const WIDTH_PRESETS = [{ label: 'Compact', value: 60 }, { label: 'Balanced', value: 80 }, { label: 'Full', value: 100 }] as const;
+/** The highlighted segment, split around the word being spoken. */
+const PREVIEW_SEGMENT = ['The afternoon light fell across the page. There was ', 'time', ' to pause, and room for the story to unfold.'] as const;
 const PREVIEW_PARAGRAPHS = [
-  'The afternoon light fell across the page. There was time to pause, and room for the story to unfold.',
   'Outside, the street had gone quiet. A kettle ticked as it cooled, and somewhere a door closed softly, the way doors do when no one wants to be the reason for a sound.',
   'She turned the page and kept going. The chapter was longer than she remembered, but the words came easily now, one sentence leaning into the next.',
   'By the time she looked up, the window had turned from gold to blue. The tea beside her had gone cold hours ago, a thin ring left on the saucer where she had set it down without thinking. Somewhere below, a neighbor was practicing scales on an old piano, missing the same note each time and starting over with a patience she almost envied.',
@@ -93,7 +94,7 @@ function Row({ label, wide = false, actions, lead, children }: {
     <div className={`flex min-w-0 items-center gap-3 ${wide ? 'shrink-0' : 'flex-1'}`}>
       <RowIcon>{icon}</RowIcon>
       <span className="flex min-w-0 items-center gap-1 text-sm font-medium text-foreground">
-        <span className="min-w-0">{label}</span>{actions}<InfoTip label={label}>{info}</InfoTip>
+        <span className="min-w-0">{label}</span>{actions}{info ? <InfoTip label={label}>{info}</InfoTip> : null}
       </span>
     </div>
     <div className={`ml-auto flex items-center gap-2 ${wide ? styles.controls : ''}`}>
@@ -112,19 +113,20 @@ function LinesGlyph({ gap = 2, widths = [100, 100, 100], centered = false }: { g
   </span>;
 }
 
-const APPEARANCE_ROWS: Record<string, { icon: ReactNode; info: string }> = {
-  'Font family': { icon: <TextCursorIcon />, info: 'Choose the typeface for flowing text and EPUB. Default uses the document’s or publisher’s font. PDF page fonts stay unchanged.' },
-  'Text size': { icon: <ZoomIcon />, info: 'Scale the text relative to its normal size. This changes the reading layout without changing audio or your saved position.' },
-  Spacing: { icon: <LinesGlyph gap={3} />, info: 'Apply line, paragraph, and letter spacing together. Adjust the individual controls below for a custom combination.' },
-  'Line spacing': { icon: <LinesGlyph gap={4} />, info: 'Set the distance between lines as a multiple of the text size.' },
-  'Paragraph spacing': { icon: <DocumentIcon />, info: 'Set the space between paragraphs relative to the text size.' },
-  'Letter spacing': { icon: <TextCursorIcon />, info: 'Add space between letters relative to the text size. Zero keeps the font’s normal spacing.' },
-  Width: { icon: <BookIcon />, info: 'Choose a preset text-column width. Narrower columns shorten each line; Full uses all available reading space.' },
-  'Reading width': { icon: <BookIcon />, info: 'Set how much of the available reading area the text column uses. This affects flowing text and EPUB, not PDF pages.' },
-  Alignment: { icon: <LinesGlyph widths={[100, 60, 100]} />, info: 'Default follows the document. Left keeps a natural right edge; Justified stretches lines to align both edges.' },
-  Preset: { icon: <PaletteIcon />, info: 'Apply segment and word highlight colors and opacity together. Theme follows the current app colors; the other presets use fixed colors.' },
-  Segment: { icon: <HighlighterIcon />, info: 'Choose the color and opacity of the current segment’s highlight. The separate Highlight segment switch controls whether it is shown.' },
-  Word: { icon: <TextCursorIcon />, info: 'Choose the color and opacity of the spoken word’s highlight. The separate Highlight words switch controls whether it is shown.' },
+/** Only rows whose effect is not plain from the label and control carry an explanation. */
+const APPEARANCE_ROWS: Record<string, { icon: ReactNode; info?: string }> = {
+  'Font family': { icon: <TextCursorIcon /> },
+  'Text size': { icon: <ZoomIcon /> },
+  Spacing: { icon: <LinesGlyph gap={3} /> },
+  'Line spacing': { icon: <LinesGlyph gap={4} /> },
+  'Paragraph spacing': { icon: <DocumentIcon /> },
+  'Letter spacing': { icon: <TextCursorIcon /> },
+  Width: { icon: <BookIcon /> },
+  'Reading width': { icon: <BookIcon />, info: 'Applies to flowing text and EPUB. PDF pages keep their own width.' },
+  Alignment: { icon: <LinesGlyph widths={[100, 60, 100]} /> },
+  Preset: { icon: <PaletteIcon />, info: 'Theme follows the app’s accent color; the others use fixed colors.' },
+  Segment: { icon: <HighlighterIcon />, info: 'A segment is the passage narrated as one piece. It is often a paragraph or a few sentences, not a single sentence.' },
+  Word: { icon: <TextCursorIcon /> },
 };
 
 // Block flex, not inline: glyphs of different heights would otherwise shift each segment's text baseline.
@@ -136,6 +138,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
 }) {
   const config = useConfig();
   const [moreTypography, setMoreTypography] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const { book, readerType } = useReaderAppearance();
   const saved: AppearanceDraft = {
     typography: scope === 'book' ? book?.settings.typography ?? {} : config.readerTypography,
@@ -193,12 +196,13 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
   const highlightsChanged = scope === 'book'
     ? Object.keys(ownHighlights).length > 0 || pending.presentation?.highlightSegment !== undefined || pending.presentation?.highlightWords !== undefined
     : JSON.stringify(ownHighlights) !== JSON.stringify(DEFAULT_HIGHLIGHT_APPEARANCE) || Object.values(visibility).some(shown => !shown);
-  const resetHighlights = () => {
+  const resetHighlights = (from: AppearanceDraft): AppearanceDraft => {
     if (scope === 'book') {
-      const next = { ...pending.presentation }; delete next.highlightSegment; delete next.highlightWords;
-      setPending({ ...pending, highlightAppearance: {}, presentation: next });
-    } else setPending({ ...pending, highlightAppearance: DEFAULT_HIGHLIGHT_APPEARANCE,
-      highlightVisibility: setAppHighlightLayers(visibility, { highlightSegment: true, highlightWords: true }) });
+      const next = { ...from.presentation }; delete next.highlightSegment; delete next.highlightWords;
+      return { ...from, highlightAppearance: {}, presentation: next };
+    }
+    return { ...from, highlightAppearance: DEFAULT_HIGHLIGHT_APPEARANCE,
+      highlightVisibility: setAppHighlightLayers(visibility, { highlightSegment: true, highlightWords: true }) };
   };
   const change = (kind: 'typography' | 'highlightAppearance', patch: Partial<Values>) => {
     setPending({ ...pending, [kind]: { ...pending[kind], ...patch } });
@@ -213,30 +217,39 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
   const fontStyle = (value: string) => ({ fontFamily: READER_FONT_FAMILIES[value as ReaderTypography['fontFamily']] || undefined });
 
   return <fieldset disabled={busy || (scope === 'book' && !book)} className="min-w-0 space-y-5" style={{ containerType: 'inline-size', containerName: 'reader-appearance' }}>
-    <p className="text-xs text-soft">{scope === 'book' ? 'This book inherits your global settings until you change a control.' : 'Defaults for all books. Individual books can override these settings.'}</p>
+    {scope === 'book' && <p className="text-xs text-soft">This book inherits your global settings until you change a control.</p>}
     {error && <p role="alert" className="text-sm text-warning">{error}</p>}
     {scope === 'book' && <ReaderPresentationControls readerType={readerType}
       value={resolveReaderPresentation(config, readerType, pending.presentation)} overrides={pending.presentation}
       onChange={changePresentation} onReset={resetPresentation} />}
-    {showTypography && <Section title="Typography" variant="group" action={typographyChanged &&
-      <ResetIcon label={scope === 'book' ? 'Use global typography' : 'Reset typography'} onClick={() => setPending({ ...pending, typography: scope === 'book' ? {} : DEFAULT_TYPOGRAPHY })} />}>
+    <Section title={showTypography ? 'Typography' : 'Highlights'} variant="group" action={((showTypography && typographyChanged) || highlightsChanged) &&
+      <ResetIcon label={scope === 'book' ? `Use global ${showTypography ? 'typography and highlights' : 'highlights'}` : `Reset ${showTypography ? 'typography and highlights' : 'highlights'}`}
+        onClick={() => setPending(resetHighlights(showTypography ? { ...pending, typography: scope === 'book' ? {} : DEFAULT_TYPOGRAPHY } : pending))} />}>
       <div aria-label="Typography preview" role="region" className="overflow-hidden text-foreground">
-        <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-wide text-faint"><span>Reading preview</span><span>Live</span></div>
-        {/* Taller on wide screens so a real page of text shows; the fade marks the clip as intentional. */}
-        <div role="article" aria-label="Reading sample" className="mx-auto h-44 overflow-hidden [mask-image:linear-gradient(to_bottom,black_75%,transparent)] sm:h-60 lg:h-80" style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || undefined,
+        <button type="button" aria-expanded={previewOpen} onClick={() => setPreviewOpen(current => !current)}
+          className="mb-2 flex w-full items-center justify-between text-[10px] uppercase tracking-wide text-faint hover:text-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <span>Reading preview</span>
+          <span className="flex items-center gap-1">{previewOpen ? 'Show less' : 'Show more'}<DisclosureIcon className={`h-3 w-3 transition-transform duration-300 motion-reduce:transition-none ${previewOpen ? '-rotate-90' : 'rotate-90'}`} aria-hidden /></span>
+        </button>
+        {/* Short by default so the controls stay in view; the fade marks the clip as intentional. */}
+        <div role="article" aria-label="Reading sample" className={`mx-auto overflow-hidden transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] [mask-image:linear-gradient(to_bottom,black_70%,transparent)] motion-reduce:transition-none ${previewOpen ? 'h-60 lg:h-80' : 'h-24'}`} style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || undefined,
           fontSize: `${14 * draft.sizePercent / 100}px`, lineHeight: draft.lineMultiplier, letterSpacing: `${draft.letterSpacing}em`, textAlign: draft.alignment === 'default' ? 'start' : draft.alignment }}>
+          {/* The first paragraph is the segment being read: a whole passage, not one sentence. */}
+          <p aria-label="Highlight preview" className="-mx-1 rounded-sm px-1" style={{ marginBottom: `${draft.paragraphSpacing}em`, backgroundColor: presentation.highlightSegment ? highlightBackground(draft, 'segment') : undefined }}>
+            {PREVIEW_SEGMENT[0]}<span className="rounded-sm" style={{ backgroundColor: presentation.highlightWords ? highlightBackground(draft, 'word') : undefined }}>{PREVIEW_SEGMENT[1]}</span>{PREVIEW_SEGMENT[2]}
+          </p>
           {PREVIEW_PARAGRAPHS.map((text) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>{text}</p>)}
         </div>
       </div>
-      <Row label="Font family" actions={resetField('typography', ['fontFamily'], 'Use global font family')}>
+      {showTypography && <Row label="Font family" actions={resetField('typography', ['fontFamily'], 'Use global font family')}>
         <div className="min-w-0 flex-1"><Select aria-label="Font family" disabled={busy} buttonClassName="h-9 rounded-full py-0 pl-3.5 text-xs font-medium"
           value={SELECT_OPTIONS.fontFamily.find((option) => option.value === draft.fontFamily)} options={SELECT_OPTIONS.fontFamily}
           renderValue={(option) => <span style={fontStyle(option.value)}>{option.label}</span>}
           renderOption={(option) => <span className="flex items-center justify-between gap-4" style={fontStyle(option.value)}><span>{option.label}</span><span aria-hidden className="text-[1rem]">Aa</span></span>}
           onChange={({ value }) => change('typography', { fontFamily: value as ReaderTypography['fontFamily'] })} /></div>
-      </Row>
-      {numberRow('sizePercent')}
-      <div>
+      </Row>}
+      {showTypography && numberRow('sizePercent')}
+      {showTypography && <div>
       <button type="button" aria-expanded={moreTypography} onClick={() => setMoreTypography(current => !current)}
         className="flex min-h-8 w-full items-center justify-between text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         More typography<DisclosureIcon className={`h-4 w-4 text-faint transition-transform duration-300 motion-reduce:transition-none ${moreTypography ? 'rotate-90' : ''}`} aria-hidden />
@@ -263,14 +276,10 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
             label: segmentLabel(<LinesGlyph widths={option.value === 'justify' ? [100, 100, 100] : [100, 60, 100]} />, option.value === 'default' ? 'Default' : option.label) }))} />
       </Row>
       </div></AnimatedCollapse>
-      </div>
-    </Section>}
-    <Section title="Highlight appearance" variant="group" action={highlightsChanged &&
-      <ResetIcon label={scope === 'book' ? 'Use global highlights' : 'Reset highlight appearance'} onClick={resetHighlights} />}>
+      </div>}
       <ReaderPresentationControls highlights readerType={readerType} value={presentation} overrides={scope === 'book' ? pending.presentation : undefined}
         onChange={changePresentation} onReset={resetPresentation} />
-      <div><p aria-label="Highlight preview" className="rounded-md px-3 py-2 text-sm text-foreground" style={{ backgroundColor: presentation.highlightSegment ? highlightBackground(draft, 'segment') : undefined }}>Read at your own pace, <span className="rounded-sm" style={{ backgroundColor: presentation.highlightWords ? highlightBackground(draft, 'word') : undefined }}>word</span> by word.</p></div>
-      <Row label="Preset" wide>
+      <Row label="Preset" wide actions={scope === 'book' && highlightsChanged && <ResetIcon label="Use global highlights" onClick={() => setPending(resetHighlights(pending))} />}>
         <SegmentedControl ariaLabel="Highlight presets" className={segmentedClass(4)}
           value={Object.entries(HIGHLIGHT_PRESETS).find(([, preset]) => Object.entries(preset).every(([key, value]) => draft[key as keyof HighlightAppearance] === value))?.[0] ?? ''}
           onChange={(name) => change('highlightAppearance', HIGHLIGHT_PRESETS[name])}

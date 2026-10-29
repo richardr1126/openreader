@@ -18,7 +18,7 @@ export function MaxSegmentLengthControl({ value, onChange, overridden = false, o
   ];
   return <AdvancedSettingsGroup title="Narration segments">
     <SettingRow label="Max segment length" icon={<TextCursorIcon />} controlClassName="w-40 max-w-[48%]"
-      info="The maximum size of a reader narration segment. Changing it rebuilds the narration plan. Local models can split each segment into smaller pieces using Piece length."
+      info="The longest passage narrated as one segment. Changing it rebuilds the narration plan."
       labelAction={overridden && onReset ? <button type="button" aria-label="Use app default for max segment length" title="Use app default"
         onClick={onReset} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         <RefreshIcon className="h-3 w-3" aria-hidden />

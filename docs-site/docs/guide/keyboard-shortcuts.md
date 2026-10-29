@@ -13,7 +13,7 @@ description: Keys for playback, navigation, and selecting documents.
 | `<` / `>` | Slower or faster playback |
 | Esc | Close the open side panel |
 
-The playback keys work while the reader has focus, including inside an EPUB. They are ignored while you type in a field or use a menu, slider or dialog. Turn them off with **Keyboard shortcuts** in **Settings → Reading**.
+The playback keys work while the reader has focus, including inside an EPUB. They are ignored while you type in a field or use a menu, slider or dialog. Turn them off with **Keyboard shortcuts** in **Settings → Customize**.
 
 ## Library
 

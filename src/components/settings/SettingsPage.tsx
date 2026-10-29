@@ -21,9 +21,8 @@ import { normalizeVersion } from '@/lib/shared/changelog';
 import { AboutSettingsPanel } from './AboutSettingsPanel';
 import { AccountSettingsPanel } from './AccountSettingsPanel';
 import { StorageSettingsPanel } from './StorageSettingsPanel';
-import { AppearanceSettingsPanel } from './AppearanceSettingsPanel';
+import { CustomizeSettingsPanel } from './CustomizeSettingsPanel';
 import { ProviderSettingsPanel } from './ProviderSettingsPanel';
-import { ReaderSettingsPanel } from './ReaderSettingsPanel';
 import { settingsNavGroups, visibleSettingsSections, type SettingsSectionId } from './settings-sections';
 
 function CloseSettingsLink() {
@@ -60,7 +59,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
   const requestedSection = searchParams.get('section') ?? initialSection;
   const currentSection = orderedSections.find((section) => section.id === requestedSection)
     ?? orderedSections[0];
-  const activeSection = currentSection?.id ?? 'theme';
+  const activeSection = currentSection?.id ?? 'customize';
   const displayVersion = normalizeVersion(runtimeConfig.appVersion || '');
   const selectSection = (section: SettingsSectionId) => {
     router.replace(`/app/settings?section=${section}`, { scroll: false });
@@ -179,8 +178,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
 
                 <div>
                   {runtimeConfig.enableTtsProvidersTab && activeSection === 'api' ? <ProviderSettingsPanel active /> : null}
-                  {activeSection === 'theme' ? <AppearanceSettingsPanel /> : null}
-                  {activeSection === 'reader' ? <ReaderSettingsPanel /> : null}
+                  {activeSection === 'customize' ? <CustomizeSettingsPanel /> : null}
                   {activeSection === 'account' ? <AccountSettingsPanel /> : null}
                   {activeSection === 'storage' ? <StorageSettingsPanel /> : null}
                   {activeSection === 'about' ? <AboutSettingsPanel /> : null}
