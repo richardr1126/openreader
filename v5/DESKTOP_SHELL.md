@@ -42,7 +42,7 @@ The staged runtime mirrors the Docker image:
 
 | Path | Contents |
 |---|---|
-| `node/` | the official Node.js binary (the version that ran staging) and its LICENSE; on Linux, `lib/libatomic.so.1`, which it links and some systems lack |
+| `node/` | the official Node.js binary (the version that ran staging) and its LICENSE; on Linux, `lib/libatomic.so.1` when that Node.js links it, since some systems lack it |
 | `app/` | `.next/standalone` plus `.next/static` and `public`, with `.env*` removed |
 | `bootstrap/` | `pnpm deploy` of `@openreader/bootstrap`, `better-sqlite3` rebuilt |
 | `embedded-compute-worker/` | `pnpm deploy --prod` of the worker, `onnxruntime-node` binaries pruned to the target |
