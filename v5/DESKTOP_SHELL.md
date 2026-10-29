@@ -36,14 +36,13 @@ desktop/
   src/menu.mjs           the application menu
   src/updates.mjs        automatic updates from GitHub Releases
   src/runtime.mjs        ports, environment, spawn/stop, readiness, token exchange
-  src/loading.html       shown while the runtime starts
 ```
 
 The staged runtime mirrors the Docker image:
 
 | Path | Contents |
 |---|---|
-| `node/` | the official Node.js binary (the version that ran staging) and its LICENSE |
+| `node/` | the official Node.js binary (the version that ran staging) and its LICENSE; on Linux, `lib/libatomic.so.1`, which it links and some systems lack |
 | `app/` | `.next/standalone` plus `.next/static` and `public`, with `.env*` removed |
 | `bootstrap/` | `pnpm deploy` of `@openreader/bootstrap`, `better-sqlite3` rebuilt |
 | `embedded-compute-worker/` | `pnpm deploy --prod` of the worker, `onnxruntime-node` binaries pruned to the target |
@@ -84,7 +83,9 @@ import, so the smoke test runs the shell's own startup and sign-in code.
   app's environment.
 - **Logs.** Bootstrap output goes to `<logs>/runtime.log`, rotated once at
   10 MB.
-- **Readiness.** The window shows `loading.html` until `/api/auth/ok` answers.
+- **Readiness.** The window stays hidden until `/api/auth/ok` answers and the
+  library's first paint, so it only ever shows the app. A startup failure shows
+  an error box with the log path instead.
 - **Stopping.** The shell owns an IPC channel to bootstrap and disconnects it on
   quit; bootstrap treats that as SIGTERM and stops every service (this works on
   Windows, where there are no signals, and the channel also closes if the shell

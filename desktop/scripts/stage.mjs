@@ -87,6 +87,27 @@ async function stageNode() {
   const binary = process.platform === 'win32' ? path.join(root, 'node.exe') : path.join(root, 'bin', 'node');
   copyExecutable(binary, path.join(runtimeDir, 'node', exe('node')));
   fs.copyFileSync(path.join(root, 'LICENSE'), path.join(runtimeDir, 'node', 'LICENSE'));
+  if (process.platform === 'linux') stageNodeLibraries(binary);
+}
+
+/**
+ * Node.js for Linux links libatomic, which minimal and some desktop installs
+ * lack, so the runtime carries the build machine's copy in node/lib
+ * (src/runtime.mjs puts it on the loader path). It is GCC runtime code, which
+ * the GCC Runtime Library Exception lets us redistribute.
+ */
+function stageNodeLibraries(binary) {
+  const ldd = spawnSync('ldd', [binary], { encoding: 'utf8' });
+  if (ldd.status !== 0) throw new Error(`ldd ${binary} failed: ${ldd.stderr}`);
+  const line = ldd.stdout.split('\n').find((entry) => entry.trim().startsWith('libatomic.so.1'));
+  if (!line) return;
+  const source = line.match(/=>\s*(\S+)/)?.[1];
+  if (!source || !source.startsWith('/')) {
+    throw new Error('Node.js needs libatomic.so.1, which this machine lacks: install libatomic1.');
+  }
+  const lib = path.join(runtimeDir, 'node', 'lib');
+  fs.mkdirSync(lib, { recursive: true });
+  fs.copyFileSync(fs.realpathSync(source), path.join(lib, 'libatomic.so.1'));
 }
 
 function stageApp() {
