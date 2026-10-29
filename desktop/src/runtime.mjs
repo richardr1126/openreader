@@ -162,7 +162,7 @@ export async function startRuntime({ root, dataDir, logDir, onExit }) {
   // Bootstrap passes its environment on, so every runtime process finds them.
   const nodeLib = path.join(root, 'node', 'lib');
   if (fs.existsSync(nodeLib)) {
-    env.LD_LIBRARY_PATH = [nodeLib, process.env.LD_LIBRARY_PATH].filter(Boolean).join(path.delimiter);
+    env.LD_LIBRARY_PATH = nodeLib;
   }
 
   const child = spawn(

@@ -84,8 +84,9 @@ import, so the smoke test runs the shell's own startup and sign-in code.
 - **Logs.** Bootstrap output goes to `<logs>/runtime.log`, rotated once at
   10 MB.
 - **Readiness.** The window stays hidden until `/api/auth/ok` answers and the
-  library's first paint, so it only ever shows the app. A startup failure shows
-  an error box with the log path instead.
+  app's first render, so it only ever shows the app. On a cold start that render
+  is the `AuthLoader` loading overlay. A startup failure shows an error box with
+  the log path instead.
 - **Stopping.** The shell owns an IPC channel to bootstrap and disconnects it on
   quit; bootstrap treats that as SIGTERM and stops every service (this works on
   Windows, where there are no signals, and the channel also closes if the shell
