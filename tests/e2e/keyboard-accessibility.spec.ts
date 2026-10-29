@@ -29,7 +29,7 @@ test('keyboard user controls reader panels and playback shortcuts', async ({ pag
   const settings = page.getByRole('dialog', { name: 'Document settings' });
   await expect(settings.getByRole('switch', { name: 'Keyboard shortcuts' })).toHaveCount(0);
   const bookUrl = page.url();
-  await page.goto('/app/settings?section=reader');
+  await page.goto('/app/settings?section=customize');
   const shortcuts = page.getByRole('switch', { name: 'Keyboard shortcuts' });
   const keys = page.getByLabel('Playback keys');
   await expect(shortcuts).toBeChecked();

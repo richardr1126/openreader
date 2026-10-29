@@ -9,7 +9,7 @@ for (const showsLayout of [true, false]) {
     test.setTimeout(75_000);
     await enterAnonymousLibrary(page);
     if (!showsLayout) {
-      await page.goto('/app/settings?section=reader');
+      await page.goto('/app/settings?section=customize');
       await page.getByRole('switch', { name: 'Show the pages', exact: true }).click();
       await page.getByRole('region', { name: 'Unsaved changes', exact: true })
         .getByRole('button', { name: 'Save', exact: true }).click();

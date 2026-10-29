@@ -16,15 +16,13 @@ async function save(page: Page, regenerate = false) {
 test('reader defaults inherit independently and speech saves preserve book display choices', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   await enterAnonymousLibrary(page);
-  await page.goto('/app/settings?section=reader');
+  await page.goto('/app/settings?section=customize');
   await page.getByRole('switch', { name: 'Show the pages', exact: true }).click();
   await save(page);
   await page.getByRole('radio', { name: 'EPUB', exact: true }).click();
   await expect(page.getByRole('switch', { name: 'Show the book', exact: true })).toBeChecked();
 
-  await page.getByRole('button', { name: 'Appearance', exact: true }).click();
-  const highlightSection = page.locator('section').filter({ has: page.getByRole('heading', { name: 'Highlight appearance', exact: true }) });
-  await highlightSection.getByRole('switch', { name: 'Highlight segment', exact: true }).click();
+  await page.getByRole('switch', { name: 'Highlight segment', exact: true }).click();
   await save(page);
   await page.getByRole('button', { name: 'Model & Voice', exact: true }).click();
   await page.getByRole('button', { name: 'Advanced', exact: true }).click();

@@ -7,7 +7,7 @@ const source = (relativePath: string) => readFileSync(resolve(root, relativePath
 
 const sectionFiles = [
   'AccountSettingsPanel.tsx',
-  'AppearanceSettingsPanel.tsx',
+  'CustomizeSettingsPanel.tsx',
   'ProviderSettingsPanel.tsx',
 ];
 

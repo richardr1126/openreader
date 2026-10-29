@@ -95,8 +95,7 @@ Skipped text stays visible and highlighted words still line up with the audio. T
 **Settings** holds the defaults every book starts from:
 
 - **Model & Voice**: your default provider, model and voice, and the defaults for the **Advanced** settings above.
-- **Appearance**: the app theme, and the default typography and highlights.
-- **Reading**: whether PDFs and EPUBs open showing their pages, and [keyboard shortcuts](./keyboard-shortcuts).
+- **Customize**: the app theme, whether PDFs and EPUBs open showing their pages, the default typography and highlights, and [keyboard shortcuts](./keyboard-shortcuts).
 
 A book you have changed keeps its own setting; everything else follows the defaults.
 

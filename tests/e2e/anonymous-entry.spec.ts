@@ -65,7 +65,7 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
 
   await expect(page).toHaveURL(/\/app\/settings$/);
   await expect(page.getByTestId('settings-page')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Appearance', exact: true }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Customize', exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Documents', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Changelog', exact: true }).first().click();
   await closeChangelog(page);
@@ -78,8 +78,8 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await expect(page.getByText('FFmpeg', { exact: true })).toBeVisible();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Appearance', exact: true }).first().click();
-  await expect(page.getByRole('heading', { name: 'Appearance', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Customize', exact: true }).first().click();
+  await expect(page.getByRole('heading', { name: 'Customize', exact: true })).toBeVisible();
   const hasHorizontalOverflow = await page.getByTestId('settings-page').evaluate(
     (element) => element.scrollWidth > element.clientWidth,
   );

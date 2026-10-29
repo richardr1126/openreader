@@ -1,12 +1,11 @@
 'use client';
 
-import { PopoverButton } from '@headlessui/react';
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
 import { InfoCircleIcon } from '@/components/icons/Icons';
 import { cn } from './cn';
-import { PopoverRoot, PopoverSurface } from './popover';
 import { RangeInput } from './range';
 import { Switch } from './switch';
+import { Tooltip } from './tooltip';
 
 export function Field({
   label,
@@ -53,23 +52,25 @@ export function RowIcon({ children, className }: { children: ReactNode; classNam
 }
 
 /**
- * An ⓘ button beside a row label that opens a short explanation, so rows stay
- * one line while the detail remains a tap away.
+ * An ⓘ button beside a row label whose explanation shows as a tooltip: on hover
+ * or keyboard focus like an icon button's label, or pinned by a press, which
+ * is how touch screens reach it. Rows stay one line while the detail remains
+ * a glance away. Plain-text detail is also the button's accessible description.
  */
 export function InfoTip({ label, children }: { label: string; children: ReactNode }) {
   return (
+    // Rows can sit inside clickable summaries; the press stays with the tip.
     <span className="inline-flex" onClick={(event) => event.stopPropagation()}>
-      <PopoverRoot className="inline-flex">
-        <PopoverButton
-          aria-label={`About ${label}`}
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full text-faint transition-colors duration-fast ease-standard hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          <InfoCircleIcon className="h-4 w-4" />
-        </PopoverButton>
-        <PopoverSurface anchor="bottom start" className="mt-1 w-72 max-w-[calc(100vw-2rem)] text-xs leading-5 text-soft">
-          {children}
-        </PopoverSurface>
-      </PopoverRoot>
+    <Tooltip label={children} pressToggles>
+      <button
+        type="button"
+        aria-label={`About ${label}`}
+        aria-description={typeof children === 'string' ? children : undefined}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-faint transition-colors duration-fast ease-standard hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <InfoCircleIcon className="h-4 w-4" />
+      </button>
+    </Tooltip>
     </span>
   );
 }

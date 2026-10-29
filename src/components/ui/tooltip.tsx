@@ -57,6 +57,7 @@ export function Tooltip({
   shortcut,
   icons,
   side = 'bottom',
+  pressToggles = false,
   children,
 }: {
   label: ReactNode;
@@ -65,6 +66,12 @@ export function Tooltip({
   /** The actions a combined control opens, shown as icons after the label. */
   icons?: readonly ReactNode[];
   side?: TooltipSide;
+  /**
+   * For explanations rather than names: a press pins the card open (and a
+   * second press closes it), so touch screens, which never hover, can read it.
+   * The label may then wrap over several lines.
+   */
+  pressToggles?: boolean;
   children: ReactElement;
 }) {
   const id = useId();
@@ -73,6 +80,8 @@ export function Tooltip({
   const timerRef = useRef<number | null>(null);
   const [open, setOpen] = useState(false);
   const openRef = useRef(false);
+  /** Opened by a press rather than hover, so leaving the control keeps it. */
+  const pinnedRef = useRef(false);
   const [position, setPosition] = useState<{
     left: number;
     top: number;
@@ -91,6 +100,7 @@ export function Tooltip({
   const hide = useCallback(() => {
     clearTimer();
     if (openRef.current) lastClosedAt = Date.now();
+    pinnedRef.current = false;
     setOpen(false);
     setPosition(null);
   }, []);
@@ -118,6 +128,7 @@ export function Tooltip({
   };
 
   const handlePointerOut = (event: PointerEvent) => {
+    if (pinnedRef.current) return;
     const to = event.relatedTarget as Node | null;
     if (to && wrapperRef.current?.contains(to)) return;
     hide();
@@ -127,29 +138,20 @@ export function Tooltip({
     if (event.target instanceof HTMLElement && event.target.matches(':focus-visible')) scheduleShow();
   };
 
+  const handleClick = () => {
+    if (pinnedRef.current) { hide(); return; }
+    clearTimer();
+    pinnedRef.current = true;
+    setOpen(true);
+  };
+
   useEffect(() => clearTimer, []);
 
   useLayoutEffect(() => {
     openRef.current = open;
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') hide();
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('scroll', hide, true);
-    window.addEventListener('resize', hide);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('scroll', hide, true);
-      window.removeEventListener('resize', hide);
-    };
-  }, [open, hide]);
-
-  useLayoutEffect(() => {
-    if (!open) return;
+  const place = useCallback(() => {
     const anchor = anchorOf(wrapperRef.current);
     const tip = tooltipRef.current;
     if (!anchor || !tip || !anchor.isConnected) {
@@ -170,7 +172,34 @@ export function Tooltip({
       below: placeBelow,
       arrowLeft: Math.max(ARROW_INSET_PX, Math.min(anchorCentre - left, t.width - ARROW_INSET_PX)),
     });
-  }, [open, side, hide]);
+  }, [side, hide]);
+
+  useLayoutEffect(() => {
+    if (open) place();
+  }, [open, place]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') hide();
+    };
+    // A pinned card closes on a press anywhere else.
+    const onPointerDown = (event: globalThis.PointerEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) hide();
+    };
+    // A pinned card follows its control, since a press can land while a scroll settles.
+    const onScroll = () => (pinnedRef.current ? place() : hide());
+    window.addEventListener('pointerdown', onPointerDown, true);
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', hide);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true);
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', hide);
+    };
+  }, [open, hide, place]);
 
   return (
     <span
@@ -178,7 +207,8 @@ export function Tooltip({
       className="contents"
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}
-      onPointerDown={hide}
+      onPointerDown={pressToggles ? undefined : hide}
+      onClick={pressToggles ? handleClick : undefined}
       onFocus={handleFocus}
       onBlur={hide}
     >
@@ -207,7 +237,7 @@ export function Tooltip({
               style={{ left: position.arrowLeft }}
             />
           ) : null}
-          <div className="relative flex items-center gap-2 whitespace-nowrap px-2.5 py-1.5 font-medium">
+          <div className={cn('relative flex items-center gap-2 px-2.5 py-1.5', pressToggles ? 'w-max max-w-72 font-normal leading-4' : 'whitespace-nowrap font-medium')}>
             <span>{label}</span>
             {icons?.length ? (
               <span aria-hidden className="flex items-center gap-1 border-l border-line-soft pl-2 text-soft [&_svg]:h-3 [&_svg]:w-3">
