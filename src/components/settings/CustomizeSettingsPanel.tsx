@@ -64,18 +64,29 @@ export function CustomizeSettingsPanel() {
     try {
       const patch: Partial<AppConfigValues> = { ...readerDraft };
       if (appearanceDirty) Object.assign(patch, { readerTypography: normalizeTypography(appearance.typography), highlightAppearance: normalizeHighlightAppearance(appearance.highlightAppearance), ...appearance.highlightVisibility });
-      if (Object.keys(patch).length) await config.updateConfig(patch);
+      if (Object.keys(patch).length) {
+        const pending = config.updateConfig(patch);
+        inFlightSave.current = pending;
+        await pending;
+      }
       setThemeBaseline(null); setAppearance(null); setReaderDraft({});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save your changes.');
-    } finally { setSaving(false); }
+    } finally { inFlightSave.current = null; setSaving(false); }
   };
   // Leaving the panel drops unapplied edits, as every other settings draft does; that includes the theme preview.
+  // A save still in flight decides instead: it keeps the theme, or restores it if it fails.
+  const inFlightSave = useRef<Promise<void> | null>(null);
   const unappliedTheme = useRef<typeof themeBaseline>(null);
   unappliedTheme.current = themeDirty ? themeBaseline : null;
   const restoreOnLeave = useRef(restoreTheme);
   restoreOnLeave.current = restoreTheme;
-  useEffect(() => () => { if (unappliedTheme.current) restoreOnLeave.current(unappliedTheme.current); }, []);
+  useEffect(() => () => {
+    const baseline = unappliedTheme.current;
+    if (!baseline) return;
+    const restore = () => restoreOnLeave.current(baseline);
+    if (inFlightSave.current) inFlightSave.current.catch(restore); else restore();
+  }, []);
 
   return <fieldset disabled={saving || !config.preferencesReady} className="min-w-0 space-y-6">
     <p className="text-xs text-soft">Defaults for every book. Each book can override its display, typography and highlights.</p>
