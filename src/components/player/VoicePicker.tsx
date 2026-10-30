@@ -155,9 +155,11 @@ export function VoicePicker({
   const hidden = total - shownGroups.reduce((sum, group) => sum + group.rows.length, 0);
   const listTop = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
+  const showMore = useRef<HTMLButtonElement>(null);
   // Show more disappears with the last batch, so its focus moves to Show fewer.
   const focusShowFewer = useRef(false);
   const revealMore = () => {
+    focusShowFewer.current = hidden <= VOICE_BATCH && showMore.current === document.activeElement;
     setRevealFrom(shownLimit);
     setLimit(Math.min(total, shownLimit + VOICE_BATCH));
   };
@@ -245,7 +247,7 @@ export function VoicePicker({
           )}
           {hidden > 0 ? (
             <div ref={sentinel} className="pointer-events-none absolute inset-x-0 bottom-0 flex h-24 items-end justify-center pb-2">
-              <button type="button" onClick={() => { setEndless(true); focusShowFewer.current = hidden <= VOICE_BATCH; revealMore(); }}
+              <button type="button" ref={showMore} onClick={() => { setEndless(true); revealMore(); }}
                 className="group pointer-events-auto inline-flex animate-scale-in items-center gap-2 rounded-full border border-line-soft bg-[color-mix(in_srgb,var(--surface-solid),transparent_22%)] py-1.5 pl-3.5 pr-3 text-xs font-medium text-foreground shadow-[0_6px_24px_-8px_color-mix(in_srgb,var(--accent),transparent_55%)] backdrop-blur-md transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:translate-y-0 active:scale-[0.97] motion-reduce:animate-none motion-reduce:transition-none">
                 <span className="tabular-nums">{endless ? `${hidden} more` : `Show ${hidden} more`}</span>
                 <span className="animate-nudge-down text-accent motion-reduce:animate-none" aria-hidden>

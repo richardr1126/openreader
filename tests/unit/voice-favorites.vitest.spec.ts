@@ -87,11 +87,19 @@ test('favorites do not select or preview a voice, and the filter can recover fro
 });
 
 test('a folded list opens past the selected voice and hands Show more focus to Show fewer', async () => {
-  class Observer { observe() {} unobserve() {} disconnect() {} }
-  vi.stubGlobal('ResizeObserver', Observer);
-  vi.stubGlobal('IntersectionObserver', Observer);
+  vi.useFakeTimers();
+  let reveal: IntersectionObserverCallback = () => {};
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal('IntersectionObserver', class {
+    constructor(callback: IntersectionObserverCallback) { reveal = callback; }
+    observe() {} unobserve() {} disconnect() {}
+  });
   window.matchMedia = () => ({ matches: true }) as MediaQueryList;
-  const voices = Array.from({ length: 30 }, (_, index) => `voice${String(index).padStart(2, '0')}`);
+  window.HTMLElement.prototype.scrollIntoView = () => {};
+  // linkedom does not track focus: Show more holds it, and the call that moves it is asserted.
+  Object.defineProperty(document, 'activeElement', { configurable: true, get: () => button(/more$/) });
+  const focus = vi.spyOn(window.HTMLElement.prototype, 'focus');
+  const voices = Array.from({ length: 40 }, (_, index) => `voice${String(index).padStart(2, '0')}`);
   const picker = (value: string) => createElement(VoicePicker, {
     voices, value, onChange: vi.fn(), pickPolicy: { multi: false, maxVoices: 1 }, groupByLanguage: false,
     preview: { state: { phase: 'idle' }, play: vi.fn(), stop: vi.fn() },
@@ -99,16 +107,29 @@ test('a folded list opens past the selected voice and hands Show more focus to S
   const rows = () => container.querySelectorAll('li').length;
   const button = (text: RegExp) => [...container.querySelectorAll('button')].find((item) => text.test(item.textContent ?? ''));
 
-  await act(async () => root.render(picker('voice20')));
-  // Three rows follow the selected voice, so the fade never covers it, and
-  // picking an earlier voice does not pull the list out from under the pointer.
-  expect(rows()).toBe(24);
-  await act(async () => root.render(picker('voice00')));
-  expect(rows()).toBe(24);
+  try {
+    await act(async () => root.render(picker('voice20')));
+    // Three rows follow the selected voice, so the fade never covers it, and
+    // picking an earlier voice does not pull the list out from under the pointer.
+    expect(rows()).toBe(24);
+    await act(async () => root.render(picker('voice00')));
+    expect(rows()).toBe(24);
 
-  // linkedom does not track focus, so assert the call that moves it.
-  const focus = vi.spyOn(window.HTMLElement.prototype, 'focus');
-  await act(async () => (button(/^Show 6 more$/) as HTMLElement).click());
-  expect(rows()).toBe(30);
-  expect(focus.mock.contexts).toEqual([button(/^Show fewer$/)]);
+    focus.mockClear();
+    await act(async () => (button(/^Show 16 more$/) as HTMLElement).click());
+    expect(rows()).toBe(40);
+    expect(focus.mock.contexts.at(-1)).toBe(button(/^Show fewer$/));
+
+    // Scrolling to the fade reveals the final batch just as a click does.
+    await act(async () => (button(/^Show fewer$/) as HTMLElement).click());
+    await act(async () => (button(/^Show 32 more$/) as HTMLElement).click());
+    expect(rows()).toBe(24);
+    focus.mockClear();
+    await act(async () => { vi.advanceTimersByTime(400); });
+    await act(async () => reveal([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
+    expect(rows()).toBe(40);
+    expect(focus.mock.contexts.at(-1)).toBe(button(/^Show fewer$/));
+  } finally {
+    vi.useRealTimers();
+  }
 });

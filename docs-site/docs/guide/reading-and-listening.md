@@ -45,7 +45,7 @@ Changes in the voice panel apply **to this book only**. **Use default** returns 
 | **Bracketed text** | Skip text in **Square brackets**, **Parentheses** or **Both**. |
 | **PDF block kinds** | PDF only. Choose which detected blocks (headers, footers, footnotes, titles and more) to skip. |
 
-Skipped text stays visible and highlighted words still line up with the audio. Skipping is off by default; set the defaults in **Settings → Model & Voice**, and a reset icon beside a changed setting returns the book to them. A change asks first, then regenerates audio from your position.
+Skipped text stays visible and highlighted words still line up with the audio. Citations and bracketed text are read by default, while PDFs skip headers, footers and footnotes; set the defaults in **Settings → Model & Voice**, and a reset icon beside a changed setting returns the book to them. A change asks first, then regenerates audio from your position.
 
 ### Your own voice
 
