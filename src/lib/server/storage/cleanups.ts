@@ -135,33 +135,3 @@ export async function runStorageCleanup(row: StorageCleanupRow): Promise<'cleare
     return 'failed';
   }
 }
-
-/** Run due cleanups oldest first until the queue is drained or the deadline passes. */
-export async function drainStorageCleanups(input: { deadlineAt: number; signal?: AbortSignal }): Promise<{
-  cleared: number;
-  owned: number;
-  failed: number;
-  remaining: boolean;
-}> {
-  const totals = { cleared: 0, owned: 0, failed: 0 };
-  const attempted = new Set<string>();
-  while (Date.now() < input.deadlineAt && !input.signal?.aborted) {
-    const due = (await db.select({
-      id: storageCleanups.id,
-      userId: storageCleanups.userId,
-      documentId: storageCleanups.documentId,
-      notBeforeMs: storageCleanups.notBeforeMs,
-      attempts: storageCleanups.attempts,
-    }).from(storageCleanups)
-      .where(lte(storageCleanups.notBeforeMs, Date.now()))
-      .orderBy(asc(storageCleanups.notBeforeMs))
-      .limit(25) as StorageCleanupRow[]).filter((row) => !attempted.has(row.id));
-    if (due.length === 0) return { ...totals, remaining: false };
-    for (const row of due) {
-      if (Date.now() >= input.deadlineAt || input.signal?.aborted) break;
-      attempted.add(row.id);
-      totals[await runStorageCleanup(row)] += 1;
-    }
-  }
-  return { ...totals, remaining: true };
-}

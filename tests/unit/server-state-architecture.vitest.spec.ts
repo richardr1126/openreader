@@ -552,7 +552,7 @@ describe('server-state architecture', () => {
     expect(workerRoutes).not.toContain("/v1/tts-playback/exports/:artifactId/download");
     expect(source('src/app/api/tts/segments/clear/route.ts')).toContain('clearTtsPlaybackScope');
     expect(source('src/app/api/tts/segments/clear/route.ts')).not.toContain('deleteTtsSegmentPrefix');
-    expect(source('src/lib/server/user/data-cleanup.ts')).toContain('cleanupUserStorage');
+    expect(source('packages/compute-worker/src/jobs/maintenance.ts')).toContain('cleanupUserStorage');
     expect(source('src/lib/server/user/data-cleanup.ts')).not.toContain('deleteTtsSegmentPrefix');
     expect(workerRoutes).toContain("/v1/tts-playback/plans/jobs");
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");

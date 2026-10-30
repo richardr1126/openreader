@@ -1,8 +1,8 @@
-import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminContext } from '@/lib/server/auth/admin';
 import { AdminUserManagementError, requestManagedUserDeletions } from '@/lib/server/admin/users';
-import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { queueUserDeletion } from '@/lib/server/tasks/enqueue-maintenance';
 import { errorResponse } from '@/lib/server/errors/next-response';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   if (!isComputeWorkerAvailable()) return NextResponse.json({ error: 'Compute worker is required for account deletion' }, { status: 503 });
   try {
     const userIds = await requestManagedUserDeletions(context.userId!, body.userIds as string[]);
-    const operation = await getComputeWorkerClient().createMaintenanceOperation({ task: 'delete-users', runId: randomUUID(), userIds });
+    const operation = await queueUserDeletion(userIds);
     return NextResponse.json(operation, { status: 202 });
   } catch (error) {
     if (error instanceof AdminUserManagementError) return NextResponse.json({ error: error.message }, { status: error.status });

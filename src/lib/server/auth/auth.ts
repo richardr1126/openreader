@@ -20,9 +20,8 @@ import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import { tryGetOrigin } from "@/lib/shared/urls";
 import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 
-// Heavy modules (S3 SDK, blobstore, rate-limiter, claim-data) are loaded
-// lazily via dynamic import() inside the beforeDelete / onLinkAccount
-// callbacks to avoid inflating every serverless function that touches auth.
+// Heavy modules (claim-data, user management, compute client) are loaded
+// lazily via dynamic import() inside the onLinkAccount callback to avoid inflating every serverless function that touches auth.
 
 // ...
 
@@ -130,31 +129,9 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
         input: false,
       },
     },
-    deleteUser: {
-      enabled: true,
-      beforeDelete: async (user) => {
-        const { assertNotLastAdmin } = await import('@/lib/server/admin/users');
-        await assertNotLastAdmin({
-          isAdmin: Boolean((user as typeof user & { isAdmin?: boolean }).isAdmin),
-          accessStatus: (user as typeof user & { accessStatus?: 'active' | 'pending' | 'suspended' }).accessStatus ?? 'active',
-        });
-        try {
-          const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
-          await deleteUserStorageData(user.id, null);
-        } catch (error) {
-          logDegraded(serverLogger, {
-            event: 'auth.user_delete.storage_cleanup_failed',
-            msg: 'Failed to clean up user storage before deletion',
-            step: 'delete_user_storage',
-            context: { userIdHash: hashForLog(user.id) },
-            error,
-          });
-          // Without a durable cleanup queue, proceeding would permanently
-          // orphan user-scoped storage and non-cascading database rows.
-          throw error;
-        }
-      },
-    },
+    // Self-delete goes through /api/account/delete, which marks the account
+    // and queues the durable worker deletion job. Better Auth's synchronous
+    // endpoint stays off so nothing bypasses storage cleanup.
   },
   databaseHooks: {
     user: {
@@ -244,7 +221,14 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
     // `allowAnonymousSessions` setting without a restart; the user-create hook
     // above refuses new anonymous users while it is off.
     anonymous({
+      // The plugin's own deletes skip storage cleanup. Linked guests are marked
+      // for the durable deletion job instead; idle guests expire through the
+      // same job.
+      disableDeleteAnonymousUser: true,
       onLinkAccount: async ({ anonymousUser, newUser }) => {
+        // The plugin also calls this when the guest signs in as itself or into
+        // another guest; there is nothing to transfer or delete then.
+        if (newUser.user.id === anonymousUser.user.id || newUser.user.isAnonymous) return;
         try {
           // Log when anonymous user links to a real account
           serverLogger.info({
@@ -263,8 +247,21 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
             null,
             { cleanupLegacySources: false },
           );
-          const { deleteUserStorageData } = await import('@/lib/server/user/data-cleanup');
-          await deleteUserStorageData(anonymousUser.user.id, null);
+          // The guest's data now belongs to the new account. Mark the guest so
+          // the worker removes its leftover storage and then its row; a failed
+          // queue is retried by Finish pending account deletions.
+          const { markUsersForDeletion } = await import('@/lib/server/admin/users');
+          await markUsersForDeletion([anonymousUser.user.id]);
+          const { queueUserDeletion } = await import('@/lib/server/tasks/enqueue-maintenance');
+          await queueUserDeletion([anonymousUser.user.id]).catch((error: unknown) => {
+            logDegraded(serverLogger, {
+              event: 'auth.link_account.guest_deletion_queue_failed',
+              msg: 'Failed to queue linked guest deletion; it will be retried',
+              step: 'queue_linked_guest_deletion',
+              context: { anonymousUserIdHash: hashForLog(anonymousUser.user.id) },
+              error,
+            });
+          });
           serverLogger.info({
             event: 'auth.link_account.transfer.succeeded',
             transferred,
@@ -277,11 +274,10 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
             msg: 'onLinkAccount callback failed',
             error,
           });
-          // Better Auth deletes the anonymous user after this callback.
-          // Block linking when transfer is incomplete so data remains retryable.
+          // Block linking when transfer is incomplete so the guest and its
+          // data remain retryable.
           throw error;
         }
-        // Note: Anonymous user will be automatically deleted after this callback completes
       },
     }),
     ...(oidcAuthConfig

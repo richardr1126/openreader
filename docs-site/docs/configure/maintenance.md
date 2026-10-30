@@ -41,7 +41,7 @@ The web request only queues a job. The worker performs storage scans and deletes
 
 Waiting behind another maintenance sweep does not expire a queued cleanup. The panel refreshes its task list to discover scheduled runs; detailed cleanup progress uses SSE. Last-run times and durations reflect worker completion, even when the app learns about completion later.
 
-Account deletion first revokes sessions and displays **Deletion pending** in Users. The account and its ownership rows are removed after storage cleanup succeeds. Failed deletions retain that marker and can be retried with **Finish pending account deletions**. Selecting multiple users queues one cleanup job for the selection.
+Account deletion first revokes sessions and displays **Deletion pending** in Users. The account and its ownership rows are removed after storage cleanup succeeds. Failed deletions retain that marker and can be retried with **Finish pending account deletions**. Selecting multiple users queues one cleanup job for the selection. Deleting your own account from **Settings → Account**, and the guest left behind when a guest signs up or signs in, go through the same job.
 
 Only one copy of a task runs at a time, even with several app instances.
 

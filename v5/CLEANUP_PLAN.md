@@ -859,6 +859,11 @@ expire or replace waiting jobs, while running jobs retain heartbeat recovery.
 Completion times come from the worker; Vercel scheduling remains anchored to
 the original run's UTC day rather than delayed reconciliation.
 
+Self-service account deletion and guest-to-account linking mark the account
+and queue the same `delete-users` job as admin deletion. Better Auth's
+synchronous delete endpoints are disabled, and the in-request
+`deleteUserStorageData` path was removed.
+
 The superseded synchronous sweep endpoints, app loops and direct S3 sweep
 helpers were removed. Single-scope playback cache commands remain synchronous
 worker commands; source upload/finalization remains app-owned. Compute-history

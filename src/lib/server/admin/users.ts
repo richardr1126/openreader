@@ -13,8 +13,8 @@ const { user, session } = authSchema;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const database = db as any;
 
-// Every admin-removal path (demote, suspend, delete, and the Better Auth
-// self-delete guard) serializes on this one advisory lock so the last-admin
+// Every admin-removal path (demote, suspend, delete, and self-delete)
+// serializes on this one advisory lock so the last-admin
 // count and the mutation that acts on it stay atomic. The constant is
 // arbitrary but must be stable across processes.
 const ADMIN_MUTATION_LOCK_KEY = 4915231001;
@@ -247,7 +247,7 @@ async function getTargetUser(userId: string, conn: any = database): Promise<Targ
 /**
  * Throw if `target` is the final removable administrator. Runs on the caller's
  * connection so it can be part of the same transaction as the mutation it
- * guards; `assertNotLastAdmin` is the standalone (self-locking) entry point.
+ * guards.
  */
 async function assertNotLastAdminOn(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -263,11 +263,6 @@ async function assertNotLastAdminOn(
   if (numeric(rows[0]?.value) <= 1) {
     throw new AdminUserManagementError('The final administrator cannot be removed.', 409);
   }
-}
-
-export async function assertNotLastAdmin(target: { isAdmin: boolean; accessStatus: UserAccessStatus }): Promise<void> {
-  if (!target.isAdmin) return;
-  await withAdminMutationLock((conn) => assertNotLastAdminOn(conn, target));
 }
 
 export class AdminUserManagementError extends Error {
@@ -322,10 +317,19 @@ export async function updateManagedUser(input: {
 
 /** Mark a selected batch atomically; storage deletion is a durable worker job. */
 export async function requestManagedUserDeletions(actorUserId: string, targetUserIds: string[]): Promise<string[]> {
-  const ids = [...new Set(targetUserIds)];
-  if (ids.includes(actorUserId)) {
+  if (targetUserIds.includes(actorUserId)) {
     throw new AdminUserManagementError('Use Account settings to delete your own account.', 409);
   }
+  return markUsersForDeletion(targetUserIds);
+}
+
+/**
+ * Suspend, mark and sign out accounts so the `delete-users` worker job (or
+ * Finish pending account deletions) removes their storage and then their rows.
+ * Shared by admin deletes, self-delete and guest-to-account linking.
+ */
+export async function markUsersForDeletion(targetUserIds: string[]): Promise<string[]> {
+  const ids = [...new Set(targetUserIds)];
   return withAdminMutationLock(async (conn) => {
     const targets = await conn.select({
       id: user.id, isAdmin: user.isAdmin, accessStatus: user.accessStatus,

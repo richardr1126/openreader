@@ -29,7 +29,6 @@ vi.mock('@/lib/server/tts/segments-cache', () => ({
 vi.mock('@/lib/server/errors/logging', () => ({ logDegraded: vi.fn() }));
 
 import {
-  drainStorageCleanups,
   enqueueStorageCleanup,
   runStorageCleanup,
 } from '../../src/lib/server/storage/cleanups';
@@ -118,19 +117,5 @@ describe('storage cleanup queue', () => {
     await expect(runStorageCleanup(stale)).resolves.toBe('cleared');
 
     expect(queuedRows()).toEqual([expect.objectContaining({ id: 'doc:u1:d1', notBeforeMs: 2 })]);
-  });
-
-  test('drains only due rows and attempts each once per run', async () => {
-    mocks.workerAvailable = false;
-    await enqueueStorageCleanup({ userId: 'u1', documentId: 'due' });
-    await enqueueStorageCleanup({ userId: 'u1', documentId: 'later', notBeforeMs: Date.now() + 60_000 });
-
-    const result = await drainStorageCleanups({ deadlineAt: Date.now() + 10_000 });
-
-    expect(result).toEqual({ cleared: 0, owned: 0, failed: 1, remaining: false });
-    expect(queuedRows().map((row) => [row.id, row.attempts])).toEqual([
-      ['doc:u1:due', 1],
-      ['doc:u1:later', 0],
-    ]);
   });
 });
