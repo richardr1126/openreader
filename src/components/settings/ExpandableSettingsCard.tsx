@@ -32,6 +32,6 @@ export function ExpandableSettingsCard({ label, header, children }: { label: str
       className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
       {header}<DisclosureIcon className={`h-4 w-4 shrink-0 text-faint transition-transform duration-300 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} aria-hidden />
     </button>
-    <AnimatedCollapse open={open} id={id}><div className="space-y-4 border-t border-line-soft px-3 pb-3 pt-4">{children}</div></AnimatedCollapse>
+    <AnimatedCollapse open={open} id={id}><div className="space-y-5 border-t border-line-soft px-3 pb-3.5 pt-3.5">{children}</div></AnimatedCollapse>
   </section>;
 }

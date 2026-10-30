@@ -10,8 +10,10 @@ import {
   IconButton,
   Section,
   Select,
+  ToggleRow,
 } from '@/components/ui';
 import {
+  EyeIcon,
   RefreshIcon,
 } from '@/components/icons/Icons';
 import { usePlanChangeConfirm } from '@/components/PlanChangeConfirm';
@@ -110,7 +112,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
 
         <ReaderAppearanceSettings scope="book" showTypography={!isPdfMode || !presentation.showsLayout} />
 
-        {isOpen && <BookAdvancedSettings key={documentId} pdf={isPdfMode ? pdf : undefined} />}
+        {isOpen && <BookAdvancedSettings key={documentId} />}
 
         {documentId ? <DocumentStorageSection documentId={documentId} /> : null}
 
@@ -118,6 +120,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
           <Section
             title="PDF Layout"
             variant="group"
+            footer="Reparse this document to refresh detected PDF blocks."
             action={
               <span className="flex items-center gap-1">
                 <span>{pdf.parseStatus ?? 'pending'}</span>
@@ -134,7 +137,8 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
               </span>
             }
           >
-            <p className="text-xs text-soft">Reparse this document to refresh detected PDF blocks.</p>
+            <ToggleRow label="Show block overlay" icon={<EyeIcon />} checked={pdf.parsedOverlayEnabled}
+              onChange={pdf.onToggleOverlay} disabled={pdf.parseStatus !== 'ready'} variant="plain" />
           </Section>
         )}
       </div>

@@ -1,7 +1,7 @@
 'use client';
 
-import { Select, SettingRow, Switch } from '@/components/ui';
-import { BookmarksListIcon, TextCursorIcon, RefreshIcon } from '@/components/icons/Icons';
+import { ResetButton, Select, SettingRow, Switch } from '@/components/ui';
+import { BookmarksListIcon, TextCursorIcon } from '@/components/icons/Icons';
 import { BRACKETED_TEXT_MODES, type SpeechTextOptions } from '@openreader/tts/speech-text';
 
 const labels = { off: 'Off', square: 'Square brackets', parentheses: 'Parentheses', both: 'Both' };
@@ -14,10 +14,8 @@ export function SpeechTextControls({ value, onChange, overrides, onReset }: {
   onReset?: (key: keyof SpeechTextOptions) => void;
 }) {
   const reset = (key: keyof SpeechTextOptions) => overrides?.[key] !== undefined && onReset
-    ? <button type="button" aria-label={`Use app default for ${key === 'citations' ? 'citations' : 'bracketed text'}`}
-      title="Use app default" onClick={() => onReset(key)} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-      <RefreshIcon className="h-3 w-3" aria-hidden />
-    </button> : null;
+    ? <ResetButton label={`Use app default for ${key === 'citations' ? 'citations' : 'bracketed text'}`} onClick={() => onReset(key)} />
+    : null;
   return <>
     <SettingRow label="Citations" icon={<BookmarksListIcon />}
       info="Skip numeric references such as [1, 3–5] and author–year citations such as (Smith, 2024). Only speech changes; the displayed document stays intact."

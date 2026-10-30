@@ -8,7 +8,9 @@ All readers expose two rows under “Skip when reading aloud”:
   and parenthetical author–year citations such as `(Smith, 2024)`.
 - Bracketed text: off, square brackets, parentheses, or both.
 
-Web places app defaults below the voice picker. Both app and book controls use
+Web places the group in the voices panel, never under Advanced: app defaults
+below the Default voice section of Model & Voice settings, and each book's
+overrides below the voice list in its reader Voice panel. Both use
 the existing settings list rows with leading icons and ⓘ help popovers; examples
 and explanations belong in those popovers rather than extra descriptive rows.
 

@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { RangeInput, Select, SettingRow } from '@/components/ui';
+import { RangeInput, ResetButton, Select, SettingRow } from '@/components/ui';
 import { AdvancedSettingsGroup } from './AdvancedSettings';
-import { RefreshIcon, TextCursorIcon, PauseIcon } from '@/components/icons/Icons';
+import { TextCursorIcon, PauseIcon } from '@/components/icons/Icons';
 import type { VoiceCustomization } from '@openreader/tts/voice-customization';
 
 export function VoiceCustomizationControls({ value, local, onChange, overrides, onReset }: {
@@ -26,10 +26,7 @@ export function VoiceCustomizationControls({ value, local, onChange, overrides, 
       { value: 'custom', label: current !== null && !presets.includes(current) ? `${current} ${unit}` : 'Custom…' },
     ];
     const reset = overrides?.[key] !== undefined && onReset
-      ? <button type="button" aria-label={`Use app default for ${label.toLowerCase()}`} title="Use app default"
-        onClick={() => onReset(key)} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-        <RefreshIcon className="h-3 w-3" aria-hidden />
-      </button> : null;
+      ? <ResetButton label={`Use app default for ${label.toLowerCase()}`} onClick={() => onReset(key)} /> : null;
     const custom = current !== null && (customField === key || !presets.includes(current));
     return <SettingRow key={key} label={label} icon={length ? <TextCursorIcon /> : <PauseIcon />} info={info} labelAction={reset}
       controlClassName="w-40 max-w-[48%]">

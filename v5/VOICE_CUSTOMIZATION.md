@@ -33,10 +33,12 @@ has a small reset icon beside its label when overridden. Explicit Automatic
 
 ## Reader settings organization and inheritance
 
-On web, Advanced is one collapsed card containing skip-when-reading-aloud,
-local text grouping, added pauses, and maximum narration segment length. PDF
-block kinds expand within it, with the per-document block overlay alongside
-those controls. App defaults and book overrides use the existing preference
+On web, Advanced is one collapsed card containing local text grouping, added
+pauses, and maximum narration segment length. Skip when reading aloud, with PDF
+block kinds expanding inside it, lives in the voices panel below the voice list
+(see `SPEECH_TEXT_HANDLING.md`). The per-document block overlay is a PDF Layout
+switch in reader settings. Every overridden row shows the same `ResetButton`
+beside its label. App defaults and book overrides use the existing preference
 and document JSON. `playback.maxSegmentLength` overrides the app's segment
 limit per book; PDF skip kinds inherit the app default when absent, while an
 explicit empty array skips no block kinds. Existing saved arrays remain book
@@ -55,7 +57,7 @@ Typography shows font family and text size first. More typography reveals
 spacing, reading width, and alignment. Preset rows respond to the panel width,
 so sidebar and phone layouts stack consistently. Themes occupy their own card,
 collapsed to the current theme name and swatches. Theme, typography, Advanced,
-and PDF block disclosures animate measured height changes and respect reduced
+PDF block disclosures, and the voice list's endless Show more animate measured height changes and respect reduced
 motion. Their collapsed contents are inert and hidden from accessibility.
 Animated contents use `overflow: clip` so focus scrolls the settings pane rather
 than a hidden inner container. `overflow: hidden` allowed WebKit to move reset

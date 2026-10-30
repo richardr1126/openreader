@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, type InputHTMLAttributes, type ReactNode } from 'react';
-import { InfoCircleIcon } from '@/components/icons/Icons';
+import { InfoCircleIcon, RefreshIcon } from '@/components/icons/Icons';
 import { cn } from './cn';
 import { RangeInput } from './range';
 import { Switch } from './switch';
@@ -72,6 +72,20 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
       </button>
     </Tooltip>
     </span>
+  );
+}
+
+/**
+ * Beside a row's label while its value differs from what it would fall back
+ * to: the app default in a book, the built-in default in app settings. Every
+ * resettable row uses this one control so restore looks and reads the same.
+ */
+export function ResetButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" aria-label={label} title={label} onClick={onClick}
+      className="inline-flex h-5 w-5 shrink-0 animate-scale-in items-center justify-center rounded-full bg-accent-wash text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 motion-reduce:animate-none">
+      <RefreshIcon className="h-3 w-3" aria-hidden />
+    </button>
   );
 }
 
