@@ -1,9 +1,10 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ClonedVoiceLibrary } from './ClonedVoiceLibrary';
 import type { VoiceCloningContext } from './CloneVoiceEditor';
-import { CheckIcon, HeartIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
+import { CheckIcon, DisclosureIcon, HeartIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
+import { AnimatedCollapse } from '@/components/settings/ExpandableSettingsCard';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, IconButton, Input, cn } from '@/components/ui';
 import type { VoicePreviewState } from '@/hooks/audio/useVoicePreview';
@@ -15,6 +16,14 @@ import {
   voiceStringFor,
   type VoicePickPolicy,
 } from '@/lib/client/tts/voice-draft';
+
+/** Voices shown before the list fades out; the rest reveal in batches. */
+const FIRST_VOICES = 8;
+const VOICE_BATCH = 16;
+/** Fewer hidden voices than this are simply shown rather than folded away. */
+const MIN_FOLDED = 4;
+/** Stagger between rows revealed together, capped so a batch lands quickly. */
+const REVEAL_STAGGER_MS = 22;
 
 /** The preview key for "the voice as currently picked", beside per-voice keys. */
 export const SELECTION_PREVIEW_KEY = 'selection';
@@ -120,7 +129,50 @@ export function VoicePicker({
     query, groupByLanguage,
   ), [voices, query, groupByLanguage, favoritesOnly, favorites?.voices]);
   const previewError = preview.state.phase === 'error' ? preview.state : null;
-
+  const total = groups.reduce((sum, group) => sum + group.voices.length, 0);
+  // Searching or filtering already narrows the list, so it shows in full.
+  const foldable = !query.trim() && !favoritesOnly && total > FIRST_VOICES + MIN_FOLDED;
+  const [limit, setLimit] = useState(FIRST_VOICES);
+  // Rows from this index rise in; earlier rows were already on screen.
+  const [revealFrom, setRevealFrom] = useState(Infinity);
+  // After the first "Show more", reaching the fade reveals the next batch.
+  const [endless, setEndless] = useState(false);
+  const shownLimit = foldable ? limit : Infinity;
+  // Only a folding list animates its height; search and favorites resize at once.
+  const fold = (list: ReactNode) => foldable ? <AnimatedCollapse open>{list}</AnimatedCollapse> : list;
+  // Selected voices always stay in view, wherever they fall in the list.
+  let order = 0;
+  const shownGroups = groups.map((group) => ({
+    ...group,
+    rows: group.voices.map((voiceId) => ({ voiceId, index: order++ }))
+      .filter(({ voiceId, index }) => index < shownLimit || selectedVoices.includes(voiceId)),
+  })).filter((group) => group.rows.length > 0);
+  const hidden = total - shownGroups.reduce((sum, group) => sum + group.rows.length, 0);
+  const listTop = useRef<HTMLDivElement>(null);
+  const sentinel = useRef<HTMLDivElement>(null);
+  const revealMore = () => {
+    setRevealFrom(limit);
+    setLimit(current => Math.min(total, current + VOICE_BATCH));
+  };
+  const revealMoreRef = useRef(revealMore);
+  revealMoreRef.current = revealMore;
+  useEffect(() => {
+    const element = sentinel.current;
+    if (!endless || !hidden || !element) return;
+    const observer = new IntersectionObserver(entries => {
+      if (entries.some(entry => entry.isIntersecting)) revealMoreRef.current();
+    }, { rootMargin: '0px 0px 160px 0px' });
+    // Wait for the last batch to finish growing, or the fade would still be
+    // in view and every batch would load at once.
+    const settle = window.setTimeout(() => observer.observe(element), 360);
+    return () => { window.clearTimeout(settle); observer.disconnect(); };
+  }, [endless, hidden, limit]);
+  const showFewer = () => {
+    setEndless(false);
+    setRevealFrom(Infinity);
+    setLimit(FIRST_VOICES);
+    listTop.current?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  };
   const pick = (voiceId: string) => {
     const next = voiceStringFor(toggleDraftVoice(selectedVoices, voiceId, pickPolicy), pickPolicy);
     if (next) onChange(next);
@@ -154,26 +206,55 @@ export function VoicePicker({
           {favoritesOnly && <Button size="sm" onClick={() => setFavoritesOnly(false)}>Show all voices</Button>}
         </div>
       ) : (
-        <div className="space-y-3 pt-1">
-          {groups.map((group) => (
-            <div key={group.key} role="group" aria-label={group.label}>
-              {groups.length > 1 || groupByLanguage ? (
-                <h4 className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-faint">
-                  {group.label}
-                </h4>
-              ) : null}
-              <ul className="space-y-0.5">
-                {group.voices.map((voiceId) => {
-                  const selected = selectedVoices.includes(voiceId);
-                  const name = displayVoiceName(voiceId);
-                  return (
-                    <li key={voiceId}><VoicePickerRow voice={voiceId} name={name} selected={selected} onSelect={() => pick(voiceId)}
-                      preview={preview} favorites={groupByLanguage && voiceId.includes('+') ? undefined : favorites} onError={setFavoriteError} /></li>
-                  );
-                })}
-              </ul>
+        <div ref={listTop} className="relative scroll-mt-4">
+          {fold(
+            <div className={cn('space-y-3 pt-1', hidden > 0 && '[mask-image:linear-gradient(to_bottom,black_calc(100%-6rem),transparent)]')}>
+              {shownGroups.map(({ rows, ...group }) => {
+                return (
+                  <div key={group.key} role="group" aria-label={group.label}>
+                    {shownGroups.length > 1 || groupByLanguage ? (
+                      <h4 className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-faint">
+                        {group.label}
+                      </h4>
+                    ) : null}
+                    <ul className="space-y-0.5">
+                      {rows.map(({ voiceId, index }) => {
+                        const selected = selectedVoices.includes(voiceId);
+                        const name = displayVoiceName(voiceId);
+                        const rising = index >= revealFrom;
+                        return (
+                          <li key={voiceId} className={rising ? 'animate-rise-in motion-reduce:animate-none' : undefined}
+                            style={rising ? { animationDelay: `${Math.min(index - revealFrom, VOICE_BATCH) * REVEAL_STAGGER_MS}ms` } : undefined}>
+                            <VoicePickerRow voice={voiceId} name={name} selected={selected} onSelect={() => pick(voiceId)}
+                              preview={preview} favorites={groupByLanguage && voiceId.includes('+') ? undefined : favorites} onError={setFavoriteError} />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })}
             </div>
-          ))}
+          )}
+          {hidden > 0 ? (
+            <div ref={sentinel} className="pointer-events-none absolute inset-x-0 bottom-0 flex h-24 items-end justify-center pb-2">
+              <button type="button" onClick={() => { setEndless(true); revealMore(); }}
+                className="group pointer-events-auto inline-flex animate-scale-in items-center gap-2 rounded-full border border-line-soft bg-[color-mix(in_srgb,var(--surface-solid),transparent_22%)] py-1.5 pl-3.5 pr-3 text-xs font-medium text-foreground shadow-[0_6px_24px_-8px_color-mix(in_srgb,var(--accent),transparent_55%)] backdrop-blur-md transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:translate-y-0 active:scale-[0.97] motion-reduce:animate-none motion-reduce:transition-none">
+                <span className="tabular-nums">{endless ? `${hidden} more` : `Show ${hidden} more`}</span>
+                <span className="animate-nudge-down text-accent motion-reduce:animate-none" aria-hidden>
+                  <DisclosureIcon className="h-3.5 w-3.5 rotate-90" />
+                </span>
+              </button>
+            </div>
+          ) : foldable && limit > FIRST_VOICES ? (
+            <div className="flex justify-center pt-2">
+              <button type="button" onClick={showFewer}
+                className="inline-flex animate-fade-in items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-soft transition-colors hover:bg-surface-sunken hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent motion-reduce:animate-none">
+                Show fewer
+                <DisclosureIcon className="h-3.5 w-3.5 -rotate-90" aria-hidden />
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
       {showCustomVoice && (

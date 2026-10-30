@@ -22,14 +22,17 @@ import {
 import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
 import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
 import { useClonedVoiceNames } from '@/hooks/useClonedVoiceNames';
+import { BookSkipSettings } from '@/components/settings/BookSkipSettings';
 
 /**
  * The reader's voice panel. Voice and model-speed picks are a draft: they
  * regenerate audio, so nothing changes until Apply commits them in one
  * restart. Closing the panel discards the draft. Previews speak a short
  * sample with the draft settings and never touch the document's audio.
+ * What the book skips sits below the voices and applies on its own, after
+ * the regenerate confirmation.
  */
-export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean; onClose: () => void; pdf?: boolean }) {
   const { providerRef, providerType, ttsModel, ttsInstructions, ttsModelOptions, voiceCustomization } = useConfig();
   const favorites = useVoiceFavorites(providerRef, ttsModel);
   const {
@@ -240,6 +243,8 @@ export function VoiceSidebar({ isOpen, onClose }: { isOpen: boolean; onClose: ()
             </>}
           />
         </Section>
+
+        <BookSkipSettings pdf={pdf} />
       </div>
     </ReaderSidebarShell>
   );

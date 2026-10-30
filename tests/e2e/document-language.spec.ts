@@ -43,6 +43,10 @@ test('Kokoro warnings follow the document across the player, settings, export, a
     await page.getByRole('button', { name: /^Voice: / }).click();
     const voices = page.getByRole('dialog', { name: 'Voice', exact: true });
     await expect(voices.getByText(mismatch, { exact: true })).toBeVisible();
+    // The list folds after a few voices; searching by language finds the rest
+    // once the settled panel takes focus.
+    await expect(voices.getByRole('button', { name: 'Close', exact: true })).toBeFocused();
+    await voices.getByRole('searchbox', { name: 'Search voices', exact: true }).fill('French');
     const frenchVoice = voices.getByRole('button', { name: 'ff_siwis', exact: true });
     await frenchVoice.click();
     await expect(frenchVoice).toHaveAttribute('aria-pressed', 'true');

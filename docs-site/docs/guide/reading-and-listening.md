@@ -25,15 +25,27 @@ Scrolling or turning pages yourself stops the reader from following the narratio
 
 The **Voice** button in the player opens the voice panel for the current document:
 
-- Pick a voice. **Search voices** filters a long list. Star a voice to add it to **Favorites**, then use the Favorites filter to see only those. Favorites are saved to your account for each model.
+- Pick a voice. A long list shows its first few voices; **Show more** reveals the rest as you scroll, and **Search voices** finds one by name or language. Star a voice to add it to **Favorites**, then use the Favorites filter to see only those. Favorites are saved to your account for each model.
 - Providers that support blending let you select several voices to mix them.
 - **Model speed** changes how fast the voice itself speaks. It regenerates audio from your position.
 - **Preview selection** plays a short sample before you apply it.
 - For external providers, expand **Custom voice ID** to enter a voice missing from the list. Preview it or choose **Use voice**, then **Apply**. Closing the panel discards unapplied changes.
 
+- **Skip when reading aloud** chooses text the voice leaves out. See [Skipping text](#skipping-text).
+
 Changes in the voice panel apply **to this book only**. **Use default** returns the book to your default voice. Set the default voice, provider and model for all documents in **Settings → Model & Voice**.
 
 **Playback speed**, the speed button next to the voice button, changes the playback rate instantly and never regenerates audio.
+
+### Skipping text
+
+| Setting | What it does |
+| --- | --- |
+| **Citations** | Skip reference markers such as `[1, 3–5]` and `(Smith, 2024)`. Bare numbers and years are still read. |
+| **Bracketed text** | Skip text in **Square brackets**, **Parentheses** or **Both**. |
+| **PDF block kinds** | PDF only. Choose which detected blocks (headers, footers, footnotes, titles and more) to skip. |
+
+Skipped text stays visible and highlighted words still line up with the audio. Skipping is off by default; set the defaults in **Settings → Model & Voice**, and a reset icon beside a changed setting returns the book to them. A change asks first, then regenerates audio from your position.
 
 ### Your own voice
 
@@ -59,7 +71,7 @@ The settings button in the reader header opens **Reader Settings** for the curre
 | **Typography** | Flowing text and EPUB. See [Typography](#typography). |
 | **Highlight appearance** | **Highlight segment** and **Highlight words** turn highlighting of the spoken passage and word on or off, and set their colors. See [Highlights](#highlights). |
 | **Advanced** | What is read aloud and how. See [Advanced](#advanced). |
-| **PDF Layout** | PDF only. Shows the processing status and re-runs layout analysis. |
+| **PDF Layout** | PDF only. Shows the processing status, re-runs layout analysis, and **Show block overlay** draws the detected blocks over the page. |
 
 Changing the language or anything under **Advanced** changes what is spoken. OpenReader asks before applying the change, then regenerates audio from your position. Display, typography and highlight changes never regenerate audio.
 
@@ -81,20 +93,15 @@ Choose a preset (**Theme**, **Amber**, **Ocean** or **Mint**), or set the segmen
 
 | Setting | What it does |
 | --- | --- |
-| **Citations** | Skip reference markers such as `[1, 3–5]` and `(Smith, 2024)`. Bare numbers and years are still read. |
-| **Bracketed text** | Skip text in **Square brackets**, **Parentheses** or **Both**. |
-| **PDF blocks** | PDF only. Choose which detected blocks (headers, footers, footnotes, titles and more) to skip. **Show block overlay** draws the detected blocks over the page. |
 | **Text grouping** | Built-in Kokoro only. **Piece length** sets how much text the model speaks in one pass. |
 | **Added pauses** | Extra silence **Between segments**, and for built-in Kokoro **Between pieces**. **Automatic** adds none, keeping the voice's natural pauses. Added pauses are included in audiobook exports. |
 | **Max segment length** | How much text is generated as one piece of audio. |
-
-Skipped text stays visible and highlighted words still line up with the audio. The skipping settings are off by default.
 
 ## App settings
 
 **Settings** holds the defaults every book starts from:
 
-- **Model & Voice**: your default provider, model and voice, and the defaults for the **Advanced** settings above.
+- **Model & Voice**: your default provider, model and voice, and the defaults for [skipping text](#skipping-text) and the **Advanced** settings above.
 - **Customize**: the app theme, whether PDFs and EPUBs open showing their pages, the default typography and highlights, and [keyboard shortcuts](./keyboard-shortcuts).
 
 A book you have changed keeps its own setting; everything else follows the defaults.

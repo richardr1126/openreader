@@ -4,7 +4,7 @@ import { VoiceCustomizationControls } from './VoiceCustomizationControls';
 import { OpenRouterOptionsControls, readableOpenRouterOptions } from './OpenRouterOptionsControls';
 import { useOpenRouterModels } from '@/hooks/useOpenRouterModels';
 import { normalizeOpenRouterOptions } from '@openreader/tts/openrouter';
-import { AdvancedSettings, AdvancedSettingsGroup } from './AdvancedSettings';
+import { AdvancedSettings } from './AdvancedSettings';
 import { MaxSegmentLengthControl } from './MaxSegmentLengthControl';
 import { PdfBlockKindControls } from './PdfBlockKindControls';
 import { VOICE_CUSTOMIZATION_FIELDS } from '@openreader/tts/voice-customization';
@@ -484,12 +484,12 @@ export function ProviderSettingsPanel({
         )}
       </Section>
 
-      <AdvancedSettings>
-      <AdvancedSettingsGroup title="Skip when reading aloud"
-        subtitle="App defaults. Each book can override these settings.">
+      <Section title="Skip when reading aloud" variant="group" footer="Each book can override these from its Voice panel.">
         <SpeechTextControls value={localSpeechText} onChange={change => setLocalSpeechText({ ...localSpeechText, ...change })} />
         <PdfBlockKindControls value={localPdfSkipKinds} onChange={setLocalPdfSkipKinds} />
-      </AdvancedSettingsGroup>
+      </Section>
+
+      <AdvancedSettings>
         <VoiceCustomizationControls value={localCustomization} local={effectiveProviderType === 'kokoro-local'}
           onChange={change => setLocalCustomization({ ...localCustomization, ...change })} />
         <MaxSegmentLengthControl value={localMaxSegmentLength} onChange={setLocalMaxSegmentLength} />

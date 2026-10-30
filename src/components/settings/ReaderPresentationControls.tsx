@@ -1,7 +1,7 @@
 'use client';
 
-import { Section, Select, SettingRow, Switch } from '@/components/ui';
-import { BookIcon, DocumentIcon, HighlighterIcon, PaletteIcon, RefreshIcon, TextCursorIcon } from '@/components/icons/Icons';
+import { ResetButton, Section, Select, SettingRow, Switch } from '@/components/ui';
+import { BookIcon, DocumentIcon, HighlighterIcon, PaletteIcon, TextCursorIcon } from '@/components/icons/Icons';
 import type { ReaderPresentation } from '@/lib/shared/reader-presentation';
 import type { ReaderType } from '@/types/user-state';
 import type { ReactNode } from 'react';
@@ -23,10 +23,7 @@ export function ReaderPresentationControls({ readerType, value, onChange, overri
   action?: ReactNode;
 }) {
   const reset = (key: keyof ReaderPresentation, label: string) => overrides?.[key] !== undefined && onReset
-    ? <button type="button" aria-label={`Use app default for ${label.toLowerCase()}`} title="Use app default"
-      onClick={() => onReset(key)} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-      <RefreshIcon className="h-3 w-3" aria-hidden />
-    </button> : null;
+    ? <ResetButton label={`Use app default for ${label.toLowerCase()}`} onClick={() => onReset(key)} /> : null;
   const toggle = (key: 'showsLayout' | 'epubTheme' | 'highlightSegment' | 'highlightWords', label: string, icon: ReactNode, info?: string) => (
     <SettingRow label={label} icon={icon} info={info} labelAction={reset(key, label)} controlClassName="w-auto">
       <Switch ariaLabel={label} checked={value[key]} onChange={next => onChange({ [key]: next })} />

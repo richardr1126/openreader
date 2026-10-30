@@ -231,6 +231,7 @@ function PdfReader({
         />
       ) : null}
       <VoiceSidebar
+        pdf
         isOpen={activeSidebar === 'voice'}
         onClose={() => setActiveSidebar((prev) => (prev === 'voice' ? null : prev))}
       />

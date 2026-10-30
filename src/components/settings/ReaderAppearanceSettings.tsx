@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { Section, Select, SegmentedControl, SaveBar, RowIcon, InfoTip } from '@/components/ui';
+import { Section, Select, SegmentedControl, SaveBar, RowIcon, InfoTip, ResetButton } from '@/components/ui';
 import { ColorPicker } from '@/components/ColorPicker';
-import { BookIcon, DisclosureIcon, DocumentIcon, HighlighterIcon, MinusIcon, PaletteIcon, PlusIcon, RefreshIcon, TextCursorIcon, ZoomIcon } from '@/components/icons/Icons';
+import { BookIcon, DisclosureIcon, DocumentIcon, HighlighterIcon, MinusIcon, PaletteIcon, PlusIcon, TextCursorIcon, ZoomIcon } from '@/components/icons/Icons';
 import { AnimatedCollapse } from './ExpandableSettingsCard';
 import styles from './ReaderAppearanceSettings.module.css';
 import { useConfig } from '@/contexts/ConfigContext';
@@ -45,13 +45,6 @@ const PREVIEW_PARAGRAPHS = [
 const SELECT_OPTIONS = Object.fromEntries(Object.entries(TYPE_OPTIONS).map(([key, values]) => [key,
   values.map((value) => ({ value, label: value === 'default' ? 'Default / publisher' : value === 'justify' ? 'Justified' : value.charAt(0).toUpperCase() + value.slice(1) })),
 ])) as Record<keyof typeof TYPE_OPTIONS, { value: string; label: string }[]>;
-
-function ResetIcon({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button type="button" aria-label={label} title={label} onClick={onClick}
-    className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50">
-    <RefreshIcon className="h-3 w-3" aria-hidden />
-  </button>;
-}
 
 const stepButtonClass = 'inline-flex h-7 w-7 items-center justify-center rounded-full text-soft hover:bg-accent-wash hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-30';
 
@@ -187,7 +180,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
   const resetField = (kind: 'typography' | 'highlightAppearance', keys: (keyof Values)[], label: string) => {
     const own = kind === 'typography' ? ownTypography : ownHighlights;
     if (scope !== 'book' || !keys.some((key) => Object.hasOwn(own, key))) return null;
-    return <ResetIcon label={label} onClick={() => {
+    return <ResetButton label={label} onClick={() => {
       const next = { ...own }; for (const key of keys) delete (next as Partial<Values>)[key];
       setPending({ ...pending, [kind]: next });
     }} />;
@@ -223,7 +216,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       value={resolveReaderPresentation(config, readerType, pending.presentation)} overrides={pending.presentation}
       onChange={changePresentation} onReset={resetPresentation} />}
     <Section title={showTypography ? 'Typography' : 'Highlights'} variant="group" action={((showTypography && typographyChanged) || highlightsChanged) &&
-      <ResetIcon label={scope === 'book' ? `Use global ${showTypography ? 'typography and highlights' : 'highlights'}` : `Reset ${showTypography ? 'typography and highlights' : 'highlights'}`}
+      <ResetButton label={scope === 'book' ? `Use global ${showTypography ? 'typography and highlights' : 'highlights'}` : `Reset ${showTypography ? 'typography and highlights' : 'highlights'}`}
         onClick={() => setPending(resetHighlights(showTypography ? { ...pending, typography: scope === 'book' ? {} : DEFAULT_TYPOGRAPHY } : pending))} />}>
       <div aria-label="Typography preview" role="region" className="overflow-hidden text-foreground">
         <button type="button" aria-expanded={previewOpen} onClick={() => setPreviewOpen(current => !current)}
@@ -279,7 +272,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       </div>}
       <ReaderPresentationControls highlights readerType={readerType} value={presentation} overrides={scope === 'book' ? pending.presentation : undefined}
         onChange={changePresentation} onReset={resetPresentation} />
-      <Row label="Preset" wide actions={scope === 'book' && highlightsChanged && <ResetIcon label="Use global highlights" onClick={() => setPending(resetHighlights(pending))} />}>
+      <Row label="Preset" wide actions={scope === 'book' && highlightsChanged && <ResetButton label="Use global highlights" onClick={() => setPending(resetHighlights(pending))} />}>
         <SegmentedControl ariaLabel="Highlight presets" className={segmentedClass(4)}
           value={Object.entries(HIGHLIGHT_PRESETS).find(([, preset]) => Object.entries(preset).every(([key, value]) => draft[key as keyof HighlightAppearance] === value))?.[0] ?? ''}
           onChange={(name) => change('highlightAppearance', HIGHLIGHT_PRESETS[name])}

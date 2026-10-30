@@ -33,7 +33,6 @@ export function ReaderSidebarShell({
 }: ReaderSidebarShellProps) {
   const bounds = useReaderSidebarBounds(isOpen);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const [interactive, setInteractive] = useState(isOpen);
 
@@ -43,8 +42,9 @@ export function ReaderSidebarShell({
     openerRef.current = opener;
     return () => {
       // Return focus from a closing panel, but not from a control the user chose.
+      // Only the closing panel can hold focus here: another takes it once settled.
       const active = document.activeElement;
-      if (active === document.body || panelRef.current?.contains(active)) {
+      if (active === document.body || active?.closest('[data-reader-sidebar-panel]')) {
         if (opener?.isConnected) opener.focus();
       }
     };
@@ -99,7 +99,6 @@ export function ReaderSidebarShell({
           beforeLeave={() => setInteractive(false)}
         >
           <aside
-            ref={panelRef}
             data-reader-sidebar-panel
             role="dialog"
             aria-label={ariaLabel}
