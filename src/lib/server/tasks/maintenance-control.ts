@@ -7,7 +7,7 @@ import { claimUserDeletionBatch, finalizeUserDeletion } from '@/lib/server/admin
 import { deleteDocumentPreviewRows } from '@/lib/server/documents/previews';
 import { releaseDocumentBlobLease, renewDocumentBlobLease, tryAcquireDocumentBlobLease } from '@/lib/server/documents/blob-lease';
 import {
-  enqueueStorageCleanup, failStorageCleanup, isStillOwned, listDueStorageCleanups, settleRow,
+  enqueueStorageCleanup, failStorageCleanup, listDueStorageCleanups, settleIfOwned, settleRow,
   type StorageCleanupRow,
 } from '@/lib/server/storage/cleanups';
 
@@ -47,8 +47,7 @@ export async function executeMaintenanceStep(raw: unknown): Promise<unknown> {
       const due = await listDueStorageCleanups(after);
       const rows: StorageCleanupRow[] = [];
       for (const row of due) {
-        if (await isStillOwned(row)) await settleRow(row);
-        else rows.push(row);
+        if (!(await settleIfOwned(row))) rows.push(row);
       }
       return { rows, after: due.at(-1)?.id ?? null, done: due.length === 0 };
     }

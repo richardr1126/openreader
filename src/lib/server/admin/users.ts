@@ -323,6 +323,15 @@ export async function requestManagedUserDeletions(actorUserId: string, targetUse
   return markUsersForDeletion(targetUserIds);
 }
 
+/** Suspend, mark (keeping an earlier mark's time) and sign out; callers hold the admin mutation lock. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function markForDeletionOn(conn: any, ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  await conn.update(user).set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
+    .where(and(inArray(user.id, ids), isNull(user.deletionRequestedAt)));
+  await conn.delete(session).where(inArray(session.userId, ids));
+}
+
 /**
  * Suspend, mark and sign out accounts so the `delete-users` worker job (or
  * Finish pending account deletions) removes their storage and then their rows.
@@ -342,17 +351,11 @@ export async function markUsersForDeletion(targetUserIds: string[]): Promise<str
     for (const target of targets) {
       if (!target.deletionRequestedAt && target.isAdmin) {
         await assertNotLastAdminOn(conn, target);
-        await conn.update(user).set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
-          .where(eq(user.id, target.id));
+        await markForDeletionOn(conn, [target.id]);
       }
     }
-    const ordinaryIds = targets.filter((target) => !target.isAdmin && !target.deletionRequestedAt).map((target) => target.id);
-    if (ordinaryIds.length) {
-      await conn.update(user).set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
-        .where(inArray(user.id, ordinaryIds));
-    }
     const found = targets.map((target) => target.id);
-    if (found.length) await conn.delete(session).where(inArray(session.userId, found));
+    await markForDeletionOn(conn, found);
     return found;
   });
 }
@@ -391,11 +394,7 @@ export async function claimUserDeletionBatch(input: {
       .where(and(condition, input.after ? sql`${user.id} > ${input.after}` : undefined))
       .orderBy(asc(user.id)).limit(25) as Array<{ id: string }>;
     const ids = rows.map((row) => row.id);
-    if (ids.length) {
-      await conn.update(user).set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
-        .where(and(inArray(user.id, ids), isNull(user.deletionRequestedAt)));
-      await conn.delete(session).where(inArray(session.userId, ids));
-    }
+    await markForDeletionOn(conn, ids);
     return ids;
   });
 }

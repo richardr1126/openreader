@@ -3,7 +3,6 @@ import { db } from '@openreader/database';
 import { documents, storageCleanups } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
-import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
@@ -34,9 +33,9 @@ export function storageCleanupId(userId: string, documentId: string | null): str
 }
 
 /** Queue (or re-arm) cleanup of one user's document storage, or of the whole user when `documentId` is null. */
-export async function enqueueStorageCleanup(
-  input: { userId: string; documentId: string | null; notBeforeMs?: number },
-): Promise<StorageCleanupRow> {
+export async function enqueueStorageCleanup<D extends string | null>(
+  input: { userId: string; documentId: D; notBeforeMs?: number },
+): Promise<StorageCleanupRow & { documentId: D }> {
   const now = Date.now();
   const row = {
     id: storageCleanupId(input.userId, input.documentId),
@@ -55,7 +54,7 @@ export async function enqueueStorageCleanup(
   return row;
 }
 
-export async function isStillOwned(row: StorageCleanupRow): Promise<boolean> {
+async function isStillOwned(row: StorageCleanupRow): Promise<boolean> {
   if (row.documentId === null) {
     const [user] = await db.select({ id: authSchema.user.id }).from(authSchema.user)
       .where(eq(authSchema.user.id, row.userId)).limit(1);
@@ -74,6 +73,13 @@ export async function settleRow(row: StorageCleanupRow): Promise<void> {
   ));
 }
 
+/** Drop the row when the user owns the document (or the account exists) again, since its storage is live. */
+export async function settleIfOwned(row: StorageCleanupRow): Promise<boolean> {
+  if (!(await isStillOwned(row))) return false;
+  await settleRow(row);
+  return true;
+}
+
 export async function listDueStorageCleanups(after: string | null): Promise<StorageCleanupRow[]> {
   return db.select().from(storageCleanups).where(and(
     lte(storageCleanups.notBeforeMs, Date.now()),
@@ -81,55 +87,37 @@ export async function listDueStorageCleanups(after: string | null): Promise<Stor
   )).orderBy(asc(storageCleanups.id)).limit(10);
 }
 
-export async function failStorageCleanup(row: StorageCleanupRow): Promise<void> {
+/** Back a failed row off for the `retry-storage-cleanups` task. */
+export async function failStorageCleanup(row: StorageCleanupRow, error?: unknown): Promise<void> {
   const attempts = row.attempts + 1;
   await db.update(storageCleanups).set({
     attempts,
-    lastError: 'Worker storage cleanup failed',
+    lastError: error === undefined ? 'Worker storage cleanup failed' : String(error).slice(0, 1000),
     notBeforeMs: Date.now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (attempts - 1)),
   }).where(and(eq(storageCleanups.id, row.id), eq(storageCleanups.notBeforeMs, row.notBeforeMs)));
 }
 
 /**
- * Run one queued cleanup. The row is dropped without a worker call when the
- * user owns the document (or the account exists) again, since its storage is
- * live; a failure backs the row off for the retry task.
+ * Run a deleted document's queued playback cleanup inline. The worker's
+ * `retry-storage-cleanups` task runs whatever this leaves behind.
  */
-export async function runStorageCleanup(row: StorageCleanupRow): Promise<'cleared' | 'owned' | 'failed'> {
+export async function runStorageCleanup(
+  row: StorageCleanupRow & { documentId: string },
+): Promise<'cleared' | 'owned' | 'failed'> {
   try {
-    if (await isStillOwned(row)) {
-      await settleRow(row);
-      return 'owned';
-    }
-    if (!isComputeWorkerAvailable()) throw new Error('Compute worker is required for storage cleanup');
-    if (row.documentId === null) {
-      await getComputeWorkerClient().cleanupUserStorage({
-        storageUserId: row.userId,
-        namespace: null,
-        documentIds: [],
-      });
-    } else {
-      await deleteDocumentTtsSegmentCache({ userId: row.userId, documentId: row.documentId, namespace: null });
-    }
+    if (await settleIfOwned(row)) return 'owned';
+    await deleteDocumentTtsSegmentCache({ userId: row.userId, documentId: row.documentId, namespace: null });
     await settleRow(row);
     return 'cleared';
   } catch (error) {
-    const attempts = row.attempts + 1;
     // If the backoff cannot be recorded either, the row keeps its due time and
     // the retry task picks it up; this runs after responses, so never reject.
-    await db.update(storageCleanups).set({
-      attempts,
-      lastError: String(error).slice(0, 1000),
-      notBeforeMs: Date.now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (attempts - 1)),
-    }).where(and(
-      eq(storageCleanups.id, row.id),
-      eq(storageCleanups.notBeforeMs, row.notBeforeMs),
-    )).catch(() => undefined);
+    await failStorageCleanup(row, error).catch(() => undefined);
     logDegraded(serverLogger, {
       event: 'storage.cleanup.failed',
       msg: 'Queued storage cleanup failed; it will be retried',
-      step: row.documentId === null ? 'cleanup_user_storage' : 'cleanup_document_storage',
-      context: { userIdHash: hashForLog(row.userId), documentId: row.documentId, attempts },
+      step: 'cleanup_document_storage',
+      context: { userIdHash: hashForLog(row.userId), documentId: row.documentId, attempts: row.attempts + 1 },
       error,
     });
     return 'failed';

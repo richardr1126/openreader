@@ -30,6 +30,7 @@ export function createMaintenanceHandler(input: {
 }) {
   const { storage, s3Prefix, cleanup } = input;
   const database = input.databaseStep ?? maintenanceDatabaseStep;
+  const clearUserStorage = (userId: string) => cleanup.cleanupUserStorage({ storageUserId: userId, namespace: null, documentIds: [] });
   return async (request: MaintenanceJobRequest, _queueWaitMs: number, hooks?: {
     onProgress?: (progress: MaintenanceProgress) => Promise<void>;
   }): Promise<MaintenanceJobResult> => {
@@ -61,7 +62,7 @@ export function createMaintenanceHandler(input: {
         if (!userIds.length) break;
         for (const userId of userIds) {
           if (await attempt(async () => {
-            await cleanup.cleanupUserStorage({ storageUserId: userId, namespace: null, documentIds: [] });
+            await clearUserStorage(userId);
             await database({ action: 'finalize-user', userId });
           }, 'Deleting accounts')) completed++;
           await report('Deleting accounts');
@@ -78,7 +79,7 @@ export function createMaintenanceHandler(input: {
         if (page.done) break;
         for (const row of page.rows) {
           const ok = await attempt(async () => {
-            if (row.documentId === null) await cleanup.cleanupUserStorage({ storageUserId: row.userId, namespace: null, documentIds: [] });
+            if (row.documentId === null) await clearUserStorage(row.userId);
             else await cleanup.clearPlaybackScope({ storageUserId: row.userId, documentId: row.documentId });
             await database({ action: 'cleanup-settle', row });
           }, 'Clearing queued storage');

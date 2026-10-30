@@ -6,8 +6,6 @@ import * as sqliteSchema from '@openreader/database/schema-sqlite';
 // Real in-memory SQLite so the re-arm, settle and backoff predicates run as SQL.
 const holder = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof drizzle> }));
 const mocks = vi.hoisted(() => ({
-  workerAvailable: true,
-  cleanupUserStorage: vi.fn(async () => undefined),
   deleteDocumentTtsSegmentCache: vi.fn(async () => undefined),
 }));
 
@@ -15,11 +13,6 @@ vi.mock('@openreader/database', () => ({
   get db() {
     return holder.db;
   },
-}));
-
-vi.mock('@/lib/server/compute-worker/client', () => ({
-  isComputeWorkerAvailable: () => mocks.workerAvailable,
-  getComputeWorkerClient: () => ({ cleanupUserStorage: mocks.cleanupUserStorage }),
 }));
 
 vi.mock('@/lib/server/tts/segments-cache', () => ({
@@ -57,9 +50,6 @@ beforeEach(() => {
   sqlite = new Database(':memory:');
   sqlite.exec(SCHEMA);
   holder.db = drizzle(sqlite, { schema: sqliteSchema });
-  mocks.workerAvailable = true;
-  mocks.cleanupUserStorage.mockReset();
-  mocks.cleanupUserStorage.mockResolvedValue(undefined);
   mocks.deleteDocumentTtsSegmentCache.mockReset();
   mocks.deleteDocumentTtsSegmentCache.mockResolvedValue(undefined);
 });
@@ -85,18 +75,17 @@ describe('storage cleanup queue', () => {
   });
 
   test('backs a failed cleanup off and clears it on a later attempt', async () => {
-    mocks.cleanupUserStorage.mockRejectedValueOnce(new Error('worker down'));
-    const row = await enqueueStorageCleanup({ userId: 'gone', documentId: null });
+    mocks.deleteDocumentTtsSegmentCache.mockRejectedValueOnce(new Error('worker down'));
+    const row = await enqueueStorageCleanup({ userId: 'u1', documentId: 'd1' });
 
     const before = Date.now();
     await expect(runStorageCleanup(row)).resolves.toBe('failed');
     const [failed] = queuedRows();
-    expect(failed).toEqual(expect.objectContaining({ id: 'user:gone', attempts: 1 }));
+    expect(failed).toEqual(expect.objectContaining({ id: 'doc:u1:d1', attempts: 1 }));
     expect(failed.lastError).toContain('worker down');
     expect(failed.notBeforeMs).toBeGreaterThanOrEqual(before + 5 * 60 * 1000);
 
     await expect(runStorageCleanup({ ...row, attempts: 1, notBeforeMs: failed.notBeforeMs })).resolves.toBe('cleared');
-    expect(mocks.cleanupUserStorage).toHaveBeenLastCalledWith({ storageUserId: 'gone', namespace: null, documentIds: [] });
     expect(queuedRows()).toEqual([]);
   });
 
