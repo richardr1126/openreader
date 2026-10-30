@@ -38,11 +38,11 @@ vi.mock('@openreader/database', () => ({ db: mocks.conn }));
 vi.mock('@openreader/database/run-in-transaction', () => ({
   runInDbTransaction: (fn: (conn: unknown) => unknown) => fn(mocks.conn),
 }));
-vi.mock('@/lib/server/user/data-cleanup', () => ({ deleteUserStorageData: mocks.cleanup }));
+vi.mock('@/lib/server/user/data-cleanup', () => ({ deleteUserDatabaseData: mocks.cleanup }));
 
 import {
-  deleteManagedUser,
-  resumePendingUserDeletions,
+  requestManagedUserDeletions,
+  finalizeUserDeletion,
   updateManagedUser,
 } from '../../src/lib/server/admin/users';
 
@@ -85,37 +85,43 @@ describe('admin user mutation guards', () => {
       .rejects.toThrow(/own administrator access/i);
 
     mocks.selectedRows = [[target({ isAdmin: true })], [{ value: 1 }]];
-    await expect(deleteManagedUser({ actorUserId: 'owner', targetUserId: 'target-1' }))
+    await expect(requestManagedUserDeletions('owner', ['target-1']))
       .rejects.toThrow(/final administrator/i);
     expect(mocks.cleanup).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 
-  test('durably suspends and marks before cleaning up storage and the row', async () => {
+  test('marks the batch and revokes sessions without waiting for storage or removing rows', async () => {
     mocks.selectedRows = [[target()]];
-    await deleteManagedUser({ actorUserId: 'owner', targetUserId: 'target-1' });
-    // Phase 1 wrote the suspend + deletionRequestedAt marker...
+    await expect(requestManagedUserDeletions('owner', ['target-1'])).resolves.toEqual(['target-1']);
     expect(mocks.update).toHaveBeenCalledTimes(1);
-    // ...and phase 2 cleaned up storage then removed the row.
-    expect(mocks.cleanup).toHaveBeenCalledTimes(1);
-    expect(userRowDeleted()).toBe(true);
+    expect(mocks.cleanup).not.toHaveBeenCalled();
+    expect(userRowDeleted()).toBe(false);
+    expect(mocks.remove).toHaveBeenCalledOnce();
   });
 
-  test('never deletes the account row when storage cleanup fails', async () => {
+  test('refuses a worker completion for an account that was not marked', async () => {
     mocks.selectedRows = [[target()]];
-    mocks.cleanup.mockRejectedValue(new Error('storage unavailable'));
-    await expect(deleteManagedUser({ actorUserId: 'owner', targetUserId: 'target-1' }))
-      .rejects.toThrow(/storage unavailable/);
-    // The durable marker was written and sessions revoked, but the irreversible
-    // row deletion never ran — a later sweep can retry it.
+    await expect(finalizeUserDeletion('target-1')).rejects.toThrow(/not marked/);
+    expect(mocks.cleanup).not.toHaveBeenCalled();
     expect(userRowDeleted()).toBe(false);
   });
 
-  test('resume sweep finishes durably marked deletions', async () => {
-    mocks.selectedRows = [[{ id: 'u1' }, { id: 'u2' }]];
-    await resumePendingUserDeletions();
-    expect(mocks.cleanup).toHaveBeenCalledTimes(2);
-    expect(mocks.remove.mock.calls.filter((call: unknown[]) => call[0] === user)).toHaveLength(2);
+  test('completes only marked deletions and preserves rows if SQL cleanup fails', async () => {
+    mocks.selectedRows = [[target({ deletionRequestedAt: new Date() })]];
+    mocks.cleanup.mockRejectedValueOnce(new Error('database unavailable'));
+    await expect(finalizeUserDeletion('target-1')).rejects.toThrow(/database unavailable/);
+    expect(userRowDeleted()).toBe(false);
+    mocks.selectedRows = [[target({ deletionRequestedAt: new Date() })]];
+    await finalizeUserDeletion('target-1');
+    expect(userRowDeleted()).toBe(true);
+  });
+
+  test('prevents restoring an account whose deletion has started', async () => {
+    mocks.selectedRows = [[target({ deletionRequestedAt: new Date() })]];
+    await expect(updateManagedUser({ actorUserId: 'owner', targetUserId: 'target-1', accessStatus: 'active' }))
+      .rejects.toThrow(/being deleted/);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   test('revokes sessions after an approval', async () => {

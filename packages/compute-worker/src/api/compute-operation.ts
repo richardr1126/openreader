@@ -1,4 +1,5 @@
 import type { DownloadableModel, WorkerOperationState } from '../operations/contracts';
+import { maintenanceSubjectFromOperationKey } from '../operations/keys';
 import {
   accountExportSubjectFromOperationKey,
   documentConversionSubjectFromOperationKey,
@@ -12,6 +13,7 @@ import {
 } from '../operations/keys';
 
 export type ComputeOperationSubject =
+  | ReturnType<typeof maintenanceSubjectFromOperationKey>
   | { kind: 'pdf_layout'; documentId: string; namespace: string | null }
   | { kind: 'tts_playback'; documentId: string; sessionId: string }
   | { kind: 'tts_playback_plan'; documentId: string; settingsHash: string; planSignature: string }
@@ -43,7 +45,7 @@ export interface ComputeOperationEvent<Result = unknown> {
 export function toComputeOperation<Result>(
   state: WorkerOperationState<Result>,
 ): ComputeOperation<Result> {
-  const subject = state.kind === 'pdf_layout'
+  const subject = state.kind === 'maintenance' ? maintenanceSubjectFromOperationKey(state.opKey) : state.kind === 'pdf_layout'
     ? (pdfSubjectFromOperationKey(state.opKey) ?? { kind: 'pdf_layout', documentId: '', namespace: null })
     : state.kind === 'tts_playback_plan'
       ? (ttsPlaybackPlanSubjectFromOperationKey(state.opKey) ?? {

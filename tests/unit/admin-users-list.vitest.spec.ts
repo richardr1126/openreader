@@ -44,6 +44,7 @@ describe('admin user directory query', () => {
       INSERT INTO compute_limit_events VALUES
         ('e1', 'owner', 'characters', 100), ('e2', 'owner', 'characters', 50),
         ('e3', 'guest', 'input_bytes', 128);
+      ALTER TABLE user ADD COLUMN deletion_requested_at integer;
     `);
   });
 

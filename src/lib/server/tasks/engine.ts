@@ -6,10 +6,13 @@ import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 import { TASK_REGISTRY } from './registry';
 import type { TaskContext, TaskDef, TaskRegistry, TaskRunStatus } from './types';
+import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
+import type { MaintenanceResult } from '@/lib/server/compute-worker/protocol';
 
 // A task still marked 'running' after this long is assumed abandoned (process
 // crashed mid-run) and may be reclaimed by the next tick.
 const STALE_RUNNING_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 // Next control-plane invocations must remain comfortably below Vercel's
 // request ceiling. Handlers must observe the supplied AbortSignal so a future
 // larger maintenance job is moved to the worker instead of stretching a route.
@@ -21,18 +24,14 @@ const DEFAULT_TASK_MAX_RUN_MS = 45_000;
  */
 async function ensureTaskRows(registry: TaskRegistry = TASK_REGISTRY): Promise<void> {
   const now = Date.now();
-  for (const [key, def] of Object.entries(registry)) {
-    await db
+  const rows = Object.entries(registry).map(([key, def]) => ({
+    key, enabled: def.defaultEnabled ?? true, intervalMs: def.defaultIntervalMs,
+    lastStatus: 'idle', nextRunAt: now,
+  }));
+  if (rows.length) await db
       .insert(scheduledTasks)
-      .values({
-        key,
-        enabled: def.defaultEnabled ?? true,
-        intervalMs: def.defaultIntervalMs,
-        lastStatus: 'idle',
-        nextRunAt: now,
-      })
+      .values(rows)
       .onConflictDoNothing();
-  }
 }
 
 /**
@@ -65,23 +64,27 @@ async function claimTask(key: string, now: number): Promise<string | null> {
 
 // `last_result_json` holds the plain summary, or `{summary, cursor}` while a
 // bounded task has more to do.
-function encodeStoredResult(summary: string | null, cursor: string | null): string | null {
-  return cursor === null ? summary : JSON.stringify({ summary, cursor });
+function encodeStoredResult(summary: string | null, cursor: string | null, operationId: string | null = null): string | null {
+  return cursor === null && operationId === null ? summary : JSON.stringify({ summary, cursor, operationId });
 }
 
-function decodeStoredResult(raw: string | null | undefined): { summary: string | null; cursor: string | null } {
-  if (!raw) return { summary: null, cursor: null };
+function decodeStoredResult(raw: string | null | undefined): { summary: string | null; cursor: string | null; operationId: string | null } {
+  if (!raw) return { summary: null, cursor: null, operationId: null };
   if (raw.startsWith('{')) {
     try {
-      const parsed = JSON.parse(raw) as { summary?: unknown; cursor?: unknown };
-      if (typeof parsed.cursor === 'string') {
-        return { summary: typeof parsed.summary === 'string' ? parsed.summary : null, cursor: parsed.cursor };
+      const parsed = JSON.parse(raw) as { summary?: unknown; cursor?: unknown; operationId?: unknown };
+      if (typeof parsed.cursor === 'string' || typeof parsed.operationId === 'string') {
+        return {
+          summary: typeof parsed.summary === 'string' ? parsed.summary : null,
+          cursor: typeof parsed.cursor === 'string' ? parsed.cursor : null,
+          operationId: typeof parsed.operationId === 'string' ? parsed.operationId : null,
+        };
       }
     } catch {
       // A plain summary that happens to start with a brace.
     }
   }
-  return { summary: raw, cursor: null };
+  return { summary: raw, cursor: null, operationId: null };
 }
 
 async function readTaskCursor(key: string): Promise<string | null> {
@@ -96,20 +99,27 @@ async function finishTask(
   outcome:
     | { status: 'ok'; startedAt: number; summary: string | null; cursor: string | null; disable: boolean }
     | { status: 'error'; startedAt: number; error: unknown; cursor: string | null },
+  finishedAt = Date.now(),
 ): Promise<void> {
   const now = Date.now();
+  // Hobby cron runs once daily at midnight UTC. Anchor that cadence to the
+  // run's UTC day so execution latency and late reconciliation cannot skip a
+  // day. Long-lived installations keep their completion-based interval.
+  const scheduleFrom = process.env.VERCEL
+    ? Math.floor(outcome.startedAt / DAY_MS) * DAY_MS
+    : finishedAt;
   await db
     .update(scheduledTasks)
     .set({
       lastStatus: outcome.status,
-      lastRunAt: now,
-      lastDurationMs: now - outcome.startedAt,
+      lastRunAt: finishedAt,
+      lastDurationMs: Math.max(0, finishedAt - outcome.startedAt),
       lastError: outcome.status === 'error' ? String(outcome.error) : null,
       // A failed run keeps the cursor it started from so progress is not lost.
       lastResultJson: encodeStoredResult(outcome.status === 'ok' ? outcome.summary : null, outcome.cursor),
       ...(outcome.status === 'ok' && outcome.disable ? { enabled: false } : {}),
       // Schedule the next run off the row's (possibly user-edited) interval.
-      nextRunAt: sql`${now} + ${scheduledTasks.intervalMs}`,
+      nextRunAt: sql`${scheduleFrom} + ${scheduledTasks.intervalMs}`,
       leaseOwner: null,
       runningSince: null,
       updatedAt: now,
@@ -124,12 +134,45 @@ function taskTimeoutError(key: string, maxRunMs: number): Error {
   return new Error(`Scheduled task "${key}" exceeded its ${maxRunMs}ms runtime limit`);
 }
 
+/** Read durable worker state at existing task entry points, never from a timer in a web request. */
+async function reconcileMaintenanceTasks(): Promise<void> {
+  const rows = await db.select().from(scheduledTasks).where(eq(scheduledTasks.lastStatus, 'running')) as Array<typeof scheduledTasks.$inferSelect>;
+  await Promise.all(rows.map(async (row) => {
+    const { operationId } = decodeStoredResult(row.lastResultJson);
+    if (!operationId || !row.leaseOwner) return;
+    try {
+      const operation = await getComputeWorkerClient().getOperation<MaintenanceResult>(operationId, { signal: AbortSignal.timeout(10_000) });
+      if (operation?.subject.kind === 'maintenance' && operation.subject.runId !== row.leaseOwner) return;
+      if (operation && (operation.status === 'queued' || operation.status === 'running')) {
+        // A long-running job is alive even when no admin has the panel open.
+        await db.update(scheduledTasks).set({ runningSince: Date.now() }).where(and(
+          eq(scheduledTasks.key, row.key), eq(scheduledTasks.leaseOwner, row.leaseOwner),
+        ));
+        return;
+      }
+      const result = operation?.result;
+      await finishTask(row.key, row.leaseOwner, operation?.status === 'succeeded' && result && result.failed === 0
+        ? { status: 'ok', startedAt: operation.queuedAt, summary: result.summary, cursor: null, disable: result.disableTask === true }
+        : { status: 'error', startedAt: operation?.queuedAt ?? Number(row.runningSince ?? row.updatedAt), error: result?.summary ?? operation?.error?.message ?? 'Maintenance operation expired; run the task again', cursor: null },
+      operation?.updatedAt ?? Date.now());
+    } catch (error) {
+      // An unavailable worker is not evidence that its durable job stopped.
+      // Renew the control-plane lease rather than starting a duplicate job.
+      await db.update(scheduledTasks).set({ runningSince: Date.now() }).where(and(
+        eq(scheduledTasks.key, row.key), eq(scheduledTasks.leaseOwner, row.leaseOwner),
+      ));
+      serverLogger.warn({ event: 'tasks.reconcile.failed', key: row.key, error: String(error) }, 'Unable to read maintenance operation');
+    }
+  }));
+}
+
 async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promise<void> {
   const startedAt = Date.now();
   const maxRunMs = def.maxRunMs ?? DEFAULT_TASK_MAX_RUN_MS;
   const controller = new AbortController();
   const cursor = await readTaskCursor(key);
   const context: TaskContext = {
+    runId: leaseOwner,
     signal: controller.signal,
     deadlineAt: startedAt + maxRunMs,
     cursor,
@@ -147,6 +190,13 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
       }),
     ]);
     const summary = result && typeof result.summary === 'string' ? result.summary : null;
+    if (result?.operationId) {
+      await db.update(scheduledTasks).set({
+        lastResultJson: encodeStoredResult(summary, null, result.operationId),
+        lastError: null, updatedAt: Date.now(),
+      }).where(and(eq(scheduledTasks.key, key), eq(scheduledTasks.leaseOwner, leaseOwner)));
+      return;
+    }
     await finishTask(key, leaseOwner, {
       status: 'ok',
       startedAt,
@@ -179,6 +229,7 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
 export async function runDueTasks(options?: { registry?: TaskRegistry; sequential?: boolean }): Promise<void> {
   const registry = options?.registry ?? TASK_REGISTRY;
   await ensureTaskRows(registry);
+  await reconcileMaintenanceTasks();
 
   const now = Date.now();
   const rows = await db.select().from(scheduledTasks);
@@ -211,6 +262,7 @@ export async function runTaskNow(key: string, registry: TaskRegistry = TASK_REGI
   const def = registry[key];
   if (!def) return false;
   await ensureTaskRows(registry);
+  await reconcileMaintenanceTasks();
   const leaseOwner = await claimTask(key, Date.now());
   if (!leaseOwner) return false;
   await executeTask(key, def, leaseOwner);
@@ -248,6 +300,7 @@ export async function updateTask(
 }
 
 export type TaskView = {
+  operationId: string | null;
   key: string;
   name: string;
   description?: string;
@@ -265,6 +318,7 @@ export type TaskView = {
 /** Combined registry + stored-state view for the admin tasks UI. */
 export async function listTasks(registry: TaskRegistry = TASK_REGISTRY): Promise<TaskView[]> {
   await ensureTaskRows(registry);
+  await reconcileMaintenanceTasks();
   const rows = await db.select().from(scheduledTasks);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const byKey = new Map<string, any>(rows.map((row: any) => [row.key, row]));
@@ -272,6 +326,7 @@ export async function listTasks(registry: TaskRegistry = TASK_REGISTRY): Promise
   return Object.entries(registry).map(([key, def]) => {
     const row = byKey.get(key);
     return {
+      operationId: decodeStoredResult(row?.lastResultJson).operationId,
       key,
       name: def.name,
       description: def.description,

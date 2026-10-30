@@ -21,6 +21,8 @@ export const DOCUMENT_CONVERSION_JOBS_SUBJECT = 'jobs.document_conversion';
 export const ACCOUNT_EXPORT_JOBS_SUBJECT = 'jobs.account_export';
 export const EMAIL_DELIVERY_JOBS_SUBJECT = 'jobs.email_delivery';
 export const MODEL_DOWNLOAD_JOBS_SUBJECT = 'jobs.model_download';
+export const MAINTENANCE_JOBS_SUBJECT = 'jobs.maintenance';
+export const MAINTENANCE_CONSUMER_NAME = 'compute_maintenance';
 export const LAYOUT_CONSUMER_NAME = 'compute_layout';
 export const TTS_PLAYBACK_CONSUMER_NAME = 'compute_tts_playback';
 export const TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME = 'compute_tts_playback_document';
@@ -63,6 +65,7 @@ export async function ensureJetStreamResources(input: {
       ACCOUNT_EXPORT_JOBS_SUBJECT,
       EMAIL_DELIVERY_JOBS_SUBJECT,
       MODEL_DOWNLOAD_JOBS_SUBJECT,
+      MAINTENANCE_JOBS_SUBJECT,
     ],
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
@@ -135,5 +138,6 @@ export async function ensureJetStreamResources(input: {
     ensureConsumer(EMAIL_DELIVERY_CONSUMER_NAME, EMAIL_DELIVERY_JOBS_SUBJECT, 60_000, 3),
     // The running job extends the ack as it goes; a failed download is retried by the admin.
     ensureConsumer(MODEL_DOWNLOAD_CONSUMER_NAME, MODEL_DOWNLOAD_JOBS_SUBJECT, 60_000, 1),
+    ensureConsumer(MAINTENANCE_CONSUMER_NAME, MAINTENANCE_JOBS_SUBJECT, 60_000, 3),
   ]);
 }

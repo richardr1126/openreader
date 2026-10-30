@@ -24,6 +24,7 @@ import type {
 } from '../operations/contracts';
 import { createJsonCodec } from './json-codec';
 import { toErrorMessage } from './errors';
+import type { MaintenanceJobRequest } from '../operations/contracts';
 
 export interface KvEntryLike {
   operation?: string;
@@ -74,15 +75,20 @@ export function opEventsSubject(opId: string): string {
 
 export interface JetStreamOperationStateStoreDeps {
   getKv: () => Promise<KvStoreLike>;
+  listKeys?: (filter: string) => AsyncIterable<string>;
 }
 
 export class JetStreamOperationStateStore<Result = unknown> implements OperationStateStore<Result> {
   private readonly getKv: () => Promise<KvStoreLike>;
+  private readonly listKeys: (filter: string) => AsyncIterable<string>;
   private readonly opStateCodec = createJsonCodec<OperationState<Result>>();
   private readonly opIndexCodec = createJsonCodec<OpIndexEntry>();
 
   constructor(deps: JetStreamOperationStateStoreDeps) {
     this.getKv = deps.getKv;
+    this.listKeys = deps.listKeys ?? (async function* (filter) {
+      for await (const key of await (await deps.getKv()).keys(filter)) yield key;
+    });
   }
 
   async getOpState(opId: string): Promise<OperationState<Result> | null> {
@@ -127,7 +133,7 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
   async listOpStates(): Promise<OperationState<Result>[]> {
     const kv = await this.getKv();
     const keys: string[] = [];
-    for await (const key of await kv.keys('op_state.*')) keys.push(key);
+    for await (const key of this.listKeys('op_state.*')) keys.push(key);
     const states: OperationState<Result>[] = [];
     // Remote NATS round trips dominate this scan in production. Bound the
     // fan-out instead of serializing every historical operation read.
@@ -327,6 +333,7 @@ export interface JetStreamOperationQueueDeps<TPayload> {
   accountExportSubject?: string;
   emailDeliverySubject?: string;
   modelDownloadSubject?: string;
+  maintenanceSubject?: string;
   onEnqueued?: (job: QueuedOperation<TPayload>) => Promise<void> | void;
 }
 
@@ -339,7 +346,8 @@ type JetStreamQueuedPayload =
   | DocumentConversionJobRequest
   | AccountExportJobRequest
   | EmailDeliveryJobRequest
-  | ModelDownloadJobRequest;
+  | ModelDownloadJobRequest
+  | MaintenanceJobRequest;
 
 export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPayload> {
   private readonly getJs: () => Promise<Pick<JetStreamClient, 'publish'>>;
@@ -353,6 +361,8 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
   private readonly accountExportSubject: string;
   private readonly emailDeliverySubject: string;
   private readonly modelDownloadSubject: string;
+  private readonly maintenanceSubject: string;
+  private readonly maintenanceCodec = createJsonCodec<QueuedOperation<MaintenanceJobRequest>>();
   private readonly onEnqueued?: (job: QueuedOperation<JetStreamQueuedPayload>) => Promise<void> | void;
   private readonly layoutCodec = createJsonCodec<QueuedOperation<PdfLayoutJobRequest>>();
   private readonly ttsPlaybackCodec = createJsonCodec<QueuedOperation<TtsPlaybackJobRequest>>();
@@ -376,6 +386,7 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
     this.accountExportSubject = deps.accountExportSubject ?? 'jobs.account_export';
     this.emailDeliverySubject = deps.emailDeliverySubject ?? 'jobs.email_delivery';
     this.modelDownloadSubject = deps.modelDownloadSubject ?? 'jobs.model_download';
+    this.maintenanceSubject = deps.maintenanceSubject ?? 'jobs.maintenance';
     this.onEnqueued = deps.onEnqueued;
   }
 
@@ -429,6 +440,8 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
         this.modelDownloadSubject,
         this.modelDownloadCodec.encode(job as QueuedOperation<ModelDownloadJobRequest>),
       );
+    } else if (job.kind === 'maintenance') {
+      await js.publish(this.maintenanceSubject, this.maintenanceCodec.encode(job as QueuedOperation<MaintenanceJobRequest>));
     } else {
       const exhaustive: never = job.kind;
       throw new Error(`Unsupported operation kind: ${String(exhaustive)}`);

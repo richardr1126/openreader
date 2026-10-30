@@ -5,6 +5,16 @@ import {
   buildTtsPlaybackExportArtifactId,
 } from '@openreader/tts/playback-scope';
 import { DOCX_CONVERTER_VERSION, DOCUMENT_PREVIEW_RENDERER_VERSION, PDF_PARSER_VERSION, type DownloadableModel } from './contracts';
+import type { MaintenanceJobRequest, MaintenanceTask } from './contracts';
+
+export function buildMaintenanceOperationKey(input: MaintenanceJobRequest): string {
+  return ['maintenance', 'v1', input.task, input.runId].join('|');
+}
+
+export function maintenanceSubjectFromOperationKey(key: string): { kind: 'maintenance'; task: MaintenanceTask; runId: string } {
+  const [, , task, runId] = key.split('|');
+  return { kind: 'maintenance', task: task as MaintenanceTask, runId };
+}
 
 export function buildPdfOperationKey(input: {
   documentId: string;

@@ -1,5 +1,7 @@
 import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import type {
+  MaintenanceJobRequest,
+  MaintenanceJobResult,
   AccountExportJobRequest,
   AccountExportJobResult,
   EmailDeliveryJobRequest,
@@ -144,6 +146,7 @@ export function createWorkerLoopController(input: {
   accountExportCodec?: JsonCodec<QueuedJob<AccountExportJobRequest>>;
   emailDeliveryCodec?: JsonCodec<QueuedJob<EmailDeliveryJobRequest>>;
   modelDownloadCodec?: JsonCodec<QueuedJob<ModelDownloadJobRequest>>;
+  maintenanceCodec?: JsonCodec<QueuedJob<MaintenanceJobRequest>>;
   isOwnerActive: (owner: object) => boolean;
   isStopping: () => boolean;
   markActivity: (reason: string) => void;
@@ -230,7 +233,7 @@ export function createWorkerLoopController(input: {
         queueWaitTiming: buildQueueWaitTiming(decoded.queuedAt, startedAt),
       };
       if (work.notStarted) throw work.notStarted;
-      if (startedAt - decoded.queuedAt > maxQueueAgeMs) {
+      if (WORKER_OPERATION_KIND_POLICY[decoded.kind].enforcesQueueDeadline && startedAt - decoded.queuedAt > maxQueueAgeMs) {
         throw new ComputeQueueExpiredError();
       }
       await writeState(() => markRunning(context!, startedAt));
@@ -473,6 +476,7 @@ export function createWorkerLoopController(input: {
       accountExport?: Consumer;
       emailDelivery?: Consumer;
       modelDownload?: Consumer;
+      maintenance?: Consumer;
     }): void {
       stopRequested = false;
       loops = [];
@@ -546,6 +550,13 @@ export function createWorkerLoopController(input: {
           ? { codec: input.modelDownloadCodec, run: input.handlers.runModelDownload }
           : null;
       let loopSlots = 0;
+      const maintenanceWork: WorkDefinition<MaintenanceJobRequest, MaintenanceJobResult> | null =
+        input.maintenanceCodec && consumers.maintenance && input.handlers.runMaintenance
+          ? { codec: input.maintenanceCodec, run: input.handlers.runMaintenance }
+          : null;
+      if (maintenanceWork && consumers.maintenance) {
+        loops.push(runLoop({ owner, consumer: consumers.maintenance, ...maintenanceWork, workerLabel: 'maintenance-1' }));
+      }
       const addLoopSlot = (i: number): void => {
         loops.push(runLoop({ owner, consumer: consumers.pdfLayout, ...pdfWork, workerLabel: `layout-${i + 1}` }));
         if (ttsPlaybackWork && consumers.ttsPlayback) {

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { eq } from 'drizzle-orm';
@@ -7,6 +7,10 @@ import * as sqliteSchema from '@openreader/database/schema-sqlite';
 // Back the engine with a real in-memory SQLite so the CAS claim, due-detection,
 // and nextRunAt arithmetic are exercised against real SQL rather than mocks.
 const holder = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof drizzle> }));
+const worker = vi.hoisted(() => ({ getOperation: vi.fn() }));
+vi.mock('@/lib/server/compute-worker/client', () => ({
+  getComputeWorkerClient: () => worker,
+}));
 vi.mock('@openreader/database', () => ({
   get db() {
     return holder.db;
@@ -62,12 +66,86 @@ function registryWith(run: TaskRegistry[string]['run']): TaskRegistry {
 }
 
 beforeEach(() => {
+  worker.getOperation.mockReset();
   const sqlite = new Database(':memory:');
   sqlite.exec(CREATE_TABLE);
   holder.db = drizzle(sqlite, { schema: sqliteSchema });
 });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe('scheduled task engine', () => {
+  test('late reconciliation records worker completion and keeps the next daily Vercel cron due', async () => {
+    vi.useFakeTimers();
+    vi.stubEnv('VERCEL', '1');
+    const queuedAt = Date.parse('2026-10-29T00:00:10Z');
+    const finishedAt = queuedAt + 60_000;
+    vi.setSystemTime(queuedAt);
+    let runId = '';
+    const handler = vi.fn(async (context: { runId: string }) => {
+      runId = context.runId;
+      return { operationId: 'op-daily' };
+    });
+    const registry: TaskRegistry = { [KEY]: { name: 'Daily cleanup', defaultIntervalMs: 86_400_000, run: handler } };
+    await runDueTasks({ registry });
+    worker.getOperation.mockResolvedValue({
+      opId: 'op-daily', subject: { kind: 'maintenance', runId }, status: 'succeeded', queuedAt, updatedAt: finishedAt,
+      result: { summary: 'Done', completed: 1, failed: 0 },
+    });
+    // The next cron can arrive a few seconds earlier than the previous day's.
+    vi.setSystemTime(Date.parse('2026-10-30T00:00:05Z'));
+    await listTasks(registry);
+    const row = await readRow();
+    expect(row.lastRunAt).toBe(finishedAt);
+    expect(row.lastDurationMs).toBe(60_000);
+    expect(row.nextRunAt).toBe(Date.parse('2026-10-30T00:00:00Z'));
+    await runDueTasks({ registry });
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  test('self-hosted schedules use completion time even when success is reconciled much later', async () => {
+    vi.stubEnv('VERCEL', '');
+    const finishedAt = Date.now() - 3_600_000;
+    const queuedAt = finishedAt - 30_000;
+    await seedRow({ lastStatus: 'running', leaseOwner: 'old-run', runningSince: queuedAt,
+      lastResultJson: JSON.stringify({ operationId: 'op-old' }) });
+    worker.getOperation.mockResolvedValue({
+      subject: { kind: 'maintenance', runId: 'old-run' }, status: 'succeeded', queuedAt, updatedAt: finishedAt,
+      result: { summary: 'Done', completed: 1, failed: 0 },
+    });
+    await listTasks(registryWith(async () => undefined));
+    expect(await readRow()).toMatchObject({ lastRunAt: finishedAt, lastDurationMs: 30_000, nextRunAt: finishedAt + 1000 });
+  });
+  test('keeps a queued worker task running until durable completion, including partial failure', async () => {
+    let runId = '';
+    const registry = registryWith(async (context) => {
+      runId = context.runId;
+      return { operationId: 'op-maintenance', summary: 'Queued' };
+    });
+    await runDueTasks({ registry });
+    expect((await readRow()).lastStatus).toBe('running');
+    worker.getOperation.mockResolvedValue({
+      opId: 'op-maintenance', subject: { kind: 'maintenance', runId }, status: 'running', queuedAt: Date.now(),
+    });
+    expect((await listTasks(registry))[0]).toMatchObject({ operationId: 'op-maintenance', running: true });
+    worker.getOperation.mockResolvedValue({
+      opId: 'op-maintenance', subject: { kind: 'maintenance', runId }, status: 'succeeded', queuedAt: Date.now(),
+      result: { summary: 'Deleted 20 accounts; 5 failed', completed: 20, failed: 5 },
+    });
+    expect((await listTasks(registry))[0]).toMatchObject({ running: false, lastStatus: 'error', lastError: 'Deleted 20 accounts; 5 failed' });
+  });
+
+  test('does not reclaim a long-running worker job or start another when its worker is unreachable', async () => {
+    const handler = vi.fn(async () => ({ summary: 'wrong duplicate' }));
+    const leaseOwner = 'existing-run';
+    await seedRow({
+      lastStatus: 'running', leaseOwner, runningSince: Date.now() - 7_200_000,
+      lastResultJson: JSON.stringify({ operationId: 'op-existing' }),
+    });
+    worker.getOperation.mockRejectedValue(new Error('worker temporarily unavailable'));
+    await runDueTasks({ registry: registryWith(handler) });
+    expect(handler).not.toHaveBeenCalled();
+    expect((await readRow()).lastStatus).toBe('running');
+  });
   test('sequential mode claims every due task, then runs them one at a time', async () => {
     const events: string[] = [];
     const task = (key: string) => async () => {

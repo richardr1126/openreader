@@ -39,14 +39,6 @@ export type TtsVoicePreviewResult =
   | { ok: true; audio: ArrayBuffer }
   | { ok: false; status: number; code: string | null; retryAfterMs: number | null };
 
-// ONE-TIME (scan-orphaned-storage): remove with that task.
-export type UserStorageScopeRoot =
-  | 'playback-audio'
-  | 'playback-exports'
-  | 'playback-sidecars'
-  | 'account-exports'
-  | 'cloned-voices';
-
 class WorkerHttpError extends Error {
   constructor(
     message: string,
@@ -148,6 +140,10 @@ export class ComputeWorkerClient {
 
   createAccountExportOperation(input: AccountExportRequest): Promise<ComputeOperation> {
     return this.requestJson('POST', '/v1/account-exports/jobs', input);
+  }
+
+  createMaintenanceOperation(input: import('./protocol').MaintenanceRequest): Promise<ComputeOperation<import('./protocol').MaintenanceResult>> {
+    return this.requestJson('POST', '/v1/maintenance/jobs', input, { signal: AbortSignal.timeout(10_000) });
   }
 
   createEmailDeliveryOperation(input: {
@@ -350,61 +346,6 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/user-storage/cleanup', input);
   }
 
-  // ONE-TIME (scan-orphaned-storage): remove with that task.
-  listUserStorageScopes(input: {
-    root: UserStorageScopeRoot;
-    startAfter: string | null;
-    limit: number;
-  }, init?: { signal?: AbortSignal }): Promise<{
-    users: Array<{ key: string; user: string; documentIds: string[] }>;
-    nextStartAfter: string | null;
-  }> {
-    return this.requestJson('POST', '/v1/user-storage/scopes', input, init);
-  }
-
-  // ONE-TIME (scan-orphaned-storage): remove with that task.
-  clearUserSidecarsByHash(input: {
-    storageUserHash: string;
-  }, init?: { signal?: AbortSignal }): Promise<{ deletedObjects: number }> {
-    return this.requestJson('POST', '/v1/user-storage/sidecars/clear', input, init);
-  }
-
-  expireAccountExportArtifacts(input: {
-    maxAgeMs: number;
-  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
-    return this.requestJson('POST', '/v1/account-exports/expire', input, init);
-  }
-
-  expireDocumentConversionArtifacts(input: {
-    maxAgeMs: number;
-  }, init?: { signal?: AbortSignal }): Promise<{ expiredArtifacts: number; deletedObjects: number }> {
-    return this.requestJson('POST', '/v1/document-conversions/expire', input, init);
-  }
-
-  clearPdfLayoutArtifacts(input: {
-    documentId: string;
-    namespace: string | null;
-  }, init?: { signal?: AbortSignal }): Promise<{ deletedParsedObjects: number }> {
-    return this.requestJson('POST', '/v1/pdf-layout/clear', input, init);
-  }
-
-  clearDocumentPreviewArtifacts(input: {
-    documentId: string;
-    namespace: string | null;
-  }, init?: { signal?: AbortSignal }): Promise<{ deletedPreviewObjects: number }> {
-    return this.requestJson('POST', '/v1/document-previews/clear', input, init);
-  }
-
-  listDocumentDerivedIds(init?: { signal?: AbortSignal }): Promise<{ documentIds: string[] }> {
-    return this.requestJson('GET', '/v1/document-derived/ids', undefined, init);
-  }
-
-  clearTtsPlaybackPlans(input: {
-    documentId: string;
-  }, init?: { signal?: AbortSignal }): Promise<{ deletedPlanObjects: number }> {
-    return this.requestJson('POST', '/v1/tts-playback/plans/clear', input, init);
-  }
-
   /**
    * Synthesizes a short in-memory voice sample. Nothing is persisted, so the
    * result never touches the canonical timeline or segment cache. A worker
@@ -436,9 +377,9 @@ export class ComputeWorkerClient {
     };
   }
 
-  async getOperation<Result>(opId: string): Promise<ComputeOperation<Result> | null> {
+  async getOperation<Result>(opId: string, init?: { signal?: AbortSignal }): Promise<ComputeOperation<Result> | null> {
     try {
-      return await this.requestJson('GET', `/v1/operations/${encodeURIComponent(opId)}`);
+      return await this.requestJson('GET', `/v1/operations/${encodeURIComponent(opId)}`, undefined, init);
     } catch (error) {
       if (error instanceof WorkerHttpError && error.status === 404) return null;
       throw error;

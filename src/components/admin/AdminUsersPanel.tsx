@@ -16,6 +16,7 @@ import {
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { queryKeys } from '@/lib/client/query-keys';
 import { formatBytes } from '@/lib/shared/format-bytes';
+import { useMaintenanceOperation, type MaintenanceOperation } from '@/hooks/useMaintenanceOperation';
 
 type UserAccessStatus = 'active' | 'pending' | 'suspended';
 type UserKind = 'all' | 'account' | 'anonymous';
@@ -31,6 +32,7 @@ interface ManagedUser {
   isAdmin: boolean;
   adminSource: 'bootstrap' | 'managed' | 'none';
   accessStatus: UserAccessStatus;
+  deletionRequestedAt: string | null;
   createdAt: string;
   updatedAt: string;
   lastActiveAt: string | null;
@@ -87,9 +89,12 @@ async function updateUser(id: string, changes: Partial<Pick<ManagedUser, 'isAdmi
   if (!response.ok) throw await responseError(response);
 }
 
-async function deleteUser(id: string): Promise<void> {
-  const response = await fetch(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+async function deleteUsers(userIds: string[]): Promise<MaintenanceOperation> {
+  const response = await fetch('/api/admin/users/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userIds }),
+  });
   if (!response.ok) throw await responseError(response);
+  return response.json() as Promise<MaintenanceOperation>;
 }
 
 function formatCount(value: number): string {
@@ -140,6 +145,30 @@ export function AdminUsersPanel() {
   const [roleTarget, setRoleTarget] = useState<{ user: ManagedUser; grant: boolean } | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkTarget, setBulkTarget] = useState<{ action: BulkAction; users: ManagedUser[] } | null>(null);
+  const [deletionOperationId, setDeletionOperationId] = useState<string | null>(null);
+  const deletionStorageKey = session?.user?.id ? `admin-user-deletion:${session.user.id}` : null;
+  useEffect(() => {
+    if (deletionStorageKey) setDeletionOperationId(sessionStorage.getItem(deletionStorageKey));
+  }, [deletionStorageKey]);
+  const trackDeletion = (operation: MaintenanceOperation) => {
+    if (deletionStorageKey) sessionStorage.setItem(deletionStorageKey, operation.opId);
+    setDeletionOperationId(operation.opId);
+  };
+  const deletion = useMaintenanceOperation(deletionOperationId, (operation) => {
+    if (deletionStorageKey) sessionStorage.removeItem(deletionStorageKey);
+    setDeletionOperationId(null);
+    if (operation.status === 'failed' || operation.result?.failed) toast.error(operation.result?.summary ?? operation.error?.message ?? 'Deletion failed');
+    else toast.success(operation.result?.summary ?? 'Account deletion finished');
+    void refreshUsers();
+  }, (reason) => {
+    // A dropped stream keeps the stored id so a reload reconnects to the job.
+    if (reason === 'expired' && deletionStorageKey) sessionStorage.removeItem(deletionStorageKey);
+    setDeletionOperationId(null);
+    toast.error(reason === 'expired'
+      ? 'Cleanup progress has expired. Unfinished accounts remain marked for retry.'
+      : 'Lost connection to cleanup progress. Deletion continues; reload to check on it.');
+    void refreshUsers();
+  });
   const queryKey = useMemo(() => queryKeys.admin(
     session?.user?.id ?? 'no-session',
     `users:${page}:${kind}:${status}:${deferredSearch}`,
@@ -163,28 +192,28 @@ export function AdminUsersPanel() {
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Unable to update user'),
   });
   const deleteMutation = useMutation({
-    mutationFn: deleteUser,
-    onSuccess: async () => {
+    mutationFn: (id: string) => deleteUsers([id]),
+    onSuccess: async (operation) => {
       setDeleteTarget(null);
-      toast.success('User and owned data deleted');
+      trackDeletion(operation);
       await refreshUsers();
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Unable to delete user'),
   });
   const bulkMutation = useMutation({
     mutationFn: async ({ action, users }: { action: BulkAction; users: ManagedUser[] }) => {
+      if (action === 'delete') return { total: users.length, failed: 0, operation: await deleteUsers(users.map((user) => user.id)) };
       const results = await Promise.allSettled(users.map((user) => (
-        action === 'delete'
-          ? deleteUser(user.id)
-          : updateUser(user.id, { accessStatus: action === 'suspend' ? 'suspended' : 'active' })
+        updateUser(user.id, { accessStatus: action === 'suspend' ? 'suspended' : 'active' })
       )));
       const failed = results.filter((result) => result.status === 'rejected').length;
       return { total: users.length, failed };
     },
-    onSuccess: async ({ total, failed }) => {
+    onSuccess: async ({ total, failed, operation }) => {
       setBulkTarget(null);
       setSelectedIds(new Set());
-      if (failed === 0) toast.success(`${total} ${total === 1 ? 'user' : 'users'} updated`);
+      if (operation) trackDeletion(operation);
+      else if (failed === 0) toast.success(`${total} ${total === 1 ? 'user' : 'users'} updated`);
       else toast.error(`${total - failed} of ${total} updated · ${failed} failed`);
       await refreshUsers();
     },
@@ -205,6 +234,8 @@ export function AdminUsersPanel() {
   const allSelected = selectableUsers.length > 0 && selectableUsers.every((user) => selectedIds.has(user.id));
   const someSelected = selectedUsers.length > 0 && !allSelected;
   const bulkBusy = bulkMutation.isPending;
+  // One deletion job is tracked at a time; other row actions stay available.
+  const deletionTracked = Boolean(deletionOperationId);
   const eligible: Record<BulkAction, ManagedUser[]> = {
     approve: selectedUsers.filter((user) => !user.isAnonymous && user.accessStatus === 'pending'),
     restore: selectedUsers.filter((user) => !user.isAnonymous && user.accessStatus === 'suspended'),
@@ -222,7 +253,7 @@ export function AdminUsersPanel() {
   const toggleAll = (checked: boolean) => setSelectedIds(checked ? new Set(selectableUsers.map((user) => user.id)) : new Set());
   const runBulk = (action: BulkAction) => {
     const users = eligible[action];
-    if (users.length === 0 || bulkBusy) return;
+    if (users.length === 0 || bulkBusy || (action === 'delete' && deletionTracked)) return;
     if (action === 'delete' || action === 'suspend') setBulkTarget({ action, users });
     else bulkMutation.mutate({ action, users });
   };
@@ -233,6 +264,14 @@ export function AdminUsersPanel() {
 
   return (
     <div className="space-y-4">
+      {deletionOperationId ? (
+        <p role="status" aria-live="polite" className="rounded-lg border border-line p-3 text-sm text-soft">
+          {deletion.progress
+            ? `${deletion.progress.phase}: ${deletion.progress.completed} completed · ${deletion.progress.failed} failed`
+            : 'Account deletion queued…'}
+          {deletion.reconnecting ? ' Reconnecting to progress…' : ' You can leave this page while cleanup continues.'}
+        </p>
+      ) : null}
       <section className="overflow-hidden rounded-lg border border-line bg-surface">
         <div className="grid grid-cols-3 gap-px bg-line-soft lg:grid-cols-6">
           {[
@@ -296,7 +335,7 @@ export function AdminUsersPanel() {
               <Button size="xs" variant="outline" disabled={bulkBusy || eligible.approve.length === 0} onClick={() => runBulk('approve')}>Approve{eligible.approve.length ? ` (${eligible.approve.length})` : ''}</Button>
               <Button size="xs" variant="outline" disabled={bulkBusy || eligible.restore.length === 0} onClick={() => runBulk('restore')}>Restore{eligible.restore.length ? ` (${eligible.restore.length})` : ''}</Button>
               <Button size="xs" variant="outline" disabled={bulkBusy || eligible.suspend.length === 0} onClick={() => runBulk('suspend')}>Suspend{eligible.suspend.length ? ` (${eligible.suspend.length})` : ''}</Button>
-              <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={bulkBusy || eligible.delete.length === 0} onClick={() => runBulk('delete')}>Delete{eligible.delete.length ? ` (${eligible.delete.length})` : ''}</Button>
+              <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={bulkBusy || deletionTracked || eligible.delete.length === 0} onClick={() => runBulk('delete')}>Delete{eligible.delete.length ? ` (${eligible.delete.length})` : ''}</Button>
             </div>
           </div>
         ) : null}
@@ -331,7 +370,7 @@ export function AdminUsersPanel() {
             {data?.users.map((user) => {
               const isSelf = user.id === session?.user?.id;
               const expanded = expandedId === user.id;
-              const busy = bulkMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
+              const busy = bulkBusy || updateMutation.isPending || deleteMutation.isPending;
               return (
                 <article key={user.id} className={selectedIds.has(user.id) ? 'group bg-accent-wash' : 'group'}>
                   <div className={`p-3 ${columns}`}>
@@ -353,7 +392,7 @@ export function AdminUsersPanel() {
                               <span className="block truncate text-sm font-medium text-foreground">{user.isAnonymous ? 'Anonymous session' : user.name || 'Unnamed account'}</span>
                               {isSelf ? <Badge tone="foreground">You</Badge> : null}
                               {user.isAdmin ? <Badge tone="accent">Admin</Badge> : null}
-                              <Badge tone={statusTone(user.accessStatus)}>{user.accessStatus}</Badge>
+                              <Badge tone={user.deletionRequestedAt ? 'muted' : statusTone(user.accessStatus)}>{user.deletionRequestedAt ? 'Deletion pending' : user.accessStatus}</Badge>
                             </span>
                             <span className="mt-0.5 block truncate font-mono text-[11px] text-soft">{user.isAnonymous ? user.id : user.email}</span>
                             <span className="mt-0.5 block truncate font-mono text-[11px] tabular-nums text-faint lg:hidden">
@@ -388,7 +427,7 @@ export function AdminUsersPanel() {
                           {user.accessStatus === 'suspended' ? 'Restore' : 'Suspend'}
                         </Button>
                       ) : null}
-                      {!isSelf ? <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={busy} onClick={() => setDeleteTarget(user)}>Delete</Button> : null}
+                      {!isSelf ? <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={busy || deletionTracked} onClick={() => setDeleteTarget(user)}>Delete</Button> : null}
                     </div>
                   </div>
 
@@ -444,7 +483,7 @@ export function AdminUsersPanel() {
         onConfirm={() => { if (bulkTarget && !bulkMutation.isPending) bulkMutation.mutate(bulkTarget); }}
         title={bulkTarget?.action === 'delete' ? 'Delete selected users?' : 'Suspend selected users?'}
         message={bulkTarget?.action === 'delete'
-          ? `Permanently delete ${bulkTarget.users.length} selected ${bulkTarget.users.length === 1 ? 'user' : 'users'} and all owned data? Storage cleanup must succeed for each before its database account is removed.`
+          ? `Permanently delete ${bulkTarget.users.length} selected ${bulkTarget.users.length === 1 ? 'user' : 'users'} and all owned data? Their sessions end immediately. Cleanup continues in the background.`
           : `Suspend ${bulkTarget?.users.length} selected ${bulkTarget && bulkTarget.users.length === 1 ? 'account' : 'accounts'}? Their active sessions will be revoked.`}
         confirmText={bulkMutation.isPending ? 'Working…' : bulkTarget?.action === 'delete' ? 'Delete users' : 'Suspend users'}
         isDangerous
@@ -454,7 +493,7 @@ export function AdminUsersPanel() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { if (deleteTarget && !deleteMutation.isPending) deleteMutation.mutate(deleteTarget.id); }}
         title={deleteTarget?.isAnonymous ? 'Delete anonymous session?' : 'Delete user account?'}
-        message={`Permanently delete ${deleteTarget?.isAnonymous ? 'this anonymous session' : deleteTarget?.email ?? 'this user'} and all owned data? Storage cleanup must succeed before the database account is removed.`}
+        message={`Permanently delete ${deleteTarget?.isAnonymous ? 'this anonymous session' : deleteTarget?.email ?? 'this user'} and all owned data? Their sessions end immediately. Cleanup continues in the background.`}
         confirmText={deleteMutation.isPending ? 'Deleting…' : 'Delete user'}
         isDangerous
       />

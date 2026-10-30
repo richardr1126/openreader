@@ -2,7 +2,6 @@ import type { ComputeWorkerRouteContext } from './route-context';
 import { createPlaybackSessionController } from './playback/session-controller';
 import { createPlaybackSessionReadModel } from './playback/session-read-model';
 import {
-  registerAccountExportRetentionRoute,
   registerAccountExportRoutes,
 } from './routes/account-exports';
 import { registerCleanupRoutes } from './routes/cleanup';
@@ -14,6 +13,7 @@ import { registerHealthRoutes } from './routes/health';
 import { registerOperationRoutes } from './routes/operations';
 import { registerEmailDeliveryRoutes } from './routes/email-deliveries';
 import { registerModelRoutes } from './routes/models';
+import { registerMaintenanceRoutes } from './routes/maintenance';
 import { registerPlaybackAudioRoutes } from './routes/playback/audio';
 import {
   registerPlaybackExportJobRoutes,
@@ -29,7 +29,7 @@ import { registerVoicePreviewRoutes } from './routes/playback/voice-preview';
 export type { ComputeWorkerRouteDeps } from './route-context';
 
 /** Composition root for the compute worker's domain-owned route registrars. */
-export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext): void {
+export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext) {
   const playbackReadModel = createPlaybackSessionReadModel({
     storage: context.storage,
     playbackStorage: context.playbackStorage,
@@ -41,8 +41,7 @@ export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext):
   registerPlaybackExportRoutes(context);
   registerPlaybackSessionRoutes(context, playbackReadModel, playbackController);
   registerPlaybackExportSessionRoutes(context, playbackReadModel);
-  registerCleanupRoutes(context, playbackReadModel);
-  registerAccountExportRetentionRoute(context);
+  const cleanup = registerCleanupRoutes(context, playbackReadModel);
   registerPlaybackAudioRoutes(context, playbackReadModel, playbackController);
   registerDocumentJobRoutes(context);
   registerPlaybackJobRoutes(context, playbackController);
@@ -50,7 +49,9 @@ export function registerComputeWorkerRoutes(context: ComputeWorkerRouteContext):
   registerAccountExportRoutes(context);
   registerEmailDeliveryRoutes(context);
   registerModelRoutes(context);
+  registerMaintenanceRoutes(context);
   registerPlaybackExportJobRoutes(context);
   registerDocumentResolutionRoutes(context);
   registerOperationRoutes(context);
+  return cleanup;
 }

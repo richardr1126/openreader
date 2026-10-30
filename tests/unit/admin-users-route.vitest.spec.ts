@@ -5,7 +5,9 @@ const mocks = vi.hoisted(() => ({
   requireAdminContext: vi.fn(),
   listAdminUsers: vi.fn(),
   updateManagedUser: vi.fn(),
-  deleteManagedUser: vi.fn(),
+  requestManagedUserDeletions: vi.fn(),
+  createMaintenanceOperation: vi.fn(),
+  isComputeWorkerAvailable: vi.fn(() => true),
 }));
 
 vi.mock('@/lib/server/auth/admin', () => ({ requireAdminContext: mocks.requireAdminContext }));
@@ -15,11 +17,16 @@ vi.mock('@/lib/server/admin/users', () => ({
   },
   listAdminUsers: mocks.listAdminUsers,
   updateManagedUser: mocks.updateManagedUser,
-  deleteManagedUser: mocks.deleteManagedUser,
+  requestManagedUserDeletions: mocks.requestManagedUserDeletions,
+}));
+vi.mock('@/lib/server/compute-worker/client', () => ({
+  isComputeWorkerAvailable: mocks.isComputeWorkerAvailable,
+  getComputeWorkerClient: () => ({ createMaintenanceOperation: mocks.createMaintenanceOperation }),
 }));
 
 import { GET } from '../../src/app/api/admin/users/route';
-import { PATCH, DELETE } from '../../src/app/api/admin/users/[id]/route';
+import { PATCH } from '../../src/app/api/admin/users/[id]/route';
+import { POST } from '../../src/app/api/admin/users/delete/route';
 
 const request = (method: string, body?: unknown) => new NextRequest('http://localhost/api/admin/users/reader-1', {
   method,
@@ -33,7 +40,9 @@ describe('admin users routes', () => {
     mocks.requireAdminContext.mockResolvedValue({ userId: 'owner-1' });
     mocks.listAdminUsers.mockResolvedValue({ users: [], total: 0 });
     mocks.updateManagedUser.mockResolvedValue(undefined);
-    mocks.deleteManagedUser.mockResolvedValue(undefined);
+    mocks.requestManagedUserDeletions.mockResolvedValue(['reader-1']);
+    mocks.isComputeWorkerAvailable.mockReturnValue(true);
+    mocks.createMaintenanceOperation.mockResolvedValue({ opId: 'cleanup-1', status: 'queued' });
   });
 
   test('requires admin access before reading users', async () => {
@@ -66,14 +75,23 @@ describe('admin users routes', () => {
     expect(mocks.updateManagedUser).toHaveBeenCalledWith({
       actorUserId: 'owner-1', targetUserId: 'reader-1', accessStatus: 'active',
     });
-    expect((await DELETE(request('DELETE'), params)).status).toBe(200);
-    expect(mocks.deleteManagedUser).toHaveBeenCalledWith({ actorUserId: 'owner-1', targetUserId: 'reader-1' });
+    const deletion = await POST(request('POST', { userIds: ['reader-1'] }));
+    expect(deletion.status).toBe(202);
+    expect(mocks.requestManagedUserDeletions).toHaveBeenCalledWith('owner-1', ['reader-1']);
+    expect(mocks.createMaintenanceOperation).toHaveBeenCalledWith(expect.objectContaining({ task: 'delete-users', userIds: ['reader-1'] }));
   });
 
   test('requires admin access before deleting', async () => {
     const denied = new Response('Forbidden', { status: 403 });
     mocks.requireAdminContext.mockResolvedValue(denied);
-    expect(await DELETE(request('DELETE'), params)).toBe(denied);
-    expect(mocks.deleteManagedUser).not.toHaveBeenCalled();
+    expect(await POST(request('POST', { userIds: ['reader-1'] }))).toBe(denied);
+    expect(mocks.requestManagedUserDeletions).not.toHaveBeenCalled();
+  });
+
+  test('rejects oversized batches and unavailable workers before marking accounts', async () => {
+    expect((await POST(request('POST', { userIds: Array(101).fill('reader-1') }))).status).toBe(400);
+    mocks.isComputeWorkerAvailable.mockReturnValue(false);
+    expect((await POST(request('POST', { userIds: ['reader-1'] }))).status).toBe(503);
+    expect(mocks.requestManagedUserDeletions).not.toHaveBeenCalled();
   });
 });

@@ -331,6 +331,12 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
+                                    kind: "maintenance";
+                                    /** @enum {string} */
+                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    runId: string;
+                                } | {
+                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
@@ -396,6 +402,10 @@ export interface paths {
                                     computeMs?: number;
                                 };
                                 progress?: {
+                                    phase: string;
+                                    completed: number;
+                                    failed: number;
+                                } | {
                                     totalPages: number;
                                     pagesParsed: number;
                                     currentPage?: number;
@@ -1197,213 +1207,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/pdf-layout/clear": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        documentId: string;
-                        namespace: string | null;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            deletedParsedObjects: number;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/document-previews/clear": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        documentId: string;
-                        namespace: string | null;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            deletedPreviewObjects: number;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/document-derived/ids": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            documentIds: string[];
-                        };
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/tts-playback/plans/clear": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        documentId: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            deletedPlanObjects: number;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/user-storage/cleanup": {
         parameters: {
             query?: never;
@@ -1439,183 +1242,6 @@ export interface paths {
                         "application/json": {
                             deletedObjects: number;
                             deletedDocumentArtifacts: number;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/user-storage/scopes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        root: "playback-audio" | "playback-exports" | "playback-sidecars" | "account-exports" | "cloned-voices";
-                        startAfter: string | null;
-                        limit: number;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            users: {
-                                key: string;
-                                user: string;
-                                documentIds: string[];
-                            }[];
-                            nextStartAfter: string | null;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/user-storage/sidecars/clear": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        storageUserHash: string;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            deletedObjects: number;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account-exports/expire": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        maxAgeMs: number;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            expiredArtifacts: number;
-                            deletedObjects: number;
                         };
                     };
                 };
@@ -1804,6 +1430,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -1869,6 +1501,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -1987,6 +1623,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -2052,6 +1694,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -2167,6 +1813,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -2232,6 +1884,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -2371,6 +2027,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -2436,6 +2098,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -2565,6 +2231,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -2630,6 +2302,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -2880,6 +2556,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -2945,6 +2627,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -3078,6 +2764,12 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
+                                    kind: "maintenance";
+                                    /** @enum {string} */
+                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    runId: string;
+                                } | {
+                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
@@ -3143,6 +2835,10 @@ export interface paths {
                                     computeMs?: number;
                                 };
                                 progress?: {
+                                    phase: string;
+                                    completed: number;
+                                    failed: number;
+                                } | {
                                     totalPages: number;
                                     pagesParsed: number;
                                     currentPage?: number;
@@ -3259,6 +2955,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -3324,6 +3026,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -3436,6 +3142,12 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
+                                    kind: "maintenance";
+                                    /** @enum {string} */
+                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    runId: string;
+                                } | {
+                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
@@ -3501,6 +3213,10 @@ export interface paths {
                                     computeMs?: number;
                                 };
                                 progress?: {
+                                    phase: string;
+                                    completed: number;
+                                    failed: number;
+                                } | {
                                     totalPages: number;
                                     pagesParsed: number;
                                     currentPage?: number;
@@ -3654,6 +3370,12 @@ export interface paths {
                             opId: string;
                             subject: {
                                 /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
                                 namespace: string | null;
@@ -3719,6 +3441,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -3846,7 +3572,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/tts-playback/exports/jobs": {
+    "/v1/maintenance/jobs": {
         parameters: {
             query?: never;
             header?: never;
@@ -3865,21 +3591,12 @@ export interface paths {
             requestBody: {
                 content: {
                     "application/json": {
-                        artifactId: string;
-                        sessionId: string;
-                        userId: string;
-                        storageUserId: string;
-                        documentId: string;
-                        documentVersion: number;
+                        /** Format: uuid */
+                        runId: string;
                         /** @enum {string} */
-                        readerType: "pdf" | "epub" | "html";
-                        settingsHash: string;
-                        settingsJson: unknown;
-                        planObjectKey: string;
-                        /** @enum {string} */
-                        format: "mp3" | "m4b";
-                        speed: number;
-                        chapterIndex?: number;
+                        task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                        userIds?: string[];
+                        idleBefore?: number;
                     };
                 };
             };
@@ -3893,6 +3610,12 @@ export interface paths {
                         "application/json": {
                             opId: string;
                             subject: {
+                                /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
                                 /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
@@ -3959,6 +3682,208 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
+                                totalPages: number;
+                                pagesParsed: number;
+                                currentPage?: number;
+                                /** @enum {string} */
+                                phase: "download_model" | "infer" | "merge";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
+                            } | {
+                                completedThroughOrdinal: number;
+                                completedCount: number;
+                                skippedCount?: number;
+                                plannedCount: number;
+                                alignedCount?: number;
+                                /** @enum {string} */
+                                phase?: "downloading_model" | "generating" | "checking_cache";
+                                /** @enum {string} */
+                                stopReason?: "usage_limit";
+                                downloadedBytes?: number;
+                                totalBytes?: number;
+                                modelComponents?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "transcoding" | "uploading";
+                                completedSegments: number;
+                                plannedSegments: number;
+                                skippedSegments?: number;
+                            } | {
+                                /** @enum {string} */
+                                phase: "fetching" | "converting" | "uploading";
+                            } | {
+                                /** @enum {string} */
+                                phase: "assembling" | "uploading";
+                                completedFiles: number;
+                                plannedFiles: number;
+                            } | {
+                                downloadedBytes: number;
+                                totalBytes: number;
+                                components?: {
+                                    name: string;
+                                    totalBytes: number;
+                                    downloadedBytes: number;
+                                    /** @enum {string} */
+                                    state: "pending" | "downloading" | "verifying" | "ready" | "failed";
+                                }[];
+                            };
+                        };
+                    };
+                };
+                /** @description Default Response */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            error: string;
+                        } & {
+                            [key: string]: unknown;
+                        };
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tts-playback/exports/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        artifactId: string;
+                        sessionId: string;
+                        userId: string;
+                        storageUserId: string;
+                        documentId: string;
+                        documentVersion: number;
+                        /** @enum {string} */
+                        readerType: "pdf" | "epub" | "html";
+                        settingsHash: string;
+                        settingsJson: unknown;
+                        planObjectKey: string;
+                        /** @enum {string} */
+                        format: "mp3" | "m4b";
+                        speed: number;
+                        chapterIndex?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Default Response */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            opId: string;
+                            subject: {
+                                /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "pdf_layout";
+                                documentId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback";
+                                documentId: string;
+                                sessionId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_plan";
+                                documentId: string;
+                                settingsHash: string;
+                                planSignature: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "tts_playback_export";
+                                documentId: string;
+                                artifactId: string;
+                                /** @enum {string} */
+                                format: "mp3" | "m4b";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_preview";
+                                documentId: string;
+                                namespace: string | null;
+                                /** @enum {string} */
+                                previewKind: "card";
+                            } | {
+                                /** @enum {string} */
+                                kind: "document_conversion";
+                                conversionId: string;
+                                namespace: string | null;
+                            } | {
+                                /** @enum {string} */
+                                kind: "account_export";
+                                storageUserId: string;
+                                namespace: string | null;
+                                artifactId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "email_delivery";
+                                deliveryId: string;
+                            } | {
+                                /** @enum {string} */
+                                kind: "model_download";
+                                /** @enum {string} */
+                                model: "kokoro-82m";
+                            };
+                            /** @enum {string} */
+                            status: "queued" | "running" | "succeeded" | "failed";
+                            queuedAt: number;
+                            updatedAt: number;
+                            startedAt?: number;
+                            result?: unknown;
+                            error?: {
+                                message: string;
+                                code?: string;
+                            };
+                            timing?: {
+                                queueWaitMs?: number;
+                                s3FetchMs?: number;
+                                computeMs?: number;
+                            };
+                            progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -4105,6 +4030,12 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
+                                    kind: "maintenance";
+                                    /** @enum {string} */
+                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    runId: string;
+                                } | {
+                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
@@ -4170,6 +4101,10 @@ export interface paths {
                                     computeMs?: number;
                                 };
                                 progress?: {
+                                    phase: string;
+                                    completed: number;
+                                    failed: number;
+                                } | {
                                     totalPages: number;
                                     pagesParsed: number;
                                     currentPage?: number;
@@ -4286,6 +4221,12 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
+                                    kind: "maintenance";
+                                    /** @enum {string} */
+                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    runId: string;
+                                } | {
+                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
@@ -4351,6 +4292,10 @@ export interface paths {
                                     computeMs?: number;
                                 };
                                 progress?: {
+                                    phase: string;
+                                    completed: number;
+                                    failed: number;
+                                } | {
                                     totalPages: number;
                                     pagesParsed: number;
                                     currentPage?: number;
@@ -4494,6 +4439,12 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
+                                    kind: "maintenance";
+                                    /** @enum {string} */
+                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    runId: string;
+                                } | {
+                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
@@ -4559,6 +4510,10 @@ export interface paths {
                                     computeMs?: number;
                                 };
                                 progress?: {
+                                    phase: string;
+                                    completed: number;
+                                    failed: number;
+                                } | {
                                     totalPages: number;
                                     pagesParsed: number;
                                     currentPage?: number;
@@ -4696,6 +4651,12 @@ export interface paths {
                                 opId: string;
                                 subject: {
                                     /** @enum {string} */
+                                    kind: "maintenance";
+                                    /** @enum {string} */
+                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    runId: string;
+                                } | {
+                                    /** @enum {string} */
                                     kind: "pdf_layout";
                                     documentId: string;
                                     namespace: string | null;
@@ -4761,6 +4722,10 @@ export interface paths {
                                     computeMs?: number;
                                 };
                                 progress?: {
+                                    phase: string;
+                                    completed: number;
+                                    failed: number;
+                                } | {
                                     totalPages: number;
                                     pagesParsed: number;
                                     currentPage?: number;
@@ -4837,63 +4802,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/document-conversions/expire": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": {
-                        maxAgeMs: number;
-                    };
-                };
-            };
-            responses: {
-                /** @description Default Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            expiredArtifacts: number;
-                            deletedObjects: number;
-                        };
-                    };
-                };
-                /** @description Default Response */
-                400: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": {
-                            error: string;
-                        } & {
-                            [key: string]: unknown;
-                        };
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/operations/{opId}": {
         parameters: {
             query?: never;
@@ -4921,6 +4829,12 @@ export interface paths {
                         "application/json": {
                             opId: string;
                             subject: {
+                                /** @enum {string} */
+                                kind: "maintenance";
+                                /** @enum {string} */
+                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                runId: string;
+                            } | {
                                 /** @enum {string} */
                                 kind: "pdf_layout";
                                 documentId: string;
@@ -4987,6 +4901,10 @@ export interface paths {
                                 computeMs?: number;
                             };
                             progress?: {
+                                phase: string;
+                                completed: number;
+                                failed: number;
+                            } | {
                                 totalPages: number;
                                 pagesParsed: number;
                                 currentPage?: number;
@@ -5322,6 +5240,12 @@ export interface components {
             opId: string;
             subject: {
                 /** @enum {string} */
+                kind: "maintenance";
+                /** @enum {string} */
+                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                runId: string;
+            } | {
+                /** @enum {string} */
                 kind: "pdf_layout";
                 documentId: string;
                 namespace: string | null;
@@ -5387,6 +5311,10 @@ export interface components {
                 computeMs?: number;
             };
             progress?: {
+                phase: string;
+                completed: number;
+                failed: number;
+            } | {
                 totalPages: number;
                 pagesParsed: number;
                 currentPage?: number;
@@ -5444,6 +5372,12 @@ export interface components {
             snapshot: {
                 opId: string;
                 subject: {
+                    /** @enum {string} */
+                    kind: "maintenance";
+                    /** @enum {string} */
+                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    runId: string;
+                } | {
                     /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
@@ -5510,6 +5444,10 @@ export interface components {
                     computeMs?: number;
                 };
                 progress?: {
+                    phase: string;
+                    completed: number;
+                    failed: number;
+                } | {
                     totalPages: number;
                     pagesParsed: number;
                     currentPage?: number;
@@ -5571,6 +5509,12 @@ export interface components {
                 opId: string;
                 subject: {
                     /** @enum {string} */
+                    kind: "maintenance";
+                    /** @enum {string} */
+                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    runId: string;
+                } | {
+                    /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
                     namespace: string | null;
@@ -5636,6 +5580,10 @@ export interface components {
                     computeMs?: number;
                 };
                 progress?: {
+                    phase: string;
+                    completed: number;
+                    failed: number;
+                } | {
                     totalPages: number;
                     pagesParsed: number;
                     currentPage?: number;
@@ -5723,6 +5671,12 @@ export interface components {
                 opId: string;
                 subject: {
                     /** @enum {string} */
+                    kind: "maintenance";
+                    /** @enum {string} */
+                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    runId: string;
+                } | {
+                    /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
                     namespace: string | null;
@@ -5788,6 +5742,10 @@ export interface components {
                     computeMs?: number;
                 };
                 progress?: {
+                    phase: string;
+                    completed: number;
+                    failed: number;
+                } | {
                     totalPages: number;
                     pagesParsed: number;
                     currentPage?: number;
@@ -5870,6 +5828,12 @@ export interface components {
                 opId: string;
                 subject: {
                     /** @enum {string} */
+                    kind: "maintenance";
+                    /** @enum {string} */
+                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    runId: string;
+                } | {
+                    /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
                     namespace: string | null;
@@ -5935,6 +5899,10 @@ export interface components {
                     computeMs?: number;
                 };
                 progress?: {
+                    phase: string;
+                    completed: number;
+                    failed: number;
+                } | {
                     totalPages: number;
                     pagesParsed: number;
                     currentPage?: number;
@@ -6013,6 +5981,12 @@ export interface components {
                 opId: string;
                 subject: {
                     /** @enum {string} */
+                    kind: "maintenance";
+                    /** @enum {string} */
+                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    runId: string;
+                } | {
+                    /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
                     namespace: string | null;
@@ -6078,6 +6052,10 @@ export interface components {
                     computeMs?: number;
                 };
                 progress?: {
+                    phase: string;
+                    completed: number;
+                    failed: number;
+                } | {
                     totalPages: number;
                     pagesParsed: number;
                     currentPage?: number;
@@ -6155,6 +6133,12 @@ export interface components {
                 opId: string;
                 subject: {
                     /** @enum {string} */
+                    kind: "maintenance";
+                    /** @enum {string} */
+                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    runId: string;
+                } | {
+                    /** @enum {string} */
                     kind: "pdf_layout";
                     documentId: string;
                     namespace: string | null;
@@ -6220,6 +6204,10 @@ export interface components {
                     computeMs?: number;
                 };
                 progress?: {
+                    phase: string;
+                    completed: number;
+                    failed: number;
+                } | {
                     totalPages: number;
                     pagesParsed: number;
                     currentPage?: number;

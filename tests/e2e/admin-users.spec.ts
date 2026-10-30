@@ -99,6 +99,13 @@ test('admin approves a pending user and inspects the user directory', async ({ b
 
     await reader.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(reader).toHaveURL(/\/app$/, { timeout: 30_000 });
+
+    // Account deletion is one durable worker operation, observed through SSE.
+    await page.getByRole('checkbox', { name: `Select ${readerEmail}`, exact: true }).check();
+    await page.getByRole('button', { name: 'Delete (1)', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Delete selected users?' }).getByRole('button', { name: 'Delete users', exact: true }).click();
+    await expect(page.getByText('Deleted 1 account(s); 0 failed', { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(readerEmail, { exact: true })).toHaveCount(0);
   } finally {
     await reader.close();
   }

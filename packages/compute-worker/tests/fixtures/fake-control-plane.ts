@@ -1,4 +1,5 @@
 import type {
+  MaintenanceJobResult,
   AccountExportJobResult,
   EmailDeliveryJobResult,
   ModelDownloadJobResult,
@@ -23,7 +24,8 @@ type ComputeResult =
   | DocumentConversionJobResult
   | AccountExportJobResult
   | EmailDeliveryJobResult
-  | ModelDownloadJobResult;
+  | ModelDownloadJobResult
+  | MaintenanceJobResult;
 type ComputeState = WorkerOperationState<ComputeResult>;
 type ComputeEvent = WorkerOperationEvent<ComputeResult>;
 

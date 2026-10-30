@@ -10,7 +10,6 @@ import {
   documentPreviewMetadataArtifactKey,
   parsedPdfArtifactKey,
 } from '../../storage/artifact-addressing';
-import { expireArtifactFoldersUnderRoot } from '../../storage/artifact-retention';
 import type {
   DocumentConversionArtifactMetadata,
   DocumentPreviewArtifactMetadata,
@@ -19,7 +18,6 @@ import { toComputeOperation } from '../compute-operation';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
   apiErrorResponseSchema,
-  artifactRetentionSchema,
   computeOperationSchema,
   documentConversionOperationCreateSchema,
   documentConversionResolutionSchema,
@@ -240,30 +238,4 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
     return { artifact, operation: operation ? toComputeOperation(operation) : null };
   });
 
-  // A converted PDF is only read while its temp upload is finalized, so the
-  // app expires conversions on the temp-upload window.
-  app.post('/v1/document-conversions/expire', {
-    schema: {
-      body: jsonSchema(artifactRetentionSchema),
-      response: {
-        200: {
-          type: 'object',
-          properties: { expiredArtifacts: { type: 'number' }, deletedObjects: { type: 'number' } },
-          required: ['expiredArtifacts', 'deletedObjects'],
-        },
-        400: errorResponseSchema,
-      },
-    },
-  }, async (request, reply) => {
-    const parsed = artifactRetentionSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
-    }
-    return expireArtifactFoldersUnderRoot({
-      storage: context.storage,
-      root: `${s3Prefix}/document_conversions_v1/`,
-      maxAgeMs: parsed.data.maxAgeMs,
-    });
-  });
 }

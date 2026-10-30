@@ -211,7 +211,6 @@ describe('server-state architecture', () => {
       'DELETE /v1/models/:model',
       'GET /health/live',
       'GET /health/ready',
-      'GET /v1/document-derived/ids',
       'GET /v1/models/:model',
       'GET /v1/operations/:opId',
       'GET /v1/operations/:opId/events',
@@ -219,19 +218,16 @@ describe('server-state architecture', () => {
       'GET /v1/tts-playback/sessions/:sessionId',
       'GET /v1/tts-playback/sessions/:sessionId/audio',
       'GET /v1/tts-playback/sessions/:sessionId/segments',
-      'POST /v1/account-exports/expire',
       'POST /v1/account-exports/jobs',
       'POST /v1/account-exports/resolve',
-      'POST /v1/document-conversions/expire',
       'POST /v1/document-conversions/docx/jobs',
       'POST /v1/document-conversions/docx/resolve',
-      'POST /v1/document-previews/clear',
       'POST /v1/document-previews/jobs',
       'POST /v1/document-previews/resolve',
       'POST /v1/email-deliveries/jobs',
+      'POST /v1/maintenance/jobs',
       'POST /v1/models/:model/cancel',
       'POST /v1/models/:model/download',
-      'POST /v1/pdf-layout/clear',
       'POST /v1/pdf-layout/jobs',
       'POST /v1/pdf-layout/resolve',
       'POST /v1/tts-playback/sessions/:sessionId/cancel',
@@ -240,7 +236,6 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/exports/jobs',
       'POST /v1/tts-playback/exports/progress',
       'POST /v1/tts-playback/exports/resolve',
-      'POST /v1/tts-playback/plans/clear',
       'POST /v1/tts-playback/plans/jobs',
       'POST /v1/tts-playback/sessions/jobs',
       'POST /v1/tts-playback/sessions/prepare',
@@ -248,8 +243,6 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/sessions/resolve',
       'POST /v1/tts-playback/voice-previews',
       'POST /v1/user-storage/cleanup',
-      'POST /v1/user-storage/scopes',
-      'POST /v1/user-storage/sidecars/clear',
       'POST /v1/user-storage/usage',
       'PUT /v1/tts-playback/sessions/:sessionId/cursor',
     ].sort());
@@ -279,6 +272,7 @@ describe('server-state architecture', () => {
       '/api/admin/local-voices',
       '/api/admin/local-voices/cancel',
       '/api/admin/local-voices/events',
+      '/api/admin/maintenance/events',
       '/api/admin/providers',
       '/api/admin/providers/[id]',
       '/api/admin/providers/check',
@@ -290,6 +284,7 @@ describe('server-state architecture', () => {
       '/api/admin/tasks/tick',
       '/api/admin/users',
       '/api/admin/users/[id]',
+      '/api/admin/users/delete',
       '/api/auth/[...all]',
       '/api/compute-limits/status',
       '/api/documents',
@@ -319,6 +314,7 @@ describe('server-state architecture', () => {
       '/api/internal/compute/limits/complete',
       '/api/internal/compute/limits/consume',
       '/api/internal/compute/limits/policy',
+      '/api/internal/compute/maintenance',
       '/api/internal/compute/tts-credentials',
       '/api/local-library',
       '/api/local-library/content',
@@ -556,7 +552,7 @@ describe('server-state architecture', () => {
     expect(workerRoutes).not.toContain("/v1/tts-playback/exports/:artifactId/download");
     expect(source('src/app/api/tts/segments/clear/route.ts')).toContain('clearTtsPlaybackScope');
     expect(source('src/app/api/tts/segments/clear/route.ts')).not.toContain('deleteTtsSegmentPrefix');
-    expect(source('src/lib/server/user/data-cleanup.ts')).toContain('cleanupUserStorage');
+    expect(source('packages/compute-worker/src/jobs/maintenance.ts')).toContain('cleanupUserStorage');
     expect(source('src/lib/server/user/data-cleanup.ts')).not.toContain('deleteTtsSegmentPrefix');
     expect(workerRoutes).toContain("/v1/tts-playback/plans/jobs");
     expect(workerRoutes).toContain("/v1/tts-playback/sessions/resolve");

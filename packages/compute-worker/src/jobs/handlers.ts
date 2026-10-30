@@ -1,4 +1,7 @@
 import type {
+  MaintenanceJobRequest,
+  MaintenanceJobResult,
+  MaintenanceProgress,
   AccountExportJobRequest,
   AccountExportJobResult,
   AccountExportProgress,
@@ -36,6 +39,7 @@ import { runModelDownload } from './model-download';
 import type { ModelDownloadProgress } from '../inference/model-download';
 
 export interface JobHandlers {
+  runMaintenance?(payload: MaintenanceJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: MaintenanceProgress) => Promise<void> }): Promise<MaintenanceJobResult>;
   runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> }): Promise<PdfLayoutJobResult>;
   runTtsPlayback(payload: TtsPlaybackJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: TtsPlaybackProgress) => Promise<void> }): Promise<TtsPlaybackJobResult>;
   runTtsPlaybackPlan(payload: TtsPlaybackPlanJobRequest, queueWaitMs: number): Promise<TtsPlaybackPlanJobResult>;

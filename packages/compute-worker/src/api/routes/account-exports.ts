@@ -1,9 +1,7 @@
-import type { FastifyReply, FastifyRequest } from 'fastify';
 import { hashOpKey } from '../../infrastructure/nats-adapters';
 import type { AccountExportArtifactMetadata, WorkerOperationRequest } from '../../operations/contracts';
 import { buildAccountExportOperationKey } from '../../operations/keys';
 import { accountExportMetadataArtifactKey } from '../../storage/artifact-addressing';
-import { expireArtifactFoldersUnderRoot } from '../../storage/artifact-retention';
 import { toComputeOperation } from '../compute-operation';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
@@ -12,7 +10,6 @@ import {
   accountExportResolveSchema,
   apiErrorResponseSchema,
   computeOperationSchema,
-  artifactRetentionSchema,
   jsonSchema,
 } from '../schemas';
 
@@ -94,32 +91,4 @@ export function registerAccountExportRoutes(context: ComputeWorkerRouteContext):
     const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
     return { artifact, operation: operation ? toComputeOperation(operation) : null };
   });
-}
-
-export function registerAccountExportRetentionRoute(context: ComputeWorkerRouteContext): void {
-  const { app } = context;
-  const retentionRouteSchema = {
-    body: jsonSchema(artifactRetentionSchema),
-    response: {
-      200: {
-        type: 'object',
-        properties: { expiredArtifacts: { type: 'number' }, deletedObjects: { type: 'number' } },
-        required: ['expiredArtifacts', 'deletedObjects'],
-      },
-      400: errorResponseSchema,
-    },
-  };
-  const retentionHandler = async (request: FastifyRequest, reply: FastifyReply) => {
-    const parsed = artifactRetentionSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
-    }
-    return expireArtifactFoldersUnderRoot({
-      storage: context.storage,
-      root: `${context.s3Prefix}/account_exports_v1/`,
-      maxAgeMs: parsed.data.maxAgeMs,
-    });
-  };
-  app.post('/v1/account-exports/expire', { schema: retentionRouteSchema }, retentionHandler);
 }

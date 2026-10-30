@@ -63,6 +63,7 @@ export function shouldReuseExistingOperation(input: {
     return WORKER_OPERATION_KIND_POLICY[input.requestKind].reusesSucceeded;
   }
   if (!isInflightStatus(input.current.status)) return false;
+  if (input.current.status === 'queued' && !WORKER_OPERATION_KIND_POLICY[input.requestKind].enforcesQueueDeadline) return true;
   const ageMs = input.now - input.current.updatedAt;
   return ageMs <= input.opStaleMs;
 }

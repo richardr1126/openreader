@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAdminContext } from '@/lib/server/auth/admin';
 import {
   AdminUserManagementError,
-  deleteManagedUser,
   updateManagedUser,
   type UserAccessStatus,
 } from '@/lib/server/admin/users';
@@ -65,20 +64,5 @@ export async function PATCH(
     return NextResponse.json({ ok: true });
   } catch (error) {
     return managementError(error, 'admin.users.update.failed');
-  }
-}
-
-export async function DELETE(
-  request: NextRequest,
-  routeContext: { params: Promise<{ id: string }> },
-) {
-  const context = await requireAdminContext(request);
-  if (context instanceof Response) return context;
-  const { id } = await routeContext.params;
-  try {
-    await deleteManagedUser({ actorUserId: context.userId!, targetUserId: id });
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    return managementError(error, 'admin.users.delete.failed');
   }
 }

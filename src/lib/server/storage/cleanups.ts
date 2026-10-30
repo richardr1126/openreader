@@ -1,9 +1,8 @@
-import { and, asc, eq, lte } from 'drizzle-orm';
+import { and, asc, eq, lte, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documents, storageCleanups } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
-import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
@@ -34,9 +33,9 @@ export function storageCleanupId(userId: string, documentId: string | null): str
 }
 
 /** Queue (or re-arm) cleanup of one user's document storage, or of the whole user when `documentId` is null. */
-export async function enqueueStorageCleanup(
-  input: { userId: string; documentId: string | null; notBeforeMs?: number },
-): Promise<StorageCleanupRow> {
+export async function enqueueStorageCleanup<D extends string | null>(
+  input: { userId: string; documentId: D; notBeforeMs?: number },
+): Promise<StorageCleanupRow & { documentId: D }> {
   const now = Date.now();
   const row = {
     id: storageCleanupId(input.userId, input.documentId),
@@ -67,85 +66,60 @@ async function isStillOwned(row: StorageCleanupRow): Promise<boolean> {
 }
 
 // Removing only the claimed generation keeps a row re-armed during the run.
-async function settleRow(row: StorageCleanupRow): Promise<void> {
+export async function settleRow(row: StorageCleanupRow): Promise<void> {
   await db.delete(storageCleanups).where(and(
     eq(storageCleanups.id, row.id),
     eq(storageCleanups.notBeforeMs, row.notBeforeMs),
   ));
 }
 
+/** Drop the row when the user owns the document (or the account exists) again, since its storage is live. */
+export async function settleIfOwned(row: StorageCleanupRow): Promise<boolean> {
+  if (!(await isStillOwned(row))) return false;
+  await settleRow(row);
+  return true;
+}
+
+export async function listDueStorageCleanups(after: string | null): Promise<StorageCleanupRow[]> {
+  return db.select().from(storageCleanups).where(and(
+    lte(storageCleanups.notBeforeMs, Date.now()),
+    after ? sql`${storageCleanups.id} > ${after}` : undefined,
+  )).orderBy(asc(storageCleanups.id)).limit(10);
+}
+
+/** Back a failed row off for the `retry-storage-cleanups` task. */
+export async function failStorageCleanup(row: StorageCleanupRow, error?: unknown): Promise<void> {
+  const attempts = row.attempts + 1;
+  await db.update(storageCleanups).set({
+    attempts,
+    lastError: error === undefined ? 'Worker storage cleanup failed' : String(error).slice(0, 1000),
+    notBeforeMs: Date.now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (attempts - 1)),
+  }).where(and(eq(storageCleanups.id, row.id), eq(storageCleanups.notBeforeMs, row.notBeforeMs)));
+}
+
 /**
- * Run one queued cleanup. The row is dropped without a worker call when the
- * user owns the document (or the account exists) again, since its storage is
- * live; a failure backs the row off for the retry task.
+ * Run a deleted document's queued playback cleanup inline. The worker's
+ * `retry-storage-cleanups` task runs whatever this leaves behind.
  */
-export async function runStorageCleanup(row: StorageCleanupRow): Promise<'cleared' | 'owned' | 'failed'> {
+export async function runStorageCleanup(
+  row: StorageCleanupRow & { documentId: string },
+): Promise<'cleared' | 'owned' | 'failed'> {
   try {
-    if (await isStillOwned(row)) {
-      await settleRow(row);
-      return 'owned';
-    }
-    if (!isComputeWorkerAvailable()) throw new Error('Compute worker is required for storage cleanup');
-    if (row.documentId === null) {
-      await getComputeWorkerClient().cleanupUserStorage({
-        storageUserId: row.userId,
-        namespace: null,
-        documentIds: [],
-      });
-    } else {
-      await deleteDocumentTtsSegmentCache({ userId: row.userId, documentId: row.documentId, namespace: null });
-    }
+    if (await settleIfOwned(row)) return 'owned';
+    await deleteDocumentTtsSegmentCache({ userId: row.userId, documentId: row.documentId, namespace: null });
     await settleRow(row);
     return 'cleared';
   } catch (error) {
-    const attempts = row.attempts + 1;
     // If the backoff cannot be recorded either, the row keeps its due time and
     // the retry task picks it up; this runs after responses, so never reject.
-    await db.update(storageCleanups).set({
-      attempts,
-      lastError: String(error).slice(0, 1000),
-      notBeforeMs: Date.now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (attempts - 1)),
-    }).where(and(
-      eq(storageCleanups.id, row.id),
-      eq(storageCleanups.notBeforeMs, row.notBeforeMs),
-    )).catch(() => undefined);
+    await failStorageCleanup(row, error).catch(() => undefined);
     logDegraded(serverLogger, {
       event: 'storage.cleanup.failed',
       msg: 'Queued storage cleanup failed; it will be retried',
-      step: row.documentId === null ? 'cleanup_user_storage' : 'cleanup_document_storage',
-      context: { userIdHash: hashForLog(row.userId), documentId: row.documentId, attempts },
+      step: 'cleanup_document_storage',
+      context: { userIdHash: hashForLog(row.userId), documentId: row.documentId, attempts: row.attempts + 1 },
       error,
     });
     return 'failed';
   }
-}
-
-/** Run due cleanups oldest first until the queue is drained or the deadline passes. */
-export async function drainStorageCleanups(input: { deadlineAt: number; signal?: AbortSignal }): Promise<{
-  cleared: number;
-  owned: number;
-  failed: number;
-  remaining: boolean;
-}> {
-  const totals = { cleared: 0, owned: 0, failed: 0 };
-  const attempted = new Set<string>();
-  while (Date.now() < input.deadlineAt && !input.signal?.aborted) {
-    const due = (await db.select({
-      id: storageCleanups.id,
-      userId: storageCleanups.userId,
-      documentId: storageCleanups.documentId,
-      notBeforeMs: storageCleanups.notBeforeMs,
-      attempts: storageCleanups.attempts,
-    }).from(storageCleanups)
-      .where(lte(storageCleanups.notBeforeMs, Date.now()))
-      .orderBy(asc(storageCleanups.notBeforeMs))
-      .limit(25) as StorageCleanupRow[]).filter((row) => !attempted.has(row.id));
-    if (due.length === 0) return { ...totals, remaining: false };
-    for (const row of due) {
-      if (Date.now() >= input.deadlineAt || input.signal?.aborted) break;
-      attempted.add(row.id);
-      totals[await runStorageCleanup(row)] += 1;
-    }
-  }
-  return { ...totals, remaining: true };
 }

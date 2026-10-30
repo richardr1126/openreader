@@ -1,11 +1,6 @@
 import type { TaskRegistry } from './types';
-import { reapOrphanedBlobs } from './handlers/reap-orphaned-blobs';
-import { cleanupTempUploads } from './handlers/cleanup-temp-uploads';
-import { expireExportArtifacts } from './handlers/expire-export-artifacts';
 import { pruneComputeLimits } from './handlers/prune-compute-limits';
-import { retryStorageCleanups } from './handlers/retry-storage-cleanups';
-import { expireAnonymousUsers } from './handlers/expire-anonymous-users';
-import { scanOrphanedStorage } from './handlers/scan-orphaned-storage';
+import { enqueueMaintenanceTask } from './enqueue-maintenance';
 
 /**
  * The catalog of scheduled tasks. Each key is the stable task id stored in the
@@ -18,21 +13,21 @@ export const TASK_REGISTRY: TaskRegistry = {
     description: 'Remove document files and generated artifacts that no longer have an owner.',
     defaultIntervalMs: 6 * 60 * 60 * 1000,
     maxRunMs: 45_000,
-    run: reapOrphanedBlobs,
+    run: (context) => enqueueMaintenanceTask('reap-orphaned-blobs', context),
   },
   'cleanup-temp-uploads': {
     name: 'Clean up expired uploads',
     description: 'Remove temporary uploads and DOCX conversions past their TTL.',
     defaultIntervalMs: 60 * 60 * 1000,
     maxRunMs: 45_000,
-    run: cleanupTempUploads,
+    run: (context) => enqueueMaintenanceTask('cleanup-temp-uploads', context),
   },
   'expire-export-artifacts': {
     name: 'Clean up expired exports',
     description: 'Remove temporary account export ZIPs after seven days. Audiobooks are kept until audio is cleared.',
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     maxRunMs: 45_000,
-    run: expireExportArtifacts,
+    run: (context) => enqueueMaintenanceTask('expire-export-artifacts', context),
   },
   'prune-compute-limits': {
     name: 'Clean up compute history',
@@ -46,7 +41,7 @@ export const TASK_REGISTRY: TaskRegistry = {
     description: 'Delete audio and exports left by deleted documents and accounts, including retries and the delayed second pass.',
     defaultIntervalMs: 15 * 60 * 1000,
     maxRunMs: 45_000,
-    run: retryStorageCleanups,
+    run: (context) => enqueueMaintenanceTask('retry-storage-cleanups', context),
   },
   'expire-anonymous-users': {
     name: 'Delete idle guest accounts',
@@ -54,7 +49,14 @@ export const TASK_REGISTRY: TaskRegistry = {
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     defaultEnabled: false,
     maxRunMs: 45_000,
-    run: expireAnonymousUsers,
+    run: (context) => enqueueMaintenanceTask('expire-anonymous-users', context),
+  },
+  'resume-user-deletions': {
+    name: 'Finish pending account deletions',
+    description: 'Resume account deletions interrupted by a restart or a failed storage cleanup.',
+    defaultIntervalMs: 15 * 60 * 1000,
+    maxRunMs: 15_000,
+    run: (context) => enqueueMaintenanceTask('resume-user-deletions', context),
   },
   // ONE-TIME: disables itself after a complete pass. Remove with its handler.
   'scan-orphaned-storage': {
@@ -62,6 +64,6 @@ export const TASK_REGISTRY: TaskRegistry = {
     description: 'One-time scan that queues cleanup for audio and exports left by earlier deletes.',
     defaultIntervalMs: 10 * 60 * 1000,
     maxRunMs: 45_000,
-    run: scanOrphanedStorage,
+    run: (context) => enqueueMaintenanceTask('scan-orphaned-storage', context),
   },
 };

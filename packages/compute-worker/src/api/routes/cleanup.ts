@@ -1,32 +1,18 @@
 import { clearTtsPlaybackArtifacts } from '../../playback/cache-clear';
 import type { TtsPlaybackResetScope, TtsPlaybackStorage } from '../../playback/storage';
-import {
-  clearDocumentPreviewArtifacts,
-  clearPdfLayoutArtifacts,
-  clearTtsPlaybackPlanArtifacts,
-  listDocumentDerivedIds,
-} from '../../storage/document-derived-cleanup';
 import { ttsPlaybackResetScopeFromOperationKey } from '../../operations/keys';
-import { ttsPlaybackPlanArtifactPrefix } from '../../storage/artifact-addressing';
 import { cleanupUserStorageArtifacts } from '../../storage/user-storage-cleanup';
-import { clearUserSidecarsByHash, listUserStorageScopes } from '../../storage/user-storage-scan';
 import { collectStorageUsage, reclaimableVariants } from '../../storage/storage-usage';
 import { invalidatePlaybackOperationsForScope } from '../playback/operation-invalidation';
 import type { PlaybackSessionReadModel } from '../playback/session-read-model';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
   apiErrorResponseSchema,
-  documentPreviewClearSchema,
   jsonSchema,
-  pdfLayoutClearSchema,
   ttsPlaybackCacheClearSchema,
   ttsPlaybackCacheReclaimResponseSchema,
   ttsPlaybackCacheReclaimSchema,
-  ttsPlaybackPlansClearSchema,
   userStorageCleanupSchema,
-  userStorageScopesResponseSchema,
-  userStorageScopesSchema,
-  userStorageSidecarsClearSchema,
   userStorageUsageResponseSchema,
   userStorageUsageSchema,
 } from '../schemas';
@@ -36,7 +22,7 @@ const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
 export function registerCleanupRoutes(
   context: ComputeWorkerRouteContext,
   readModel: PlaybackSessionReadModel,
-): void {
+) {
   const { app, deps, storage, playbackStorage, s3Prefix } = context;
 
   // Stop everything that could still write into a scope: bump its epoch,
@@ -240,87 +226,15 @@ export function registerCleanupRoutes(
     });
   });
 
-  app.post('/v1/pdf-layout/clear', {
-    schema: {
-      body: jsonSchema(pdfLayoutClearSchema),
-      response: {
-        200: {
-          type: 'object',
-          properties: { deletedParsedObjects: { type: 'number' } },
-          required: ['deletedParsedObjects'],
-        },
-        400: errorResponseSchema,
-      },
-    },
-  }, async (request, reply) => {
-    const parsed = pdfLayoutClearSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
+  const cleanupUserStorage = async (input: typeof userStorageCleanupSchema._output) => {
+    if (playbackStorage && input.namespace === null) {
+      const now = Date.now();
+      for (const documentId of await listUserPlaybackDocumentIds(playbackStorage, input.storageUserId)) {
+        await cancelPlaybackScope(playbackStorage, { storageUserId: input.storageUserId, documentId }, now);
+      }
     }
-    const deletedParsedObjects = await clearPdfLayoutArtifacts({ storage, s3Prefix, ...parsed.data });
-    return { deletedParsedObjects };
-  });
-
-  app.post('/v1/document-previews/clear', {
-    schema: {
-      body: jsonSchema(documentPreviewClearSchema),
-      response: {
-        200: {
-          type: 'object',
-          properties: { deletedPreviewObjects: { type: 'number' } },
-          required: ['deletedPreviewObjects'],
-        },
-        400: errorResponseSchema,
-      },
-    },
-  }, async (request, reply) => {
-    const parsed = documentPreviewClearSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
-    }
-    const deletedPreviewObjects = await clearDocumentPreviewArtifacts({ storage, s3Prefix, ...parsed.data });
-    return { deletedPreviewObjects };
-  });
-
-  app.get('/v1/document-derived/ids', {
-    schema: {
-      response: {
-        200: {
-          type: 'object',
-          properties: { documentIds: { type: 'array', items: { type: 'string' } } },
-          required: ['documentIds'],
-        },
-      },
-    },
-  }, async () => ({ documentIds: await listDocumentDerivedIds({ storage, s3Prefix }) }));
-
-  app.post('/v1/tts-playback/plans/clear', {
-    schema: {
-      body: jsonSchema(ttsPlaybackPlansClearSchema),
-      response: {
-        200: {
-          type: 'object',
-          properties: { deletedPlanObjects: { type: 'number' } },
-          required: ['deletedPlanObjects'],
-        },
-        400: errorResponseSchema,
-      },
-    },
-  }, async (request, reply) => {
-    const parsed = ttsPlaybackPlansClearSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
-    }
-    readModel.invalidatePlansUnderPrefix(ttsPlaybackPlanArtifactPrefix({
-      documentId: parsed.data.documentId,
-      prefix: s3Prefix,
-    }));
-    const deletedPlanObjects = await clearTtsPlaybackPlanArtifacts({ storage, s3Prefix, ...parsed.data });
-    return { deletedPlanObjects };
-  });
+    return cleanupUserStorageArtifacts({ storage, s3Prefix, ...input });
+  };
 
   app.post('/v1/user-storage/cleanup', {
     schema: {
@@ -343,52 +257,14 @@ export function registerCleanupRoutes(
       reply.code(400);
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
-    const { storageUserId } = parsed.data;
-    if (playbackStorage && parsed.data.namespace === null) {
-      const now = Date.now();
-      for (const documentId of await listUserPlaybackDocumentIds(playbackStorage, storageUserId)) {
-        await cancelPlaybackScope(playbackStorage, { storageUserId, documentId }, now);
-      }
-    }
-    return cleanupUserStorageArtifacts({ storage, s3Prefix, ...parsed.data });
+    return cleanupUserStorage(parsed.data);
   });
 
-  // ONE-TIME (scan-orphaned-storage): remove both routes with that task.
-  app.post('/v1/user-storage/scopes', {
-    schema: {
-      body: jsonSchema(userStorageScopesSchema),
-      response: {
-        200: jsonSchema(userStorageScopesResponseSchema),
-        400: errorResponseSchema,
-      },
+  return {
+    cleanupUserStorage,
+    clearPlaybackScope: async (scope: TtsPlaybackResetScope) => {
+      if (!playbackStorage) throw new Error('Playback storage is required for cleanup');
+      return resetPlaybackScope(playbackStorage, crypto.randomUUID(), scope, { namespace: null });
     },
-  }, async (request, reply) => {
-    const parsed = userStorageScopesSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
-    }
-    return listUserStorageScopes({ storage, s3Prefix, ...parsed.data });
-  });
-
-  app.post('/v1/user-storage/sidecars/clear', {
-    schema: {
-      body: jsonSchema(userStorageSidecarsClearSchema),
-      response: {
-        200: {
-          type: 'object',
-          properties: { deletedObjects: { type: 'number' } },
-          required: ['deletedObjects'],
-        },
-        400: errorResponseSchema,
-      },
-    },
-  }, async (request, reply) => {
-    const parsed = userStorageSidecarsClearSchema.safeParse(request.body);
-    if (!parsed.success) {
-      reply.code(400);
-      return { error: 'Invalid request body', issues: parsed.error.issues };
-    }
-    return { deletedObjects: await clearUserSidecarsByHash({ storage, s3Prefix, ...parsed.data }) };
-  });
+  };
 }
