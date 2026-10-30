@@ -7,6 +7,10 @@ import * as sqliteSchema from '@openreader/database/schema-sqlite';
 // Back the engine with a real in-memory SQLite so the CAS claim, due-detection,
 // and nextRunAt arithmetic are exercised against real SQL rather than mocks.
 const holder = vi.hoisted(() => ({ db: null as unknown as ReturnType<typeof drizzle> }));
+const worker = vi.hoisted(() => ({ getOperation: vi.fn() }));
+vi.mock('@/lib/server/compute-worker/client', () => ({
+  getComputeWorkerClient: () => worker,
+}));
 vi.mock('@openreader/database', () => ({
   get db() {
     return holder.db;
@@ -62,12 +66,44 @@ function registryWith(run: TaskRegistry[string]['run']): TaskRegistry {
 }
 
 beforeEach(() => {
+  worker.getOperation.mockReset();
   const sqlite = new Database(':memory:');
   sqlite.exec(CREATE_TABLE);
   holder.db = drizzle(sqlite, { schema: sqliteSchema });
 });
 
 describe('scheduled task engine', () => {
+  test('keeps a queued worker task running until durable completion, including partial failure', async () => {
+    let runId = '';
+    const registry = registryWith(async (context) => {
+      runId = context.runId;
+      return { operationId: 'op-maintenance', summary: 'Queued' };
+    });
+    await runDueTasks({ registry });
+    expect((await readRow()).lastStatus).toBe('running');
+    worker.getOperation.mockResolvedValue({
+      opId: 'op-maintenance', subject: { kind: 'maintenance', runId }, status: 'running', queuedAt: Date.now(),
+    });
+    expect((await listTasks(registry))[0]).toMatchObject({ operationId: 'op-maintenance', running: true });
+    worker.getOperation.mockResolvedValue({
+      opId: 'op-maintenance', subject: { kind: 'maintenance', runId }, status: 'succeeded', queuedAt: Date.now(),
+      result: { summary: 'Deleted 20 accounts; 5 failed', completed: 20, failed: 5 },
+    });
+    expect((await listTasks(registry))[0]).toMatchObject({ running: false, lastStatus: 'error', lastError: 'Deleted 20 accounts; 5 failed' });
+  });
+
+  test('does not reclaim a long-running worker job or start another when its worker is unreachable', async () => {
+    const handler = vi.fn(async () => ({ summary: 'wrong duplicate' }));
+    const leaseOwner = 'existing-run';
+    await seedRow({
+      lastStatus: 'running', leaseOwner, runningSince: Date.now() - 7_200_000,
+      lastResultJson: JSON.stringify({ operationId: 'op-existing' }),
+    });
+    worker.getOperation.mockRejectedValue(new Error('worker temporarily unavailable'));
+    await runDueTasks({ registry: registryWith(handler) });
+    expect(handler).not.toHaveBeenCalled();
+    expect((await readRow()).lastStatus).toBe('running');
+  });
   test('sequential mode claims every due task, then runs them one at a time', async () => {
     const events: string[] = [];
     const task = (key: string) => async () => {

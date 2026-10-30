@@ -1,4 +1,5 @@
 import type {
+  MaintenanceJobResult,
   PdfLayoutJobResult,
   AccountExportJobResult,
   EmailDeliveryJobResult,
@@ -14,7 +15,7 @@ import type {
 } from '../operations/contracts';
 
 export type StreamedOperationState = WorkerOperationState<
-  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult
+  PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult | MaintenanceJobResult
 >;
 
 export interface OrphanRecoveryStateStore {
@@ -60,6 +61,7 @@ export function getOrphanRecoveryThresholdMs(input: {
       || input.state.kind === 'account_export'
       || input.state.kind === 'email_delivery'
       || input.state.kind === 'model_download'
+      || input.state.kind === 'maintenance'
       ? input.pdfTimeoutMs
       : input.whisperTimeoutMs;
   }
@@ -70,6 +72,7 @@ export function getOrphanRecoveryThresholdMs(input: {
     || input.state.kind === 'account_export'
     || input.state.kind === 'email_delivery'
     || input.state.kind === 'model_download'
+    || input.state.kind === 'maintenance'
     ? input.opStaleMs
     : null;
 }

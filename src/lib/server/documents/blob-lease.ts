@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, eq, lt } from 'drizzle-orm';
+import { and, eq, gt, lt } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documentBlobLeases } from '@openreader/database/schema';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
@@ -12,6 +12,20 @@ export type DocumentBlobLease = {
   owner: string;
   release: () => Promise<void>;
 };
+
+export async function releaseDocumentBlobLease(documentId: string, owner: string): Promise<void> {
+  await db.delete(documentBlobLeases).where(and(
+    eq(documentBlobLeases.documentId, documentId), eq(documentBlobLeases.leaseOwner, owner),
+  ));
+}
+
+export async function renewDocumentBlobLease(documentId: string, owner: string): Promise<boolean> {
+  const now = Date.now();
+  const rows = await db.update(documentBlobLeases).set({ leaseUntilMs: now + DEFAULT_LEASE_MS }).where(and(
+    eq(documentBlobLeases.documentId, documentId), eq(documentBlobLeases.leaseOwner, owner), gt(documentBlobLeases.leaseUntilMs, now),
+  )).returning({ owner: documentBlobLeases.leaseOwner });
+  return rows[0]?.owner === owner;
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,12 +54,7 @@ export async function tryAcquireDocumentBlobLease(
   return {
     owner,
     release: async () => {
-      await db
-        .delete(documentBlobLeases)
-        .where(and(
-          eq(documentBlobLeases.documentId, documentId),
-          eq(documentBlobLeases.leaseOwner, owner),
-        ));
+      await releaseDocumentBlobLease(documentId, owner);
     },
   };
 }

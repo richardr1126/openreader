@@ -31,10 +31,15 @@ The desktop app adds **Open logs folder** here.
 | Clean up expired exports | 1 day | Removes account export ZIPs after seven days. Audiobooks are kept until their audio is cleared. |
 | Clean up compute history | 1 day | Releases expired compute leases and removes old limit counters and events. |
 | Retry storage cleanup | 15 minutes | Deletes audio and exports left by deleted documents and accounts. Retries cleanups that failed and runs a second pass after an account is deleted. |
-| Delete idle guest accounts | 1 day | Off by default. Deletes guest accounts with no session for the **Guest idle period** (90 days by default, under Site features) and their data. |
+| Delete idle guest accounts | 1 day | Off by default. Deletes guests whose account and sessions have been idle for the **Guest idle period** (90 days by default, under Guest sessions), and resumes previously requested deletions. |
+| Finish pending account deletions | 15 minutes | Retries account deletions interrupted by a restart or failed cleanup. Also available on Vercel. |
 | Find leftover storage | 10 minutes | Runs once. Queues cleanup for audio and exports left by deletes before this version, then turns itself off. |
 
-You can turn each task on or off, change its interval, or run it now. Each task shows its last result, how long it took, and any error, which also goes to the server logs. A run that takes too long is stopped and recorded as failed.
+You can turn each task on or off, change its interval, or run it now. Storage cleanup and account deletion run as durable jobs on the compute worker. The panel shows live progress and the final result, including failed items. You can leave the page while a job continues; opening Maintenance again reconnects to its progress. Compute-history cleanup stays in the app because it only changes the application database.
+
+The web request only queues a job. The worker performs storage scans and deletes, and makes short authenticated calls to the app for database ownership checks and row cleanup. A web request ending or a progress stream reconnecting does not cancel the job.
+
+Account deletion first revokes sessions and displays **Deletion pending** in Users. The account and its ownership rows are removed after storage cleanup succeeds. Failed deletions retain that marker and can be retried with **Finish pending account deletions**. Selecting multiple users queues one cleanup job for the selection.
 
 Only one copy of a task runs at a time, even with several app instances.
 

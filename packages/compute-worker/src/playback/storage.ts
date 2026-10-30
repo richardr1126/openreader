@@ -216,6 +216,7 @@ function sidecarMatchesSession(
 
 export function createTtsPlaybackKvStore(input: {
   getKv: () => Promise<KvStoreLike>;
+  listKeys?: (filter: string) => AsyncIterable<string>;
 }): TtsPlaybackSessionStore {
   const sessionCodec = createJsonCodec<TtsPlaybackSessionState>();
   const cursorCodec = createJsonCodec<TtsPlaybackCursorRecord>();
@@ -257,7 +258,10 @@ export function createTtsPlaybackKvStore(input: {
   const listSessions = async (scope?: TtsPlaybackResetScope): Promise<TtsPlaybackSessionState[]> => {
     const kv = await input.getKv();
     const keys: string[] = [];
-    for await (const key of await kv.keys('tts_playback.session.*')) keys.push(key);
+    const listed = input.listKeys
+      ? input.listKeys('tts_playback.session.*')
+      : await kv.keys('tts_playback.session.*');
+    for await (const key of listed) keys.push(key);
     const sessions: TtsPlaybackSessionState[] = [];
     for (let index = 0; index < keys.length; index += 32) {
       const entries = await Promise.all(keys.slice(index, index + 32).map((key) => kv.get(key)));
@@ -641,11 +645,12 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
 
 export function createTtsPlaybackStorage(input: {
   getKv: () => Promise<KvStoreLike>;
+  listKeys?: (filter: string) => AsyncIterable<string>;
   storage: ArtifactStorage;
   s3Prefix: string;
 }): TtsPlaybackStorage {
   return {
-    sessions: createTtsPlaybackKvStore({ getKv: input.getKv }),
+    sessions: createTtsPlaybackKvStore({ getKv: input.getKv, listKeys: input.listKeys }),
     artifacts: createTtsPlaybackSegmentArtifactStore({
       getKv: input.getKv,
       storage: input.storage,

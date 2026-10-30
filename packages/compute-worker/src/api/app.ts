@@ -22,6 +22,8 @@ import {
 import { getTtsCredentialBrokerConfig } from '../infrastructure/credential-broker-config';
 import { OperationOrchestrator } from '../operations/service';
 import type {
+  MaintenanceJobRequest,
+  MaintenanceJobResult,
   AccountExportJobRequest,
   AccountExportJobResult,
   EmailDeliveryJobRequest,
@@ -65,6 +67,8 @@ import { resolveTtsCredentialsFromBroker } from '../jobs/tts-credential-broker';
 import { generateTTSBuffer, registerLocalTtsSynthesizer } from '@openreader/tts/generate';
 import { synthesizeKokoro } from '../inference/kokoro/engine';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
+import { listKvKeys } from '../infrastructure/kv-keys';
+import { createMaintenanceHandler } from '../jobs/maintenance';
 import {
   ACCOUNT_EXPORT_JOBS_SUBJECT,
   EMAIL_DELIVERY_JOBS_SUBJECT,
@@ -204,6 +208,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   };
   let sessionManager!: ReturnType<typeof createNatsSessionManager>;
   const ensureConnected = () => sessionManager.ensureConnected();
+  const listKeys = async function* (filter: string) {
+    const session = await ensureConnected();
+    yield* listKvKeys({ js: session.js, jsm: session.jsm, bucket: 'compute_state', filter });
+  };
 
   const s3Prefix = normalizeS3Prefix(process.env.S3_PREFIX);
   const storageDisabled = async (): Promise<never> => {
@@ -300,18 +308,21 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const accountExportJobCodec = createJsonCodec<QueuedJob<AccountExportJobRequest>>();
   const emailDeliveryJobCodec = createJsonCodec<QueuedJob<EmailDeliveryJobRequest>>();
   const modelDownloadJobCodec = createJsonCodec<QueuedJob<ModelDownloadJobRequest>>();
+  const maintenanceJobCodec = createJsonCodec<QueuedJob<MaintenanceJobRequest>>();
 
-  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult>({
+  const defaultOperationStateStore = new JetStreamOperationStateStore<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult | MaintenanceJobResult>({
     getKv: async () => (await ensureConnected()).kv,
+    listKeys,
   });
 
-  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult>({
+  const defaultOperationEventStream = new JetStreamOperationEventStream<PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult | MaintenanceJobResult>({
     getJs: async () => (await ensureConnected()).js,
     getJsm: async () => (await ensureConnected()).jsm,
     eventsStreamName: EVENTS_STREAM_NAME,
   });
   const playbackStorage = createTtsPlaybackStorage({
     getKv: async () => (await ensureConnected()).kv,
+    listKeys,
     storage,
     s3Prefix,
   });
@@ -370,7 +381,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     app.log,
   );
 
-  registerComputeWorkerRoutes({
+  const cleanup = registerComputeWorkerRoutes({
     app,
     deps: {
       orchestrator,
@@ -416,7 +427,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const workerLoops = createWorkerLoopController({
     orchestrator,
-    handlers: jobHandlers,
+    handlers: { ...jobHandlers, runMaintenance: createMaintenanceHandler({ storage, s3Prefix, cleanup, logger: app.log }) },
     logger: app.log,
     getComputePolicy: () => computePolicy,
     pdfAttempts,
@@ -429,6 +440,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     accountExportCodec: accountExportJobCodec,
     emailDeliveryCodec: emailDeliveryJobCodec,
     modelDownloadCodec: modelDownloadJobCodec,
+    maintenanceCodec: maintenanceJobCodec,
     isOwnerActive: (owner) => sessionManager.isOwnerActive(owner),
     isStopping: () => stopping,
     markActivity,
@@ -511,6 +523,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
         accountExport: session.accountExportConsumer,
         emailDelivery: session.emailDeliveryConsumer,
         modelDownload: session.modelDownloadConsumer,
+        maintenance: session.maintenanceConsumer,
       });
     },
     stopWorkers: () => workerLoops.stop(),

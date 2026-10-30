@@ -1,5 +1,7 @@
 /** Outcome a task handler may return; surfaced in the admin UI as a summary. */
 export type TaskResult = {
+  /** Durable worker execution. The task remains running until its operation settles. */
+  operationId?: string;
   /** Short human-readable summary, e.g. "Reaped 3 orphaned blobs". */
   summary?: string;
   /** Where a bounded run stopped; handed back as `context.cursor` next run. */
@@ -11,6 +13,7 @@ export type TaskResult = {
 };
 
 export type TaskContext = {
+  runId: string;
   signal: AbortSignal;
   deadlineAt: number;
   /** Cursor the previous successful run returned, if any. */

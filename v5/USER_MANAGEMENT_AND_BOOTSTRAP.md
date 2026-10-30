@@ -16,6 +16,20 @@ cleanup succeeds. Role and status changes revoke sessions. The final active
 admin, self-demotion, self-suspension, and self-deletion are blocked. A failed
 storage cleanup retains the account and ownership rows.
 
+Admin deletion queues one durable `maintenance` operation for the selection;
+it does not wait for storage cleanup in the browser request. The locked SQL
+step records `deletionRequestedAt`, suspends the account and revokes sessions.
+The worker removes storage and calls the boundary-4 maintenance broker for
+SQL-only completion. The directory displays **Deletion pending** rather than
+presenting those rows as ordinary suspensions. Marked accounts cannot be
+restored while deletion is in progress.
+
+Idle-guest cleanup drains bounded SQL claim pages, including existing deletion
+markers. The enabled **Finish pending account deletions** task recovers marked
+accounts on every deployment profile, including Vercel; recovery does not
+depend on a process-startup sweep. Both admin deletion and scheduled storage
+maintenance expose durable operation snapshots over authenticated admin SSE.
+
 `signupPolicy` is one runtime setting, optionally seeded by
 `runtimeConfig.signupPolicy` in the version 1 runtime JSON document:
 

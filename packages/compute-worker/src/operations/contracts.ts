@@ -301,6 +301,33 @@ export interface ModelDownloadJobResult {
   model: DownloadableModel;
 }
 
+export const MAINTENANCE_TASKS = [
+  'delete-users', 'expire-anonymous-users', 'resume-user-deletions',
+  'reap-orphaned-blobs', 'cleanup-temp-uploads', 'expire-export-artifacts',
+  'retry-storage-cleanups', 'scan-orphaned-storage',
+] as const;
+export type MaintenanceTask = typeof MAINTENANCE_TASKS[number];
+
+export interface MaintenanceJobRequest {
+  runId: string;
+  task: MaintenanceTask;
+  userIds?: string[];
+  idleBefore?: number;
+}
+
+export interface MaintenanceProgress {
+  phase: string;
+  completed: number;
+  failed: number;
+}
+
+export interface MaintenanceJobResult {
+  summary: string;
+  completed: number;
+  failed: number;
+  disableTask?: boolean;
+}
+
 export type PdfLayoutJobResult =
   | {
     parsed: ParsedPdfDocument;
@@ -386,7 +413,8 @@ export type WorkerOperationProgress =
   | TtsPlaybackExportProgress
   | DocumentConversionProgress
   | AccountExportProgress
-  | ModelDownloadProgress;
+  | ModelDownloadProgress
+  | MaintenanceProgress;
 
 export type WorkerOperationKind =
   | 'pdf_layout'
@@ -397,13 +425,14 @@ export type WorkerOperationKind =
   | 'document_conversion'
   | 'account_export'
   | 'email_delivery'
-  | 'model_download';
+  | 'model_download'
+  | 'maintenance';
 
 /**
  * Kinds outside compute limits: email is queued by the app itself, and model
  * downloads are started by an admin.
  */
-type UnlimitedOperationKind = 'email_delivery' | 'model_download';
+type UnlimitedOperationKind = 'email_delivery' | 'model_download' | 'maintenance';
 
 /**
  * The two exhaustive sides keep worker operation kinds and the shared compute
@@ -454,6 +483,7 @@ export const WORKER_OPERATION_KIND_POLICY: Record<WorkerOperationKind, {
   email_delivery: { reusesSucceeded: true, slowJobLogThresholdMs: 10_000 },
   // The files on disk are the cache; each request checks them again.
   model_download: { reusesSucceeded: false, slowJobLogThresholdMs: 600_000 },
+  maintenance: { reusesSucceeded: true, slowJobLogThresholdMs: 600_000 },
 };
 
 export interface PdfLayoutOperationRequest {
@@ -510,6 +540,12 @@ export interface ModelDownloadOperationRequest {
   payload: ModelDownloadJobRequest;
 }
 
+export interface MaintenanceOperationRequest {
+  kind: 'maintenance';
+  opKey: string;
+  payload: MaintenanceJobRequest;
+}
+
 export type WorkerOperationRequest =
   | PdfLayoutOperationRequest
   | TtsPlaybackOperationRequest
@@ -519,7 +555,8 @@ export type WorkerOperationRequest =
   | DocumentConversionOperationRequest
   | AccountExportOperationRequest
   | EmailDeliveryOperationRequest
-  | ModelDownloadOperationRequest;
+  | ModelDownloadOperationRequest
+  | MaintenanceOperationRequest;
 
 export interface WorkerOperationState<Result = unknown> {
   opId: string;

@@ -3,10 +3,8 @@ import { createServerAppError, isServerAppError } from '@/lib/server/errors/cont
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
-  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
-  ListObjectsV2Command,
   PutObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -417,109 +415,4 @@ export function isMissingBlobError(error: unknown): boolean {
   if (maybe.name === 'NotFound' || maybe.name === 'NoSuchKey') return true;
   if (maybe.Code === 'NotFound' || maybe.Code === 'NoSuchKey') return true;
   return false;
-}
-
-/**
- * List the source document blobs under a namespace (content-addressed objects
- * directly beneath `documents_v1/`, excluding the `parsed_v2/` and `ns/`
- * subtrees via the `/` delimiter). Used by the orphaned-blob reaper.
- */
-export async function listDocumentSourceBlobs(
-  namespace: string | null,
-  options?: { signal?: AbortSignal },
-): Promise<Array<{ id: string; lastModifiedMs: number }>> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  const ns = sanitizeNamespace(namespace);
-  const nsSegment = ns ? `ns/${ns}/` : '';
-  const prefix = `${cfg.prefix}/documents_v1/${nsSegment}`;
-  const out: Array<{ id: string; lastModifiedMs: number }> = [];
-  let continuationToken: string | undefined;
-
-  do {
-    options?.signal?.throwIfAborted();
-    const listRes = await client.send(
-      new ListObjectsV2Command({
-        Bucket: cfg.bucket,
-        Prefix: prefix,
-        Delimiter: '/',
-        ContinuationToken: continuationToken,
-      }),
-      { abortSignal: options?.signal },
-    );
-
-    for (const item of listRes.Contents ?? []) {
-      const key = item.Key;
-      if (!key) continue;
-      const id = key.slice(prefix.length);
-      if (!isValidDocumentId(id)) continue;
-      out.push({ id, lastModifiedMs: item.LastModified?.getTime() ?? 0 });
-    }
-
-    continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
-  } while (continuationToken);
-
-  return out;
-}
-
-/**
- * Delete every temporary upload object (across all users) older than the given
- * cutoff. Used by the cleanup-temp-uploads scheduled task.
- */
-export async function deleteAllExpiredTempDocumentUploads(
-  namespace: string | null,
-  olderThanMs: number,
-  options?: { signal?: AbortSignal },
-): Promise<number> {
-  const cfg = getS3Config();
-  const client = getS3InternalClient();
-  const ns = sanitizeNamespace(namespace);
-  const nsSegment = ns ? `ns/${ns}/` : '';
-  const prefix = `${cfg.prefix}/document_uploads_temp_v1/${nsSegment}`;
-  let continuationToken: string | undefined;
-  let deleted = 0;
-
-  do {
-    options?.signal?.throwIfAborted();
-    const listRes = await client.send(
-      new ListObjectsV2Command({
-        Bucket: cfg.bucket,
-        Prefix: prefix,
-        ContinuationToken: continuationToken,
-      }),
-      { abortSignal: options?.signal },
-    );
-
-    const batch: string[] = [];
-    for (const item of listRes.Contents ?? []) {
-      const key = item.Key;
-      const lastModified = item.LastModified?.getTime() ?? 0;
-      if (!key || lastModified <= 0 || lastModified >= olderThanMs) continue;
-      batch.push(key);
-    }
-
-    if (batch.length > 0) {
-      const deleteRes = await client.send(
-        new DeleteObjectsCommand({
-          Bucket: cfg.bucket,
-          Delete: {
-            Objects: batch.map((Key) => ({ Key })),
-            Quiet: true,
-          },
-        }),
-        { abortSignal: options?.signal },
-      );
-      if (deleteRes.Errors?.length) {
-        throw new Error(
-          `Failed to delete temporary uploads from bucket "${cfg.bucket}" `
-          + `(keys: ${JSON.stringify(batch)}, errors: ${JSON.stringify(deleteRes.Errors)})`,
-        );
-      }
-      deleted += batch.length;
-    }
-
-    continuationToken = listRes.IsTruncated ? listRes.NextContinuationToken : undefined;
-  } while (continuationToken);
-
-  return deleted;
 }

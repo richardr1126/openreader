@@ -1,12 +1,10 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, like, lt, max, notExists, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, like, lt, max, notExists, or, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { runInDbTransaction } from '@openreader/database/run-in-transaction';
 import { computeLimitEvents, documents } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
-import { deleteUserStorageData } from '@/lib/server/user/data-cleanup';
-import { hashForLog, serverLogger } from '@/lib/server/logger';
-import { logDegraded } from '@/lib/server/errors/logging';
+import { deleteUserDatabaseData } from '@/lib/server/user/data-cleanup';
 
 const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
 const { user, session } = authSchema;
@@ -52,6 +50,7 @@ export interface AdminUserSummary {
   isAdmin: boolean;
   adminSource: 'bootstrap' | 'managed' | 'none';
   accessStatus: UserAccessStatus;
+  deletionRequestedAt: string | null;
   createdAt: string;
   updatedAt: string;
   lastActiveAt: string | null;
@@ -129,6 +128,7 @@ export async function listAdminUsers(input: {
       adminSource: user.adminSource,
       accessStatus: user.accessStatus,
       createdAt: user.createdAt,
+      deletionRequestedAt: user.deletionRequestedAt,
       updatedAt: user.updatedAt,
     }).from(user).where(where).orderBy(desc(user.createdAt), asc(user.id)).limit(pageSize).offset((page - 1) * pageSize),
     database.select({
@@ -198,6 +198,7 @@ export async function listAdminUsers(input: {
         isAdmin: Boolean(row.isAdmin),
         adminSource: row.adminSource === 'bootstrap' || row.adminSource === 'managed' ? row.adminSource : 'none',
         accessStatus: normalizeAccessStatus(row.accessStatus),
+        deletionRequestedAt: row.deletionRequestedAt == null ? null : iso(row.deletionRequestedAt),
         createdAt: iso(row.createdAt),
         updatedAt: iso(row.updatedAt),
         lastActiveAt: activeSession?.lastActiveAt ? iso(activeSession.lastActiveAt) : null,
@@ -294,6 +295,7 @@ export async function updateManagedUser(input: {
   await withAdminMutationLock(async (conn) => {
     const target = await getTargetUser(input.targetUserId, conn);
     if (!target) throw new AdminUserManagementError('User not found.', 404);
+    if (target.deletionRequestedAt) throw new AdminUserManagementError('This account is being deleted.', 409);
     if (target.isAnonymous && (input.isAdmin !== undefined || input.accessStatus !== undefined)) {
       throw new AdminUserManagementError('Anonymous users cannot receive account roles or approval state.', 400);
     }
@@ -318,115 +320,78 @@ export async function updateManagedUser(input: {
   });
 }
 
-export async function deleteManagedUser(input: {
-  actorUserId: string;
-  targetUserId: string;
-}): Promise<void> {
-  if (input.actorUserId === input.targetUserId) {
+/** Mark a selected batch atomically; storage deletion is a durable worker job. */
+export async function requestManagedUserDeletions(actorUserId: string, targetUserIds: string[]): Promise<string[]> {
+  const ids = [...new Set(targetUserIds)];
+  if (ids.includes(actorUserId)) {
     throw new AdminUserManagementError('Use Account settings to delete your own account.', 409);
   }
-  // Phase 1 durably records the intent (atomic with the last-admin guard);
-  // phase 2 performs the irreversible storage + row cleanup. If phase 2 fails
-  // the marker survives, so the request is retryable and the startup sweep
-  // (`resumePendingUserDeletions`) finishes it.
-  await requestUserDeletion(input.targetUserId);
-  await finalizeUserDeletion(input.targetUserId);
-}
-
-/**
- * Phase 1: guard against removing the last admin, then durably mark the
- * account for deletion — suspend it, stamp `deletionRequestedAt`, and revoke
- * sessions — all inside one locked transaction. Idempotent: re-marking an
- * already-marked account skips the guard so a resumed deletion can proceed.
- */
-async function requestUserDeletion(targetUserId: string, onlyIf?: SQL): Promise<boolean> {
   return withAdminMutationLock(async (conn) => {
-    if (onlyIf) {
-      const [eligible] = await conn.select({ id: user.id }).from(user)
-        .where(and(eq(user.id, targetUserId), onlyIf)).limit(1);
-      if (!eligible) return false;
+    const targets = await conn.select({
+      id: user.id, isAdmin: user.isAdmin, accessStatus: user.accessStatus,
+      deletionRequestedAt: user.deletionRequestedAt,
+    }).from(user).where(inArray(user.id, ids)) as Array<{
+      id: string; isAdmin: boolean; accessStatus: UserAccessStatus; deletionRequestedAt: Date | null;
+    }>;
+    // Check and mark administrators in order under the same lock, so deleting
+    // several admins together cannot bypass the final-administrator guard.
+    for (const target of targets) {
+      if (!target.deletionRequestedAt && target.isAdmin) {
+        await assertNotLastAdminOn(conn, target);
+        await conn.update(user).set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
+          .where(eq(user.id, target.id));
+      }
     }
-    const target = await getTargetUser(targetUserId, conn);
-    if (!target) throw new AdminUserManagementError('User not found.', 404);
-    if (target.deletionRequestedAt === null && target.isAdmin) {
-      await assertNotLastAdminOn(conn, target);
+    const ordinaryIds = targets.filter((target) => !target.isAdmin && !target.deletionRequestedAt).map((target) => target.id);
+    if (ordinaryIds.length) {
+      await conn.update(user).set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
+        .where(inArray(user.id, ordinaryIds));
     }
-    await conn.update(user)
-      .set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
-      .where(eq(user.id, target.id));
-    await conn.delete(session).where(eq(session.userId, target.id));
-    return true;
+    const found = targets.map((target) => target.id);
+    if (found.length) await conn.delete(session).where(inArray(session.userId, found));
+    return found;
   });
 }
 
-/**
- * Phase 2: remove user-owned storage, then the account row. Both steps are
- * idempotent — storage cleanup fails safe (throws before the row is removed),
- * and a missing row is a completed deletion.
- */
-async function finalizeUserDeletion(targetUserId: string): Promise<void> {
-  await deleteUserStorageData(targetUserId, null);
-  await database.delete(user).where(eq(user.id, targetUserId));
+/** SQL-only completion called by the authenticated worker after storage cleanup. */
+export async function finalizeUserDeletion(targetUserId: string): Promise<void> {
+  const target = await getTargetUser(targetUserId);
+  if (!target) return;
+  if (!target.deletionRequestedAt) throw new AdminUserManagementError('User is not marked for deletion.', 409);
+  await deleteUserDatabaseData(targetUserId);
+  await database.delete(user).where(and(eq(user.id, targetUserId), isNotNull(user.deletionRequestedAt)));
 }
 
-// A guest is idle when neither the account nor any of its sessions has been
-// touched since `idleBefore`.
+// A guest is idle when neither the account nor any session has been touched.
 function idleAnonymousUserCondition(idleBefore: Date) {
   return and(
     eq(user.isAnonymous, true),
+    eq(user.isAdmin, false),
     isNull(user.deletionRequestedAt),
     lt(user.updatedAt, idleBefore),
     notExists(database.select({ id: session.id }).from(session).where(and(
-      eq(session.userId, user.id),
-      gte(session.updatedAt, idleBefore),
+      eq(session.userId, user.id), gte(session.updatedAt, idleBefore),
     ))),
   );
 }
 
-export async function listIdleAnonymousUserIds(idleBefore: Date, limit: number): Promise<string[]> {
-  const rows = await database.select({ id: user.id }).from(user)
-    .where(idleAnonymousUserCondition(idleBefore))
-    .orderBy(asc(user.updatedAt))
-    .limit(limit) as Array<{ id: string }>;
-  return rows.map((row) => String(row.id));
-}
-
-/**
- * Delete one guest account through the same two-phase path as an admin delete.
- * Idleness is re-checked under the mutation lock, so a guest who just returned
- * is kept; once marked, its sessions are gone and it cannot return mid-delete.
- */
-export async function deleteIdleAnonymousUser(targetUserId: string, idleBefore: Date): Promise<boolean> {
-  if (!await requestUserDeletion(targetUserId, idleAnonymousUserCondition(idleBefore))) return false;
-  await finalizeUserDeletion(targetUserId);
-  return true;
-}
-
-/**
- * Startup sweep: complete any deletion whose durable marker survived a crash
- * or a transient storage-cleanup failure. Per-account errors are logged and
- * skipped so one stuck account cannot block the rest (or startup).
- */
-export async function resumePendingUserDeletions(): Promise<void> {
-  const rows = await database.select({ id: user.id }).from(user)
-    .where(isNotNull(user.deletionRequestedAt)) as Array<{ id: string }>;
-  if (rows.length === 0) return;
-  serverLogger.info({
-    event: 'admin.user_delete.resume_sweep',
-    count: rows.length,
-  }, `Resuming ${rows.length} pending user deletion(s)`);
-  for (const row of rows) {
-    const targetUserId = String(row.id);
-    try {
-      await finalizeUserDeletion(targetUserId);
-    } catch (error) {
-      logDegraded(serverLogger, {
-        event: 'admin.user_delete.resume_failed',
-        msg: 'Failed to finish a pending user deletion; will retry on next sweep',
-        step: 'finalize_user_deletion',
-        context: { userIdHash: hashForLog(targetUserId) },
-        error,
-      });
+/** Bounded database step. The worker owns iteration and storage work. */
+export async function claimUserDeletionBatch(input: {
+  after: string | null; idleBefore?: number;
+}): Promise<string[]> {
+  return withAdminMutationLock(async (conn) => {
+    const condition = input.idleBefore
+      ? or(isNotNull(user.deletionRequestedAt), idleAnonymousUserCondition(new Date(input.idleBefore)))
+      : isNotNull(user.deletionRequestedAt);
+    const rows = await conn.select({ id: user.id }).from(user)
+      .where(and(condition, input.after ? sql`${user.id} > ${input.after}` : undefined))
+      .orderBy(asc(user.id)).limit(25) as Array<{ id: string }>;
+    const ids = rows.map((row) => row.id);
+    if (ids.length) {
+      await conn.update(user).set({ accessStatus: 'suspended', deletionRequestedAt: new Date() })
+        .where(and(inArray(user.id, ids), isNull(user.deletionRequestedAt)));
+      await conn.delete(session).where(inArray(session.userId, ids));
     }
-  }
+    return ids;
+  });
 }

@@ -20,6 +20,7 @@ import {
   ensureJetStreamResources,
 } from './nats';
 import { toErrorMessage } from './errors';
+import { MAINTENANCE_CONSUMER_NAME } from './nats';
 
 const IDLE_DISCONNECT_MS = 120_000;
 const IDLE_CHECK_INTERVAL_MS = 5_000;
@@ -41,6 +42,7 @@ export interface NatsSession {
   accountExportConsumer: Consumer;
   emailDeliveryConsumer: Consumer;
   modelDownloadConsumer: Consumer;
+  maintenanceConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -180,6 +182,7 @@ export function createNatsSessionManager(input: {
         accountExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, ACCOUNT_EXPORT_CONSUMER_NAME),
         emailDeliveryConsumer: await js.consumers.get(JOBS_STREAM_NAME, EMAIL_DELIVERY_CONSUMER_NAME),
         modelDownloadConsumer: await js.consumers.get(JOBS_STREAM_NAME, MODEL_DOWNLOAD_CONSUMER_NAME),
+        maintenanceConsumer: await js.consumers.get(JOBS_STREAM_NAME, MAINTENANCE_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

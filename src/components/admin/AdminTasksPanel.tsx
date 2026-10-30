@@ -10,10 +10,12 @@ import {
 } from '@/components/icons/Icons';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useMaintenanceOperation } from '@/hooks/useMaintenanceOperation';
 
 type TaskRunStatus = 'idle' | 'running' | 'ok' | 'error';
 
 interface TaskView {
+  operationId: string | null;
   key: string;
   name: string;
   description?: string;
@@ -94,9 +96,6 @@ export function AdminTasksPanel() {
     queryKey: tasksQueryKey,
     queryFn: fetchTasks,
     enabled: Boolean(session?.user?.id),
-    refetchInterval: (query) => (
-      query.state.data?.tasks.some((task) => task.running) ? 2_000 : 30_000
-    ),
   });
 
   useEffect(() => {
@@ -161,7 +160,7 @@ export function AdminTasksPanel() {
       return ((await res.json()) as { ran: boolean }).ran;
     },
     onSuccess: (ran) => {
-      toast.success(ran ? 'Task ran' : 'Task already running');
+      toast.success(ran ? 'Task started' : 'Task already running');
       invalidate();
     },
     onError: () => toast.error('Run failed'),
@@ -192,6 +191,7 @@ export function AdminTasksPanel() {
                 runPending={runTask.isPending && runTask.variables === task.key}
                 onToggle={(enabled) => patchTask.mutate({ key: task.key, patch: { enabled } })}
                 onRun={() => runTask.mutate(task.key)}
+                onSettled={() => { void invalidate(); }}
               />
             ))}
             {data && data.tasks.length === 0 && (
@@ -246,6 +246,7 @@ function TaskRow({
   runPending,
   onToggle,
   onRun,
+  onSettled,
 }: {
   task: TaskView;
   schedulerMode: TaskSchedulerInfo['mode'];
@@ -256,8 +257,10 @@ function TaskRow({
   runPending: boolean;
   onToggle: (enabled: boolean) => void;
   onRun: () => void;
+  onSettled: () => void;
 }) {
   const running = task.running || runPending;
+  const maintenance = useMaintenanceOperation(task.running ? task.operationId : null, onSettled, onSettled);
 
   const about = [task.description, task.lastStatus === 'ok' ? task.lastResult : null].filter(Boolean);
 
@@ -312,6 +315,16 @@ function TaskRow({
 
       {task.lastStatus === 'error' && task.lastError ? (
         <p className="ml-10 truncate text-xs text-danger" title={task.lastError}>{task.lastError}</p>
+      ) : null}
+      {task.running && task.operationId ? (
+        <p role="status" className="ml-10 text-xs text-soft">
+          {maintenance.progress
+            ? `${maintenance.progress.phase}: ${maintenance.progress.completed} completed · ${maintenance.progress.failed} failed`
+            : 'Cleanup queued…'}
+          {maintenance.reconnecting ? ' Reconnecting to progress…' : ''}
+        </p>
+      ) : task.lastStatus === 'ok' && task.lastResult ? (
+        <p className="ml-10 text-xs text-soft">{task.lastResult}</p>
       ) : null}
     </li>
   );

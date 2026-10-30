@@ -724,6 +724,39 @@
                   "kind": {
                     "type": "string",
                     "enum": [
+                      "maintenance"
+                    ]
+                  },
+                  "task": {
+                    "type": "string",
+                    "enum": [
+                      "delete-users",
+                      "expire-anonymous-users",
+                      "resume-user-deletions",
+                      "reap-orphaned-blobs",
+                      "cleanup-temp-uploads",
+                      "expire-export-artifacts",
+                      "retry-storage-cleanups",
+                      "scan-orphaned-storage"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "task",
+                  "runId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
                       "pdf_layout"
                     ]
                   },
@@ -1003,6 +1036,26 @@
               {
                 "type": "object",
                 "properties": {
+                  "phase": {
+                    "type": "string"
+                  },
+                  "completed": {
+                    "type": "number"
+                  },
+                  "failed": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "phase",
+                  "completed",
+                  "failed"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
                   "totalPages": {
                     "type": "number"
                   },
@@ -1259,6 +1312,39 @@
               },
               "subject": {
                 "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "maintenance"
+                        ]
+                      },
+                      "task": {
+                        "type": "string",
+                        "enum": [
+                          "delete-users",
+                          "expire-anonymous-users",
+                          "resume-user-deletions",
+                          "reap-orphaned-blobs",
+                          "cleanup-temp-uploads",
+                          "expire-export-artifacts",
+                          "retry-storage-cleanups",
+                          "scan-orphaned-storage"
+                        ]
+                      },
+                      "runId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "task",
+                      "runId"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -1541,6 +1627,26 @@
               },
               "progress": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string"
+                      },
+                      "completed": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "completed",
+                      "failed"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -1823,6 +1929,39 @@
                       "kind": {
                         "type": "string",
                         "enum": [
+                          "maintenance"
+                        ]
+                      },
+                      "task": {
+                        "type": "string",
+                        "enum": [
+                          "delete-users",
+                          "expire-anonymous-users",
+                          "resume-user-deletions",
+                          "reap-orphaned-blobs",
+                          "cleanup-temp-uploads",
+                          "expire-export-artifacts",
+                          "retry-storage-cleanups",
+                          "scan-orphaned-storage"
+                        ]
+                      },
+                      "runId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "task",
+                      "runId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
                           "pdf_layout"
                         ]
                       },
@@ -2099,6 +2238,26 @@
               },
               "progress": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string"
+                      },
+                      "completed": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "completed",
+                      "failed"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -2481,6 +2640,39 @@
                       "kind": {
                         "type": "string",
                         "enum": [
+                          "maintenance"
+                        ]
+                      },
+                      "task": {
+                        "type": "string",
+                        "enum": [
+                          "delete-users",
+                          "expire-anonymous-users",
+                          "resume-user-deletions",
+                          "reap-orphaned-blobs",
+                          "cleanup-temp-uploads",
+                          "expire-export-artifacts",
+                          "retry-storage-cleanups",
+                          "scan-orphaned-storage"
+                        ]
+                      },
+                      "runId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "task",
+                      "runId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
                           "pdf_layout"
                         ]
                       },
@@ -2757,6 +2949,26 @@
               },
               "progress": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string"
+                      },
+                      "completed": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "completed",
+                      "failed"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -3123,6 +3335,39 @@
                       "kind": {
                         "type": "string",
                         "enum": [
+                          "maintenance"
+                        ]
+                      },
+                      "task": {
+                        "type": "string",
+                        "enum": [
+                          "delete-users",
+                          "expire-anonymous-users",
+                          "resume-user-deletions",
+                          "reap-orphaned-blobs",
+                          "cleanup-temp-uploads",
+                          "expire-export-artifacts",
+                          "retry-storage-cleanups",
+                          "scan-orphaned-storage"
+                        ]
+                      },
+                      "runId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "task",
+                      "runId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
                           "pdf_layout"
                         ]
                       },
@@ -3399,6 +3644,26 @@
               },
               "progress": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string"
+                      },
+                      "completed": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "completed",
+                      "failed"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -3749,6 +4014,39 @@
                       "kind": {
                         "type": "string",
                         "enum": [
+                          "maintenance"
+                        ]
+                      },
+                      "task": {
+                        "type": "string",
+                        "enum": [
+                          "delete-users",
+                          "expire-anonymous-users",
+                          "resume-user-deletions",
+                          "reap-orphaned-blobs",
+                          "cleanup-temp-uploads",
+                          "expire-export-artifacts",
+                          "retry-storage-cleanups",
+                          "scan-orphaned-storage"
+                        ]
+                      },
+                      "runId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "task",
+                      "runId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
                           "pdf_layout"
                         ]
                       },
@@ -4025,6 +4323,26 @@
               },
               "progress": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string"
+                      },
+                      "completed": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "completed",
+                      "failed"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -4370,6 +4688,39 @@
                       "kind": {
                         "type": "string",
                         "enum": [
+                          "maintenance"
+                        ]
+                      },
+                      "task": {
+                        "type": "string",
+                        "enum": [
+                          "delete-users",
+                          "expire-anonymous-users",
+                          "resume-user-deletions",
+                          "reap-orphaned-blobs",
+                          "cleanup-temp-uploads",
+                          "expire-export-artifacts",
+                          "retry-storage-cleanups",
+                          "scan-orphaned-storage"
+                        ]
+                      },
+                      "runId": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "task",
+                      "runId"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
                           "pdf_layout"
                         ]
                       },
@@ -4646,6 +4997,26 @@
               },
               "progress": {
                 "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "phase": {
+                        "type": "string"
+                      },
+                      "completed": {
+                        "type": "number"
+                      },
+                      "failed": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "phase",
+                      "completed",
+                      "failed"
+                    ],
+                    "additionalProperties": false
+                  },
                   {
                     "type": "object",
                     "properties": {
@@ -5490,6 +5861,39 @@
                                 "kind": {
                                   "type": "string",
                                   "enum": [
+                                    "maintenance"
+                                  ]
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete-users",
+                                    "expire-anonymous-users",
+                                    "resume-user-deletions",
+                                    "reap-orphaned-blobs",
+                                    "cleanup-temp-uploads",
+                                    "expire-export-artifacts",
+                                    "retry-storage-cleanups",
+                                    "scan-orphaned-storage"
+                                  ]
+                                },
+                                "runId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "task",
+                                "runId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
                                     "pdf_layout"
                                   ]
                                 },
@@ -5766,6 +6170,26 @@
                         },
                         "progress": {
                           "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "phase": {
+                                  "type": "string"
+                                },
+                                "completed": {
+                                  "type": "number"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "phase",
+                                "completed",
+                                "failed"
+                              ],
+                              "additionalProperties": false
+                            },
                             {
                               "type": "object",
                               "properties": {
@@ -7299,234 +7723,6 @@
         }
       }
     },
-    "/v1/pdf-layout/clear": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "documentId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "namespace": {
-                    "type": "string",
-                    "pattern": "^[a-zA-Z0-9._-]{1,128}$",
-                    "nullable": true
-                  }
-                },
-                "required": [
-                  "documentId",
-                  "namespace"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "deletedParsedObjects": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "deletedParsedObjects"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/document-previews/clear": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "documentId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "namespace": {
-                    "type": "string",
-                    "pattern": "^[a-zA-Z0-9._-]{1,128}$",
-                    "nullable": true
-                  }
-                },
-                "required": [
-                  "documentId",
-                  "namespace"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "deletedPreviewObjects": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "deletedPreviewObjects"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/document-derived/ids": {
-      "get": {
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "documentIds": {
-                      "type": "array",
-                      "items": {
-                        "type": "string"
-                      }
-                    }
-                  },
-                  "required": [
-                    "documentIds"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/tts-playback/plans/clear": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "documentId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  }
-                },
-                "required": [
-                  "documentId"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "deletedPlanObjects": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "deletedPlanObjects"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/user-storage/cleanup": {
       "post": {
         "requestBody": {
@@ -7584,248 +7780,6 @@
                   "required": [
                     "deletedObjects",
                     "deletedDocumentArtifacts"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/user-storage/scopes": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "root": {
-                    "type": "string",
-                    "enum": [
-                      "playback-audio",
-                      "playback-exports",
-                      "playback-sidecars",
-                      "account-exports",
-                      "cloned-voices"
-                    ]
-                  },
-                  "startAfter": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 1024,
-                    "nullable": true
-                  },
-                  "limit": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 200
-                  }
-                },
-                "required": [
-                  "root",
-                  "startAfter",
-                  "limit"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "users": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "key": {
-                            "type": "string"
-                          },
-                          "user": {
-                            "type": "string"
-                          },
-                          "documentIds": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": [
-                          "key",
-                          "user",
-                          "documentIds"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "nextStartAfter": {
-                      "type": "string",
-                      "nullable": true
-                    }
-                  },
-                  "required": [
-                    "users",
-                    "nextStartAfter"
-                  ],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/user-storage/sidecars/clear": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "storageUserHash": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  }
-                },
-                "required": [
-                  "storageUserHash"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "deletedObjects": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "deletedObjects"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/v1/account-exports/expire": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "maxAgeMs": {
-                    "type": "integer",
-                    "minimum": 3600000,
-                    "maximum": 9007199254740991
-                  }
-                },
-                "required": [
-                  "maxAgeMs"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "expiredArtifacts": {
-                      "type": "number"
-                    },
-                    "deletedObjects": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "expiredArtifacts",
-                    "deletedObjects"
                   ]
                 }
               }
@@ -8075,6 +8029,39 @@
                     },
                     "subject": {
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -8357,6 +8344,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -8711,6 +8718,39 @@
                             "kind": {
                               "type": "string",
                               "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -8987,6 +9027,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -9333,6 +9393,39 @@
                             "kind": {
                               "type": "string",
                               "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -9609,6 +9702,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -10059,6 +10172,39 @@
                             "kind": {
                               "type": "string",
                               "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -10335,6 +10481,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -10741,6 +10907,39 @@
                             "kind": {
                               "type": "string",
                               "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -11017,6 +11216,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -11600,6 +11819,39 @@
                             "kind": {
                               "type": "string",
                               "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -11876,6 +12128,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -12288,6 +12560,39 @@
                                 "kind": {
                                   "type": "string",
                                   "enum": [
+                                    "maintenance"
+                                  ]
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete-users",
+                                    "expire-anonymous-users",
+                                    "resume-user-deletions",
+                                    "reap-orphaned-blobs",
+                                    "cleanup-temp-uploads",
+                                    "expire-export-artifacts",
+                                    "retry-storage-cleanups",
+                                    "scan-orphaned-storage"
+                                  ]
+                                },
+                                "runId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "task",
+                                "runId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
                                     "pdf_layout"
                                   ]
                                 },
@@ -12564,6 +12869,26 @@
                         },
                         "progress": {
                           "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "phase": {
+                                  "type": "string"
+                                },
+                                "completed": {
+                                  "type": "number"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "phase",
+                                "completed",
+                                "failed"
+                              ],
+                              "additionalProperties": false
+                            },
                             {
                               "type": "object",
                               "properties": {
@@ -12911,6 +13236,39 @@
                             "kind": {
                               "type": "string",
                               "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -13187,6 +13545,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -13526,6 +13904,39 @@
                                 "kind": {
                                   "type": "string",
                                   "enum": [
+                                    "maintenance"
+                                  ]
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete-users",
+                                    "expire-anonymous-users",
+                                    "resume-user-deletions",
+                                    "reap-orphaned-blobs",
+                                    "cleanup-temp-uploads",
+                                    "expire-export-artifacts",
+                                    "retry-storage-cleanups",
+                                    "scan-orphaned-storage"
+                                  ]
+                                },
+                                "runId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "task",
+                                "runId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
                                     "pdf_layout"
                                   ]
                                 },
@@ -13802,6 +14213,26 @@
                         },
                         "progress": {
                           "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "phase": {
+                                  "type": "string"
+                                },
+                                "completed": {
+                                  "type": "number"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "phase",
+                                "completed",
+                                "failed"
+                              ],
+                              "additionalProperties": false
+                            },
                             {
                               "type": "object",
                               "properties": {
@@ -14174,6 +14605,39 @@
                             "kind": {
                               "type": "string",
                               "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
                                 "pdf_layout"
                               ]
                             },
@@ -14450,6 +14914,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -14777,7 +15261,7 @@
         }
       }
     },
-    "/v1/tts-playback/exports/jobs": {
+    "/v1/maintenance/jobs": {
       "post": {
         "requestBody": {
           "required": true,
@@ -14786,84 +15270,42 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "artifactId": {
+                  "runId": {
                     "type": "string",
-                    "pattern": "^[a-f0-9]{8,128}$"
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                   },
-                  "sessionId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 128
-                  },
-                  "userId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "storageUserId": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
-                  },
-                  "documentId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "documentVersion": {
-                    "type": "integer",
-                    "minimum": 0,
-                    "maximum": 9007199254740991
-                  },
-                  "readerType": {
+                  "task": {
                     "type": "string",
                     "enum": [
-                      "pdf",
-                      "epub",
-                      "html"
+                      "delete-users",
+                      "expire-anonymous-users",
+                      "resume-user-deletions",
+                      "reap-orphaned-blobs",
+                      "cleanup-temp-uploads",
+                      "expire-export-artifacts",
+                      "retry-storage-cleanups",
+                      "scan-orphaned-storage"
                     ]
                   },
-                  "settingsHash": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 256
+                  "userIds": {
+                    "maxItems": 100,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 256
+                    }
                   },
-                  "settingsJson": {},
-                  "planObjectKey": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 2048
-                  },
-                  "format": {
-                    "type": "string",
-                    "enum": [
-                      "mp3",
-                      "m4b"
-                    ]
-                  },
-                  "speed": {
-                    "type": "number",
-                    "minimum": 0.5,
-                    "maximum": 3
-                  },
-                  "chapterIndex": {
+                  "idleBefore": {
                     "type": "integer",
-                    "minimum": 0,
+                    "exclusiveMinimum": 0,
                     "maximum": 9007199254740991
                   }
                 },
                 "required": [
-                  "artifactId",
-                  "sessionId",
-                  "userId",
-                  "storageUserId",
-                  "documentId",
-                  "documentVersion",
-                  "readerType",
-                  "settingsHash",
-                  "settingsJson",
-                  "planObjectKey",
-                  "format",
-                  "speed"
+                  "runId",
+                  "task"
                 ],
                 "additionalProperties": false
               }
@@ -14883,6 +15325,39 @@
                     },
                     "subject": {
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -15165,6 +15640,737 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "totalPages": {
+                              "type": "number"
+                            },
+                            "pagesParsed": {
+                              "type": "number"
+                            },
+                            "currentPage": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "download_model",
+                                "infer",
+                                "merge"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "totalPages",
+                            "pagesParsed",
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "completedThroughOrdinal": {
+                              "type": "number"
+                            },
+                            "completedCount": {
+                              "type": "number"
+                            },
+                            "skippedCount": {
+                              "type": "number"
+                            },
+                            "plannedCount": {
+                              "type": "number"
+                            },
+                            "alignedCount": {
+                              "type": "number"
+                            },
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "downloading_model",
+                                "generating",
+                                "checking_cache"
+                              ]
+                            },
+                            "stopReason": {
+                              "type": "string",
+                              "enum": [
+                                "usage_limit"
+                              ]
+                            },
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "modelComponents": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "completedThroughOrdinal",
+                            "completedCount",
+                            "plannedCount"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "transcoding",
+                                "uploading"
+                              ]
+                            },
+                            "completedSegments": {
+                              "type": "number"
+                            },
+                            "plannedSegments": {
+                              "type": "number"
+                            },
+                            "skippedSegments": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedSegments",
+                            "plannedSegments"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "fetching",
+                                "converting",
+                                "uploading"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "phase"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string",
+                              "enum": [
+                                "assembling",
+                                "uploading"
+                              ]
+                            },
+                            "completedFiles": {
+                              "type": "number"
+                            },
+                            "plannedFiles": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completedFiles",
+                            "plannedFiles"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "downloadedBytes": {
+                              "type": "number"
+                            },
+                            "totalBytes": {
+                              "type": "number"
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "totalBytes": {
+                                    "type": "number"
+                                  },
+                                  "downloadedBytes": {
+                                    "type": "number"
+                                  },
+                                  "state": {
+                                    "type": "string",
+                                    "enum": [
+                                      "pending",
+                                      "downloading",
+                                      "verifying",
+                                      "ready",
+                                      "failed"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "name",
+                                  "totalBytes",
+                                  "downloadedBytes",
+                                  "state"
+                                ],
+                                "additionalProperties": false
+                              }
+                            }
+                          },
+                          "required": [
+                            "downloadedBytes",
+                            "totalBytes"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "opId",
+                    "subject",
+                    "status",
+                    "queuedAt",
+                    "updatedAt"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts-playback/exports/jobs": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "artifactId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{8,128}$"
+                  },
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "storageUserId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "documentVersion": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "readerType": {
+                    "type": "string",
+                    "enum": [
+                      "pdf",
+                      "epub",
+                      "html"
+                    ]
+                  },
+                  "settingsHash": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "settingsJson": {},
+                  "planObjectKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2048
+                  },
+                  "format": {
+                    "type": "string",
+                    "enum": [
+                      "mp3",
+                      "m4b"
+                    ]
+                  },
+                  "speed": {
+                    "type": "number",
+                    "minimum": 0.5,
+                    "maximum": 3
+                  },
+                  "chapterIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "sessionId",
+                  "userId",
+                  "storageUserId",
+                  "documentId",
+                  "documentVersion",
+                  "readerType",
+                  "settingsHash",
+                  "settingsJson",
+                  "planObjectKey",
+                  "format",
+                  "speed"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opId": {
+                      "type": "string"
+                    },
+                    "subject": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "pdf_layout"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "sessionId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "sessionId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_plan"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "settingsHash": {
+                              "type": "string"
+                            },
+                            "planSignature": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "settingsHash",
+                            "planSignature"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "tts_playback_export"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            },
+                            "format": {
+                              "type": "string",
+                              "enum": [
+                                "mp3",
+                                "m4b"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "artifactId",
+                            "format"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_preview"
+                              ]
+                            },
+                            "documentId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "previewKind": {
+                              "type": "string",
+                              "enum": [
+                                "card"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "namespace",
+                            "previewKind"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "document_conversion"
+                              ]
+                            },
+                            "conversionId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "conversionId",
+                            "namespace"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "account_export"
+                              ]
+                            },
+                            "storageUserId": {
+                              "type": "string"
+                            },
+                            "namespace": {
+                              "type": "string",
+                              "nullable": true
+                            },
+                            "artifactId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "storageUserId",
+                            "namespace",
+                            "artifactId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "email_delivery"
+                              ]
+                            },
+                            "deliveryId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "deliveryId"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "model_download"
+                              ]
+                            },
+                            "model": {
+                              "type": "string",
+                              "enum": [
+                                "kokoro-82m"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "model"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "queued",
+                        "running",
+                        "succeeded",
+                        "failed"
+                      ]
+                    },
+                    "queuedAt": {
+                      "type": "number"
+                    },
+                    "updatedAt": {
+                      "type": "number"
+                    },
+                    "startedAt": {
+                      "type": "number"
+                    },
+                    "result": {},
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "timing": {
+                      "type": "object",
+                      "properties": {
+                        "queueWaitMs": {
+                          "type": "number"
+                        },
+                        "s3FetchMs": {
+                          "type": "number"
+                        },
+                        "computeMs": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "progress": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -15628,6 +16834,39 @@
                                 "kind": {
                                   "type": "string",
                                   "enum": [
+                                    "maintenance"
+                                  ]
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete-users",
+                                    "expire-anonymous-users",
+                                    "resume-user-deletions",
+                                    "reap-orphaned-blobs",
+                                    "cleanup-temp-uploads",
+                                    "expire-export-artifacts",
+                                    "retry-storage-cleanups",
+                                    "scan-orphaned-storage"
+                                  ]
+                                },
+                                "runId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "task",
+                                "runId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
                                     "pdf_layout"
                                   ]
                                 },
@@ -15904,6 +17143,26 @@
                         },
                         "progress": {
                           "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "phase": {
+                                  "type": "string"
+                                },
+                                "completed": {
+                                  "type": "number"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "phase",
+                                "completed",
+                                "failed"
+                              ],
+                              "additionalProperties": false
+                            },
                             {
                               "type": "object",
                               "properties": {
@@ -16251,6 +17510,39 @@
                                 "kind": {
                                   "type": "string",
                                   "enum": [
+                                    "maintenance"
+                                  ]
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete-users",
+                                    "expire-anonymous-users",
+                                    "resume-user-deletions",
+                                    "reap-orphaned-blobs",
+                                    "cleanup-temp-uploads",
+                                    "expire-export-artifacts",
+                                    "retry-storage-cleanups",
+                                    "scan-orphaned-storage"
+                                  ]
+                                },
+                                "runId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "task",
+                                "runId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
                                     "pdf_layout"
                                   ]
                                 },
@@ -16527,6 +17819,26 @@
                         },
                         "progress": {
                           "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "phase": {
+                                  "type": "string"
+                                },
+                                "completed": {
+                                  "type": "number"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "phase",
+                                "completed",
+                                "failed"
+                              ],
+                              "additionalProperties": false
+                            },
                             {
                               "type": "object",
                               "properties": {
@@ -16983,6 +18295,39 @@
                                 "kind": {
                                   "type": "string",
                                   "enum": [
+                                    "maintenance"
+                                  ]
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete-users",
+                                    "expire-anonymous-users",
+                                    "resume-user-deletions",
+                                    "reap-orphaned-blobs",
+                                    "cleanup-temp-uploads",
+                                    "expire-export-artifacts",
+                                    "retry-storage-cleanups",
+                                    "scan-orphaned-storage"
+                                  ]
+                                },
+                                "runId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "task",
+                                "runId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
                                     "pdf_layout"
                                   ]
                                 },
@@ -17259,6 +18604,26 @@
                         },
                         "progress": {
                           "anyOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "phase": {
+                                  "type": "string"
+                                },
+                                "completed": {
+                                  "type": "number"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "phase",
+                                "completed",
+                                "failed"
+                              ],
+                              "additionalProperties": false
+                            },
                             {
                               "type": "object",
                               "properties": {
@@ -17696,6 +19061,39 @@
                                 "kind": {
                                   "type": "string",
                                   "enum": [
+                                    "maintenance"
+                                  ]
+                                },
+                                "task": {
+                                  "type": "string",
+                                  "enum": [
+                                    "delete-users",
+                                    "expire-anonymous-users",
+                                    "resume-user-deletions",
+                                    "reap-orphaned-blobs",
+                                    "cleanup-temp-uploads",
+                                    "expire-export-artifacts",
+                                    "retry-storage-cleanups",
+                                    "scan-orphaned-storage"
+                                  ]
+                                },
+                                "runId": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "task",
+                                "runId"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
                                     "pdf_layout"
                                   ]
                                 },
@@ -17975,6 +19373,26 @@
                             {
                               "type": "object",
                               "properties": {
+                                "phase": {
+                                  "type": "string"
+                                },
+                                "completed": {
+                                  "type": "number"
+                                },
+                                "failed": {
+                                  "type": "number"
+                                }
+                              },
+                              "required": [
+                                "phase",
+                                "completed",
+                                "failed"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
                                 "totalPages": {
                                   "type": "number"
                                 },
@@ -18250,74 +19668,6 @@
         }
       }
     },
-    "/v1/document-conversions/expire": {
-      "post": {
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "maxAgeMs": {
-                    "type": "integer",
-                    "minimum": 3600000,
-                    "maximum": 9007199254740991
-                  }
-                },
-                "required": [
-                  "maxAgeMs"
-                ],
-                "additionalProperties": false
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "expiredArtifacts": {
-                      "type": "number"
-                    },
-                    "deletedObjects": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "expiredArtifacts",
-                    "deletedObjects"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Default Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  },
-                  "required": [
-                    "error"
-                  ],
-                  "additionalProperties": {}
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/v1/operations/{opId}": {
       "get": {
         "parameters": [
@@ -18344,6 +19694,39 @@
                     },
                     "subject": {
                       "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "maintenance"
+                              ]
+                            },
+                            "task": {
+                              "type": "string",
+                              "enum": [
+                                "delete-users",
+                                "expire-anonymous-users",
+                                "resume-user-deletions",
+                                "reap-orphaned-blobs",
+                                "cleanup-temp-uploads",
+                                "expire-export-artifacts",
+                                "retry-storage-cleanups",
+                                "scan-orphaned-storage"
+                              ]
+                            },
+                            "runId": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "task",
+                            "runId"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {
@@ -18626,6 +20009,26 @@
                     },
                     "progress": {
                       "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "phase": {
+                              "type": "string"
+                            },
+                            "completed": {
+                              "type": "number"
+                            },
+                            "failed": {
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "phase",
+                            "completed",
+                            "failed"
+                          ],
+                          "additionalProperties": false
+                        },
                         {
                           "type": "object",
                           "properties": {

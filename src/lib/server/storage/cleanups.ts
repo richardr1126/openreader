@@ -1,4 +1,4 @@
-import { and, asc, eq, lte } from 'drizzle-orm';
+import { and, asc, eq, lte, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documents, storageCleanups } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
@@ -55,7 +55,7 @@ export async function enqueueStorageCleanup(
   return row;
 }
 
-async function isStillOwned(row: StorageCleanupRow): Promise<boolean> {
+export async function isStillOwned(row: StorageCleanupRow): Promise<boolean> {
   if (row.documentId === null) {
     const [user] = await db.select({ id: authSchema.user.id }).from(authSchema.user)
       .where(eq(authSchema.user.id, row.userId)).limit(1);
@@ -67,11 +67,27 @@ async function isStillOwned(row: StorageCleanupRow): Promise<boolean> {
 }
 
 // Removing only the claimed generation keeps a row re-armed during the run.
-async function settleRow(row: StorageCleanupRow): Promise<void> {
+export async function settleRow(row: StorageCleanupRow): Promise<void> {
   await db.delete(storageCleanups).where(and(
     eq(storageCleanups.id, row.id),
     eq(storageCleanups.notBeforeMs, row.notBeforeMs),
   ));
+}
+
+export async function listDueStorageCleanups(after: string | null): Promise<StorageCleanupRow[]> {
+  return db.select().from(storageCleanups).where(and(
+    lte(storageCleanups.notBeforeMs, Date.now()),
+    after ? sql`${storageCleanups.id} > ${after}` : undefined,
+  )).orderBy(asc(storageCleanups.id)).limit(10);
+}
+
+export async function failStorageCleanup(row: StorageCleanupRow): Promise<void> {
+  const attempts = row.attempts + 1;
+  await db.update(storageCleanups).set({
+    attempts,
+    lastError: 'Worker storage cleanup failed',
+    notBeforeMs: Date.now() + Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** (attempts - 1)),
+  }).where(and(eq(storageCleanups.id, row.id), eq(storageCleanups.notBeforeMs, row.notBeforeMs)));
 }
 
 /**
