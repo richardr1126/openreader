@@ -237,8 +237,10 @@ function titleBarOverlay(color, symbolColor) {
   return { color, symbolColor, height: TITLE_BAR_HEIGHT };
 }
 
+// The window stays hidden while the runtime starts and appears with the app's
+// first paint, so it never shows anything but the app.
 function createWindow() {
-  // Until the page reports its theme, match loading.html.
+  // Until the page reports its theme, follow the system's.
   const dark = nativeTheme.shouldUseDarkColors;
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -263,7 +265,6 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-  void mainWindow.loadFile(path.join(srcDir, 'loading.html'));
 }
 
 function fail(message, error) {

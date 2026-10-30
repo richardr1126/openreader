@@ -158,6 +158,12 @@ export async function startRuntime({ root, dataDir, logDir, onExit }) {
     IMPORT_LIBRARY_DIRS: library,
     RUNTIME_SEED_JSON: RUNTIME_SEED,
   });
+  // Libraries Linux Node.js needs that the system may lack (scripts/stage.mjs).
+  // Bootstrap passes its environment on, so every runtime process finds them.
+  const nodeLib = path.join(root, 'node', 'lib');
+  if (fs.existsSync(nodeLib)) {
+    env.LD_LIBRARY_PATH = nodeLib;
+  }
 
   const child = spawn(
     node,

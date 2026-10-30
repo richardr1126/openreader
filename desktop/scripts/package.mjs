@@ -62,6 +62,9 @@ const config = {
   },
   win: { target: 'nsis' },
   nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
+  // The static AppImage runtime, which needs no libfuse2 on the system. The
+  // default is still the legacy one in electron-builder 26.
+  toolsets: { appimage: '1.0.3' },
   linux: {
     target: ['AppImage', 'deb'],
     category: 'Office',
