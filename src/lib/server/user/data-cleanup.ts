@@ -25,8 +25,8 @@ export async function deleteUserDatabaseData(userId: string): Promise<void> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const database = db as any;
   const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
-  // A playback job that was mid-write can land an object after the sweep
-  // above. A delayed second pass clears it once the account row is gone; if
+  // A playback job that was mid-write can land an object after the worker's
+  // `delete-users` storage sweep. A delayed second pass clears it once the account row is gone; if
   // the delete is abandoned the queued row sees the user and drops itself.
   if (s3Enabled) {
     await enqueueStorageCleanup({

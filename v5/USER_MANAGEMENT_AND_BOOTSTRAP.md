@@ -11,10 +11,11 @@ complete historical billing ledger: an action records usage only when its
 corresponding policy enables metering.
 
 Admins can approve pending accounts, suspend or restore accounts, grant or
-revoke managed admin access, and delete another user after user-scoped storage
-cleanup succeeds. Role and status changes revoke sessions. The final active
-admin, self-demotion, self-suspension, and self-deletion are blocked. A failed
-storage cleanup retains the account and ownership rows.
+revoke managed admin access, and mark other users for deletion; the worker job
+removes their storage and then their rows. Role and status changes revoke
+sessions. The final active admin, self-demotion, self-suspension, and
+self-deletion from the admin directory are blocked. A failed storage cleanup
+retains the marked account and its ownership rows.
 
 Admin deletion queues one durable `maintenance` operation for the selection;
 it does not wait for storage cleanup in the browser request. The locked SQL
