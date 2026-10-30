@@ -230,7 +230,9 @@ export function AdminUsersPanel() {
   const selectedUsers = pageUsers.filter((user) => selectedIds.has(user.id));
   const allSelected = selectableUsers.length > 0 && selectableUsers.every((user) => selectedIds.has(user.id));
   const someSelected = selectedUsers.length > 0 && !allSelected;
-  const bulkBusy = bulkMutation.isPending || Boolean(deletionOperationId);
+  const bulkBusy = bulkMutation.isPending;
+  // One deletion job is tracked at a time; other row actions stay available.
+  const deletionTracked = Boolean(deletionOperationId);
   const eligible: Record<BulkAction, ManagedUser[]> = {
     approve: selectedUsers.filter((user) => !user.isAnonymous && user.accessStatus === 'pending'),
     restore: selectedUsers.filter((user) => !user.isAnonymous && user.accessStatus === 'suspended'),
@@ -248,7 +250,7 @@ export function AdminUsersPanel() {
   const toggleAll = (checked: boolean) => setSelectedIds(checked ? new Set(selectableUsers.map((user) => user.id)) : new Set());
   const runBulk = (action: BulkAction) => {
     const users = eligible[action];
-    if (users.length === 0 || bulkBusy) return;
+    if (users.length === 0 || bulkBusy || (action === 'delete' && deletionTracked)) return;
     if (action === 'delete' || action === 'suspend') setBulkTarget({ action, users });
     else bulkMutation.mutate({ action, users });
   };
@@ -330,7 +332,7 @@ export function AdminUsersPanel() {
               <Button size="xs" variant="outline" disabled={bulkBusy || eligible.approve.length === 0} onClick={() => runBulk('approve')}>Approve{eligible.approve.length ? ` (${eligible.approve.length})` : ''}</Button>
               <Button size="xs" variant="outline" disabled={bulkBusy || eligible.restore.length === 0} onClick={() => runBulk('restore')}>Restore{eligible.restore.length ? ` (${eligible.restore.length})` : ''}</Button>
               <Button size="xs" variant="outline" disabled={bulkBusy || eligible.suspend.length === 0} onClick={() => runBulk('suspend')}>Suspend{eligible.suspend.length ? ` (${eligible.suspend.length})` : ''}</Button>
-              <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={bulkBusy || eligible.delete.length === 0} onClick={() => runBulk('delete')}>Delete{eligible.delete.length ? ` (${eligible.delete.length})` : ''}</Button>
+              <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={bulkBusy || deletionTracked || eligible.delete.length === 0} onClick={() => runBulk('delete')}>Delete{eligible.delete.length ? ` (${eligible.delete.length})` : ''}</Button>
             </div>
           </div>
         ) : null}
@@ -422,7 +424,7 @@ export function AdminUsersPanel() {
                           {user.accessStatus === 'suspended' ? 'Restore' : 'Suspend'}
                         </Button>
                       ) : null}
-                      {!isSelf ? <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={busy} onClick={() => setDeleteTarget(user)}>Delete</Button> : null}
+                      {!isSelf ? <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={busy || deletionTracked} onClick={() => setDeleteTarget(user)}>Delete</Button> : null}
                     </div>
                   </div>
 

@@ -32,7 +32,7 @@ The desktop app adds **Open logs folder** here.
 | Clean up compute history | 1 day | Releases expired compute leases and removes old limit counters and events. |
 | Retry storage cleanup | 15 minutes | Deletes audio and exports left by deleted documents and accounts. Retries cleanups that failed and runs a second pass after an account is deleted. |
 | Delete idle guest accounts | 1 day | Off by default. Deletes guests whose account and sessions have been idle for the **Guest idle period** (90 days by default, under Guest sessions), and resumes previously requested deletions. |
-| Finish pending account deletions | 15 minutes | Retries account deletions interrupted by a restart or failed cleanup. Also available on Vercel. |
+| Finish pending account deletions | 15 minutes | Retries account deletions interrupted by a restart or failed cleanup. On Vercel it runs with the daily cron. |
 | Find leftover storage | 10 minutes | Runs once. Queues cleanup for audio and exports left by deletes before this version, then turns itself off. |
 
 You can turn each task on or off, change its interval, or run it now. Storage cleanup and account deletion run as durable jobs on the compute worker. The panel shows live progress and the final result, including failed items. You can leave the page while a job continues; opening Maintenance again reconnects to its progress. Compute-history cleanup stays in the app because it only changes the application database.

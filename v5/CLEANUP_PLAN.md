@@ -1,28 +1,5 @@
 # Project Cleanup Plan
 
-## Durable maintenance — 2026-10-30
-
-Storage maintenance runs as a JetStream-backed `maintenance` operation on the
-compute worker: unowned document reclamation, expired uploads and conversions,
-account ZIP retention, queued storage retries, idle guests, pending account
-deletions, and the one-time leftover-storage scan. Next.js owns bounded SQL
-steps behind the authenticated maintenance broker and stores scheduled-task
-operation IDs in existing task result state. It never gives the worker SQL
-access. The admin panels consume operation SSE for progress; task-list refreshes
-discover new scheduled runs and operation IDs. Maintenance queue age does not
-expire or replace waiting jobs, while running jobs retain heartbeat recovery.
-Completion times come from the worker; Vercel scheduling remains anchored to
-the original run's UTC day rather than delayed reconciliation.
-
-The superseded synchronous sweep endpoints, app loops and direct S3 sweep
-helpers were removed. Single-scope playback cache commands remain synchronous
-worker commands; source upload/finalization remains app-owned. Compute-history
-pruning is SQL-only and remains in the control plane.
-
-NATS key scans explicitly close and delete their consumers, including empty
-scans and early exits. The installed KV client's five-minute consumer retention
-made repeated account cleanup exhaust the broker's consumer limit.
-
 This is the living cleanup plan for the post-reinvention OpenReader codebase.
 It complements `PLAYBACK_ARCHITECTURE.md`: that document defines the playback
 and derived-media architecture, while this document tracks repository-wide
@@ -867,6 +844,29 @@ Validation:
 - compute-boundary, route-error, OpenAPI, and server-bundle checks passed;
 - the production application and active documentation builds passed;
 - `git diff --check` passed.
+
+### Post-roadmap durable maintenance — 2026-10-30
+
+Storage maintenance runs as a JetStream-backed `maintenance` operation on the
+compute worker: unowned document reclamation, expired uploads and conversions,
+account ZIP retention, queued storage retries, idle guests, pending account
+deletions, and the one-time leftover-storage scan. Next.js owns bounded SQL
+steps behind the authenticated maintenance broker and stores scheduled-task
+operation IDs in existing task result state. It never gives the worker SQL
+access. The admin panels consume operation SSE for progress; task-list refreshes
+discover new scheduled runs and operation IDs. Maintenance queue age does not
+expire or replace waiting jobs, while running jobs retain heartbeat recovery.
+Completion times come from the worker; Vercel scheduling remains anchored to
+the original run's UTC day rather than delayed reconciliation.
+
+The superseded synchronous sweep endpoints, app loops and direct S3 sweep
+helpers were removed. Single-scope playback cache commands remain synchronous
+worker commands; source upload/finalization remains app-owned. Compute-history
+pruning is SQL-only and remains in the control plane.
+
+NATS key scans explicitly close and delete their consumers, including empty
+scans and early exits. The installed KV client's five-minute consumer retention
+made repeated account cleanup exhaust the broker's consumer limit.
 
 ---
 
