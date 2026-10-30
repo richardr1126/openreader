@@ -2,6 +2,8 @@ import { describe, expect, test, vi } from 'vitest';
 import { createMaintenanceHandler } from '../../src/jobs/maintenance';
 import type { ArtifactStorage, StoredObjectSummary } from '../../src/infrastructure/storage';
 import type { registerCleanupRoutes } from '../../src/api/routes/cleanup';
+import { maintenanceOperationCreateSchema } from '../../src/api/schemas';
+import { deletePrefix } from '../../src/storage/prefix-cleanup';
 
 const documentId = 'a'.repeat(64);
 const otherDocumentId = 'b'.repeat(64);
@@ -101,5 +103,21 @@ describe('durable maintenance execution', () => {
     const result = await run({ task: 'expire-export-artifacts', runId: 'run' }, 0);
     expect(result.completed).toBe(1);
     expect(deleted).toEqual(['test/account_exports_v1/users/u/export/archive.zip']);
+  });
+
+  test('guest expiry requires an idle cutoff', () => {
+    const runId = '00000000-0000-4000-8000-000000000000';
+    expect(maintenanceOperationCreateSchema.safeParse({ task: 'expire-anonymous-users', runId }).success).toBe(false);
+    expect(maintenanceOperationCreateSchema.safeParse({ task: 'expire-anonymous-users', runId, idleBefore: 1 }).success).toBe(true);
+    expect(maintenanceOperationCreateSchema.safeParse({ task: 'resume-user-deletions', runId }).success).toBe(true);
+  });
+
+  test('prefix deletion stops between batches once asked to', async () => {
+    const { storage, deleted } = setup();
+    vi.mocked(storage.listPrefix).mockResolvedValue(Array.from({ length: 40 }, (_, index) => `p/${index}`));
+    let stop = false;
+    vi.mocked(storage.deleteObject).mockImplementation(async (key: string) => { deleted.push(key); stop = true; });
+    await expect(deletePrefix(storage, 'p/', () => stop)).rejects.toThrow('stopped');
+    expect(deleted).toHaveLength(32);
   });
 });

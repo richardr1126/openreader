@@ -9,9 +9,11 @@ export function storageUserHash(userId: string): string {
   return createHash('sha256').update(userId).digest('hex');
 }
 
-export async function deletePrefix(storage: ArtifactStorage, prefix: string): Promise<number> {
+/** Delete every object under `prefix`; `shouldStop` is checked before each batch. */
+export async function deletePrefix(storage: ArtifactStorage, prefix: string, shouldStop?: () => boolean): Promise<number> {
   const keys = await storage.listPrefix(prefix);
   for (let index = 0; index < keys.length; index += DELETE_BATCH) {
+    if (shouldStop?.()) throw new Error(`Deletion under ${prefix} was stopped`);
     await Promise.all(keys.slice(index, index + DELETE_BATCH).map((key) => storage.deleteObject(key)));
   }
   return keys.length;

@@ -143,7 +143,8 @@ export function createMaintenanceHandler(input: {
             renewal = renew().catch(() => { lostLease = true; }).finally(() => { renewal = null; });
           }, 30_000);
           try {
-            const scope = { storage, s3Prefix, documentId, namespace: null };
+            // Uploads wait on this lease, so a lost lease stops deletion mid-prefix.
+            const scope = { storage, s3Prefix, documentId, namespace: null, shouldStop: () => lostLease };
             await Promise.all([clearPdfLayoutArtifacts(scope), clearDocumentPreviewArtifacts(scope), clearTtsPlaybackPlanArtifacts(scope)]);
             await renewal;
             if (lostLease) throw new Error('Document cleanup lease was lost');
@@ -164,18 +165,24 @@ export function createMaintenanceHandler(input: {
 
     // One-time recovery of user-scoped artifacts left by earlier deletes.
     const hashes = new Map<string, string>();
-    let after: string | null = null;
-    for (;;) {
-      const { userIds }: { userIds: string[] } = await database({ action: 'list-users', after });
-      if (!userIds.length) break;
-      for (const id of userIds) hashes.set(createHash('sha256').update(id).digest('hex'), id);
-      after = userIds.at(-1)!;
-    }
+    const loadUserHashes = async () => {
+      hashes.clear();
+      let after: string | null = null;
+      for (;;) {
+        const { userIds }: { userIds: string[] } = await database({ action: 'list-users', after });
+        if (!userIds.length) break;
+        for (const id of userIds) hashes.set(createHash('sha256').update(id).digest('hex'), id);
+        after = userIds.at(-1)!;
+      }
+    };
     const roots: UserStorageScopeRoot[] = ['playback-audio', 'playback-exports', 'playback-sidecars', 'account-exports', 'cloned-voices'];
     for (const root of roots) {
       let startAfter: string | null = null;
       do {
         const page = await listUserStorageScopes({ storage, s3Prefix, root, startAfter, limit: 25 });
+        // Sidecar folders are named by user hash; refresh the owners right
+        // before a page so an account created mid-scan is never treated as gone.
+        if (root === 'playback-sidecars') await loadUserHashes();
         for (const entry of page.users) {
           await attempt(async () => {
             const userId = root === 'playback-sidecars' ? hashes.get(entry.user) : entry.user;

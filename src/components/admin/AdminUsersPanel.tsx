@@ -160,10 +160,13 @@ export function AdminUsersPanel() {
     if (operation.status === 'failed' || operation.result?.failed) toast.error(operation.result?.summary ?? operation.error?.message ?? 'Deletion failed');
     else toast.success(operation.result?.summary ?? 'Account deletion finished');
     void refreshUsers();
-  }, () => {
-    if (deletionStorageKey) sessionStorage.removeItem(deletionStorageKey);
+  }, (reason) => {
+    // A dropped stream keeps the stored id so a reload reconnects to the job.
+    if (reason === 'expired' && deletionStorageKey) sessionStorage.removeItem(deletionStorageKey);
     setDeletionOperationId(null);
-    toast.error('Cleanup progress has expired. Unfinished accounts remain marked for retry.');
+    toast.error(reason === 'expired'
+      ? 'Cleanup progress has expired. Unfinished accounts remain marked for retry.'
+      : 'Lost connection to cleanup progress. Deletion continues; reload to check on it.');
     void refreshUsers();
   });
   const queryKey = useMemo(() => queryKeys.admin(

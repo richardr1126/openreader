@@ -277,7 +277,11 @@ export const maintenanceOperationCreateSchema = z.object({
     'cleanup-temp-uploads', 'expire-export-artifacts', 'retry-storage-cleanups', 'scan-orphaned-storage']),
   userIds: z.array(z.string().min(1).max(256)).max(100).optional(),
   idleBefore: z.number().int().positive().optional(),
-}).strict();
+}).strict().refine((body) => body.task !== 'expire-anonymous-users' || body.idleBefore !== undefined, {
+  // Without a cutoff the claim only finds already-marked accounts.
+  message: 'idleBefore is required for expire-anonymous-users',
+  path: ['idleBefore'],
+});
 
 export const maintenanceProgressSchema = z.object({
   phase: z.string(),

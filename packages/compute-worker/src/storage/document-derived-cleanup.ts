@@ -11,6 +11,7 @@ type DocumentArtifactCleanupInput = {
   s3Prefix: string;
   documentId: string;
   namespace: string | null;
+  shouldStop?: () => boolean;
 };
 
 export function clearPdfLayoutArtifacts(input: DocumentArtifactCleanupInput): Promise<number> {
@@ -18,7 +19,7 @@ export function clearPdfLayoutArtifacts(input: DocumentArtifactCleanupInput): Pr
     documentId: input.documentId,
     namespace: input.namespace,
     prefix: input.s3Prefix,
-  }));
+  }), input.shouldStop);
 }
 
 export function clearDocumentPreviewArtifacts(input: DocumentArtifactCleanupInput): Promise<number> {
@@ -26,7 +27,7 @@ export function clearDocumentPreviewArtifacts(input: DocumentArtifactCleanupInpu
     documentId: input.documentId,
     namespace: input.namespace,
     prefix: input.s3Prefix,
-  }));
+  }), input.shouldStop);
 }
 
 export function clearTtsPlaybackPlanArtifacts(
@@ -35,7 +36,7 @@ export function clearTtsPlaybackPlanArtifacts(
   return deletePrefix(input.storage, ttsPlaybackPlanArtifactPrefix({
     documentId: input.documentId,
     prefix: input.s3Prefix,
-  }));
+  }), input.shouldStop);
 }
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
