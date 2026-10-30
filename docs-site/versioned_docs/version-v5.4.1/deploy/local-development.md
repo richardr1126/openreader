@@ -1,0 +1,138 @@
+---
+title: Local Development
+description: Run OpenReader from source with pnpm.
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+Run OpenReader from a checkout to work on it. To run it from source without changing code, [Docker Compose](./docker-compose) with a local-build file is usually simpler.
+
+## Prerequisites
+
+| Tool | Needed | Why |
+| --- | --- | --- |
+| Node.js 26 and pnpm | Always | Runs the app. The repository pins the pnpm version. |
+| `weed` (SeaweedFS) | Unless you use external S3 | Embedded object storage. |
+| `nats-server` | Unless you use an external worker | The embedded worker's job queue. |
+| `soffice` (LibreOffice) | Optional | DOCX conversion. Without it, DOCX uploads fail. |
+
+FFmpeg and the worker's models need no install: `pnpm i` brings an FFmpeg build (`FFMPEG_BIN` overrides it), and models download into `docstore/model` the first time they are needed.
+
+<Tabs groupId="local-dev-os">
+<TabItem value="macos" label="macOS" default>
+
+```bash
+brew install node pnpm seaweedfs nats-server
+brew install --cask libreoffice   # optional
+```
+
+</TabItem>
+<TabItem value="linux" label="Linux (amd64)">
+
+Install Node.js 26 (for example with [nvm](https://github.com/nvm-sh/nvm)), then:
+
+```bash
+npm install -g pnpm   # Node.js 25 and later no longer bundle Corepack
+mkdir -p "$HOME/.local/bin" && cd /tmp
+
+# SeaweedFS 4.48, the version Docker ships
+curl -fsSL https://github.com/seaweedfs/seaweedfs/releases/download/4.48/linux_amd64.tar.gz | tar -xz weed
+install -m 0755 weed "$HOME/.local/bin/weed"
+
+# NATS
+curl -fsSLO https://github.com/nats-io/nats-server/releases/download/v2.12.1/nats-server-v2.12.1-linux-amd64.zip
+unzip -j nats-server-v2.12.1-linux-amd64.zip '*/nats-server'
+install -m 0755 nats-server "$HOME/.local/bin/nats-server"
+
+sudo apt install -y libreoffice   # optional
+```
+
+Make sure `$HOME/.local/bin` is on your `PATH`.
+
+</TabItem>
+</Tabs>
+
+## Run it
+
+```bash
+git clone https://github.com/richardr1126/openreader.git
+cd openreader
+pnpm i
+cp .env.example .env
+```
+
+In `.env`, set:
+
+```env
+BASE_URL=http://localhost:3003
+AUTH_SECRET=<output of: openssl rand -base64 32>
+```
+
+That is a complete configuration. The app starts its own storage, queue and compute worker, and generates or derives the worker and playback secrets. Keep `AUTH_SECRET` stable: it also encrypts saved provider keys.
+
+```bash
+pnpm dev
+```
+
+Open [http://localhost:3003](http://localhost:3003). If anything is missing or misconfigured, startup lists every problem at once and exits.
+
+To run a production build instead, use `pnpm build` then `pnpm start`. The build compiles the worker to JavaScript; `pnpm dev` runs it from its TypeScript sources.
+
+Migrations and [scheduled tasks](../configure/maintenance#scheduled-tasks) run automatically, as on any self-hosted install.
+
+## Optional settings
+
+Add any of these to the same `.env`.
+
+**First administrator.** Create an admin account on first boot, then sign in and change the password ([details](../configure/admin-panel#create-the-first-administrator)):
+
+```env
+BOOTSTRAP_ADMIN_EMAIL=owner@example.com
+BOOTSTRAP_ADMIN_PASSWORD=<unique-initial-password-at-least-16-characters>
+```
+
+**A TTS server you already run.** Adds it as a shared provider on first boot; manage it afterwards in **Settings → Admin → Providers** ([which address to use](../configure/tts-providers#self-hosted-provider-addresses)):
+
+```env
+API_BASE=http://127.0.0.1:8880/v1
+API_MODEL_NAME=kokoro
+# API_KEY=<only if your server requires one>
+```
+
+**External S3** instead of the embedded SeaweedFS ([details](../configure/object-blob-storage)):
+
+```env
+USE_EMBEDDED_WEED_MINI=false
+S3_BUCKET=your-bucket
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=your-access-key
+S3_SECRET_ACCESS_KEY=your-secret-key
+S3_INTERNAL_ENDPOINT=https://s3.us-east-1.amazonaws.com
+# Browsers download through the app. For presigned URLs instead, remove this
+# line and set S3_PUBLIC_ENDPOINT to a public HTTPS endpoint.
+S3_BROWSER_TRANSPORT=proxy
+# Non-AWS providers that need path-style URLs: S3_FORCE_PATH_STYLE=true
+```
+
+**An external worker** instead of the embedded one. Set `COMPUTE_WORKER_URL` and the three shared values described in [Compute Worker](./compute-worker#shared-values).
+
+After signing in as an admin, **Settings → Admin → Maintenance** confirms the worker, storage and providers are healthy.
+
+## Generate migrations
+
+After changing the database schema, generate migration files for both SQLite and Postgres:
+
+```bash
+pnpm generate
+```
+
+This runs the Better Auth CLI to regenerate the auth table schemas, then `drizzle-kit generate` for both dialects. Running `drizzle-kit generate` directly skips the Better Auth step.
+
+| Files | Owner |
+| --- | --- |
+| `packages/database/src/schema_sqlite.ts`, `schema_postgres.ts` | App tables. Edit by hand and keep both dialects in sync. |
+| `packages/database/src/schema_auth_sqlite.ts`, `schema_auth_postgres.ts` | Auth tables, generated by Better Auth. Do not edit. |
+| `packages/database/migrations/{sqlite,postgres}/` | Generated SQL and `meta/_journal.json` for each dialect. |
+
+To apply migrations by hand, run `pnpm migrate` (Postgres when `POSTGRES_URL` is set, otherwise SQLite). See [Database and Migrations](../configure/database#migrations).
