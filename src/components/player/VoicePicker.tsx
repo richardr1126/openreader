@@ -20,6 +20,8 @@ import {
 /** Voices shown before the list fades out; the rest reveal in batches. */
 const FIRST_VOICES = 8;
 const VOICE_BATCH = 16;
+/** Rows the bottom fade covers, roughly its 6rem over compact voice rows. */
+const FADED_ROWS = 3;
 /** Fewer hidden voices than this are simply shown rather than folded away. */
 const MIN_FOLDED = 4;
 /** Stagger between rows revealed together, capped so a batch lands quickly. */
@@ -132,7 +134,12 @@ export function VoicePicker({
   const total = groups.reduce((sum, group) => sum + group.voices.length, 0);
   // Searching or filtering already narrows the list, so it shows in full.
   const foldable = !query.trim() && !favoritesOnly && total > FIRST_VOICES + MIN_FOLDED;
-  const [limit, setLimit] = useState(FIRST_VOICES);
+  // The list opens past the selected voice, so it never starts under the fade
+  // or the Show more button. Picking another voice later leaves the length be.
+  const lastSelected = groups.flatMap((group) => group.voices)
+    .reduce((last, voiceId, index) => selectedVoices.includes(voiceId) ? index : last, -1);
+  const openLimit = Math.max(FIRST_VOICES, lastSelected + 1 + FADED_ROWS);
+  const [limit, setLimit] = useState(openLimit);
   // Rows from this index rise in; earlier rows were already on screen.
   const [revealFrom, setRevealFrom] = useState(Infinity);
   // After the first "Show more", reaching the fade reveals the next batch.
@@ -140,19 +147,19 @@ export function VoicePicker({
   const shownLimit = foldable ? limit : Infinity;
   // Only a folding list animates its height; search and favorites resize at once.
   const fold = (list: ReactNode) => foldable ? <AnimatedCollapse open>{list}</AnimatedCollapse> : list;
-  // Selected voices always stay in view, wherever they fall in the list.
   let order = 0;
   const shownGroups = groups.map((group) => ({
     ...group,
-    rows: group.voices.map((voiceId) => ({ voiceId, index: order++ }))
-      .filter(({ voiceId, index }) => index < shownLimit || selectedVoices.includes(voiceId)),
+    rows: group.voices.map((voiceId) => ({ voiceId, index: order++ })).filter(({ index }) => index < shownLimit),
   })).filter((group) => group.rows.length > 0);
   const hidden = total - shownGroups.reduce((sum, group) => sum + group.rows.length, 0);
   const listTop = useRef<HTMLDivElement>(null);
   const sentinel = useRef<HTMLDivElement>(null);
+  // Show more disappears with the last batch, so its focus moves to Show fewer.
+  const focusShowFewer = useRef(false);
   const revealMore = () => {
-    setRevealFrom(limit);
-    setLimit(current => Math.min(total, current + VOICE_BATCH));
+    setRevealFrom(shownLimit);
+    setLimit(Math.min(total, shownLimit + VOICE_BATCH));
   };
   const revealMoreRef = useRef(revealMore);
   revealMoreRef.current = revealMore;
@@ -170,7 +177,7 @@ export function VoicePicker({
   const showFewer = () => {
     setEndless(false);
     setRevealFrom(Infinity);
-    setLimit(FIRST_VOICES);
+    setLimit(openLimit);
     listTop.current?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   };
   const pick = (voiceId: string) => {
@@ -238,7 +245,7 @@ export function VoicePicker({
           )}
           {hidden > 0 ? (
             <div ref={sentinel} className="pointer-events-none absolute inset-x-0 bottom-0 flex h-24 items-end justify-center pb-2">
-              <button type="button" onClick={() => { setEndless(true); revealMore(); }}
+              <button type="button" onClick={() => { setEndless(true); focusShowFewer.current = hidden <= VOICE_BATCH; revealMore(); }}
                 className="group pointer-events-auto inline-flex animate-scale-in items-center gap-2 rounded-full border border-line-soft bg-[color-mix(in_srgb,var(--surface-solid),transparent_22%)] py-1.5 pl-3.5 pr-3 text-xs font-medium text-foreground shadow-[0_6px_24px_-8px_color-mix(in_srgb,var(--accent),transparent_55%)] backdrop-blur-md transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:translate-y-0 active:scale-[0.97] motion-reduce:animate-none motion-reduce:transition-none">
                 <span className="tabular-nums">{endless ? `${hidden} more` : `Show ${hidden} more`}</span>
                 <span className="animate-nudge-down text-accent motion-reduce:animate-none" aria-hidden>
@@ -246,9 +253,11 @@ export function VoicePicker({
                 </span>
               </button>
             </div>
-          ) : foldable && limit > FIRST_VOICES ? (
+          ) : foldable && limit > openLimit ? (
             <div className="flex justify-center pt-2">
-              <button type="button" onClick={showFewer}
+              <button type="button" onClick={showFewer} ref={(button) => {
+                if (button && focusShowFewer.current) { focusShowFewer.current = false; button.focus(); }
+              }}
                 className="inline-flex animate-fade-in items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-soft transition-colors hover:bg-surface-sunken hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent motion-reduce:animate-none">
                 Show fewer
                 <DisclosureIcon className="h-3.5 w-3.5 -rotate-90" aria-hidden />

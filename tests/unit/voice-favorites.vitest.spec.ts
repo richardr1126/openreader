@@ -85,3 +85,30 @@ test('favorites do not select or preview a voice, and the filter can recover fro
   expect(select).not.toHaveBeenCalled();
   expect(play).not.toHaveBeenCalled();
 });
+
+test('a folded list opens past the selected voice and hands Show more focus to Show fewer', async () => {
+  class Observer { observe() {} unobserve() {} disconnect() {} }
+  vi.stubGlobal('ResizeObserver', Observer);
+  vi.stubGlobal('IntersectionObserver', Observer);
+  window.matchMedia = () => ({ matches: true }) as MediaQueryList;
+  const voices = Array.from({ length: 30 }, (_, index) => `voice${String(index).padStart(2, '0')}`);
+  const picker = (value: string) => createElement(VoicePicker, {
+    voices, value, onChange: vi.fn(), pickPolicy: { multi: false, maxVoices: 1 }, groupByLanguage: false,
+    preview: { state: { phase: 'idle' }, play: vi.fn(), stop: vi.fn() },
+  });
+  const rows = () => container.querySelectorAll('li').length;
+  const button = (text: RegExp) => [...container.querySelectorAll('button')].find((item) => text.test(item.textContent ?? ''));
+
+  await act(async () => root.render(picker('voice20')));
+  // Three rows follow the selected voice, so the fade never covers it, and
+  // picking an earlier voice does not pull the list out from under the pointer.
+  expect(rows()).toBe(24);
+  await act(async () => root.render(picker('voice00')));
+  expect(rows()).toBe(24);
+
+  // linkedom does not track focus, so assert the call that moves it.
+  const focus = vi.spyOn(window.HTMLElement.prototype, 'focus');
+  await act(async () => (button(/^Show 6 more$/) as HTMLElement).click());
+  expect(rows()).toBe(30);
+  expect(focus.mock.contexts).toEqual([button(/^Show fewer$/)]);
+});

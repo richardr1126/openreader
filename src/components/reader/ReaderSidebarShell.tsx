@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Transition } from '@headlessui/react';
 import { XCircleIcon } from '@/components/icons/Icons';
 import { useReaderSidebarBounds } from '@/hooks/useReaderSidebarBounds';
@@ -35,6 +35,7 @@ export function ReaderSidebarShell({
   const closeRef = useRef<HTMLButtonElement>(null);
   const openerRef = useRef<HTMLElement | null>(null);
   const [interactive, setInteractive] = useState(isOpen);
+  const panelId = useId();
 
   useEffect(() => {
     if (!isOpen) return;
@@ -42,13 +43,12 @@ export function ReaderSidebarShell({
     openerRef.current = opener;
     return () => {
       // Return focus from a closing panel, but not from a control the user chose.
-      // Only the closing panel can hold focus here: another takes it once settled.
       const active = document.activeElement;
-      if (active === document.body || active?.closest('[data-reader-sidebar-panel]')) {
+      if (active === document.body || active?.closest(`[data-reader-sidebar-panel="${panelId}"]`)) {
         if (opener?.isConnected) opener.focus();
       }
     };
-  }, [isOpen]);
+  }, [isOpen, panelId]);
 
   useEffect(() => {
     if (!isOpen || !interactive) return;
@@ -99,7 +99,7 @@ export function ReaderSidebarShell({
           beforeLeave={() => setInteractive(false)}
         >
           <aside
-            data-reader-sidebar-panel
+            data-reader-sidebar-panel={panelId}
             role="dialog"
             aria-label={ariaLabel}
             onKeyDown={(event) => {
