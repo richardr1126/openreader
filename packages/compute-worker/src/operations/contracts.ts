@@ -466,24 +466,29 @@ export const WORKER_OPERATION_COMPUTE_ACTION = {
  * the stable pointer to the plan artifact; cache clearing invalidates matching
  * operations before deleting that artifact.
  *
+ * `enforcesQueueDeadline`: whether time waiting in the queue can expire work
+ * or replace a queued operation. Running jobs always require a live heartbeat.
+ *
  * `slowJobLogThresholdMs`: compute duration above which the worker loop logs
  * the job as slow.
  */
 export const WORKER_OPERATION_KIND_POLICY: Record<WorkerOperationKind, {
   reusesSucceeded: boolean;
+  enforcesQueueDeadline: boolean;
   slowJobLogThresholdMs: number;
 }> = {
-  pdf_layout: { reusesSucceeded: true, slowJobLogThresholdMs: 120_000 },
-  tts_playback: { reusesSucceeded: false, slowJobLogThresholdMs: 30_000 },
-  tts_playback_plan: { reusesSucceeded: true, slowJobLogThresholdMs: 30_000 },
-  tts_playback_export: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
-  document_preview: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
-  document_conversion: { reusesSucceeded: false, slowJobLogThresholdMs: 120_000 },
-  account_export: { reusesSucceeded: true, slowJobLogThresholdMs: 120_000 },
-  email_delivery: { reusesSucceeded: true, slowJobLogThresholdMs: 10_000 },
+  pdf_layout: { reusesSucceeded: true, enforcesQueueDeadline: true, slowJobLogThresholdMs: 120_000 },
+  tts_playback: { reusesSucceeded: false, enforcesQueueDeadline: true, slowJobLogThresholdMs: 30_000 },
+  tts_playback_plan: { reusesSucceeded: true, enforcesQueueDeadline: true, slowJobLogThresholdMs: 30_000 },
+  tts_playback_export: { reusesSucceeded: false, enforcesQueueDeadline: true, slowJobLogThresholdMs: 120_000 },
+  document_preview: { reusesSucceeded: false, enforcesQueueDeadline: true, slowJobLogThresholdMs: 120_000 },
+  document_conversion: { reusesSucceeded: false, enforcesQueueDeadline: true, slowJobLogThresholdMs: 120_000 },
+  account_export: { reusesSucceeded: true, enforcesQueueDeadline: true, slowJobLogThresholdMs: 120_000 },
+  email_delivery: { reusesSucceeded: true, enforcesQueueDeadline: true, slowJobLogThresholdMs: 10_000 },
   // The files on disk are the cache; each request checks them again.
-  model_download: { reusesSucceeded: false, slowJobLogThresholdMs: 600_000 },
-  maintenance: { reusesSucceeded: true, slowJobLogThresholdMs: 600_000 },
+  model_download: { reusesSucceeded: false, enforcesQueueDeadline: true, slowJobLogThresholdMs: 600_000 },
+  // Waiting behind a storage sweep does not invalidate durable cleanup intent.
+  maintenance: { reusesSucceeded: true, enforcesQueueDeadline: false, slowJobLogThresholdMs: 600_000 },
 };
 
 export interface PdfLayoutOperationRequest {

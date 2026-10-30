@@ -21,6 +21,16 @@ function runningState(overrides: Partial<WorkerOperationState> = {}): WorkerOper
 }
 
 describe('state-machine decisions', () => {
+  test('reuses a queued maintenance operation after the ordinary stale threshold', () => {
+    expect(shouldReuseExistingOperation({
+      current: runningState({ kind: 'maintenance', status: 'queued' }), requestKind: 'maintenance',
+      now: 7_200_000, opStaleMs: 1_800_000,
+    })).toBe(true);
+    expect(shouldReuseExistingOperation({
+      current: runningState({ kind: 'maintenance', status: 'running' }), requestKind: 'maintenance',
+      now: 7_200_000, opStaleMs: 1_800_000,
+    })).toBe(false);
+  });
   test('identifies terminal and inflight states', () => {
     expect(isTerminalStatus('succeeded')).toBe(true);
     expect(isTerminalStatus('failed')).toBe(true);

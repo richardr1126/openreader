@@ -12,6 +12,7 @@ import type { MaintenanceResult } from '@/lib/server/compute-worker/protocol';
 // A task still marked 'running' after this long is assumed abandoned (process
 // crashed mid-run) and may be reclaimed by the next tick.
 const STALE_RUNNING_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 // Next control-plane invocations must remain comfortably below Vercel's
 // request ceiling. Handlers must observe the supplied AbortSignal so a future
 // larger maintenance job is moved to the worker instead of stretching a route.
@@ -98,20 +99,27 @@ async function finishTask(
   outcome:
     | { status: 'ok'; startedAt: number; summary: string | null; cursor: string | null; disable: boolean }
     | { status: 'error'; startedAt: number; error: unknown; cursor: string | null },
+  finishedAt = Date.now(),
 ): Promise<void> {
   const now = Date.now();
+  // Hobby cron runs once daily at midnight UTC. Anchor that cadence to the
+  // run's UTC day so execution latency and late reconciliation cannot skip a
+  // day. Long-lived installations keep their completion-based interval.
+  const scheduleFrom = process.env.VERCEL
+    ? Math.floor(outcome.startedAt / DAY_MS) * DAY_MS
+    : finishedAt;
   await db
     .update(scheduledTasks)
     .set({
       lastStatus: outcome.status,
-      lastRunAt: now,
-      lastDurationMs: now - outcome.startedAt,
+      lastRunAt: finishedAt,
+      lastDurationMs: Math.max(0, finishedAt - outcome.startedAt),
       lastError: outcome.status === 'error' ? String(outcome.error) : null,
       // A failed run keeps the cursor it started from so progress is not lost.
       lastResultJson: encodeStoredResult(outcome.status === 'ok' ? outcome.summary : null, outcome.cursor),
       ...(outcome.status === 'ok' && outcome.disable ? { enabled: false } : {}),
       // Schedule the next run off the row's (possibly user-edited) interval.
-      nextRunAt: sql`${now} + ${scheduledTasks.intervalMs}`,
+      nextRunAt: sql`${scheduleFrom} + ${scheduledTasks.intervalMs}`,
       leaseOwner: null,
       runningSince: null,
       updatedAt: now,
@@ -145,7 +153,8 @@ async function reconcileMaintenanceTasks(): Promise<void> {
       const result = operation?.result;
       await finishTask(row.key, row.leaseOwner, operation?.status === 'succeeded' && result && result.failed === 0
         ? { status: 'ok', startedAt: operation.queuedAt, summary: result.summary, cursor: null, disable: result.disableTask === true }
-        : { status: 'error', startedAt: operation?.queuedAt ?? Number(row.runningSince ?? row.updatedAt), error: result?.summary ?? operation?.error?.message ?? 'Maintenance operation expired; run the task again', cursor: null });
+        : { status: 'error', startedAt: operation?.queuedAt ?? Number(row.runningSince ?? row.updatedAt), error: result?.summary ?? operation?.error?.message ?? 'Maintenance operation expired; run the task again', cursor: null },
+      operation?.updatedAt ?? Date.now());
     } catch (error) {
       // An unavailable worker is not evidence that its durable job stopped.
       // Renew the control-plane lease rather than starting a duplicate job.

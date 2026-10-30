@@ -1,7 +1,7 @@
 import type { Consumer, JsMsg } from '@nats-io/jetstream';
 import { describe, expect, test, vi } from 'vitest';
 import { cloneComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
-import type { PdfLayoutProgress } from '../../src/operations/contracts';
+import type { MaintenanceJobRequest, PdfLayoutJobRequest, PdfLayoutProgress } from '../../src/operations/contracts';
 import { createJsonCodec } from '../../src/infrastructure/json-codec';
 import type { JobHandlers } from '../../src/jobs/handlers';
 import {
@@ -63,6 +63,33 @@ function createOrchestrator() {
 }
 
 describe('worker loop controller', () => {
+  test('executes maintenance after more than an hour waiting behind another sweep', async () => {
+    let active = true;
+    let complete!: () => void;
+    const completed = new Promise<void>((resolve) => { complete = resolve; });
+    const queued = createMessage<MaintenanceJobRequest>({
+      jobId: 'old-maintenance', opId: 'old-maintenance', opKey: 'maintenance-key', kind: 'maintenance',
+      queuedAt: Date.now() - 2 * 60 * 60 * 1000,
+      payload: { runId: 'run', task: 'delete-users', userIds: ['user'] },
+    });
+    const runMaintenance = vi.fn(async () => ({ summary: 'Deleted 1 account', completed: 1, failed: 0 }));
+    const { orchestrator, calls } = createOrchestrator();
+    const controller = createWorkerLoopController({
+      orchestrator, handlers: { runMaintenance } as unknown as JobHandlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: () => cloneComputeLimitPolicyDocument(), pdfAttempts: 1,
+      pdfCodec: createJsonCodec<QueuedJob<PdfLayoutJobRequest>>(), maintenanceCodec: queued.codec,
+      isOwnerActive: () => active, isStopping: () => false, markActivity: vi.fn(), onInFlightJobsChanged: vi.fn(),
+      onOperationTerminal: async () => { active = false; complete(); },
+    });
+    controller.start({}, { pdfLayout: createConsumer(), maintenance: createConsumer(queued.msg) });
+    await completed;
+    await controller.stop();
+    expect(runMaintenance).toHaveBeenCalledOnce();
+    expect(queued.ack).toHaveBeenCalledOnce();
+    expect(queued.term).not.toHaveBeenCalled();
+    expect(calls.some((call) => call.method === 'failed')).toBe(false);
+  });
   test('processes PDF progress, persists success, ACKs, and releases in-flight activity', async () => {
     const owner = {};
     let active = true;

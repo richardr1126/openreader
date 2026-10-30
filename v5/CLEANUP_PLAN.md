@@ -8,7 +8,11 @@ account ZIP retention, queued storage retries, idle guests, pending account
 deletions, and the one-time leftover-storage scan. Next.js owns bounded SQL
 steps behind the authenticated maintenance broker and stores scheduled-task
 operation IDs in existing task result state. It never gives the worker SQL
-access. The admin panels consume operation SSE instead of polling for progress.
+access. The admin panels consume operation SSE for progress; task-list refreshes
+discover new scheduled runs and operation IDs. Maintenance queue age does not
+expire or replace waiting jobs, while running jobs retain heartbeat recovery.
+Completion times come from the worker; Vercel scheduling remains anchored to
+the original run's UTC day rather than delayed reconciliation.
 
 The superseded synchronous sweep endpoints, app loops and direct S3 sweep
 helpers were removed. Single-scope playback cache commands remain synchronous

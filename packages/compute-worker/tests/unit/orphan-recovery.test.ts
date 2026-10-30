@@ -3,6 +3,19 @@ import { getOrphanRecoveryThresholdMs, recoverOrphanedOperations } from '../../s
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
 
 describe('orphan recovery', () => {
+  test('keeps queued maintenance behind a long sweep but recovers an abandoned running job', async () => {
+    const fake = new FakeControlPlane();
+    for (const status of ['queued', 'running'] as const) fake.seedState({
+      opId: `maintenance-${status}`, opKey: `maintenance|v1|delete-users|${status}`,
+      kind: 'maintenance', jobId: `job-${status}`, status, queuedAt: 1, updatedAt: 1,
+    });
+    const recovered = await recoverOrphanedOperations({
+      operationStateStore: fake.deps.operationStateStore, orchestrator: fake.deps.orchestrator,
+      whisperTimeoutMs: 30_000, pdfTimeoutMs: 300_000, opStaleMs: 1_800_000, nowMs: 7_200_000,
+    });
+    expect(recovered).toEqual([{ opId: 'maintenance-running', kind: 'maintenance', status: 'running' }]);
+    expect(fake.getState('maintenance-queued')?.status).toBe('queued');
+  });
   afterEach(() => {
     vi.useRealTimers();
   });

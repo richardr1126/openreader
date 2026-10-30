@@ -39,6 +39,8 @@ You can turn each task on or off, change its interval, or run it now. Storage cl
 
 The web request only queues a job. The worker performs storage scans and deletes, and makes short authenticated calls to the app for database ownership checks and row cleanup. A web request ending or a progress stream reconnecting does not cancel the job.
 
+Waiting behind another maintenance sweep does not expire a queued cleanup. The panel refreshes its task list to discover scheduled runs; detailed cleanup progress uses SSE. Last-run times and durations reflect worker completion, even when the app learns about completion later.
+
 Account deletion first revokes sessions and displays **Deletion pending** in Users. The account and its ownership rows are removed after storage cleanup succeeds. Failed deletions retain that marker and can be retried with **Finish pending account deletions**. Selecting multiple users queues one cleanup job for the selection.
 
 Only one copy of a task runs at a time, even with several app instances.
@@ -47,3 +49,5 @@ Only one copy of a task runs at a time, even with several app instances.
 
 - **Self-hosted and desktop**: the app checks for due tasks every minute.
 - **Vercel**: there is no long-running server, so Vercel Cron calls `/api/admin/tasks/tick`. Set `CRON_SECRET`; requests without it are rejected. The included schedule runs once a day (the most Vercel Hobby allows), so intervals shorter than a day are not offered there.
+
+Vercel intervals are anchored to the UTC day of the run. A job finishing after the cron request or being reconciled the following day does not postpone the next daily run.

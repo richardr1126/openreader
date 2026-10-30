@@ -96,6 +96,9 @@ export function AdminTasksPanel() {
     queryKey: tasksQueryKey,
     queryFn: fetchTasks,
     enabled: Boolean(session?.user?.id),
+    // Discover scheduled runs and bridge the claim before its operation ID is
+    // stored. Per-item cleanup progress continues to come from operation SSE.
+    refetchInterval: (query) => query.state.data?.tasks.some((task) => task.running && !task.operationId) ? 2_000 : 30_000,
   });
 
   useEffect(() => {

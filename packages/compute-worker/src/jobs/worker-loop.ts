@@ -233,7 +233,7 @@ export function createWorkerLoopController(input: {
         queueWaitTiming: buildQueueWaitTiming(decoded.queuedAt, startedAt),
       };
       if (work.notStarted) throw work.notStarted;
-      if (startedAt - decoded.queuedAt > maxQueueAgeMs) {
+      if (WORKER_OPERATION_KIND_POLICY[decoded.kind].enforcesQueueDeadline && startedAt - decoded.queuedAt > maxQueueAgeMs) {
         throw new ComputeQueueExpiredError();
       }
       await writeState(() => markRunning(context!, startedAt));

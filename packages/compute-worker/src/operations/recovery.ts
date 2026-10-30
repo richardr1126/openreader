@@ -13,6 +13,7 @@ import type {
   WorkerJobState,
   WorkerOperationState,
 } from '../operations/contracts';
+import { WORKER_OPERATION_KIND_POLICY } from './contracts';
 
 export type StreamedOperationState = WorkerOperationState<
   PdfLayoutJobResult | TtsPlaybackJobResult | TtsPlaybackPlanJobResult | TtsPlaybackExportArtifactResult | DocumentPreviewJobResult | DocumentConversionJobResult | AccountExportJobResult | EmailDeliveryJobResult | ModelDownloadJobResult | MaintenanceJobResult
@@ -53,6 +54,7 @@ export function getOrphanRecoveryThresholdMs(input: {
   opStaleMs: number;
 }): number | null {
   if (!isInflightStatus(input.state.status)) return null;
+  if (input.state.status === 'queued' && !WORKER_OPERATION_KIND_POLICY[input.state.kind].enforcesQueueDeadline) return null;
   if (input.state.status === 'running') {
     return input.state.kind === 'pdf_layout'
       || input.state.kind === 'tts_playback_export'
@@ -72,7 +74,6 @@ export function getOrphanRecoveryThresholdMs(input: {
     || input.state.kind === 'account_export'
     || input.state.kind === 'email_delivery'
     || input.state.kind === 'model_download'
-    || input.state.kind === 'maintenance'
     ? input.opStaleMs
     : null;
 }
