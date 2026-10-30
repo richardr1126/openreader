@@ -165,6 +165,7 @@ export function createMaintenanceHandler(input: {
 
     // One-time recovery of user-scoped artifacts left by earlier deletes.
     const hashes = new Map<string, string>();
+    let hashesLoaded = false;
     const loadUserHashes = async () => {
       hashes.clear();
       let after: string | null = null;
@@ -180,9 +181,12 @@ export function createMaintenanceHandler(input: {
       let startAfter: string | null = null;
       do {
         const page = await listUserStorageScopes({ storage, s3Prefix, root, startAfter, limit: 25 });
-        // Sidecar folders are named by user hash; refresh the owners right
-        // before a page so an account created mid-scan is never treated as gone.
-        if (root === 'playback-sidecars') await loadUserHashes();
+        // Sidecar folders are named by user hash. Reload the owners when a page
+        // has an unknown hash, so an account created mid-scan is never treated as gone.
+        if (root === 'playback-sidecars' && (!hashesLoaded || page.users.some((entry) => !hashes.has(entry.user)))) {
+          await loadUserHashes();
+          hashesLoaded = true;
+        }
         for (const entry of page.users) {
           await attempt(async () => {
             const userId = root === 'playback-sidecars' ? hashes.get(entry.user) : entry.user;

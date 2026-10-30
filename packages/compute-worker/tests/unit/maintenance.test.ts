@@ -120,4 +120,28 @@ describe('durable maintenance execution', () => {
     await expect(deletePrefix(storage, 'p/', () => stop)).rejects.toThrow('stopped');
     expect(deleted).toHaveLength(32);
   });
+
+  test('reaper stops deleting derived artifacts once its lease renewal is refused', async () => {
+    // Only the renewal interval is faked; the retry backoff stays real.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    try {
+      const { run, step, storage, deleted } = setup([
+        { key: `test/documents_v1/${documentId}`, lastModifiedMs: Date.now() - 7_200_000, size: 1 },
+      ]);
+      vi.mocked(storage.listPrefix).mockImplementation(async (prefix) => Array.from({ length: 40 }, (_, index) => `${prefix}k${index}`));
+      vi.mocked(storage.deleteObject).mockImplementation(async (key: string) => {
+        deleted.push(key);
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      step.mockImplementation(async (body) => body.action === 'reap-claim'
+        ? { owner: 'lease' } : body.action === 'reap-renew' ? { renewed: false } : { ok: true });
+      const result = await run({ task: 'reap-orphaned-blobs', runId: 'run' }, 0);
+      expect(result).toMatchObject({ completed: 0, failed: 1 });
+      // Each cleaner stops after its first batch; the source blob is never removed.
+      expect(deleted.filter((key) => /k(3[2-9])$/.test(key))).toEqual([]);
+      expect(deleted).not.toContain(`test/documents_v1/${documentId}`);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
