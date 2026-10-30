@@ -84,11 +84,13 @@ describe('durable maintenance execution', () => {
       { key: `test/documents_v1/${otherDocumentId}`, lastModifiedMs: now - 7_200_000, size: 1 },
       { key: `test/documents_v1/${young}`, lastModifiedMs: now, size: 1 },
     ]);
-    vi.mocked(storage.listPrefix).mockImplementation(async (prefix) => [`${prefix}derived`]);
+    // More than one 32-key batch per cleaner, so a held lease must not stop early.
+    vi.mocked(storage.listPrefix).mockImplementation(async (prefix) => Array.from({ length: 40 }, (_, index) => `${prefix}k${index}`));
     step.mockImplementation(async (body) => body.action === 'reap-claim'
       ? { owner: body.documentId === documentId ? 'lease' : null } : { ok: true, renewed: true });
     const result = await run({ task: 'reap-orphaned-blobs', runId: 'run' }, 0);
     expect(result.completed).toBe(1);
+    expect(deleted).toHaveLength(3 * 40 + 1);
     expect(deleted.at(-1)).toBe(`test/documents_v1/${documentId}`);
     expect(deleted).not.toContain(`test/documents_v1/${otherDocumentId}`);
     expect(step).not.toHaveBeenCalledWith({ action: 'reap-claim', documentId: young });
