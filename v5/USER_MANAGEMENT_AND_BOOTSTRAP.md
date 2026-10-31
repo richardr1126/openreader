@@ -28,13 +28,13 @@ restored while deletion is in progress.
 Self-service deletion (`DELETE /api/account/delete`) and guest-to-account
 linking use the same marker and job: the request marks the account (or the
 linked guest after its data is claimed) and queues `delete-users`. A failed
-queue leaves the marker for **Finish pending account deletions**. Better Auth's
+queue leaves the marker for **Finish pending deletions**. Better Auth's
 synchronous `/delete-user` and `/delete-anonymous-user` endpoints and the
 anonymous plugin's post-link delete are disabled, so no path removes an
 account before its storage.
 
 Idle-guest cleanup drains bounded SQL claim pages, including existing deletion
-markers. The enabled **Finish pending account deletions** task recovers marked
+markers. The enabled **Finish pending deletions** task recovers marked
 accounts on every deployment profile, including Vercel; recovery does not
 depend on a process-startup sweep. Both admin deletion and scheduled storage
 maintenance expose durable operation snapshots over authenticated admin SSE.

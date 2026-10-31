@@ -97,7 +97,7 @@ async function finishTask(
   key: string,
   leaseOwner: string,
   outcome:
-    | { status: 'ok'; startedAt: number; summary: string | null; cursor: string | null; disable: boolean }
+    | { status: 'ok'; startedAt: number; summary: string | null; cursor: string | null }
     | { status: 'error'; startedAt: number; error: unknown; cursor: string | null },
   finishedAt = Date.now(),
 ): Promise<void> {
@@ -117,7 +117,6 @@ async function finishTask(
       lastError: outcome.status === 'error' ? String(outcome.error) : null,
       // A failed run keeps the cursor it started from so progress is not lost.
       lastResultJson: encodeStoredResult(outcome.status === 'ok' ? outcome.summary : null, outcome.cursor),
-      ...(outcome.status === 'ok' && outcome.disable ? { enabled: false } : {}),
       // Schedule the next run off the row's (possibly user-edited) interval.
       nextRunAt: sql`${scheduleFrom} + ${scheduledTasks.intervalMs}`,
       leaseOwner: null,
@@ -152,7 +151,7 @@ async function reconcileMaintenanceTasks(): Promise<void> {
       }
       const result = operation?.result;
       await finishTask(row.key, row.leaseOwner, operation?.status === 'succeeded' && result && result.failed === 0
-        ? { status: 'ok', startedAt: operation.queuedAt, summary: result.summary, cursor: null, disable: result.disableTask === true }
+        ? { status: 'ok', startedAt: operation.queuedAt, summary: result.summary, cursor: null }
         : { status: 'error', startedAt: operation?.queuedAt ?? Number(row.runningSince ?? row.updatedAt), error: result?.summary ?? operation?.error?.message ?? 'Maintenance operation expired; run the task again', cursor: null },
       operation?.updatedAt ?? Date.now());
     } catch (error) {
@@ -202,7 +201,6 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
       startedAt,
       summary,
       cursor: result && typeof result.cursor === 'string' ? result.cursor : null,
-      disable: result?.disableTask === true,
     });
   } catch (error) {
     logDegraded(serverLogger, {

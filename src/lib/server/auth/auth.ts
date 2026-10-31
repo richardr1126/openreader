@@ -249,7 +249,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
           );
           // The guest's data now belongs to the new account. Mark the guest so
           // the worker removes its leftover storage and then its row; a failed
-          // queue is retried by Finish pending account deletions.
+          // queue is retried by Finish pending deletions.
           const { markUsersForDeletion } = await import('@/lib/server/admin/users');
           await markUsersForDeletion([anonymousUser.user.id]);
           const { queueUserDeletion } = await import('@/lib/server/tasks/enqueue-maintenance');

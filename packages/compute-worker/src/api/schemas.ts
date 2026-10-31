@@ -273,8 +273,7 @@ export const userStorageUsageResponseSchema = z.object({
 
 export const maintenanceOperationCreateSchema = z.object({
   runId: z.string().uuid(),
-  task: z.enum(['delete-users', 'expire-anonymous-users', 'resume-user-deletions', 'reap-orphaned-blobs',
-    'cleanup-temp-uploads', 'expire-export-artifacts', 'retry-storage-cleanups', 'scan-orphaned-storage']),
+  task: z.enum(['delete-users', 'expire-anonymous-users', 'reap-orphaned-blobs', 'cleanup-temp-uploads', 'retry-storage-cleanups']),
   userIds: z.array(z.string().min(1).max(256)).max(100).optional(),
   idleBefore: z.number().int().positive().optional(),
 }).strict().refine((body) => body.task !== 'expire-anonymous-users' || body.idleBefore !== undefined, {
