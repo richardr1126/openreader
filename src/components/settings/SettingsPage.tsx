@@ -169,7 +169,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
             </div>
           </nav>
 
-          <section id="main-content" tabIndex={-1} aria-label={currentSection?.label ?? 'Settings'} className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+          <section id="main-content" tabIndex={-1} aria-label={currentSection?.label ?? 'Settings'} className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
             {currentSection ? (
               <div className={`mx-auto w-full p-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-5 lg:p-8 ${currentSection.group === 'admin' ? 'max-w-6xl' : 'max-w-4xl'}`}>
                 <h2 className="mb-4 text-lg font-semibold tracking-tight text-foreground sm:mb-5">
