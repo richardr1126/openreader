@@ -80,8 +80,8 @@ export function createMaintenanceHandler(input: {
       try { await deleteAccounts(true); }
       catch (error) {
         failed++;
+        // The cleanup loop's next progress report carries this failure.
         input.logger.warn({ task: request.task, phase: 'Deleting accounts', error: String(error) }, 'maintenance.item_failed');
-        await report('Deleting accounts');
       }
       const accounts = completed;
       let after: string | null = null;
