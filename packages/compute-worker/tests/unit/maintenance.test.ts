@@ -129,6 +129,20 @@ describe('durable maintenance execution', () => {
     expect(cleanup.clearPlaybackScope).toHaveBeenCalledWith({ storageUserId: 'gone', documentId });
   });
 
+  test('pending-deletion recovery still drains queued storage when the account claim fails', async () => {
+    const { run, step, cleanup } = setup();
+    const row = { id: 'row', userId: 'gone', documentId: documentId, notBeforeMs: 0, attempts: 0 };
+    step.mockImplementation(async (body) => {
+      if (body.action === 'claim-users') throw new Error('database unavailable');
+      if (body.action === 'cleanup-next') return body.after === null ? { rows: [row], after: 'row', done: false } : { rows: [], after: null, done: true };
+      return { ok: true };
+    });
+    const result = await run({ task: 'retry-storage-cleanups', runId: 'run' }, 0);
+    expect(result).toMatchObject({ completed: 1, failed: 1 });
+    expect(cleanup.clearPlaybackScope).toHaveBeenCalledWith({ storageUserId: 'gone', documentId });
+    expect(step).toHaveBeenCalledWith({ action: 'cleanup-settle', row });
+  });
+
   test('guest expiry requires an idle cutoff', () => {
     const runId = '00000000-0000-4000-8000-000000000000';
     expect(maintenanceOperationCreateSchema.safeParse({ task: 'expire-anonymous-users', runId }).success).toBe(false);

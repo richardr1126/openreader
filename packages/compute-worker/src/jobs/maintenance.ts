@@ -75,8 +75,14 @@ export function createMaintenanceHandler(input: {
     }
 
     if (request.task === 'retry-storage-cleanups') {
-      // Without an idle cutoff the claim only finds accounts already marked for deletion.
-      await deleteAccounts(true);
+      // Without an idle cutoff the claim only finds accounts already marked for
+      // deletion. A failed claim must not keep queued storage cleanup waiting.
+      try { await deleteAccounts(true); }
+      catch (error) {
+        failed++;
+        input.logger.warn({ task: request.task, phase: 'Deleting accounts', error: String(error) }, 'maintenance.item_failed');
+        await report('Deleting accounts');
+      }
       const accounts = completed;
       let after: string | null = null;
       for (;;) {
