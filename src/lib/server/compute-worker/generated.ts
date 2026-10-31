@@ -333,7 +333,7 @@ export interface paths {
                                     /** @enum {string} */
                                     kind: "maintenance";
                                     /** @enum {string} */
-                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                     runId: string;
                                 } | {
                                     /** @enum {string} */
@@ -1432,7 +1432,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -1625,7 +1625,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -1815,7 +1815,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -2029,7 +2029,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -2233,7 +2233,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -2558,7 +2558,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -2766,7 +2766,7 @@ export interface paths {
                                     /** @enum {string} */
                                     kind: "maintenance";
                                     /** @enum {string} */
-                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                     runId: string;
                                 } | {
                                     /** @enum {string} */
@@ -2957,7 +2957,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -3144,7 +3144,7 @@ export interface paths {
                                     /** @enum {string} */
                                     kind: "maintenance";
                                     /** @enum {string} */
-                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                     runId: string;
                                 } | {
                                     /** @enum {string} */
@@ -3372,7 +3372,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -3594,7 +3594,7 @@ export interface paths {
                         /** Format: uuid */
                         runId: string;
                         /** @enum {string} */
-                        task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                        task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                         userIds?: string[];
                         idleBefore?: number;
                     };
@@ -3613,7 +3613,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -3811,7 +3811,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -4032,7 +4032,7 @@ export interface paths {
                                     /** @enum {string} */
                                     kind: "maintenance";
                                     /** @enum {string} */
-                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                     runId: string;
                                 } | {
                                     /** @enum {string} */
@@ -4223,7 +4223,7 @@ export interface paths {
                                     /** @enum {string} */
                                     kind: "maintenance";
                                     /** @enum {string} */
-                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                     runId: string;
                                 } | {
                                     /** @enum {string} */
@@ -4441,7 +4441,7 @@ export interface paths {
                                     /** @enum {string} */
                                     kind: "maintenance";
                                     /** @enum {string} */
-                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                     runId: string;
                                 } | {
                                     /** @enum {string} */
@@ -4653,7 +4653,7 @@ export interface paths {
                                     /** @enum {string} */
                                     kind: "maintenance";
                                     /** @enum {string} */
-                                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                     runId: string;
                                 } | {
                                     /** @enum {string} */
@@ -4832,7 +4832,7 @@ export interface paths {
                                 /** @enum {string} */
                                 kind: "maintenance";
                                 /** @enum {string} */
-                                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                                 runId: string;
                             } | {
                                 /** @enum {string} */
@@ -5242,7 +5242,7 @@ export interface components {
                 /** @enum {string} */
                 kind: "maintenance";
                 /** @enum {string} */
-                task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                 runId: string;
             } | {
                 /** @enum {string} */
@@ -5375,7 +5375,7 @@ export interface components {
                     /** @enum {string} */
                     kind: "maintenance";
                     /** @enum {string} */
-                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                     runId: string;
                 } | {
                     /** @enum {string} */
@@ -5511,7 +5511,7 @@ export interface components {
                     /** @enum {string} */
                     kind: "maintenance";
                     /** @enum {string} */
-                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                     runId: string;
                 } | {
                     /** @enum {string} */
@@ -5673,7 +5673,7 @@ export interface components {
                     /** @enum {string} */
                     kind: "maintenance";
                     /** @enum {string} */
-                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                     runId: string;
                 } | {
                     /** @enum {string} */
@@ -5830,7 +5830,7 @@ export interface components {
                     /** @enum {string} */
                     kind: "maintenance";
                     /** @enum {string} */
-                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                     runId: string;
                 } | {
                     /** @enum {string} */
@@ -5983,7 +5983,7 @@ export interface components {
                     /** @enum {string} */
                     kind: "maintenance";
                     /** @enum {string} */
-                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                     runId: string;
                 } | {
                     /** @enum {string} */
@@ -6135,7 +6135,7 @@ export interface components {
                     /** @enum {string} */
                     kind: "maintenance";
                     /** @enum {string} */
-                    task: "delete-users" | "expire-anonymous-users" | "resume-user-deletions" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "expire-export-artifacts" | "retry-storage-cleanups" | "scan-orphaned-storage";
+                    task: "delete-users" | "expire-anonymous-users" | "reap-orphaned-blobs" | "cleanup-temp-uploads" | "retry-storage-cleanups";
                     runId: string;
                 } | {
                     /** @enum {string} */

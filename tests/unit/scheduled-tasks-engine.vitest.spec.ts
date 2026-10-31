@@ -341,16 +341,6 @@ describe('scheduled task engine', () => {
     expect((await readRow()).lastResultJson).toBe('done');
   });
 
-  test('a task can disable itself when its work is complete', async () => {
-    await seedRow({ nextRunAt: Date.now() - 1 });
-
-    await runDueTasks({ registry: registryWith(async () => ({ summary: 'finished', disableTask: true })) });
-
-    const row = await readRow();
-    expect(row.enabled).toBe(false);
-    expect(row.lastStatus).toBe('ok');
-  });
-
   test('seeds tasks registered as disabled by default', async () => {
     const registry: TaskRegistry = {
       [KEY]: { name: 'Opt-in task', defaultIntervalMs: 1000, defaultEnabled: false, run: vi.fn() },

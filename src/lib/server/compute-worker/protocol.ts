@@ -1,7 +1,7 @@
 import type { components, paths } from './generated';
 
 export type MaintenanceRequest = paths['/v1/maintenance/jobs']['post']['requestBody']['content']['application/json'];
-export type MaintenanceResult = { summary: string; completed: number; failed: number; disableTask?: boolean };
+export type MaintenanceResult = { summary: string; completed: number; failed: number };
 
 export type ParsedPdfDocument = components['schemas']['ParsedPdfDocument'];
 export type ParsedPdfPage = ParsedPdfDocument['pages'][number];
