@@ -115,4 +115,16 @@ test('anonymous user creates a folder by dragging documents together and keeps i
   await expect(pdfLink).toBeHidden();
   await expect(iosBanner).toBeHidden();
   await expect(page.getByRole('status')).toContainText('3 items');
+
+  // Removing a folder keeps its documents in the unfiled library.
+  await page.getByRole('button', { name: 'All Documents 4', exact: true }).click();
+  await page.getByRole('button', { name: 'Delete Reading List', exact: true }).click();
+  await expect(folderButton).toBeHidden();
+  await expect(textLink).toBeVisible();
+  await expect(epubLink).toBeVisible();
+  await expect(markdownLink).toBeVisible();
+  await expect(pdfLink).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('No folders yet', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status')).toContainText('4 items');
 });

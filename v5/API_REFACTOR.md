@@ -1,6 +1,6 @@
 # Public API refactor
 
-Status: accepted; phases 1–2 are implemented; phase 3 is in acceptance testing.
+Status: accepted; phases 1–3 are implemented; phases 4–6 remain planned.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -582,3 +582,33 @@ The replaced folder, voice and compute-status routes and their callers are
 removed. JSON parsing for document and folder controls shares the existing
 bounded implementation (3 MB for documents, 64 KB for folder controls). This phase
 adds no schema, environment setting or runtime library. OAuth remains phase 4.
+
+Acceptance evidence (2026-11-01):
+
+- A disposable local stack verified visible folder creation, movement and reload
+  persistence. Removing the folder kept its Markdown document readable. Its
+  voice picker loaded the provider catalogue, applied F2 and preserved that
+  selection after reloading. The stack was stopped before Playwright started.
+- New real-SQL tests cover owner-scoped folder reads and writes, transactional
+  creation with document moves, duplicate IDs, cross-owner isolation, stable
+  display-order cursors including legacy null timestamps, and document retention
+  on folder removal. Voice discovery tests prove that default selection reads
+  only the caller's preferences, preserves native IDs, and omits credentials.
+  Identity tests cover the binding quota, guest-device cookie and authentication.
+- Full Vitest: 1,637 passed across 244 files. Complete Playwright: 81 passed in
+  2.8 minutes, with no skips, retries or failures, including both real playback
+  journeys. The existing folder journey now also removes its folder and proves
+  all four documents remain after reloading. Existing provider/voice selection,
+  personal voice, library, conversion, reader and audiobook journeys passed.
+- Application and worker TypeScript checks, production build, route-error,
+  compute-boundary and install-profile checks passed. The documentation production
+  build passed. `openapi-typescript` successfully generated types from the public
+  specification, and unit tests verify every implemented v1 method is documented
+  and every schema reference resolves. The browser matrix used the unchanged
+  project/worker policy and the immediately preceding production build with the
+  same temporary logging configuration as earlier phases. Port 3003 was free
+  after both stacks stopped.
+
+Next: phase 4 adds OAuth, consent/revocation, bearer scopes and discovery metadata,
+with the already-planned, owner-coordinated schema migration. No production
+migration, deployment, version bump, tag or push was performed in phase 3.
