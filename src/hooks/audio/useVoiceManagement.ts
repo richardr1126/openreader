@@ -31,9 +31,8 @@ export function useVoiceManagement(
   const query = useQuery({
     queryKey: queryKeys.ttsVoices(session?.user?.id ?? 'no-session', effectiveProviderRef, effectiveModel),
     queryFn: ({ signal }) => getVoices({
-      'x-tts-provider': effectiveProviderRef,
-      'x-tts-model': effectiveModel,
-      'Content-Type': 'application/json',
+      provider: effectiveProviderRef,
+      model: effectiveModel,
     }, signal),
     enabled: !isSessionPending,
   });

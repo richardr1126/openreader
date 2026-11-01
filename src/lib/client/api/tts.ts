@@ -8,15 +8,18 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { Audiobook } from '@/types/tts-export';
+import type { VoiceListResource } from '@/types/voice-api';
+import { parseApiError } from './http';
 
-export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
-  const response = await fetch('/api/tts/voices', {
-    headers,
-    signal,
-  });
+export const getVoices = async (selection: { provider: string; model: string }, signal?: AbortSignal): Promise<VoicesResponse> => {
+  const query = new URLSearchParams();
+  query.set('provider', selection.provider);
+  query.set('model', selection.model);
+  const response = await fetch(`/api/v1/voices?${query}`, { signal });
 
-  if (!response.ok) throw new Error('Failed to fetch voices');
-  return await response.json();
+  if (!response.ok) throw await parseApiError(response, 'Failed to fetch voices');
+  const resource = await response.json() as VoiceListResource;
+  return { voices: resource.data.map(voice => voice.id) };
 };
 
 export const createTtsPlaybackSession = async (

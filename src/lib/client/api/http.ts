@@ -58,5 +58,5 @@ export async function requestJson<T>(
   if (!res.ok) {
     throw await parseApiError(res, fallback);
   }
-  return (await res.json()) as T;
+  return (res.status === 204 ? undefined : await res.json()) as T;
 }

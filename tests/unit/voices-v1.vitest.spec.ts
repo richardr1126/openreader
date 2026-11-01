@@ -1,0 +1,61 @@
+import { NextRequest } from 'next/server';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import Database from 'better-sqlite3';
+import { drizzle } from 'drizzle-orm/better-sqlite3';
+
+const state = vi.hoisted(() => ({ userId: 'alice' as string | null, credentials: vi.fn(), voices: vi.fn(),
+  db: null as unknown, sqlite: null as unknown as import('better-sqlite3').Database }));
+vi.mock('@openreader/database', () => ({ get db() { return state.db; } }));
+vi.mock('@/lib/server/admin/providers', () => ({ listAdminProviders: async () => [
+  { slug: 'speech', providerType: 'openai', defaultModel: 'tts-1', enabled: true },
+  { slug: 'personal', providerType: 'openai', defaultModel: 'tts-1', enabled: true },
+] }));
+vi.mock('@/lib/server/auth/auth', () => ({ getAuthContext: async () => ({ userId: state.userId, user: { isAnonymous: false } }), getTrustedOrigins: () => [] }));
+vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ defaultTtsProvider: 'speech', showAllProviderModels: true }) }));
+vi.mock('@/lib/server/admin/resolve-credentials', () => ({ resolveTtsCredentials: state.credentials }));
+vi.mock('@openreader/tts/voice-resolution', () => ({ resolveVoices: state.voices }));
+import { GET } from '@/app/api/v1/voices/route';
+import { getVoices } from '@/lib/client/api/tts';
+
+beforeEach(() => {
+  state.userId = 'alice';
+  state.sqlite = new Database(':memory:'); state.db = drizzle(state.sqlite);
+  state.sqlite.exec('create table user_preferences (user_id text primary key, data_json text)');
+  state.credentials.mockReset().mockResolvedValue({ provider: 'openai', apiKey: 'test-provider-key', baseUrl: 'https://provider.test/v1',
+    adminRecord: { slug: 'speech', providerType: 'openai', defaultModel: 'tts-1' } });
+  state.voices.mockReset().mockResolvedValue(['alloy', 'echo', 'alloy']);
+  vi.unstubAllGlobals();
+});
+afterEach(() => { state.sqlite.close(); vi.unstubAllGlobals(); });
+test('uses the provider/model policy and returns stable native IDs without execution credentials', async () => {
+  const response = await GET(new NextRequest('http://localhost/api/v1/voices?provider=speech&model=tts-1'));
+  expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('private, no-store');
+  const resource = await response.json();
+  expect(resource).toEqual({ provider: 'speech', model: 'tts-1', nextCursor: null, data: [{ id: 'alloy', name: 'alloy' }, { id: 'echo', name: 'echo' }] });
+  expect(state.voices).toHaveBeenCalledWith({ provider: 'openai', model: 'tts-1', apiKey: 'test-provider-key', baseUrl: 'https://provider.test/v1' });
+  expect(JSON.stringify(resource)).not.toMatch(/test-provider-key|provider\.test/);
+});
+test('authenticates before provider access and uses public errors for missing providers', async () => {
+  state.userId = null;
+  expect((await GET(new NextRequest('http://localhost/api/v1/voices'))).status).toBe(401);
+  expect(state.credentials).not.toHaveBeenCalled();
+  state.userId = 'alice'; state.credentials.mockResolvedValue({ error: 'no_shared_provider_configured', slug: 'speech' });
+  const missing = await GET(new NextRequest('http://localhost/api/v1/voices'));
+  expect(missing.status).toBe(503); expect(await missing.json()).toMatchObject({ error: { code: 'PROVIDER_UNAVAILABLE' } });
+});
+test('client uses query selection and projects IDs into the existing voice picker contract', async () => {
+  const fetch = vi.fn(async () => Response.json({ provider: 'speech', model: 'tts-1', nextCursor: null, data: [{ id: 'alloy', name: 'Alloy' }] }));
+  vi.stubGlobal('fetch', fetch);
+  expect(await getVoices({ provider: 'speech', model: 'tts-1' })).toEqual({ voices: ['alloy'] });
+  expect(fetch).toHaveBeenCalledWith('/api/v1/voices?provider=speech&model=tts-1', { signal: undefined });
+});
+
+test('default discovery follows only the caller saved provider and model', async () => {
+  state.sqlite.prepare('insert into user_preferences values (?,?)').run('alice', JSON.stringify({ providerRef: 'personal', providerType: 'openai', ttsModel: 'gpt-4o-mini-tts' }));
+  state.sqlite.prepare('insert into user_preferences values (?,?)').run('bob', JSON.stringify({ providerRef: 'speech', providerType: 'openai', ttsModel: 'tts-1' }));
+  state.credentials.mockResolvedValue({ provider: 'openai', apiKey: '', adminRecord: { slug: 'personal', providerType: 'openai', defaultModel: 'tts-1' } });
+  const response = await GET(new NextRequest('http://localhost/api/v1/voices'));
+  expect(response.status).toBe(200);
+  expect(state.credentials).toHaveBeenCalledWith({ providerHeader: 'personal', fallbackProvider: 'speech' });
+  expect(await response.json()).toMatchObject({ provider: 'personal', model: 'gpt-4o-mini-tts' });
+});

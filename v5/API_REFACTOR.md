@@ -1,6 +1,6 @@
 # Public API refactor
 
-Status: accepted; phase 1 is implemented, later phases are not.
+Status: accepted; phases 1–2 are implemented; phase 3 is in acceptance testing.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -30,7 +30,7 @@ evidence at the end of this document as each phase lands.
 
 ---
 
-## Current state
+## Baseline before the refactor
 
 - **Authentication:** cookie sessions only. `src/lib/server/auth/auth.ts`
   registers `anonymous`, optional `genericOAuth` (signing in through an outside
@@ -92,7 +92,7 @@ No v1 or MCP request may wait for compute. On Vercel:
 
 Each capability has one route. Public and private routes do not overlap.
 
-| Area | Today | After |
+| Area | Before | After |
 |---|---|---|
 | Audiobooks | `/api/tts/export/*` | `/api/v1/documents/{id}/audiobooks` |
 | Documents | `/api/documents`, `documents/blob/*`, `documents/import-url`, `documents/folders` | `/api/v1/documents`, `/api/v1/uploads` |
@@ -140,7 +140,7 @@ All routes are under `/api/v1`.
 | `POST /documents/{id}/audiobooks/lookup` | Read the state of given settings without creating anything |
 | `GET /documents/{id}/audiobooks/events?opId=` | Live progress for one of its operations |
 | `GET /documents/{id}/audiobooks/files/{artifactId}` | Download the finished file |
-| `GET`, `POST /folders` | List or create folders |
+| `GET`, `POST`, `DELETE /folders` | List, create or remove all folders (keeping documents) |
 | `PATCH`, `DELETE /folders/{id}` | Rename or delete a folder |
 
 Example:
@@ -544,3 +544,41 @@ Acceptance evidence (2026-11-01):
 
 Phase 2 adds no schema migration or environment setting. Phase 3 remains folders,
 voices and publication of the full v1 OpenAPI specification and documentation.
+
+### Phase 3: Folders, voices and API reference
+
+Folder routes now use `/api/v1/folders`; item updates use PATCH. Creation still
+supports caller-selected IDs and atomic movement of selected owned documents.
+Removing one or all folders keeps the documents. Folder lists retain display
+order (position, creation time, ID) with bounded cursor pagination. Legacy null
+timestamps normalize to zero without changing stored data. Folder resources
+omit the internal owner ID; every query and mutation remains owner-scoped.
+The client batches selections above 200 documents, as with document bulk moves.
+
+Voice discovery moved to `/api/v1/voices` with provider/model query parameters.
+Its list envelope contains provider-native `{ id, name }` resources and the
+resolved provider/model. Explicit app selections keep their existing behavior;
+default discovery follows the user's saved provider/model using the same pure
+selection helper as saved-settings playback. This prevents a catalogue from the
+instance default being paired with an audiobook using another saved provider.
+Voice IDs and stored selections are unchanged. Personal voice recordings,
+previews, provider configuration and live playback stay private.
+
+The planned `/api/v1/me` endpoint returns identity, scopes and the existing binding
+TTS character quota. The quota widget uses it, replacing `/api/compute-limits/status`.
+Unlike that old route's unauthenticated nominal quota, `me` requires a session;
+the widget waits for one. Quota calculations, guest device handling and reset
+times are unchanged. No internal bucket IDs or execution credentials are returned.
+
+`/api/v1/openapi.json` publishes the implemented cookie-authenticated surface,
+including the upload conversion resource, collection actions and app audiobook
+lookup/events/file routes. Its schemes do not advertise unimplemented OAuth.
+`docs-site/docs/reference/public-api.md` documents workflows, ownership, scope
+requirements, status progression, limits, relative URLs and transport redirects.
+Route/method coverage and schema-reference tests guard the specification; the
+existing OpenAPI TypeScript tool validates it without adding a dependency.
+
+The replaced folder, voice and compute-status routes and their callers are
+removed. JSON parsing for document and folder controls shares the existing
+bounded implementation (3 MB for documents, 64 KB for folder controls). This phase
+adds no schema, environment setting or runtime library. OAuth remains phase 4.

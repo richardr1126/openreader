@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { readApiJson } from '@/lib/server/api/body';
 import { ApiRequestError } from '@/lib/server/api/responses';
-import { documentApi, documentBody } from '@/lib/server/documents/request';
+import { documentApi } from '@/lib/server/documents/request';
 import { createDocument } from '@/lib/server/documents/create';
 import { listDocumentResources, removeDocuments, updateDocuments } from '@/lib/server/documents/resources';
 
@@ -12,7 +13,7 @@ export function GET(request: NextRequest) {
 
 export function POST(request: NextRequest) {
   return documentApi(request, 'documents:write', async caller => {
-    const upload = await createDocument(caller, await documentBody(request));
+    const upload = await createDocument(caller, await readApiJson(request));
     const response = NextResponse.json(upload.document ?? upload, { status: upload.document ? 201 : 202 });
     response.headers.set('Location', upload.document ? `/api/v1/documents/${upload.document.id}` : upload.statusUrl);
     return response;
@@ -21,7 +22,7 @@ export function POST(request: NextRequest) {
 
 export function PATCH(request: NextRequest) {
   return documentApi(request, 'documents:write', async caller => {
-    const patch = await documentBody(request);
+    const patch = await readApiJson(request);
     if (!Array.isArray(patch.ids) || !patch.ids.every(id => typeof id === 'string')) throw new ApiRequestError(400, 'REQUEST_INVALID', 'ids is required.');
     return NextResponse.json(await updateDocuments(caller, patch.ids, patch));
   });

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { documentApi, documentBody } from '@/lib/server/documents/request';
+import { readApiJson } from '@/lib/server/api/body';
+import { documentApi } from '@/lib/server/documents/request';
 import { describeDocument, requireDocument, removeDocuments, updateDocuments } from '@/lib/server/documents/resources';
 
 export const dynamic = 'force-dynamic';
@@ -11,7 +12,7 @@ export function GET(request: NextRequest, context: Context) {
 
 export function PATCH(request: NextRequest, context: Context) {
   return documentApi(request, 'documents:write', async caller => {
-    const patch = await documentBody(request);
+    const patch = await readApiJson(request);
     const result = await updateDocuments(caller, [(await context.params).id], patch);
     return NextResponse.json(await describeDocument(result.data[0]));
   });

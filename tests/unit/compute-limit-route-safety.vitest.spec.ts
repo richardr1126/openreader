@@ -7,10 +7,10 @@ const source = (relativePath: string) => readFileSync(path.join(root, relativePa
 
 describe('compute-limit route safety', () => {
   test('prevents user-specific status responses from being cached', () => {
-    const route = source('src/app/api/compute-limits/status/route.ts');
+    const route = source('src/lib/server/api/request.ts');
 
-    expect(route).toContain("'Cache-Control': 'no-store, private'");
-    expect(route.match(/headers: NO_STORE_HEADERS/g)).toHaveLength(2);
+    expect(route).toContain("response.headers.set('Cache-Control', 'private, no-store')");
+    expect(source('src/app/api/v1/me/route.ts')).toContain("apiRequest(request, 'documents:read'");
   });
 
   test('filters the synthesis admission session before bounding query results', () => {

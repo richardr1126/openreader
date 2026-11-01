@@ -139,18 +139,18 @@ export function AuthRateLimitProvider({
   } = useQuery({
     queryKey: rateLimitQueryKey,
     queryFn: async () => {
-      const response = await fetch('/api/compute-limits/status');
+      const response = await fetch('/api/v1/me');
       if (!response.ok) {
         throw new Error(`Failed to fetch rate limit status: ${response.status}`);
       }
-      return parseRateLimitStatus(await response.json());
+      return parseRateLimitStatus((await response.json()).computeLimits);
     },
-    enabled: true,
+    enabled: Boolean(session?.user),
     retry: 0,
   });
 
   const status = queryStatus ?? null;
-  const loading = isPending || isFetching;
+  const loading = Boolean(session?.user) && (isPending || isFetching);
   const error = queryError instanceof Error ? queryError.message : queryError ? 'Unknown error' : null;
 
   useEffect(() => {

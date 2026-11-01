@@ -1,0 +1,191 @@
+---
+title: Public API
+description: The v1 library and audiobook API, its authentication and asynchronous workflows.
+---
+
+OpenReader's web app uses the same `/api/v1` document, folder, voice and audiobook
+routes available to other clients. Each instance publishes its machine-readable
+specification at **`/api/v1/openapi.json`**. Resolve relative resource URLs against
+the instance's origin, not against `/api/v1`.
+
+## Authentication
+
+The current API accepts an existing Better Auth **session cookie**. Sign in through
+the instance normally. Browsers send that cookie automatically. Local scripts can
+use a cookie jar for their own session; keep that file private. Guest sessions can
+access only their own library and remain subject to guest limits.
+
+OAuth, bearer tokens, personal access tokens and MCP access are not available yet.
+Provider API keys are configured by the administrator; they are never client API
+credentials. The API does not accept a provider key in place of a session.
+
+Cookie-authenticated writes must come from the same origin or a configured trusted
+origin. There is no general cross-origin browser API. The documented scopes are
+`documents:read`, `documents:write` and `audio:generate`; an existing web session
+has all three. OAuth scope consent will be added separately.
+
+`GET /api/v1/me` returns the session's ID, guest flag, scopes and `computeLimits`.
+The latter describes the current binding TTS character quota, including remaining
+characters and its reset timestamp. It does not expose internal bucket identifiers
+or provider configuration. Admission limits for conversion, parsing or assembly
+are also enforced and can return `429` independently of that character quota.
+
+## Documents
+
+Create a document from text:
+
+```bash
+curl --cookie cookies.txt \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"notes.md","source":{"type":"text","text":"# Notes\n\nA document to read."}}' \
+  https://reader.example/api/v1/documents
+```
+
+For a web page, use `{"source":{"type":"url","url":"https://example.com/article"}}`.
+The server fetches public HTTP(S) pages, checks redirect destinations and extracts
+readable Markdown. It cannot see pages available only in your logged-in browser.
+Private-network destinations are blocked. HTML downloads and inline text imports
+are limited to 2 MB; JSON document control messages are limited to 3 MB.
+
+Creation accepts an optional `folderId`. Text imports can also supply `author`
+and `language`. A supplied `name` must include a text or Markdown extension for
+text sources; web imports produce Markdown. The resulting ID is the SHA-256 of
+the canonical file. Reimporting the same bytes reuses that identity.
+
+Successful registration returns `201`, a `Location` header and the document.
+`GET /api/v1/documents/{id}` adds preparation status (`processing`, `ready` or
+`failed`), `operationId`, `error`, `fileUrl` and `webUrl` to its metadata. Status
+reads do not open the reader, update recent activity or create playback plans.
+PDFs may need worker parsing before they are ready.
+
+| Operation | Route |
+| --- | --- |
+| List/search | `GET /api/v1/documents` |
+| Read metadata and status | `GET /api/v1/documents/{id}` |
+| Rename or move | `PATCH /api/v1/documents/{id}` with `name` and/or `folderId` |
+| Delete | `DELETE /api/v1/documents/{id}` |
+| Read canonical file | `GET /api/v1/documents/{id}/file` |
+| Move selected documents | `PATCH /api/v1/documents` with `ids` and `folderId` |
+| Delete selected documents | `DELETE /api/v1/documents?ids=id1,id2` |
+
+Lists return `{ "data": [...], "nextCursor": "..." }`; keep requesting the
+returned cursor until it is `null`. `limit` defaults to 100 and cannot exceed
+200. Documents are ordered by ID. `q` is a literal, case-insensitive filename
+substring. `folderId=` selects unfiled documents; omitting it selects all folders.
+`ids` selects up to 200 comma-separated IDs. Bulk moves and deletes also accept
+at most 200 IDs. Deletion always requires explicit IDs. Setting `folderId` to
+`null` moves a document out of its folder. Renaming or moving does not invalidate
+the document's audio or change its version.
+
+## File uploads and DOCX
+
+1. `POST /api/v1/uploads` with `name`, `size` (exact bytes) and `contentType`.
+   Optional fields are `lastModified` (Unix milliseconds), `author` and `language`.
+2. PUT the raw file to the returned `url`, with **every returned header**. The URL
+   may be a signed storage URL or a same-origin proxy URL. Use the descriptor's
+   `expiresAt` and prepare another upload if its transfer URL has expired.
+3. `POST /api/v1/documents` with
+   `{"source":{"type":"upload","uploadId":"..."}}` and optional `folderId`.
+
+Files are subject to the instance's configured maximum upload size. Transfers
+must match their declared length, and canonical bytes are verified before
+registration. Pending uploads expire after 24 hours. Signed transfer URLs expire
+after five minutes; proxy descriptors use the pending-upload lifetime. Storage
+transport and CORS requirements are described in [Object and blob storage](../configure/object-blob-storage).
+
+DOCX is converted to PDF by the compute worker. Until conversion finishes,
+creation returns **`202` with an upload resource**, rather than inventing a
+temporary document ID. Use its `statusUrl` to read progress or its `eventsUrl` to
+observe SSE snapshots, then read `statusUrl` after completion. That read verifies
+and registers the canonical PDF and returns it as `document`. Conversion can run
+with the tab closed, but registration still requires the status read. `failed`
+uploads include an error message.
+
+The upload resource uses `pending`, `processing`, `ready` and `failed` status.
+Its `ready` means the file is registered; the returned PDF document may still
+have `status: "processing"` while PDF parsing runs. A converted DOCX's file URL
+serves the resulting PDF.
+
+## Folders and voices
+
+`GET /api/v1/folders` returns the same paginated list envelope, ordered by
+`position`, creation time and ID. Cursors are opaque; reuse them unchanged.
+`POST /api/v1/folders` takes `name`, an optional caller-selected `id`, and optional
+`documentIds` (at most 200) to move into the new folder atomically. A name is
+trimmed and limited to 200 characters. Folder IDs are 1–100 letters, digits or
+hyphens; omit `id` to generate a UUID.
+
+`PATCH /api/v1/folders/{id}` accepts `name` and/or integer `position`.
+`DELETE /api/v1/folders/{id}` removes one folder;
+`DELETE /api/v1/folders` removes all of the caller's folders. **Both keep the
+documents**, moving them to the unfiled library. Deletes return `204` without a
+body. Folder write bodies are limited to 64 KB.
+
+`GET /api/v1/voices` returns `data: [{id, name}]`, `nextCursor: null`, and the
+resolved `provider` and `model`. Without selection parameters, it follows the
+caller's saved speech provider/model, then the instance default. Optional
+`provider` (a configured shared-provider slug) and `model` query parameters select
+a different catalogue, subject to the administrator's model policy.
+
+Voice IDs are the existing **provider-native strings**, stable within that
+provider and model. They are not global voice names. Use a voice from the same
+provider/model as the audiobook settings. Listing another catalogue does not
+change saved settings. Personal voice recordings, previews, provider management
+and live playback remain private app features.
+
+## Audiobooks
+
+```bash
+curl --cookie cookies.txt \
+  -H 'Content-Type: application/json' \
+  --data '{"format":"mp3","speed":1}' \
+  https://reader.example/api/v1/documents/DOCUMENT_ID/audiobooks
+```
+
+The request uses the document's saved settings. Optional `voice` selects a
+provider-native voice; `speed` ranges from 0.5 to 3, and `format` is `mp3`
+(default) or `m4b`. Advanced explicit `settings` and planning references used by
+the web app are described in the specification; ordinary clients can omit them.
+
+The response is `200` when the matching file is ready, otherwise `202` with its
+status and ID. A repeated request with matching document version, settings,
+format, speed and chapter reuses the same audiobook. Read
+`GET /api/v1/documents/{id}/audiobooks/{audiobookId}` until `downloadUrl` is
+present, then follow it. `webUrl` opens the reader in the normal app.
+
+Signed-in whole-book requests continue through assembly after the tab closes.
+Guest requests advance only on the guest's own requests. If an unparsed PDF
+returns `409 DOCUMENT_PREPARING`, retry after `retryAfterMs`. A compile held back
+by admission limits reports `waiting` and can recover on a later status read or
+completion signal. Usage-limited, failed or interrupted generation needs an
+explicit new POST to resume; status reads do not restart failed generation.
+
+Stop with `DELETE /api/v1/documents/{id}/audiobooks/{audiobookId}`. Generated
+audio remains cached. The request is removed, so a later GET returns `404`.
+`retrySkipped: true` retries skipped whole-book segments. `chapter` is a
+zero-based chapter index for assembling already-settled audio; it does not start
+generation, and chapter Stop is rejected.
+
+The spec also covers the app's settings lookup, authorized operation SSE and
+file routes. SSE connections are bounded to 300 seconds; reconnect as needed.
+External clients may poll status. The reader continues using its existing
+event-driven private playback protocol.
+
+## Errors and downloads
+
+Errors use this shape:
+
+```json
+{"error":{"code":"DOCUMENT_PREPARING","message":"This PDF is still being prepared.","retryAfterMs":5000}}
+```
+
+`429` includes a `Retry-After` header in seconds. Worker unavailability normally
+returns `503` with a retry hint. IDs and operation streams are checked against the
+caller; identical document content does not grant access to another user's
+uploads, events or audiobooks.
+
+In proxy mode, file routes return bytes. In presigned mode, canonical document
+files return `307` and audiobook files return `303`, both pointing to short-lived
+storage URLs. Follow redirects and keep the resource URL for later use, rather
+than saving the signed destination. The browser transport is described in
+[Object and blob storage](../configure/object-blob-storage).

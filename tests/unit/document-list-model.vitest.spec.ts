@@ -31,7 +31,7 @@ const epubs = [
 const html = [
   document('html-1', 'Alpha Article.txt', 'html', { size: 10, folderId: 'stale-folder' }),
 ];
-const folders = [{ id: 'reading', name: 'Reading', position: 0 }];
+const folders = [{ id: 'reading', name: 'Reading', position: 0, createdAt: 0, updatedAt: 0 }];
 
 function derive(overrides: Partial<Parameters<typeof deriveDocumentListModel>[0]> = {}) {
   return deriveDocumentListModel({

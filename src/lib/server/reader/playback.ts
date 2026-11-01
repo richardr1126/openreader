@@ -4,8 +4,7 @@ import { resolveEffectiveOpenRouterOptions } from '@openreader/tts/openrouter';
 import { normalizeSpeechText } from '@openreader/tts/speech-text';
 import { effectiveVoiceCustomization } from '@openreader/tts/voice-customization';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
-import { resolveProviderDefaults, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
-import { APP_CONFIG_DEFAULTS, type AppConfigValues } from '@/types/config';
+import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import type { ReaderPayload, ReaderPlaybackPreparation } from '@/types/reader-bootstrap';
 import { mergeDocumentSettings, resolveBookVoice } from '@/lib/shared/document-settings';
 import { assertAuthoritativePlaybackPlan, normalizePlaybackPlan } from '@/lib/shared/playback-plan';
@@ -20,24 +19,8 @@ import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { buildTtsPlaybackPlanningInput, toTtsPlaybackPlanRequest, type ParsedTtsPlaybackRequestBody } from '@/lib/server/tts/playback-request';
 import { buildPlaybackGrid, readTtsPlaybackPlanArtifact } from '@/lib/server/tts/playback-plans';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
-import { sanitizePreferencesPatch, type PreferenceNormalizationContext } from '@/lib/server/user/preferences-normalize';
+import { resolveSpeechPreferences } from '@/lib/server/tts/speech-preferences';
 import type { ReaderBootstrapResolution } from './bootstrap';
-
-function preferenceContext(
-  runtimeConfig: Awaited<ReturnType<typeof getResolvedRuntimeConfig>>,
-  providers: Awaited<ReturnType<typeof listAdminProviders>>,
-): PreferenceNormalizationContext {
-  return {
-    showAllProviderModels: runtimeConfig.showAllProviderModels,
-    sharedProviders: providers.filter((provider) => provider.enabled).map((provider) => ({
-      slug: provider.slug,
-      providerType: provider.providerType,
-      defaultModel: provider.defaultModel,
-      defaultInstructions: provider.defaultInstructions,
-      defaultModelOptions: provider.defaultModelOptions,
-    })),
-  };
-}
 
 /** Resolves the playback request for a user's saved voice and document settings. */
 export async function resolveDefaultPlaybackRequest(
@@ -52,19 +35,7 @@ export async function resolveDefaultPlaybackRequest(
     getResolvedRuntimeConfig(),
     listAdminProviders(),
   ]);
-  const normalization = preferenceContext(runtimeConfig, providers);
-  const patch = sanitizePreferencesPatch(
-    storedPreferences,
-    normalization,
-    { fillMissingProvider: true },
-  ).patch;
-  const preferences: AppConfigValues = { ...APP_CONFIG_DEFAULTS, ...patch };
-  const provider = resolveProviderDefaults({
-    providerRef: preferences.providerRef,
-    providerType: preferences.providerType,
-    sharedProviders: normalization.sharedProviders,
-    fallbackProviderRef: runtimeConfig.defaultTtsProvider,
-  });
+  const { normalization, preferences, provider } = resolveSpeechPreferences(storedPreferences, runtimeConfig, providers);
   const model = preferences.ttsModel || provider.defaultModel;
   const policy = resolveTtsProviderModelPolicy({
     providerRef: provider.providerRef,
