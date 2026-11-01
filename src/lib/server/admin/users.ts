@@ -334,7 +334,7 @@ async function markForDeletionOn(conn: any, ids: string[]): Promise<void> {
 
 /**
  * Suspend, mark and sign out accounts so the `delete-users` worker job (or
- * Finish pending account deletions) removes their storage and then their rows.
+ * Finish pending deletions) removes their storage and then their rows.
  * Shared by admin deletes, self-delete and guest-to-account linking.
  */
 export async function markUsersForDeletion(targetUserIds: string[]): Promise<string[]> {

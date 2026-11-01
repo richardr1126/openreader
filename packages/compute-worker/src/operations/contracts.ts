@@ -302,9 +302,8 @@ export interface ModelDownloadJobResult {
 }
 
 export const MAINTENANCE_TASKS = [
-  'delete-users', 'expire-anonymous-users', 'resume-user-deletions',
-  'reap-orphaned-blobs', 'cleanup-temp-uploads', 'expire-export-artifacts',
-  'retry-storage-cleanups', 'scan-orphaned-storage',
+  'delete-users', 'expire-anonymous-users', 'reap-orphaned-blobs',
+  'cleanup-temp-uploads', 'retry-storage-cleanups',
 ] as const;
 export type MaintenanceTask = typeof MAINTENANCE_TASKS[number];
 
@@ -325,7 +324,6 @@ export interface MaintenanceJobResult {
   summary: string;
   completed: number;
   failed: number;
-  disableTask?: boolean;
 }
 
 export type PdfLayoutJobResult =

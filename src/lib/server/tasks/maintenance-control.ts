@@ -1,28 +1,19 @@
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
-import * as sqlite from '@openreader/database/schema-auth-sqlite';
-import * as postgres from '@openreader/database/schema-auth-postgres';
 import { claimUserDeletionBatch, finalizeUserDeletion } from '@/lib/server/admin/users';
 import { deleteDocumentPreviewRows } from '@/lib/server/documents/previews';
 import { releaseDocumentBlobLease, renewDocumentBlobLease, tryAcquireDocumentBlobLease } from '@/lib/server/documents/blob-lease';
 import {
-  enqueueStorageCleanup, failStorageCleanup, listDueStorageCleanups, settleIfOwned, settleRow,
+  failStorageCleanup, listDueStorageCleanups, settleIfOwned, settleRow,
   type StorageCleanupRow,
 } from '@/lib/server/storage/cleanups';
-
-const { user } = process.env.POSTGRES_URL ? postgres : sqlite;
 
 export class InvalidMaintenanceStep extends Error {}
 
 function string(value: unknown, max = 256): string {
   if (typeof value !== 'string' || !value.length || value.length > max) throw new InvalidMaintenanceStep('Invalid identifier');
   return value;
-}
-
-function strings(value: unknown, max = 100): string[] {
-  if (!Array.isArray(value) || value.length > max) throw new InvalidMaintenanceStep('Invalid identifiers');
-  return value.map((entry) => string(entry));
 }
 
 function number(value: unknown): number {
@@ -84,33 +75,6 @@ export async function executeMaintenanceStep(raw: unknown): Promise<unknown> {
       return { ok: true };
     case 'reap-renew':
       return { renewed: await renewDocumentBlobLease(string(body.documentId), string(body.owner)) };
-    case 'list-users': {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = await (db as any).select({ id: user.id }).from(user)
-        .where(after ? sql`${user.id} > ${after}` : undefined).orderBy(asc(user.id)).limit(500) as Array<{ id: string }>;
-      return { userIds: rows.map((row) => row.id) };
-    }
-    case 'scan-user': {
-      const userId = string(body.userId);
-      const documentIds = strings(body.documentIds, 25);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const [exists] = await (db as any).select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1);
-      if (!exists) {
-        await enqueueStorageCleanup({ userId, documentId: null });
-        return { queued: 1 };
-      }
-      if (!documentIds.length) return { queued: 0 };
-      const owned = new Set((await db.select({ id: documents.id }).from(documents).where(and(
-        eq(documents.userId, userId), inArray(documents.id, documentIds),
-      )) as Array<{ id: string }>).map((row) => row.id));
-      let queued = 0;
-      for (const documentId of documentIds) {
-        if (owned.has(documentId)) continue;
-        await enqueueStorageCleanup({ userId, documentId });
-        queued++;
-      }
-      return { queued };
-    }
     default: throw new InvalidMaintenanceStep('Unknown maintenance step');
   }
 }

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Button, InfoTip, Input, RowIcon, SaveBar, Section, Switch } from '@/components/ui';
 import {
-  ClockIcon, DatabaseIcon, HeadphonesIcon, RefreshIcon, SearchIcon, SlidersIcon, TrashIcon, UploadIcon, UserIcon,
+  ClockIcon, DatabaseIcon, RefreshIcon, SlidersIcon, TrashIcon, UploadIcon, UserIcon,
   WrenchIcon,
 } from '@/components/icons/Icons';
 import { queryKeys } from '@/lib/client/query-keys';
@@ -45,11 +45,9 @@ async function fetchTasks(): Promise<{ tasks: TaskView[]; scheduler: TaskSchedul
 const TASK_ICONS: Record<string, ReactNode> = {
   'reap-orphaned-blobs': <TrashIcon />,
   'cleanup-temp-uploads': <UploadIcon />,
-  'expire-export-artifacts': <HeadphonesIcon />,
   'prune-compute-limits': <SlidersIcon />,
   'retry-storage-cleanups': <DatabaseIcon />,
   'expire-anonymous-users': <UserIcon />,
-  'scan-orphaned-storage': <SearchIcon />,
 };
 
 function RunningDot() {

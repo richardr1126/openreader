@@ -31,7 +31,7 @@ export async function DELETE() {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     if (marked) {
-      // The marker is durable: Finish pending account deletions retries it.
+      // The marker is durable: Finish pending deletions retries it.
       serverLogger.warn({
         event: 'account.delete.queue_failed',
         userIdHash: hashForLog(session.user.id),

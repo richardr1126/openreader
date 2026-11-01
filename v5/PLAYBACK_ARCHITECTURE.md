@@ -1371,7 +1371,7 @@ Step 19 review surfaced, before the new export prefixes ship in a release.
      reset.
 2. Temporary account export retention is enforced by
    `POST /v1/account-exports/expire`, scanning `account_exports_v1/`.
-   The daily `expire-export-artifacts` task expires completed ZIPs/manifests
+   The hourly `cleanup-temp-uploads` task expires completed ZIPs/manifests
    after seven days. Audiobook retention was revised after iOS parity: finished
    MP3/M4B files stay with cached audio until explicit audio/document/account
    cleanup. The automatic audiobook expiry route and caller were removed.

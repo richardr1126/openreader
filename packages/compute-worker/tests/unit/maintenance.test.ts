@@ -97,21 +97,57 @@ describe('durable maintenance execution', () => {
     expect(step).toHaveBeenCalledWith({ action: 'reap-release', documentId, owner: 'lease' });
   });
 
-  test('export retention removes account ZIPs and preserves audiobook storage', async () => {
+  test('expired-file cleanup removes stale uploads and account ZIPs and preserves audiobook storage', async () => {
+    const stale = Date.now() - 8 * 86_400_000;
     const { run, deleted } = setup([
-      { key: 'test/account_exports_v1/users/u/export/archive.zip', lastModifiedMs: Date.now() - 8 * 86_400_000, size: 1 },
-      { key: 'test/tts_playback_exports_v1/users/u/book.m4b', lastModifiedMs: Date.now() - 8 * 86_400_000, size: 1 },
+      { key: 'test/document_uploads_temp_v1/upload', lastModifiedMs: stale, size: 1 },
+      { key: 'test/document_uploads_temp_v1/fresh', lastModifiedMs: Date.now(), size: 1 },
+      { key: 'test/account_exports_v1/users/u/export/archive.zip', lastModifiedMs: stale, size: 1 },
+      { key: 'test/tts_playback_exports_v1/users/u/book.m4b', lastModifiedMs: stale, size: 1 },
     ]);
-    const result = await run({ task: 'expire-export-artifacts', runId: 'run' }, 0);
-    expect(result.completed).toBe(1);
-    expect(deleted).toEqual(['test/account_exports_v1/users/u/export/archive.zip']);
+    const result = await run({ task: 'cleanup-temp-uploads', runId: 'run' }, 0);
+    expect(result).toMatchObject({ completed: 2, failed: 0 });
+    expect(result.summary).toContain('1 account export(s)');
+    expect(deleted).toEqual(['test/document_uploads_temp_v1/upload', 'test/account_exports_v1/users/u/export/archive.zip']);
+  });
+
+  test('pending-deletion recovery finishes marked accounts before draining queued storage', async () => {
+    const { run, step, cleanup } = setup();
+    const row = { id: 'row', userId: 'gone', documentId: documentId, notBeforeMs: 0, attempts: 0 };
+    step.mockImplementation(async (body) => {
+      if (body.action === 'claim-users') return { userIds: body.after === null ? ['marked'] : [] };
+      if (body.action === 'cleanup-next') return body.after === null ? { rows: [row], after: 'row', done: false } : { rows: [], after: null, done: true };
+      return { ok: true };
+    });
+    const result = await run({ task: 'retry-storage-cleanups', runId: 'run' }, 0);
+    expect(result).toMatchObject({ completed: 2, failed: 0 });
+    expect(step).toHaveBeenCalledWith({ action: 'claim-users', after: null, idleBefore: undefined });
+    expect(step.mock.calls.map(([body]) => body.action)).toEqual([
+      'claim-users', 'finalize-user', 'claim-users', 'cleanup-next', 'cleanup-settle', 'cleanup-next',
+    ]);
+    expect(cleanup.cleanupUserStorage).toHaveBeenCalledWith({ storageUserId: 'marked', namespace: null, documentIds: [] });
+    expect(cleanup.clearPlaybackScope).toHaveBeenCalledWith({ storageUserId: 'gone', documentId });
+  });
+
+  test('pending-deletion recovery still drains queued storage when the account claim fails', async () => {
+    const { run, step, cleanup } = setup();
+    const row = { id: 'row', userId: 'gone', documentId: documentId, notBeforeMs: 0, attempts: 0 };
+    step.mockImplementation(async (body) => {
+      if (body.action === 'claim-users') throw new Error('database unavailable');
+      if (body.action === 'cleanup-next') return body.after === null ? { rows: [row], after: 'row', done: false } : { rows: [], after: null, done: true };
+      return { ok: true };
+    });
+    const result = await run({ task: 'retry-storage-cleanups', runId: 'run' }, 0);
+    expect(result).toMatchObject({ completed: 1, failed: 1 });
+    expect(cleanup.clearPlaybackScope).toHaveBeenCalledWith({ storageUserId: 'gone', documentId });
+    expect(step).toHaveBeenCalledWith({ action: 'cleanup-settle', row });
   });
 
   test('guest expiry requires an idle cutoff', () => {
     const runId = '00000000-0000-4000-8000-000000000000';
     expect(maintenanceOperationCreateSchema.safeParse({ task: 'expire-anonymous-users', runId }).success).toBe(false);
     expect(maintenanceOperationCreateSchema.safeParse({ task: 'expire-anonymous-users', runId, idleBefore: 1 }).success).toBe(true);
-    expect(maintenanceOperationCreateSchema.safeParse({ task: 'resume-user-deletions', runId }).success).toBe(true);
+    expect(maintenanceOperationCreateSchema.safeParse({ task: 'retry-storage-cleanups', runId }).success).toBe(true);
   });
 
   test('prefix deletion stops between batches once asked to', async () => {

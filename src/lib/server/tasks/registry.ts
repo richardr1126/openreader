@@ -16,18 +16,11 @@ export const TASK_REGISTRY: TaskRegistry = {
     run: (context) => enqueueMaintenanceTask('reap-orphaned-blobs', context),
   },
   'cleanup-temp-uploads': {
-    name: 'Clean up expired uploads',
-    description: 'Remove temporary uploads and DOCX conversions past their TTL.',
+    name: 'Clean up expired files',
+    description: 'Remove unfinished uploads and DOCX conversions after a day, and account export ZIPs after seven days. Audiobooks are kept until audio is cleared.',
     defaultIntervalMs: 60 * 60 * 1000,
     maxRunMs: 45_000,
     run: (context) => enqueueMaintenanceTask('cleanup-temp-uploads', context),
-  },
-  'expire-export-artifacts': {
-    name: 'Clean up expired exports',
-    description: 'Remove temporary account export ZIPs after seven days. Audiobooks are kept until audio is cleared.',
-    defaultIntervalMs: 24 * 60 * 60 * 1000,
-    maxRunMs: 45_000,
-    run: (context) => enqueueMaintenanceTask('expire-export-artifacts', context),
   },
   'prune-compute-limits': {
     name: 'Clean up compute history',
@@ -37,8 +30,8 @@ export const TASK_REGISTRY: TaskRegistry = {
     run: pruneComputeLimits,
   },
   'retry-storage-cleanups': {
-    name: 'Retry storage cleanup',
-    description: 'Delete audio and exports left by deleted documents and accounts, including retries and the delayed second pass.',
+    name: 'Finish pending deletions',
+    description: 'Finish account deletions interrupted by a restart or failed cleanup, then delete audio and exports left by deleted documents and accounts, including the delayed second pass.',
     defaultIntervalMs: 15 * 60 * 1000,
     maxRunMs: 45_000,
     run: (context) => enqueueMaintenanceTask('retry-storage-cleanups', context),
@@ -50,20 +43,5 @@ export const TASK_REGISTRY: TaskRegistry = {
     defaultEnabled: false,
     maxRunMs: 45_000,
     run: (context) => enqueueMaintenanceTask('expire-anonymous-users', context),
-  },
-  'resume-user-deletions': {
-    name: 'Finish pending account deletions',
-    description: 'Resume account deletions interrupted by a restart or a failed storage cleanup.',
-    defaultIntervalMs: 15 * 60 * 1000,
-    maxRunMs: 15_000,
-    run: (context) => enqueueMaintenanceTask('resume-user-deletions', context),
-  },
-  // ONE-TIME: disables itself after a complete pass. Remove with its handler.
-  'scan-orphaned-storage': {
-    name: 'Find leftover storage',
-    description: 'One-time scan that queues cleanup for audio and exports left by earlier deletes.',
-    defaultIntervalMs: 10 * 60 * 1000,
-    maxRunMs: 45_000,
-    run: (context) => enqueueMaintenanceTask('scan-orphaned-storage', context),
   },
 };

@@ -6,8 +6,6 @@ export type TaskResult = {
   summary?: string;
   /** Where a bounded run stopped; handed back as `context.cursor` next run. */
   cursor?: string;
-  /** Turn the task off after this run (a one-time task that has finished). */
-  disableTask?: boolean;
   /** Arbitrary structured detail for debugging. */
   [key: string]: unknown;
 };

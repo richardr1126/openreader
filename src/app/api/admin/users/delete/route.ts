@@ -25,7 +25,7 @@ export async function POST(request: NextRequest): Promise<Response> {
   } catch (error) {
     if (error instanceof AdminUserManagementError) return NextResponse.json({ error: error.message }, { status: error.status });
     return errorResponse(error, {
-      apiErrorMessage: 'Unable to queue deletion. Marked accounts will be retried by Finish pending account deletions.',
+      apiErrorMessage: 'Unable to queue deletion. Marked accounts will be retried by Finish pending deletions.',
       normalize: { code: 'ADMIN_USER_DELETION_QUEUE_FAILED', errorClass: 'upstream' },
     });
   }

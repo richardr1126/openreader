@@ -1,10 +1,8 @@
-import { createHash } from 'node:crypto';
 import { getTtsCredentialBrokerConfig } from '../infrastructure/credential-broker-config';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import type { MaintenanceJobRequest, MaintenanceJobResult, MaintenanceProgress } from '../operations/contracts';
 import { expireArtifactFoldersUnderRoot } from '../storage/artifact-retention';
 import { clearDocumentPreviewArtifacts, clearPdfLayoutArtifacts, clearTtsPlaybackPlanArtifacts, listDocumentDerivedIds } from '../storage/document-derived-cleanup';
-import { clearUserSidecarsByHash, listUserStorageScopes, type UserStorageScopeRoot } from '../storage/user-storage-scan';
 import type { registerCleanupRoutes } from '../api/routes/cleanup';
 
 type CleanupRow = { id: string; userId: string; documentId: string | null; notBeforeMs: number; attempts: number };
@@ -53,12 +51,12 @@ export function createMaintenanceHandler(input: {
     };
     await report('Starting');
 
-    if (request.task === 'delete-users' || request.task === 'expire-anonymous-users' || request.task === 'resume-user-deletions') {
+    const deleteAccounts = async (claim: boolean) => {
       let after: string | null = null;
       do {
-        const { userIds }: { userIds: string[] } = request.task === 'delete-users'
-          ? { userIds: request.userIds ?? [] }
-          : await database<{ userIds: string[] }>({ action: 'claim-users', after, idleBefore: request.idleBefore });
+        const { userIds }: { userIds: string[] } = claim
+          ? await database<{ userIds: string[] }>({ action: 'claim-users', after, idleBefore: request.idleBefore })
+          : { userIds: request.userIds ?? [] };
         if (!userIds.length) break;
         for (const userId of userIds) {
           if (await attempt(async () => {
@@ -68,11 +66,24 @@ export function createMaintenanceHandler(input: {
           await report('Deleting accounts');
         }
         after = userIds.at(-1)!;
-      } while (request.task !== 'delete-users');
+      } while (claim);
+    };
+
+    if (request.task === 'delete-users' || request.task === 'expire-anonymous-users') {
+      await deleteAccounts(request.task === 'expire-anonymous-users');
       return { summary: `Deleted ${completed} account(s); ${failed} failed`, completed, failed };
     }
 
     if (request.task === 'retry-storage-cleanups') {
+      // Without an idle cutoff the claim only finds accounts already marked for
+      // deletion. A failed claim must not keep queued storage cleanup waiting.
+      try { await deleteAccounts(true); }
+      catch (error) {
+        failed++;
+        // The cleanup loop's next progress report carries this failure.
+        input.logger.warn({ task: request.task, phase: 'Deleting accounts', error: String(error) }, 'maintenance.item_failed');
+      }
+      const accounts = completed;
       let after: string | null = null;
       for (;;) {
         const page: { rows: CleanupRow[]; after: string | null; done: boolean } = await database({ action: 'cleanup-next', after });
@@ -89,7 +100,7 @@ export function createMaintenanceHandler(input: {
         }
         after = page.after;
       }
-      return { summary: `Cleared ${completed} storage scope(s); ${failed} failed`, completed, failed };
+      return { summary: `Deleted ${accounts} pending account(s), cleared ${completed - accounts} storage scope(s); ${failed} failed`, completed, failed };
     }
 
     if (request.task === 'cleanup-temp-uploads') {
@@ -104,14 +115,15 @@ export function createMaintenanceHandler(input: {
         }
       }
       await report('Expiring DOCX conversions');
+      const uploads = completed;
       const conversions = await expireArtifactFoldersUnderRoot({ storage, root: `${s3Prefix}/document_conversions_v1/`, maxAgeMs: 24 * 60 * 60 * 1000 });
-      return { summary: `Deleted ${completed} expired upload(s), ${conversions.expiredArtifacts} DOCX conversion(s); ${failed} failed`, completed, failed };
-    }
-
-    if (request.task === 'expire-export-artifacts') {
       await report('Expiring account exports');
-      const result = await expireArtifactFoldersUnderRoot({ storage, root: `${s3Prefix}/account_exports_v1/`, maxAgeMs: 7 * 24 * 60 * 60 * 1000 });
-      return { summary: `Expired ${result.expiredArtifacts} export artifact(s)`, completed: result.expiredArtifacts, failed };
+      const exports = await expireArtifactFoldersUnderRoot({ storage, root: `${s3Prefix}/account_exports_v1/`, maxAgeMs: 7 * 24 * 60 * 60 * 1000 });
+      completed += conversions.expiredArtifacts + exports.expiredArtifacts;
+      return {
+        summary: `Deleted ${uploads} expired upload(s), ${conversions.expiredArtifacts} DOCX conversion(s), ${exports.expiredArtifacts} account export(s); ${failed} failed`,
+        completed, failed,
+      };
     }
 
     if (request.task === 'reap-orphaned-blobs') {
@@ -162,47 +174,6 @@ export function createMaintenanceHandler(input: {
       }
       return { summary: `Reaped ${completed} unowned document(s); ${failed} failed`, completed, failed };
     }
-
-    // One-time recovery of user-scoped artifacts left by earlier deletes.
-    const hashes = new Map<string, string>();
-    let hashesLoaded = false;
-    const loadUserHashes = async () => {
-      hashes.clear();
-      let after: string | null = null;
-      for (;;) {
-        const { userIds }: { userIds: string[] } = await database({ action: 'list-users', after });
-        if (!userIds.length) break;
-        for (const id of userIds) hashes.set(createHash('sha256').update(id).digest('hex'), id);
-        after = userIds.at(-1)!;
-      }
-    };
-    const roots: UserStorageScopeRoot[] = ['playback-audio', 'playback-exports', 'playback-sidecars', 'account-exports', 'cloned-voices'];
-    for (const root of roots) {
-      let startAfter: string | null = null;
-      do {
-        const page = await listUserStorageScopes({ storage, s3Prefix, root, startAfter, limit: 25 });
-        // Sidecar folders are named by user hash. Reload the owners when a page
-        // has an unknown hash, so an account created mid-scan is never treated as gone.
-        if (root === 'playback-sidecars' && (!hashesLoaded || page.users.some((entry) => !hashes.has(entry.user)))) {
-          await loadUserHashes();
-          hashesLoaded = true;
-        }
-        for (const entry of page.users) {
-          await attempt(async () => {
-            const userId = root === 'playback-sidecars' ? hashes.get(entry.user) : entry.user;
-            if (!userId) await clearUserSidecarsByHash({ storage, s3Prefix, storageUserHash: entry.user });
-            else {
-              for (let index = 0; index < entry.documentIds.length || index === 0; index += 25) {
-                await database({ action: 'scan-user', userId, documentIds: entry.documentIds.slice(index, index + 25) });
-              }
-            }
-            completed++;
-          }, 'Finding leftover storage');
-          await report('Finding leftover storage');
-        }
-        startAfter = page.nextStartAfter;
-      } while (startAfter);
-    }
-    return { summary: `Scanned ${completed} user folder(s); ${failed} failed`, completed, failed, disableTask: failed === 0 };
+    throw new Error(`Unknown maintenance task: ${String(request.task)}`);
   };
 }

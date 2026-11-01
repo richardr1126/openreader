@@ -50,7 +50,7 @@ All keys are under `S3_PREFIX`.
 | Prefix | Contents | Kept until |
 | --- | --- | --- |
 | `documents_v1/` | Uploaded documents, named by SHA-256 so identical files are stored once. Each upload is read back and its hash checked before it is added to the library. | No document references it ([Clean up unowned documents](./maintenance#scheduled-tasks)). |
-| `document_uploads_temp_v1/` | Uploads in progress. | Finished, or expired ([Clean up expired uploads](./maintenance#scheduled-tasks)). |
+| `document_uploads_temp_v1/` | Uploads in progress. | Finished, or expired ([Clean up expired files](./maintenance#scheduled-tasks)). |
 | `document_previews_v1/` | Library thumbnails for PDF and EPUB. | The document is deleted. They can be regenerated. |
 | `tts_playback_segments_audio_v1/` | Generated speech, one file per segment. | The user clears audio or deletes the document. |
 | `tts_playback_segments_v1/`, `tts_playback_plan_v1/` | Word timings and the playback plan for each document and voice. | Same as the audio. |

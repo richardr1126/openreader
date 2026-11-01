@@ -869,6 +869,14 @@ helpers were removed. Single-scope playback cache commands remain synchronous
 worker commands; source upload/finalization remains app-owned. Compute-history
 pruning is SQL-only and remains in the control plane.
 
+The worker tasks were then consolidated by shared purpose, keeping the stored
+task ids so existing schedules carry over. `cleanup-temp-uploads` (Clean up
+expired files) also expires account ZIPs, and `retry-storage-cleanups` (Finish
+pending deletions) finishes marked accounts before draining queued storage
+cleanup. The one-time leftover-storage scan found nothing in production and
+was removed with its broker steps, its storage lister and the self-disabling
+task result.
+
 NATS key scans explicitly close and delete their consumers, including empty
 scans and early exits. The installed KV client's five-minute consumer retention
 made repeated account cleanup exhaust the broker's consumer limit.
