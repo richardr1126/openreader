@@ -469,7 +469,7 @@ Evidence (2026-11-01):
 Remaining documented limits: saved-settings PDF requests still require a retry after
 `DOCUMENT_PREPARING`; guests advance only on their own requests; owner-less legacy
 plan metadata remains compatible pending the phase-4 authorization review. No release,
-commit, push or production migration was performed. Migration 0027 still needs the
+push or production migration was performed. Migration 0027 still needs the
 owner-coordinated production upgrade.
 
 ### Phase 2: Documents and uploads
@@ -517,3 +517,30 @@ Where it differs from the original outline:
 - **Cookie authentication remains in place.** Every route uses the shared principal
   and public error shape. Bearer support and the OpenAPI publication remain in the
   later planned phases.
+
+Acceptance evidence (2026-11-01):
+
+- On a disposable local stack, the visible app created Markdown directly, opened
+  its content in the reader, imported `https://example.com` on the server, uploaded
+  PDF and EPUB files, and converted DOCX to a readable PDF. Moving the Markdown
+  into a folder persisted after reloading the library. That stack was stopped
+  before Playwright started.
+- Real-SQL route tests cover owner filtering, cursor pagination, literal search,
+  text/URL creation, upload transfer and finalization, repeated receipt integrity,
+  metadata mutation ownership, PDF operation status and bounded JSON input. Separate
+  tests cover presigned/proxy transfer rules, canonical-copy integrity, conversion
+  admission reuse and upload event ownership.
+- Full Vitest: 1,623 passed across 240 files. Complete Playwright: 81 passed in
+  2.7 minutes, including both real playback journeys (Chromium 1.5 minutes, WebKit
+  1.6 minutes); none skipped. New creation coverage verifies the canonical ID,
+  reader content and persistence after returning to and reloading the library.
+  Its first matrix exposed a test sequencing error: reload cancelled the pending
+  return navigation. Waiting for the library URL before reloading fixed the test;
+  no timeout, retry, worker-count or product behavior change was needed.
+- Application and worker TypeScript checks, the production build, route-error,
+  compute-boundary and install-profile checks passed. The browser matrix reused
+  the immediately preceding production build through the same temporary logging
+  configuration as phase 1. Port 3003 was free after both stacks stopped.
+
+Phase 2 adds no schema migration or environment setting. Phase 3 remains folders,
+voices and publication of the full v1 OpenAPI specification and documentation.
