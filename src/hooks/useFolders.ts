@@ -45,9 +45,14 @@ export function useFolders() {
     ]),
   });
   const move = useMutation({
-    mutationFn: (input: { documentIds: string[]; folderId: string | null }) => jsonRequest('/api/documents/folders', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }),
+    mutationFn: async (input: { documentIds: string[]; folderId: string | null }) => {
+      for (let offset = 0; offset < input.documentIds.length; offset += 200) {
+        await jsonRequest('/api/v1/documents', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: input.documentIds.slice(offset, offset + 200), folderId: input.folderId }),
+        });
+      }
+    },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: documentsKey });
       const previous = queryClient.getQueryData<BaseDocument[]>(documentsKey);

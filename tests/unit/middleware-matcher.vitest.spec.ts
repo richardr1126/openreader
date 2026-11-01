@@ -9,14 +9,14 @@ describe('middleware matcher', () => {
     expect(unstable_doesMiddlewareMatch({
       config,
       nextConfig: {},
-      url: 'http://localhost/api/documents/blob/upload?token=upload-token',
+      url: 'http://localhost/api/v1/uploads/upload-token/file',
     })).toBe(false);
   });
 
   test('continues matching upload support routes and normal application requests', () => {
     for (const url of [
-      'http://localhost/api/documents/blob/upload/finalize',
-      'http://localhost/api/documents/blob/upload/events',
+      'http://localhost/api/v1/documents',
+      'http://localhost/api/v1/uploads/upload-token/events',
       'http://localhost/app',
     ]) {
       expect(unstable_doesMiddlewareMatch({ config, nextConfig: {}, url })).toBe(true);

@@ -1,5 +1,6 @@
 import type { BaseDocument, DocumentType } from '@/types/documents';
 import type { DocumentSettings } from '@/types/document-settings';
+import type { DocumentResource, DocumentUploadResource, PreparedDocumentUpload } from '@/types/document-api';
 import type { ReaderBootstrapRestart } from '@/types/reader-bootstrap';
 import { parseApiError } from '@/lib/client/api/http';
 import { transferPreparedDocumentUploads } from '@/lib/client/uploads/transfer';
@@ -20,25 +21,6 @@ export type DocumentImportMetadata = {
   language?: string | null;
 };
 
-/**
- * A file created by an import (for example a scraped web article) that knows
- * its own author or language. Passing one through the normal upload path
- * forwards that metadata to the server, including on retries.
- */
-export class DocumentImportFile extends File {
-  readonly importMetadata: DocumentImportMetadata;
-
-  constructor(
-    parts: BlobPart[],
-    name: string,
-    options: FilePropertyBag & { metadata: DocumentImportMetadata },
-  ) {
-    const { metadata, ...fileOptions } = options;
-    super(parts, name, fileOptions);
-    this.importMetadata = metadata;
-  }
-}
-
 export type DocumentUploadProgressEvent =
   | { phase: 'preparing' }
   | { phase: 'transferring'; sourceIndex: number; loadedBytes: number; totalBytes: number }
@@ -58,214 +40,64 @@ export type UploadOptions = {
   onProgress?: (event: DocumentUploadProgressEvent) => void;
 };
 
-type FinalizeUploadPayload = {
-  token: string | undefined;
-  name: string;
-  type: DocumentType;
-  lastModified: number;
-  author?: string;
-  language?: string;
-};
-
-function importMetadataPayload(metadata: DocumentImportMetadata | undefined): Pick<FinalizeUploadPayload, 'author' | 'language'> {
-  return {
-    ...(metadata?.author ? { author: metadata.author } : {}),
-    ...(metadata?.language ? { language: metadata.language } : {}),
-  };
-}
-
-type FinalizeResponse = {
-  stored?: BaseDocument[];
-  conversions?: Array<{
-    token: string;
-    name: string;
-    conversionId: string;
-    opId: string | null;
-    status: 'queued' | 'running' | 'failed';
-    error?: string;
-  }>;
-  error?: string;
-};
-
 const DOCUMENT_CONVERSION_TIMEOUT_MS = 5 * 60 * 1000;
 
 export class DocumentConversionPendingError extends Error {
-  readonly conversions: NonNullable<FinalizeResponse['conversions']>;
-  readonly stored: BaseDocument[];
-
-  constructor(input: {
-    conversions: NonNullable<FinalizeResponse['conversions']>;
-    stored: BaseDocument[];
-  }) {
+  constructor(readonly uploads: DocumentUploadResource[]) {
     super('DOCX conversion is still running');
     this.name = 'DocumentConversionPendingError';
-    this.conversions = input.conversions;
-    this.stored = input.stored;
   }
 }
 
-type PendingDocumentConversion = NonNullable<FinalizeResponse['conversions']>[number];
-
-function documentConversionEventsUrl(conversion: PendingDocumentConversion): string {
-  const params = new URLSearchParams();
-  params.set('opId', conversion.opId ?? '');
-  params.set('token', conversion.token);
-  return `/api/documents/blob/upload/events?${params.toString()}`;
-}
-
-function waitForDocumentConversion(
-  conversion: PendingDocumentConversion,
-  sourceIndex: number,
-  onProgress?: UploadOptions['onProgress'],
-  signal?: AbortSignal,
-): Promise<void> {
-  if (!conversion.opId) {
-    return Promise.reject(new Error(`DOCX conversion did not provide an operation for ${conversion.name}`));
-  }
-  if (signal?.aborted) {
-    return Promise.reject(
-      signal.reason instanceof Error ? signal.reason : new Error('Document upload aborted'),
-    );
-  }
-
-  return new Promise<void>((resolve, reject) => {
-    const source = new EventSource(documentConversionEventsUrl(conversion));
-    onProgress?.({
-      phase: 'processing',
-      sourceIndex,
-      operationStatus: conversion.status === 'running' ? 'running' : 'queued',
-    });
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new DocumentConversionPendingError({ conversions: [conversion], stored: [] }));
-    }, DOCUMENT_CONVERSION_TIMEOUT_MS);
-
-    const cleanup = () => {
-      clearTimeout(timeout);
-      signal?.removeEventListener('abort', handleAbort);
-      source.close();
-    };
-    const handleAbort = () => {
-      cleanup();
-      reject(signal?.reason instanceof Error ? signal.reason : new Error('Document upload aborted'));
-    };
-    const handleSnapshot = (event: Event) => {
+function waitForDocumentConversion(upload: DocumentUploadResource, sourceIndex: number, onProgress?: UploadOptions['onProgress'], signal?: AbortSignal): Promise<void> {
+  if (!upload.eventsUrl) return Promise.reject(new Error('Conversion did not provide an event stream.'));
+  if (signal?.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const source = new EventSource(upload.eventsUrl!);
+    const cleanup = () => { clearTimeout(timeout); source.close(); signal?.removeEventListener('abort', abort); };
+    const abort = () => { cleanup(); reject(signal?.reason); };
+    const timeout = setTimeout(() => { cleanup(); reject(new DocumentConversionPendingError([upload])); }, DOCUMENT_CONVERSION_TIMEOUT_MS);
+    source.addEventListener('snapshot', event => {
       try {
-        const payload = JSON.parse((event as MessageEvent<string>).data) as {
-          snapshot?: {
-            status?: 'queued' | 'running' | 'succeeded' | 'failed';
-            error?: { message?: string } | null;
-            progress?: {
-              phase?: 'fetching' | 'converting' | 'uploading';
-            } | null;
-          };
+        const snapshot = JSON.parse((event as MessageEvent<string>).data).snapshot as {
+          status: 'queued' | 'running' | 'succeeded' | 'failed'; error?: { message?: string };
+          progress?: { phase?: 'fetching' | 'converting' | 'uploading' };
         };
-        const snapshot = payload.snapshot;
-        if (snapshot?.status === 'succeeded') {
-          cleanup();
-          resolve();
-        } else if (snapshot?.status === 'failed') {
-          cleanup();
-          reject(new Error(snapshot.error?.message || `DOCX conversion failed for ${conversion.name}`));
-        } else if (snapshot?.status === 'queued' || snapshot?.status === 'running') {
-          onProgress?.({
-            phase: 'processing',
-            sourceIndex,
-            operationStatus: snapshot.status,
-            ...(snapshot.progress?.phase ? { workerPhase: snapshot.progress.phase } : {}),
-          });
-        }
-      } catch {
-        // Ignore malformed frames so EventSource can reconnect and continue.
-      }
-    };
-
-    signal?.addEventListener('abort', handleAbort, { once: true });
-    source.addEventListener('snapshot', handleSnapshot);
+        if (snapshot.status === 'succeeded') { cleanup(); resolve(); }
+        else if (snapshot.status === 'failed') { cleanup(); reject(new Error(snapshot.error?.message || 'Document conversion failed.')); }
+        else onProgress?.({ phase: 'processing', sourceIndex, operationStatus: snapshot.status, workerPhase: snapshot.progress?.phase });
+      } catch { /* A malformed frame must not replace valid operation state. */ }
+    });
+    signal?.addEventListener('abort', abort, { once: true });
   });
 }
 
-async function waitForDocumentConversions(
-  conversions: PendingDocumentConversion[],
-  uploads: FinalizeUploadPayload[],
-  onProgress?: UploadOptions['onProgress'],
-  signal?: AbortSignal,
-): Promise<void> {
-  const controller = new AbortController();
-  const forwardAbort = () => controller.abort(signal?.reason);
-  signal?.addEventListener('abort', forwardAbort, { once: true });
-  if (signal?.aborted) forwardAbort();
-
-  try {
-    await Promise.all(conversions.map((conversion) => {
-      const sourceIndex = uploads.findIndex((upload) => upload.token === conversion.token);
-      if (sourceIndex < 0) {
-        throw new Error(`DOCX conversion did not match a prepared upload for ${conversion.name}`);
-      }
-      return waitForDocumentConversion(
-        conversion,
-        sourceIndex,
-        onProgress,
-        controller.signal,
-      );
-    }));
-  } catch (error) {
-    controller.abort(error);
-    throw error;
-  } finally {
-    signal?.removeEventListener('abort', forwardAbort);
-  }
-}
-
-async function requestUploadFinalization(
-  uploads: FinalizeUploadPayload[],
-  options?: UploadOptions,
-): Promise<{ response: Response; data: FinalizeResponse | null }> {
-  const response = await fetch('/api/documents/blob/upload/finalize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ uploads, ...(options?.folderId ? { folderId: options.folderId } : {}) }),
-    signal: options?.signal,
-  });
-  const data = (await response.json().catch(() => null)) as FinalizeResponse | null;
-  return { response, data };
-}
-
-async function finalizeUploadedSources(
-  uploads: FinalizeUploadPayload[],
-  options?: UploadOptions,
-): Promise<BaseDocument[]> {
+async function finalizeUploadedSources(uploads: Array<{ id: string; name: string }>, options?: UploadOptions): Promise<BaseDocument[]> {
   options?.onProgress?.({ phase: 'finalizing' });
-  let { response, data } = await requestUploadFinalization(uploads, options);
-
-  if (response.status === 202) {
-    const conversions = data?.conversions ?? [];
-    if (conversions.length === 0) {
-      throw new Error('Pending DOCX conversion response did not include any operations');
-    }
-    const conversionTokens = new Set(conversions.map((conversion) => conversion.token));
-    uploads.forEach((upload, sourceIndex) => {
-      if (!upload.token || conversionTokens.has(upload.token)) return;
-      options?.onProgress?.({ phase: 'source-complete', sourceIndex });
-    });
-    await waitForDocumentConversions(conversions, uploads, options?.onProgress, options?.signal);
-    options?.onProgress?.({ phase: 'finalizing' });
-    ({ response, data } = await requestUploadFinalization(uploads, options));
-  }
-
-  if (response.status === 202) {
-    throw new DocumentConversionPendingError({
-      conversions: data?.conversions ?? [],
-      stored: data?.stored ?? [],
-    });
-  }
-  if (response.ok) {
-    options?.onProgress?.({ phase: 'complete' });
-    return data?.stored || [];
-  }
-
-  const failed = data?.conversions?.find((conversion) => conversion.status === 'failed');
-  throw new Error(failed?.error || data?.error || 'Failed to finalize uploaded documents');
+  const stored = await Promise.all(uploads.map(async (upload, sourceIndex) => {
+    const response = await fetch('/api/v1/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source: { type: 'upload', uploadId: upload.id }, ...(options?.folderId ? { folderId: options.folderId } : {}) }), signal: options?.signal });
+    if (!response.ok) throw await parseApiError(response, 'Failed to create document');
+    let document: BaseDocument;
+    if (response.status === 202) {
+      let pending = await response.json() as DocumentUploadResource;
+      if (pending.status === 'failed') throw new Error(pending.error || 'Document conversion failed.');
+      options?.onProgress?.({ phase: 'processing', sourceIndex, operationStatus: 'queued' });
+      await waitForDocumentConversion(pending, sourceIndex, options?.onProgress, options?.signal);
+      const status = await fetch(pending.statusUrl, { signal: options?.signal, cache: 'no-store' });
+      if (!status.ok) throw await parseApiError(status, 'Failed to finish document conversion');
+      pending = await status.json() as DocumentUploadResource;
+      if (!pending.document) {
+        if (pending.status === 'failed') throw new Error(pending.error || 'Document conversion failed.');
+        throw new DocumentConversionPendingError([pending]);
+      }
+      document = pending.document;
+    } else document = await response.json() as DocumentResource;
+    options?.onProgress?.({ phase: 'source-complete', sourceIndex });
+    return document;
+  }));
+  options?.onProgress?.({ phase: 'complete' });
+  return stored;
 }
 
 function documentTypeForName(name: string): DocumentType {
@@ -297,23 +129,35 @@ export function mimeTypeForDoc(doc: Pick<BaseDocument, 'type' | 'name'>): string
 }
 
 export async function listDocuments(options?: { ids?: string[]; signal?: AbortSignal }): Promise<BaseDocument[]> {
-  const params = new URLSearchParams();
-  if (options?.ids?.length) {
-    params.set('ids', options.ids.join(','));
+  if (options?.ids && options.ids.length === 0) return [];
+  if (options?.ids && options.ids.length > 200) {
+    const documents: BaseDocument[] = [];
+    for (let offset = 0; offset < options.ids.length; offset += 200) {
+      documents.push(...await listDocuments({ ...options, ids: options.ids.slice(offset, offset + 200) }));
+    }
+    return documents;
   }
-
-  const res = await fetch(`/api/documents?${params.toString()}`, { signal: options?.signal });
-  if (!res.ok) {
-    throw await parseApiError(res, 'Failed to list documents');
-  }
-
-  const data = (await res.json()) as { documents: BaseDocument[] };
-  return data.documents || [];
+  const documents: BaseDocument[] = [];
+  let cursor: string | null = null;
+  do {
+    const params = new URLSearchParams({ limit: '200' });
+    if (options?.ids?.length) params.set('ids', options.ids.join(','));
+    if (cursor) params.set('cursor', cursor);
+    const res = await fetch(`/api/v1/documents?${params}`, { signal: options?.signal });
+    if (!res.ok) throw await parseApiError(res, 'Failed to list documents');
+    const page = await res.json() as { data: BaseDocument[]; nextCursor: string | null };
+    documents.push(...page.data);
+    if (page.nextCursor && page.nextCursor === cursor) throw new Error('Document pagination did not advance.');
+    cursor = page.nextCursor;
+  } while (cursor);
+  return documents;
 }
 
 export async function getDocumentMetadata(id: string, options?: { signal?: AbortSignal }): Promise<BaseDocument | null> {
-  const docs = await listDocuments({ ids: [id], signal: options?.signal });
-  return docs[0] ?? null;
+  const response = await fetch(`/api/v1/documents/${encodeURIComponent(id)}`, { signal: options?.signal });
+  if (response.status === 404) return null;
+  if (!response.ok) throw await parseApiError(response, 'Failed to read document');
+  return await response.json() as DocumentResource;
 }
 
 export async function markDocumentOpened(
@@ -432,30 +276,13 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
   options?.onProgress?.({ phase: 'preparing' });
 
   try {
-    const presignRes = await fetch('/api/documents/blob/upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        uploads: sources.map((source) => ({
-          contentType: source.contentType,
-          size: source.size,
-        })),
-      }),
-      signal: controller.signal,
-    });
-
-    if (!presignRes.ok) {
-      const data = (await presignRes.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(data?.error || 'Failed to prepare uploads');
-    }
-
-    const presigned = (await presignRes.json()) as {
-      uploads?: Array<{ token: string; url: string; headers?: Record<string, string> }>;
-    };
-    const uploads = presigned.uploads || [];
-    if (uploads.length !== sources.length) {
-      throw new Error('Upload preparation returned an unexpected number of temp uploads');
-    }
+    const uploads = await Promise.all(sources.map(async source => {
+      const response = await fetch('/api/v1/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: source.name, contentType: source.contentType, size: source.size, lastModified: source.lastModified, ...source.metadata }),
+        signal: controller.signal });
+      if (!response.ok) throw await parseApiError(response, 'Failed to prepare upload');
+      return await response.json() as PreparedDocumentUpload;
+    }));
 
     await transferPreparedDocumentUploads({
       sources,
@@ -465,13 +292,7 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
     });
 
     return await finalizeUploadedSources(
-      sources.map((source, index) => ({
-        token: uploads[index]?.token,
-        name: source.name,
-        type: source.type,
-        lastModified: source.lastModified,
-        ...importMetadataPayload(source.metadata),
-      })),
+      sources.map((source, index) => ({ id: uploads[index].id, name: source.name })),
       requestOptions,
     );
   } catch (error) {
@@ -502,7 +323,6 @@ export async function uploadDocuments(files: File[], options?: UploadOptions): P
       lastModified: Number.isFinite(file.lastModified) ? file.lastModified : Date.now(),
       contentType,
       body: file,
-      ...(file instanceof DocumentImportFile ? { metadata: file.importMetadata } : {}),
     });
   }
 
@@ -510,15 +330,11 @@ export async function uploadDocuments(files: File[], options?: UploadOptions): P
 }
 
 export async function deleteDocuments(options?: { ids?: string[]; signal?: AbortSignal }): Promise<void> {
-  const params = new URLSearchParams();
-  if (options?.ids?.length) {
-    params.set('ids', options.ids.join(','));
-  }
-
-  const url = params.toString() ? `/api/documents?${params.toString()}` : '/api/documents';
-  const res = await fetch(url, { method: 'DELETE', signal: options?.signal });
-  if (!res.ok) {
-    throw await parseApiError(res, 'Failed to delete documents');
+  const ids = options?.ids ?? (await listDocuments({ signal: options?.signal })).map(document => document.id);
+  for (let offset = 0; offset < ids.length; offset += 200) {
+    const params = new URLSearchParams({ ids: ids.slice(offset, offset + 200).join(',') });
+    const response = await fetch(`/api/v1/documents?${params}`, { method: 'DELETE', signal: options?.signal });
+    if (!response.ok) throw await parseApiError(response, 'Failed to delete documents');
   }
 }
 
@@ -527,17 +343,12 @@ export async function downloadDocumentContent(id: string, options?: { signal?: A
 }
 
 export async function fetchDocumentContentResponse(id: string, options?: { signal?: AbortSignal }): Promise<Response> {
-  const res = await fetch(`/api/documents/blob/get?id=${encodeURIComponent(id)}`, {
+  const res = await fetch(`/api/v1/documents/${encodeURIComponent(id)}/file`, {
     signal: options?.signal,
     cache: 'no-store',
   });
   if (!res.ok) {
-    const contentType = res.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
-      const data = (await res.json().catch(() => null)) as { error?: string } | null;
-      throw new Error(data?.error || `Failed to download document (status ${res.status})`);
-    }
-    throw new Error(`Failed to download document (status ${res.status})`);
+    throw await parseApiError(res, `Failed to download document (status ${res.status})`);
   }
   return res;
 }
@@ -695,29 +506,19 @@ export function subscribeDocumentPreviewEvents(
   };
 }
 
-export type ImportedWebArticle = {
-  title: string;
-  content: string;
-  author: string | null;
-  language: string | null;
-};
+export async function createTextDocument(text: string, name: string, options?: UploadOptions): Promise<DocumentResource> {
+  return createSourceDocument({ type: 'text', text }, { ...options, name });
+}
 
-export async function importUrl(
-  url: string,
-  options?: { signal?: AbortSignal }
-): Promise<ImportedWebArticle> {
-  const res = await fetch('/api/documents/import-url', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-    signal: options?.signal,
-  });
+export async function createDocumentFromUrl(url: string, options?: UploadOptions & { name?: string }): Promise<DocumentResource> {
+  return createSourceDocument({ type: 'url', url }, options);
+}
 
-  if (!res.ok) {
-    throw await parseApiError(res, 'Failed to import URL');
-  }
-
-  return (await res.json()) as ImportedWebArticle;
+async function createSourceDocument(source: Record<string, unknown>, options?: UploadOptions & { name?: string }): Promise<DocumentResource> {
+  const response = await fetch('/api/v1/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ source, ...(options?.name ? { name: options.name } : {}), ...(options?.folderId ? { folderId: options.folderId } : {}) }), signal: options?.signal });
+  if (!response.ok) throw await parseApiError(response, 'Failed to create document');
+  return await response.json() as DocumentResource;
 }
 
 export type GutenbergBook = {
@@ -765,21 +566,6 @@ export async function importGutenbergBook(id: number, options?: UploadOptions): 
   if (!res.ok) {
     throw await parseApiError(res, 'Failed to import the book');
   }
-  const staged = (await res.json()) as {
-    token: string;
-    name: string;
-    lastModified: number;
-    author?: string | null;
-    language?: string | null;
-  };
-  return finalizeUploadedSources(
-    [{
-      token: staged.token,
-      name: staged.name,
-      type: 'epub',
-      lastModified: staged.lastModified,
-      ...importMetadataPayload(staged),
-    }],
-    options,
-  );
+  const staged = await res.json() as { uploadId: string; name: string };
+  return finalizeUploadedSources([{ id: staged.uploadId, name: staged.name }], options);
 }

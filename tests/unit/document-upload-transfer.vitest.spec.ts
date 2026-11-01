@@ -8,7 +8,7 @@ const sources = Array.from({ length: 5 }, (_, index) => ({
   body: new Uint8Array([index]),
 }));
 const uploads = Array.from({ length: 5 }, (_, index) => ({
-  token: `token-${index}`,
+  id: `upload-${index}`,
   url: `https://uploads.example/document-${index}.txt`,
 }));
 

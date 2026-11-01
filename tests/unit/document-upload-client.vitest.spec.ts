@@ -54,46 +54,16 @@ describe('document upload client', () => {
       }
     }
 
+    const id = '123e4567-e89b-12d3-a456-426614174000';
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url === '/api/documents/blob/upload') {
-        return Response.json({
-          uploads: [{
-            token: '123e4567-e89b-12d3-a456-426614174000',
-            url: 'https://uploads.example/sample.docx',
-          }],
-        });
-      }
-      if (url === 'https://uploads.example/sample.docx' && init?.method === 'PUT') {
-        return new Response(null, { status: 200 });
-      }
-      if (url === '/api/documents/blob/upload/finalize') {
-        const finalizeCalls = fetchMock.mock.calls.filter(([candidate]) => (
-          String(candidate) === '/api/documents/blob/upload/finalize'
-        )).length;
-        if (finalizeCalls === 1) {
-          return Response.json({
-            stored: [],
-            conversions: [{
-              token: '123e4567-e89b-12d3-a456-426614174000',
-              name: 'sample.docx',
-              conversionId: 'conversion-1',
-              opId: 'op-1',
-              status: 'running',
-            }],
-          }, { status: 202 });
-        }
-        return Response.json({
-          stored: [{
-            id: 'a'.repeat(64),
-            name: 'sample.pdf',
-            type: 'pdf',
-            size: 42,
-            lastModified: 1,
-            scope: 'user',
-          }],
-        });
-      }
+      if (url === '/api/v1/uploads') return Response.json({ id, url: 'https://uploads.example/sample.docx', headers: {} });
+      if (url === 'https://uploads.example/sample.docx' && init?.method === 'PUT') return new Response(null, { status: 200 });
+      if (url === '/api/v1/documents') return Response.json({ id, status: 'processing', statusUrl: `/api/v1/uploads/${id}`,
+        eventsUrl: `/api/v1/uploads/${id}/events?opId=op-1`, operationId: 'op-1', document: null }, { status: 202 });
+      if (url === `/api/v1/uploads/${id}`) return Response.json({ id, status: 'ready', document: {
+        id: 'a'.repeat(64), name: 'sample.pdf', type: 'pdf', size: 42, lastModified: 1, scope: 'user',
+      } });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -117,14 +87,13 @@ describe('document upload client', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(eventUrls).toEqual([
-      '/api/documents/blob/upload/events?opId=op-1&token=123e4567-e89b-12d3-a456-426614174000',
+      '/api/v1/uploads/123e4567-e89b-12d3-a456-426614174000/events?opId=op-1',
     ]);
     const finalizationBodies = fetchMock.mock.calls
-      .filter(([candidate]) => String(candidate) === '/api/documents/blob/upload/finalize')
+      .filter(([candidate]) => String(candidate) === '/api/v1/documents')
       .map(([, init]) => JSON.parse(String(init?.body)) as { folderId?: string });
     expect(finalizationBodies).toEqual([
-      { folderId: 'reading-list', uploads: expect.any(Array) },
-      { folderId: 'reading-list', uploads: expect.any(Array) },
+      { folderId: 'reading-list', source: { type: 'upload', uploadId: id } },
     ]);
     expect(closedSources).toEqual([{ closed: true }]);
     expect(progressEvents).toContainEqual({
@@ -168,27 +137,9 @@ describe('document upload client', () => {
 
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/documents/blob/upload') {
-        return Response.json({
-          uploads: [{
-            token: '123e4567-e89b-12d3-a456-426614174000',
-            url: 'https://uploads.example/notes.md',
-            headers: { 'x-upload-token': 'signed' },
-          }],
-        });
-      }
-      if (url === '/api/documents/blob/upload/finalize') {
-        return Response.json({
-          stored: [{
-            id: 'b'.repeat(64),
-            name: 'notes.md',
-            type: 'html',
-            size: 4,
-            lastModified: 1,
-            scope: 'user',
-          }],
-        });
-      }
+      if (url === '/api/v1/uploads') return Response.json({ id: '123e4567-e89b-12d3-a456-426614174000',
+        url: 'https://uploads.example/notes.md', headers: { 'x-upload-token': 'signed' } });
+      if (url === '/api/v1/documents') return Response.json({ id: 'b'.repeat(64), name: 'notes.md', type: 'html', size: 4, lastModified: 1, scope: 'user' }, { status: 201 });
       throw new Error(`Unexpected fetch: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -212,6 +163,7 @@ describe('document upload client', () => {
       { phase: 'transferring', sourceIndex: 0, loadedBytes: 2, totalBytes: 4 },
       { phase: 'transferring', sourceIndex: 0, loadedBytes: 4, totalBytes: 4 },
       { phase: 'finalizing' },
+      { phase: 'source-complete', sourceIndex: 0 },
       { phase: 'complete' },
     ]);
   });

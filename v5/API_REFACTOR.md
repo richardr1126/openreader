@@ -124,9 +124,14 @@ All routes are under `/api/v1`.
 | `GET /documents` | List or search, with `cursor`, `limit`, `q` and `folderId` |
 | `POST /documents` | Add a document from `url`, `text` or `uploadId` |
 | `POST /uploads` | Get a URL to upload a file to |
+| `PUT /uploads/{uploadId}/file` | Transfer bytes when the instance uses proxy uploads |
+| `GET /uploads/{uploadId}` | Read conversion status and finalize the canonical document |
+| `GET /uploads/{uploadId}/events?opId=` | Observe the upload's conversion operation |
 | `GET /documents/{id}` | Details and status: `processing`, `ready` or `failed` |
 | `PATCH /documents/{id}` | Rename or move |
 | `DELETE /documents/{id}` | Delete |
+| `PATCH /documents` | Move up to 200 explicitly selected documents |
+| `DELETE /documents?ids=...` | Delete up to 200 explicitly selected documents |
 | `GET /documents/{id}/file` | Download the original file |
 | `GET /voices` | List available voices with stable IDs |
 | `POST /documents/{id}/audiobooks` | Start an audiobook, or return the matching existing one |
@@ -466,3 +471,49 @@ Remaining documented limits: saved-settings PDF requests still require a retry a
 plan metadata remains compatible pending the phase-4 authorization review. No release,
 commit, push or production migration was performed. Migration 0027 still needs the
 owner-coordinated production upgrade.
+
+### Phase 2: Documents and uploads
+
+Document creation, listing/search, metadata reads, rename/move, deletion and file
+reads now use `/api/v1/documents`. The library, file upload, custom-text, URL and
+Gutenberg import clients use these resources. The replaced `/api/documents`
+collection, folder-move, URL-import and blob upload/download routes are removed.
+Reader bootstrap, bookmarks, settings, recency and previews remain private.
+
+Creation accepts `source: { type: 'text', text }`, `source: { type: 'url', url }`
+or `source: { type: 'upload', uploadId }`, with optional `name` and `folderId`.
+Upload preparation takes a filename, exact byte size and content type, stores its
+metadata on the server, and returns an ID, transfer URL, headers and expiry. Proxy
+transfers enforce the declared length; presigned transfers are checked before
+submission. JSON control requests are capped at 3 MB, inline text at 2 MB, and
+files at the existing configured upload limit. URL extraction retains the existing
+SSRF protections and bounded fetch.
+
+Where it differs from the original outline:
+
+- **Conversion has an upload resource.** Existing document IDs are SHA-256 addresses;
+  a DOCX's final ID is unknown until the worker produces its PDF. Creation returns
+  `202` with the upload status/events URLs until conversion finishes. A subsequent
+  status read verifies and registers the PDF, returning the canonical document.
+  A closed tab does not prevent conversion, but registration still needs that read.
+  No placeholder document ID, schema change or second stored identity is introduced.
+- **Receipts use existing temporary storage.** Preparation metadata and the final
+  document receipt use the existing owner-scoped receipt objects and cleanup policy.
+  Pending uploads expire after 24 hours; presigned transfer URLs expire in five
+  minutes. Success receipts recheck ownership and canonical blob integrity.
+- **Document status covers PDF preparation.** Creation starts an admitted parse
+  when needed. Metadata/status reads resolve worker state without opening a reader,
+  changing recency or creating playback plans. DOCX conversion exposes status on
+  its upload until a canonical PDF exists. Existing conversions are reused without
+  entering compute admission again.
+- **Library bulk actions are explicit and bounded.** Lists return `{ data,
+  nextCursor }` with a maximum page size of 200, stable ID cursors, literal text
+  search, optional ID selection and folder filtering. Collection moves/deletes
+  accept up to 200 IDs; the app batches larger selections. There is no implicit
+  delete-all request. Renames and moves preserve document versions and playback.
+- **Conversion events require upload ownership.** The server resolves the caller's
+  receipt and verifies the operation's conversion identity and namespace before
+  proxying SSE. Owning another document with matching content grants no upload access.
+- **Cookie authentication remains in place.** Every route uses the shared principal
+  and public error shape. Bearer support and the OpenAPI publication remain in the
+  later planned phases.

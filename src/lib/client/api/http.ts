@@ -25,6 +25,8 @@ function messageFromBody(body: unknown, fallback: string): string {
   if (body && typeof body === 'object') {
     const record = body as Record<string, unknown>;
     if (typeof record.error === 'string' && record.error.trim()) return record.error;
+    if (record.error && typeof record.error === 'object' && 'message' in record.error
+      && typeof record.error.message === 'string' && record.error.message.trim()) return record.error.message;
     if (typeof record.message === 'string' && record.message.trim()) return record.message;
   }
   return fallback;

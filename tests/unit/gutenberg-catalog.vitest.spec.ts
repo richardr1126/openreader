@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => {
     decryptSecret: vi.fn((ciphertext: string) => ciphertext.replace(/^encrypted:/, '')),
     requireAuthContext: vi.fn(),
     putTempDocumentBlob: vi.fn(),
+    stageUpload: vi.fn(async () => '123e4567-e89b-12d3-a456-426614174000'),
   };
 });
 
@@ -33,6 +34,7 @@ vi.mock('@/lib/server/crypto/secrets', () => ({
 }));
 vi.mock('@/lib/server/auth/auth', () => ({ requireAuthContext: mocks.requireAuthContext }));
 vi.mock('@/lib/server/documents/blobstore', () => ({ putTempDocumentBlob: mocks.putTempDocumentBlob }));
+vi.mock('@/lib/server/documents/uploads', () => ({ stageDocumentUpload: mocks.stageUpload }));
 vi.mock('@/lib/server/storage/s3', () => ({ isS3Configured: () => true }));
 vi.mock('@/lib/server/runtime-config', () => ({
   getResolvedRuntimeConfig: async () => ({ maxUploadMb: 1 }),
@@ -274,14 +276,12 @@ describe('gutenberg import route', () => {
     }));
 
     expect(response.status).toBe(200);
-    const body = await response.json() as { token: string; name: string; type: string };
+    const body = await response.json() as { uploadId: string; name: string; type: string };
     expect(body).toMatchObject({ name: 'Pride and Prejudice.epub', type: 'epub' });
-    expect(mocks.putTempDocumentBlob).toHaveBeenCalledWith(
-      body.token,
-      'user-1',
+    expect(mocks.stageUpload).toHaveBeenCalledWith(
+      expect.objectContaining({ principal: expect.objectContaining({ userId: 'user-1' }) }),
       expect.any(Buffer),
-      'application/epub+zip',
-      null,
+      expect.objectContaining({ name: body.name, contentType: 'application/epub+zip', author: 'Jane Austen', language: 'en' }),
     );
   });
 

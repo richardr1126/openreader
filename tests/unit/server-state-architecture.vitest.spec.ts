@@ -183,13 +183,14 @@ describe('server-state architecture', () => {
 
   test('keeps DOCX conversion completion on authenticated operation SSE instead of polling', () => {
     const documentsApi = source('src/lib/client/api/documents.ts');
-    const uploadEventsRoute = source('src/app/api/documents/blob/upload/events/route.ts');
-    expect(documentsApi).toContain('new EventSource(documentConversionEventsUrl(conversion))');
-    expect(documentsApi).toContain('/api/documents/blob/upload/events');
+    const uploadEventsRoute = source('src/app/api/v1/uploads/[uploadId]/events/route.ts');
+    const uploadOwner = source('src/lib/server/documents/uploads.ts');
+    expect(documentsApi).toContain('new EventSource(upload.eventsUrl!)');
+    expect(uploadOwner).toContain('/api/v1/uploads/');
     expect(documentsApi).not.toContain('Retry-After');
     expect(documentsApi).not.toContain('conversionRetryDelayMs');
-    expect(uploadEventsRoute).toContain("operation.subject.kind !== 'document_conversion'");
-    expect(uploadEventsRoute).toContain('buildDocxConversionRequest');
+    expect(uploadOwner).toContain("operation?.subject.kind === 'document_conversion'");
+    expect(uploadOwner).toContain('buildDocxConversionRequest');
     expect(uploadEventsRoute).toContain('proxyOperationEvents');
   });
 
@@ -288,7 +289,6 @@ describe('server-state architecture', () => {
       '/api/admin/users/delete',
       '/api/auth/[...all]',
       '/api/compute-limits/status',
-      '/api/documents',
       '/api/documents/[id]/bookmarks',
       '/api/documents/[id]/bookmarks/[bookmarkId]',
       '/api/documents/[id]/opened',
@@ -296,17 +296,10 @@ describe('server-state architecture', () => {
       '/api/documents/[id]/reader-bootstrap',
       '/api/documents/[id]/reader-bootstrap/events',
       '/api/documents/[id]/settings',
-      '/api/documents/blob/get',
       '/api/documents/blob/preview',
       '/api/documents/blob/preview/ensure',
       '/api/documents/blob/preview/events',
       '/api/documents/blob/preview/presign',
-      '/api/documents/blob/upload',
-      '/api/documents/blob/upload/events',
-      '/api/documents/blob/upload/finalize',
-      '/api/documents/blob/upload/presign',
-      '/api/documents/folders',
-      '/api/documents/import-url',
       '/api/folders',
       '/api/folders/[id]',
       '/api/gutenberg/books',
@@ -342,11 +335,18 @@ describe('server-state architecture', () => {
       '/api/user/state/onboarding',
       '/api/user/state/preferences',
       '/api/user/state/progress',
+      '/api/v1/documents',
+      '/api/v1/documents/[id]',
       '/api/v1/documents/[id]/audiobooks',
       '/api/v1/documents/[id]/audiobooks/[audiobookId]',
       '/api/v1/documents/[id]/audiobooks/events',
       '/api/v1/documents/[id]/audiobooks/files/[artifactId]',
       '/api/v1/documents/[id]/audiobooks/lookup',
+      '/api/v1/documents/[id]/file',
+      '/api/v1/uploads',
+      '/api/v1/uploads/[uploadId]',
+      '/api/v1/uploads/[uploadId]/events',
+      '/api/v1/uploads/[uploadId]/file',
     ]);
     expect(existsSync(path.join(root, 'src/app/api/documents/library/route.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/app/api/documents/library/content/route.ts'))).toBe(false);

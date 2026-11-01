@@ -1,10 +1,8 @@
 import path from 'path';
 import { createHash } from 'node:crypto';
-import { after, NextRequest, NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { userFolders } from '@openreader/database/schema';
-import { requireAuthContext } from '@/lib/server/auth/auth';
 import {
   TEMP_DOCUMENT_UPLOAD_TTL_MS,
   copyObjectKeyToDocument,
@@ -17,7 +15,6 @@ import {
   isDocumentBlobIntegrityError,
   isMissingBlobError,
   isPreconditionFailed,
-  isValidTempUploadToken,
   putTempDocumentFinalizeReceipt,
   verifyDocumentBlobIntegrity,
 } from '@/lib/server/documents/blobstore';
@@ -28,22 +25,19 @@ import {
 import { registerUploadedDocument } from '@/lib/server/documents/register-upload';
 import { extractImportMetadata, type ImportMetadata } from '@/lib/server/documents/import-metadata';
 import { withDocumentBlobLease } from '@/lib/server/documents/blob-lease';
-import { safeDocumentName, toDocumentTypeFromName } from '@/lib/server/documents/utils';
+import { safeDocumentName } from '@/lib/server/documents/utils';
 import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import type {
   ComputeOperation,
   DocumentConversionArtifactMetadata,
 } from '@/lib/server/compute-worker/protocol';
-import { errorResponse } from '@/lib/server/errors/next-response';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
-import { isS3Configured } from '@/lib/server/storage/s3';
+import type { ComputeLimitSubject } from '@/lib/server/compute-limits/policy';
 import type { BaseDocument, DocumentType } from '@/types/documents';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { createAdmittedComputeOperation } from '@/lib/server/compute-limits/run-admitted';
 
-export const dynamic = 'force-dynamic';
-
-type FinalizeUpload = {
+export type FinalizeUpload = {
   token: string;
   name: string;
   type: DocumentType;
@@ -53,7 +47,7 @@ type FinalizeUpload = {
   hints: Partial<ImportMetadata>;
 };
 
-class UploadFolderError extends Error {
+export class UploadFolderError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = 'UploadFolderError';
@@ -81,71 +75,12 @@ type FailedConversion = {
   error: string;
 };
 
-type FinalizeResult =
+export type FinalizeResult =
   | { kind: 'stored'; stored: BaseDocument }
   | { kind: 'pending'; pending: PendingConversion }
   | { kind: 'failed'; failed: FailedConversion };
 
-function s3NotConfiguredResponse(): NextResponse {
-  return NextResponse.json(
-    { error: 'Documents storage is not configured. Set S3_* environment variables.' },
-    { status: 503 },
-  );
-}
-
-function normalizeDocumentType(rawType: unknown, safeName: string): DocumentType {
-  if (rawType === 'pdf' || rawType === 'epub' || rawType === 'docx' || rawType === 'html') {
-    return rawType;
-  }
-  return toDocumentTypeFromName(safeName);
-}
-
-function normalizeLastModified(value: unknown): number {
-  return Number.isFinite(value) && Number(value) > 0 ? Number(value) : Date.now();
-}
-
-function parseFinalizePayload(body: unknown): FinalizeUpload[] {
-  if (!body || typeof body !== 'object') return [];
-  const request = body as { uploads?: unknown; folderId?: unknown };
-  const rawUploads = request.uploads;
-  if (!Array.isArray(rawUploads)) return [];
-  const hasFolderId = Object.prototype.hasOwnProperty.call(request, 'folderId');
-  let folderId: string | null | undefined;
-  if (!hasFolderId) {
-    folderId = undefined;
-  } else if (request.folderId === null) {
-    folderId = null;
-  } else if (typeof request.folderId === 'string') {
-    folderId = request.folderId.trim();
-    if (!folderId) throw new UploadFolderError('folderId must not be empty', 400);
-  } else {
-    throw new UploadFolderError('folderId must be a string or null', 400);
-  }
-
-  const uploads: FinalizeUpload[] = [];
-  for (const rawUpload of rawUploads) {
-    if (!rawUpload || typeof rawUpload !== 'object') continue;
-    const rec = rawUpload as Record<string, unknown>;
-    const token = typeof rec.token === 'string' ? rec.token.trim().toLowerCase() : '';
-    if (!isValidTempUploadToken(token)) continue;
-    const fallbackName = `upload-${token}.txt`;
-    const name = safeDocumentName(typeof rec.name === 'string' ? rec.name : '', fallbackName);
-    uploads.push({
-      token,
-      name,
-      type: normalizeDocumentType(rec.type, name),
-      lastModified: normalizeLastModified(rec.lastModified),
-      folderId,
-      hints: {
-        author: typeof rec.author === 'string' ? rec.author : null,
-        language: typeof rec.language === 'string' ? rec.language : null,
-      },
-    });
-  }
-  return uploads;
-}
-
-async function verifyUploadFolder(folderId: string | null, userId: string): Promise<void> {
+export async function verifyUploadFolder(folderId: string | null, userId: string): Promise<void> {
   if (!folderId) return;
   const [folder] = await db.select({ id: userFolders.id }).from(userFolders).where(and(
     eq(userFolders.id, folderId),
@@ -278,12 +213,7 @@ async function registerConvertedDocx(input: {
   return stored;
 }
 
-async function finalizeDocx(input: {
-  upload: FinalizeUpload;
-  userId: string;
-  namespace: string | null;
-  schedulePreview: (task: () => Promise<void>) => void;
-}): Promise<FinalizeResult> {
+async function finalizeDocx(input: FinalizeInput): Promise<FinalizeResult> {
   if (!isComputeWorkerAvailable()) {
     throw new Error('Compute worker is required for DOCX conversion.');
   }
@@ -321,13 +251,12 @@ async function finalizeDocx(input: {
   }
 
   const runtimeConfig = await getResolvedRuntimeConfig();
-  const operation: ComputeOperation | null = resolved.operation?.status === 'failed'
-    ? resolved.operation
-    : await createAdmittedComputeOperation({
+  const operation: ComputeOperation | null = resolved.operation
+    ?? await createAdmittedComputeOperation({
       policy: runtimeConfig.computeLimitPolicies,
       action: 'document_conversion',
       requestKey: `${conversionRequest.conversionId}:${temp.lastModified}`,
-      subject: { userId: input.userId, isAnonymous: false },
+      subject: input.subject,
       create: () => client.createDocumentConversionOperation(conversionRequest),
     });
   if (operation?.status === 'failed') {
@@ -356,12 +285,7 @@ async function finalizeDocx(input: {
   };
 }
 
-async function finalizeOne(input: {
-  upload: FinalizeUpload;
-  userId: string;
-  namespace: string | null;
-  schedulePreview: (task: () => Promise<void>) => void;
-}): Promise<FinalizeResult> {
+export async function finalizeUploadedDocument(input: FinalizeInput): Promise<FinalizeResult> {
   const existingReceipt = await getTempDocumentFinalizeReceipt<FinalizeReceipt>(
     input.upload.token,
     input.userId,
@@ -457,74 +381,12 @@ async function finalizeOne(input: {
   return { kind: 'stored', stored };
 }
 
-export async function POST(req: NextRequest) {
-  try {
-    if (!isS3Configured()) return s3NotConfiguredResponse();
 
-    const ctxOrRes = await requireAuthContext(req);
-    if (ctxOrRes instanceof Response) return ctxOrRes;
-    if (!ctxOrRes.userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    const userId = ctxOrRes.userId;
+type FinalizeInput = {
+  upload: FinalizeUpload;
+  userId: string;
+  namespace: string | null;
+  subject: ComputeLimitSubject;
+  schedulePreview: (task: () => Promise<void>) => void;
+};
 
-    const namespace = null;
-    const uploads = parseFinalizePayload(await req.json().catch(() => null));
-    if (uploads.length === 0) {
-      return NextResponse.json({ error: 'No valid uploads provided' }, { status: 400 });
-    }
-    await verifyUploadFolder(uploads[0]?.folderId ?? null, userId);
-
-    const results = await Promise.all(
-      uploads.map((upload) => finalizeOne({
-        upload,
-        userId,
-        namespace,
-        schedulePreview: after,
-      })),
-    );
-    const stored = results
-      .filter((result): result is Extract<FinalizeResult, { kind: 'stored' }> => result.kind === 'stored')
-      .map((result) => result.stored);
-    const conversions = results
-      .filter((result): result is Extract<FinalizeResult, { kind: 'pending' }> => result.kind === 'pending')
-      .map((result) => result.pending);
-    const failedConversions = results
-      .filter((result): result is Extract<FinalizeResult, { kind: 'failed' }> => result.kind === 'failed')
-      .map((result) => result.failed);
-
-    if (failedConversions.length > 0) {
-      return NextResponse.json({
-        stored,
-        conversions: failedConversions,
-        error: failedConversions[0]?.error ?? 'DOCX conversion failed',
-      }, { status: 409 });
-    }
-
-    if (conversions.length > 0) {
-      return NextResponse.json({ stored, conversions }, { status: 202 });
-    }
-
-    return NextResponse.json({ stored });
-  } catch (error) {
-    if (error instanceof UploadFolderError) {
-      return NextResponse.json({ error: error.message }, { status: error.status });
-    }
-    if (error instanceof Error && error.message === 'Temporary upload expired before finalize') {
-      return NextResponse.json({ error: error.message }, { status: 410 });
-    }
-    if (error instanceof Error && error.message === 'Compute worker is required for DOCX conversion.') {
-      return NextResponse.json({ error: error.message }, { status: 503 });
-    }
-    if (isMissingBlobError(error)) {
-      return NextResponse.json({ error: 'Temporary upload missing. Upload bytes again and retry finalize.' }, { status: 409 });
-    }
-
-    serverLogger.error({
-      event: 'documents.blob.upload.finalize.failed',
-      error: errorToLog(error),
-    }, 'Failed to finalize uploaded documents');
-    return errorResponse(error, {
-      apiErrorMessage: 'Failed to finalize uploaded documents',
-      normalize: { code: 'DOCUMENTS_BLOB_UPLOAD_FINALIZE_FAILED', errorClass: 'storage' },
-    });
-  }
-}
