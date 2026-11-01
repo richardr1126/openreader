@@ -2,7 +2,7 @@ import * as ort from 'onnxruntime-node';
 import { readFile } from 'fs/promises';
 import type { LayoutRegion, PdfTextItem } from './document-layout';
 import { ensureModel, MODEL_CONFIG_PATH, MODEL_PREPROCESSOR_PATH } from './model';
-import { getOnnxThreadsPerJob } from '../../infrastructure/config';
+import { runLayoutInference } from './layout-inference';
 
 interface RunLayoutInput {
   pageWidth: number;
@@ -76,7 +76,6 @@ interface ModelPreprocessor {
   std: [number, number, number];
 }
 
-let sessionPromise: Promise<ort.InferenceSession> | null = null;
 let idToLabelPromise: Promise<Record<number, string>> | null = null;
 let preprocessorPromise: Promise<ModelPreprocessor> | null = null;
 let canvasFnsPromise: Promise<{
@@ -110,26 +109,6 @@ async function getCanvasFns(): Promise<{
     })();
   }
   return canvasFnsPromise;
-}
-
-async function getSession(): Promise<ort.InferenceSession> {
-  if (!sessionPromise) {
-    sessionPromise = (async () => {
-      const modelPath = await ensureModel();
-      const onnxThreadsPerJob = getOnnxThreadsPerJob();
-      const stableSessionOptions: ort.InferenceSession.SessionOptions = {
-        executionProviders: ['cpu'],
-        graphOptimizationLevel: 'all',
-        intraOpNumThreads: onnxThreadsPerJob,
-        interOpNumThreads: 1,
-        executionMode: 'sequential',
-      };
-      return ort.InferenceSession.create(modelPath, {
-        ...stableSessionOptions,
-      });
-    })();
-  }
-  return sessionPromise;
 }
 
 async function getIdToLabel(): Promise<Record<number, string>> {
@@ -272,8 +251,8 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
   }
 
   try {
-    const [session, idToLabel, preprocessor, canvasFns] = await Promise.all([
-      getSession(),
+    const [modelPath, idToLabel, preprocessor, canvasFns] = await Promise.all([
+      ensureModel(),
       getIdToLabel(),
       getPreprocessor(),
       getCanvasFns(),
@@ -281,7 +260,7 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
 
     const decodedPageImage = await canvasFns.loadImageFn(pageImage);
     const pixelValues = preprocessResized(decodedPageImage, preprocessor, canvasFns.createCanvasFn);
-    const output = await session.run({ pixel_values: pixelValues });
+    const output = await runLayoutInference(modelPath, pixelValues.data as Float32Array, pixelValues.dims);
 
     const logits = output.logits?.data as Float32Array | undefined;
     const predBoxes = output.pred_boxes?.data as Float32Array | undefined;

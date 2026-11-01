@@ -44,7 +44,10 @@ fs.rmSync(distDir, { recursive: true, force: true });
 
 const result = await build({
   absWorkingDir: workerDir,
-  entryPoints: { server: path.join(srcDir, 'server.ts') },
+  entryPoints: {
+    server: path.join(srcDir, 'server.ts'),
+    'inference/pdf/layout-inference-worker': path.join(srcDir, 'inference/pdf/layout-inference-worker.mjs'),
+  },
   outdir: distDir,
   // Chunks must sit beside server.js: worker-paths.ts derives the asset root
   // from its own module URL, which is whichever dist/ file it lands in.
