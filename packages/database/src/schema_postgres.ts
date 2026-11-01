@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, text, integer, real, bigint, boolean, primaryKey, index, uniqueIndex, jsonb, foreignKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, doublePrecision, bigint, boolean, primaryKey, index, uniqueIndex, jsonb, foreignKey, check } from 'drizzle-orm/pg-core';
 import { user } from './schema_auth_postgres';
 
 const PG_NOW_MS = sql`(extract(epoch from now()) * 1000)::bigint`;
@@ -135,6 +135,29 @@ export const documentSettings = pgTable('document_settings', {
     foreignColumns: [documents.id, documents.userId],
   }).onDelete('cascade'),
   index('idx_document_settings_user_id').on(table.userId),
+]);
+
+// What a user asked to have made, so the app can start the next step when the
+// worker reports back. Generation and artifact status stay in worker operations.
+export const audiobookRequests = pgTable('audiobook_requests', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  documentVersion: bigint('document_version', { mode: 'number' }).notNull(),
+  format: text('format').notNull(),
+  speed: doublePrecision('speed').notNull(),
+  chapterIndex: integer('chapter_index'),
+  // Resolved settings and provider references, never provider credentials.
+  settingsJson: jsonb('settings_json').notNull(),
+  planObjectKey: text('plan_object_key'),
+  createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
+}, (table) => [
+  foreignKey({
+    name: 'audiobook_requests_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
+  index('idx_audiobook_requests_user_document').on(table.userId, table.documentId),
 ]);
 
 export const userDocumentProgress = pgTable('user_document_progress', {

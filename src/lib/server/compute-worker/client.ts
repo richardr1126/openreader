@@ -203,6 +203,10 @@ export class ComputeWorkerClient {
     return this.requestJson('POST', '/v1/tts-playback/plans/jobs', input);
   }
 
+  resolveTtsPlaybackPlanOperation(input: TtsPlaybackPlanRequest): Promise<ComputeOperation | null> {
+    return this.requestJson('POST', '/v1/tts-playback/plans/resolve', input);
+  }
+
   prepareTtsPlaybackSession(
     input: TtsPlaybackSessionPrepareRequest,
     init?: { signal?: AbortSignal },

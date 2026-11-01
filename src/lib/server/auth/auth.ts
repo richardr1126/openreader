@@ -26,7 +26,7 @@ import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 // ...
 
 
-function getTrustedOrigins(): string[] {
+export function getTrustedOrigins(): string[] {
   const origins = new Set<string>();
   const baseOrigin = tryGetOrigin(process.env.BASE_URL);
   if (baseOrigin) origins.add(baseOrigin);

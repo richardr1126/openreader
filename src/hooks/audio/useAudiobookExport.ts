@@ -5,10 +5,10 @@ import {
   subscribeTtsExportArtifactEvents,
   subscribeTtsExportGenerationEvents,
 } from '@/lib/client/api/tts';
-import { describeExportIssue, describeExportRequestError } from '@/lib/client/audiobook-export-issues';
+import { describeAudiobookWait, describeExportIssue, describeExportRequestError } from '@/lib/client/audiobook-export-issues';
 import { useLatestRef } from '@/hooks/useLatestRef';
 import type { TtsDocumentAudioExportRequest } from '@/hooks/audio/useTtsDocumentExport';
-import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-export';
+import type { Audiobook, TtsExportAction } from '@/types/tts-export';
 
 // Chapter progress is a read model refresh, not a stream: SSE progress only
 // triggers it, at most this often, while the export sidebar is open.
@@ -36,7 +36,7 @@ export type AudiobookChapterDownloadState = { status: 'preparing'; progress: num
 type ResolveExport = (
   request: TtsDocumentAudioExportRequest,
   signal?: AbortSignal,
-) => Promise<TtsExportResolveSnapshot>;
+) => Promise<Audiobook>;
 
 /**
  * Saves a same-origin export file. The `download` attribute makes this a
@@ -75,7 +75,7 @@ export function useAudiobookExport(input: {
   resolve: ResolveExport;
 }) {
   const { documentId, isOpen, settingsKey, format, speed, resolve } = input;
-  const [snapshot, setSnapshot] = useState<TtsExportResolveSnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<Audiobook | null>(null);
   const [liveCounts, setLiveCounts] = useState<AudiobookExportLiveCounts | null>(null);
   const [artifactProgress, setArtifactProgress] = useState<number | null>(null);
   const [artifactPhase, setArtifactPhase] = useState<'assembling' | 'transcoding' | 'uploading' | null>(null);
@@ -87,6 +87,7 @@ export function useAudiobookExport(input: {
 
   const exportKey = settingsKey ? `${documentId}|${settingsKey}|${format}|${speed.toFixed(2)}` : null;
   const exportKeyRef = useLatestRef(exportKey);
+  const snapshotRef = useLatestRef(snapshot);
   const isOpenRef = useLatestRef(isOpen);
   const requestControllerRef = useRef<AbortController | null>(null);
   const lastRefreshAtRef = useRef(0);
@@ -122,11 +123,17 @@ export function useAudiobookExport(input: {
     if (!options?.quiet) setPendingAction(action);
     try {
       const includeProgress = options?.includeProgress ?? Boolean(options?.quiet);
-      const next = await resolve({ format, speed, action, includeProgress }, controller.signal);
+      const next = await resolve({
+        format,
+        speed,
+        action,
+        includeProgress,
+        ...(action === 'stop' && snapshotRef.current ? { audiobookId: snapshotRef.current.id } : {}),
+      }, controller.signal);
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
       lastRefreshAtRef.current = Date.now();
       refreshFailuresRef.current = 0;
-      setSnapshot((previous) => ({ ...next, progress: next.progress ?? previous?.progress ?? null }));
+      setSnapshot((previous) => ({ ...next, segments: next.segments ?? previous?.segments ?? null }));
       if (includeProgress) setLiveCounts(null);
       if (!options?.quiet) setRequestError(null);
       setRefreshError(null);
@@ -152,7 +159,7 @@ export function useAudiobookExport(input: {
         }
       }
     }
-  }, [exportKeyRef, format, resolve, speed]);
+  }, [exportKeyRef, format, resolve, snapshotRef, speed]);
 
   const refresh = useCallback(() => run('resolve', { quiet: true, includeProgress: false, urgent: true }), [run]);
   const refreshDetails = useCallback(() => run('resolve', { quiet: true, includeProgress: true }), [run]);
@@ -285,13 +292,23 @@ export function useAudiobookExport(input: {
     });
   }, [artifactOperationId, artifactState, documentId, reconnectIfClosed, refresh, streamEpoch]);
 
-  // Build (or rebuild after retried skips) the book file once every segment
-  // is settled. One attempt per artifact/count state avoids retry loops when
-  // the build fails or is admission-limited; Generate retries explicitly.
+  // A build held back by a compute limit is retried when the limit says it can
+  // be; the lookup advances it on the server.
+  const waitMs = artifactState === 'waiting' ? snapshot?.retryAfterMs ?? STREAM_RECONNECT_DELAY_MS : null;
+  useEffect(() => {
+    if (waitMs === null || !isOpen) return;
+    const timer = setTimeout(() => void refresh(), Math.max(STREAM_RECONNECT_DELAY_MS, waitMs));
+    return () => clearTimeout(timer);
+  }, [isOpen, refresh, snapshot, waitMs]);
+
+  // The server finishes what was asked for without a client. This builds what
+  // was not asked for yet, such as a finished book in another format, or
+  // rebuilds after retried skips. One attempt per artifact/count state avoids
+  // retry loops when the build fails; Generate retries explicitly.
   useEffect(() => {
     if (!snapshot || snapshot.generation.state !== 'complete') return;
     if (snapshot.artifact.state !== 'none' && snapshot.artifact.state !== 'stale') return;
-    const attemptKey = `${snapshot.artifactId}:${snapshot.progress?.completedSegments ?? 0}:${snapshot.progress?.skippedSegments ?? 0}`;
+    const attemptKey = `${snapshot.id}:${snapshot.segments?.completedSegments ?? 0}:${snapshot.segments?.skippedSegments ?? 0}`;
     if (autoBuildAttemptRef.current === attemptKey) return;
     autoBuildAttemptRef.current = attemptKey;
     void run('start');
@@ -319,9 +336,13 @@ export function useAudiobookExport(input: {
         // A chapter request may outlive Stop/Resume. It owns only its download;
         // the main request/SSE owner refreshes book state without this older
         // response rolling a newer generation snapshot back.
-        if (next.download) {
+        if (next.downloadUrl) {
           setChapter(null);
-          triggerDownload(next.download);
+          triggerDownload({ url: next.downloadUrl, filename: next.filename ?? '' });
+          return;
+        }
+        if (next.artifact.state === 'waiting') {
+          setChapter({ status: 'error', message: describeAudiobookWait(next.retryAfterMs) });
           return;
         }
         if (next.artifact.state === 'building' && next.artifact.operationId) {
@@ -375,7 +396,7 @@ export function useAudiobookExport(input: {
     artifactPhase,
     checkingCache,
     isChecking: snapshot === null && refreshError === null,
-    isLoadingChapters: snapshot !== null && snapshot.progress === null && refreshError === null,
+    isLoadingChapters: snapshot !== null && snapshot.segments === null && refreshError === null,
     refreshError,
     refresh,
     pendingAction,

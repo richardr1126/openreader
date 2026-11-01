@@ -2005,32 +2005,59 @@ causes, now fixed:
   provider slots (five minutes), showing `generating` with no progress. A run
   now takes over any lease held by a different generation run of the same
   session, since only the session's current run may settle a segment, and
-  provider slots use a short renewed lease. The resolve route reports an
+  provider slots use a short renewed lease. The audiobook routes report an
   unreachable worker as a retryable `503`, and a failed background refresh
   backs off and retries instead of opening an error dialog.
 - Terminal error sidecars still become one-second silence, but an explicit
   `retry-skipped` start regenerates them; artifacts are reused only while their
   generated/skipped counts match the current sidecars.
 
-`POST /api/tts/export/resolve` takes `action: resolve | start | retry-skipped |
-stop` and an optional `chapterIndex`, and returns a server-classified snapshot:
-generation state (`idle`, `queued`, `generating`, `complete`, `stopped`,
-`usage_limited`, `interrupted`, `failed`) with its cause, per-chapter progress
-from `POST /v1/tts-playback/exports/progress`, and artifact state (`none`,
-`building`, `ready`, `stale`, `failed`). Progress is keyed by the cache scope
-and plan rather than a session: export sessions expire, and without one a book
-whose planned segments are all settled is reported `complete` instead of
-offering to generate it again. Stop cancels the export
-session through `POST /v1/tts-playback/sessions/:sessionId/cancel`, conditional
-on the generation run the request observed so a stop racing a resume never
-cancels the replacement run; cached audio is kept. A chapter artifact needs only that chapter's segments settled, so it
-downloads while the rest of the book generates. Chapters are plan locator
+Audiobooks are served from `/api/v1/documents/{id}/audiobooks`. `POST` starts one
+(`retrySkipped` for a retry, `chapter` for one chapter), `POST .../lookup` reads the
+state of given settings without creating anything, and `GET` and `DELETE` on
+`.../{audiobookId}` read and stop a requested one. Each returns a server-classified
+snapshot: generation state (`idle`, `preparing`, `queued`, `generating`, `complete`,
+`stopped`, `usage_limited`, `interrupted`, `failed`) with its cause, per-chapter
+progress from `POST /v1/tts-playback/exports/progress`, and artifact state (`none`,
+`building`, `waiting`, `ready`, `stale`, `failed`). Progress is keyed by the cache
+scope and plan rather than a session: export sessions expire, and without one a book
+whose planned segments are all settled is reported `complete` instead of offering to
+generate it again. Stop cancels the export session through
+`POST /v1/tts-playback/sessions/:sessionId/cancel`, conditional on the generation run
+the request observed so a stop racing a resume never cancels the replacement run;
+cached audio is kept. A chapter artifact needs only that chapter's segments settled,
+so it downloads while the rest of the book generates. Chapters are plan locator
 groups shared with M4B markers; EPUB rows use TOC labels.
 
-The export sidebar is presentation over `useAudiobookExport`, which owns
-resolve requests, the operation SSE subscriptions (SSE only updates counters and
-triggers a throttled snapshot refresh while open), one automatic file build per
-settled state, and per-chapter downloads.
+An export needs no browser open. `audiobook_requests` records what was asked for, and
+`advanceAudiobook` (`src/lib/server/audiobooks/audiobooks.ts`) starts whichever step
+is due, on a request and on the worker's `POST /api/internal/compute/limits/complete`
+callback for a plan, generation or export operation. Status stays in worker
+operations. It does not restart a stopped, failed or usage-limited run. A compute
+limit at the final compile reports artifact state `waiting` and retries on the next
+read or finished operation. The callback has no client IP or guest device ID, so a
+guest's export compiles when they next have it open.
+
+Plan discovery uses the worker's read-only `POST /v1/tts-playback/plans/resolve`;
+reading an existing plan does not reserve admission again or re-enqueue a failed
+plan. Audiobook commands serialize per owner/document, including formats sharing
+generation, using a process queue with SQLite and an advisory transaction lock
+with Postgres. Intent stores the generation operation reference, so session expiry
+does not erase a failure or usage limit and silently resume synthesis. Operation
+status remains worker-owned. A failed stale-artifact rebuild needs explicit retry.
+Chapter Stop is rejected because a chapter must not cancel whole-book generation.
+
+PDF layout's native ONNX session creation and inference run on one warm dedicated
+thread, with the existing CPU budget and bounded PDF job scheduling. ONNX Runtime's
+Node promise API calls the native implementation synchronously; running it on the
+main worker event loop delayed unrelated plans, HTTP responses and event delivery.
+Tensor input buffers transfer to the inference thread rather than retaining a
+second full input copy. PDF parsing, artifacts and compute policy remain worker-owned.
+
+The export sidebar is presentation over `useAudiobookExport`, which owns audiobook
+requests and the operation SSE subscriptions (SSE only updates counters and triggers
+a throttled snapshot refresh while open), one automatic file build per settled state
+for settings not yet requested, and per-chapter downloads.
 
 ### Playback startup priority and audiobook artifact retention
 

@@ -1,9 +1,10 @@
-/** Audiobook export control-plane contract shared by the resolve route and UI. */
+/** Audiobook contract shared by the `/api/v1` audiobook routes and the UI. */
 
 export type TtsExportAction = 'resolve' | 'start' | 'retry-skipped' | 'stop';
 
 /**
  * - idle: no export run exists yet for these settings.
+ * - preparing: the reading plan is being built, before any audio.
  * - queued: waiting for a worker slot (another export is generating).
  * - generating: a live worker run is producing segments.
  * - complete: every segment is settled (audio or skipped silence).
@@ -14,6 +15,7 @@ export type TtsExportAction = 'resolve' | 'start' | 'retry-skipped' | 'stop';
  */
 export type TtsExportGenerationState =
   | 'idle'
+  | 'preparing'
   | 'queued'
   | 'generating'
   | 'complete'
@@ -22,8 +24,11 @@ export type TtsExportGenerationState =
   | 'interrupted'
   | 'failed';
 
-/** `stale` is a ready file built before skipped segments were retried. */
-export type TtsExportArtifactState = 'none' | 'building' | 'ready' | 'stale' | 'failed';
+/**
+ * `stale` is a ready file built before skipped segments were retried.
+ * `waiting` is a build held back by a compute limit; it retries on its own.
+ */
+export type TtsExportArtifactState = 'none' | 'building' | 'waiting' | 'ready' | 'stale' | 'failed';
 
 export type TtsExportIssue = {
   code: string | null;
@@ -52,21 +57,37 @@ export type TtsExportProgress = {
   chapters: TtsExportChapterProgress[];
 };
 
-export type TtsExportResolveSnapshot = {
-  sessionId: string;
-  artifactId: string;
-  chapterIndex: number | null;
+export type AudiobookStatus =
+  | TtsExportGenerationState
+  | 'building'
+  | 'waiting'
+  | 'ready';
+
+export type Audiobook = {
+  /** Stable for one document version, settings, format, speed and chapter. */
+  id: string;
+  documentId: string;
+  status: AudiobookStatus;
+  /** Settled share of the planned segments, from 0 to 1, once known. */
+  progress: number | null;
+  format: 'mp3' | 'm4b';
+  speed: number;
+  chapter: number | null;
+  /** Present only when the requested book or chapter file is ready. */
+  downloadUrl: string | null;
+  filename: string | null;
+  webUrl: string;
+  /** How long a limited step waits before it is tried again. */
+  retryAfterMs: number | null;
   generation: {
     state: TtsExportGenerationState;
     operationId: string | null;
     issue: TtsExportIssue | null;
   };
-  progress: TtsExportProgress | null;
+  segments: TtsExportProgress | null;
   artifact: {
     state: TtsExportArtifactState;
     operationId: string | null;
     issue: TtsExportIssue | null;
   };
-  /** Present only when the requested book or chapter file is ready. */
-  download: { url: string; filename: string } | null;
 };

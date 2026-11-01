@@ -14,6 +14,7 @@ export const computeLimitEvents = usePostgres ? postgresSchema.computeLimitEvent
 export const userPreferences = usePostgres ? postgresSchema.userPreferences : sqliteSchema.userPreferences;
 export const userOnboarding = usePostgres ? postgresSchema.userOnboarding : sqliteSchema.userOnboarding;
 export const documentSettings = usePostgres ? postgresSchema.documentSettings : sqliteSchema.documentSettings;
+export const audiobookRequests = usePostgres ? postgresSchema.audiobookRequests : sqliteSchema.audiobookRequests;
 export const userDocumentProgress = usePostgres ? postgresSchema.userDocumentProgress : sqliteSchema.userDocumentProgress;
 export const userDocumentBookmarks = usePostgres ? postgresSchema.userDocumentBookmarks : sqliteSchema.userDocumentBookmarks;
 export const documentPreviews = usePostgres ? postgresSchema.documentPreviews : sqliteSchema.documentPreviews;

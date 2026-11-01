@@ -1,8 +1,8 @@
 import { TtsExportRequestError } from '@/lib/client/api/tts';
 import type {
+  Audiobook,
   TtsExportGenerationState,
   TtsExportIssue,
-  TtsExportResolveSnapshot,
 } from '@/types/tts-export';
 
 const MAX_DETAIL_LENGTH = 180;
@@ -71,20 +71,24 @@ export function describeGenerationState(
   }
 }
 
-export function describeSkippedSegments(snapshot: TtsExportResolveSnapshot | null): string | null {
-  const skipped = snapshot?.progress?.skippedSegments ?? 0;
+export function describeSkippedSegments(snapshot: Audiobook | null): string | null {
+  const skipped = snapshot?.segments?.skippedSegments ?? 0;
   if (skipped <= 0) return null;
-  const cause = describeExportIssue(snapshot?.progress?.lastSkipIssue ?? null);
+  const cause = describeExportIssue(snapshot?.segments?.lastSkipIssue ?? null);
   return `${skipped} ${skipped === 1 ? 'segment' : 'segments'} could not be narrated and ${skipped === 1 ? 'was' : 'were'} replaced with a short pause.${cause ? ` Last error: ${cause}` : ''}`;
+}
+
+export function describeAudiobookWait(retryAfterMs: number | null): string {
+  return retryAfterMs
+    ? `Too many audiobook requests right now. Try again in ${formatWait(retryAfterMs)}.`
+    : 'Too many audiobook requests right now. Try again shortly.';
 }
 
 /** Message for a failed export request (admission limits, network, server). */
 export function describeExportRequestError(error: unknown): string {
   if (error instanceof TtsExportRequestError) {
     if (error.code === 'COMPUTE_ADMISSION_RATE_LIMITED' || error.status === 429) {
-      return error.retryAfterMs
-        ? `Too many audiobook requests right now. Try again in ${formatWait(error.retryAfterMs)}.`
-        : 'Too many audiobook requests right now. Try again shortly.';
+      return describeAudiobookWait(error.retryAfterMs);
     }
     return error.message;
   }

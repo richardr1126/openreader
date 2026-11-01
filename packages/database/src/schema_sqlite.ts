@@ -135,6 +135,29 @@ export const documentSettings = sqliteTable('document_settings', {
   index('idx_document_settings_user_id').on(table.userId),
 ]);
 
+// What a user asked to have made, so the app can start the next step when the
+// worker reports back. Generation and artifact status stay in worker operations.
+export const audiobookRequests = sqliteTable('audiobook_requests', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  documentVersion: integer('document_version').notNull(),
+  format: text('format').notNull(),
+  speed: real('speed').notNull(),
+  chapterIndex: integer('chapter_index'),
+  // Resolved settings and provider references, never provider credentials.
+  settingsJson: text('settings_json').notNull(),
+  planObjectKey: text('plan_object_key'),
+  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+}, (table) => [
+  foreignKey({
+    name: 'audiobook_requests_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
+  index('idx_audiobook_requests_user_document').on(table.userId, table.documentId),
+]);
+
 export const userDocumentProgress = sqliteTable('user_document_progress', {
   userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
   documentId: text('document_id').notNull(),

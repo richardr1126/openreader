@@ -54,7 +54,7 @@ export type ReaderBootstrapResolveOptions = {
   preparationOperationId?: string | null;
 };
 
-function storedRecord(value: unknown): Record<string, unknown> {
+export function storedRecord(value: unknown): Record<string, unknown> {
   if (typeof value === 'string') {
     try {
       const parsed = JSON.parse(value);
@@ -81,8 +81,8 @@ function toReadingPosition(row: {
   };
 }
 
-async function ensurePdfReady(
-  request: NextRequest,
+export async function ensurePdfReady(
+  ip: string | null,
   documentId: string,
   scope: ResolvedSegmentDocumentScope,
   options: ReaderBootstrapResolveOptions,
@@ -120,7 +120,7 @@ async function ensurePdfReady(
         subject: {
           userId: scope.userId,
           isAnonymous: scope.isAnonymousUser,
-          ip: getClientIp(request),
+          ip,
         },
         create: () => createOrReuseCurrentPdfParseOperation(input),
       });
@@ -174,6 +174,22 @@ async function ensurePdfReady(
 }
 
 
+/** Samples a bounded prefix so large PDFs do not allocate a second full text. */
+export function detectParsedPdfLanguage(parsedDocument: ParsedPdfDocument): string | null {
+  const samples: string[] = [];
+  let remaining = 60_000;
+  for (const page of parsedDocument.pages) {
+    for (const block of page.blocks) {
+      if (remaining <= 0) break;
+      const text = block.text.slice(0, remaining);
+      samples.push(text);
+      remaining -= text.length + 1;
+    }
+    if (remaining <= 0) break;
+  }
+  return detectTextLanguage(samples.join(' '));
+}
+
 export async function resolveReaderBootstrapState(
   request: NextRequest,
   documentId: string,
@@ -192,7 +208,7 @@ export async function resolveReaderBootstrapState(
   }
   let parsedPdfDocument: ParsedPdfDocument | null = null;
   if (scope.readerType === 'pdf') {
-    const pdfState = await ensurePdfReady(request, documentId, scope, options);
+    const pdfState = await ensurePdfReady(getClientIp(request), documentId, scope, options);
     if ('result' in pdfState) return pdfState;
     parsedPdfDocument = pdfState.parsedDocument;
   }
@@ -232,23 +248,8 @@ export async function resolveReaderBootstrapState(
     storedRecord(settingsRows[0]?.dataJson),
   );
   const initialPosition = toReadingPosition(progressRows[0]);
-  // Reuse the worker's parsed text; never parse a PDF again in the app. Bound
-  // sampling before joining so large PDFs do not allocate a second full text.
-  let detectedLanguage: string | null = null;
-  if (!row.language && parsedPdfDocument) {
-    const samples: string[] = [];
-    let remaining = 60_000;
-    for (const page of parsedPdfDocument.pages) {
-      for (const block of page.blocks) {
-        if (remaining <= 0) break;
-        const text = block.text.slice(0, remaining);
-        samples.push(text);
-        remaining -= text.length + 1;
-      }
-      if (remaining <= 0) break;
-    }
-    detectedLanguage = detectTextLanguage(samples.join(' '));
-  }
+  // Reuse the worker's parsed text; never parse a PDF again in the app.
+  const detectedLanguage = !row.language && parsedPdfDocument ? detectParsedPdfLanguage(parsedPdfDocument) : null;
   const documentLanguage = row.language || detectedLanguage;
   const planResult = await resolveReaderPlayback(
     request, documentId, scope, settings, storedRecord(preferenceRows[0]?.dataJson), documentLanguage,

@@ -323,6 +323,26 @@ export function registerPlaybackJobRoutes(
     return toComputeOperation(op);
   });
 
+  app.post('/v1/tts-playback/plans/resolve', {
+    schema: {
+      body: jsonSchema(ttsPlaybackPlanOperationCreateSchema),
+      response: { 200: jsonSchema(computeOperationSchema.nullable()), 400: errorResponseSchema },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackPlanOperationCreateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    const planSignature = computePlaybackPlanSignature({
+      ...parsed.data,
+      sessionId: `plan:${parsed.data.documentId}:${parsed.data.settingsHash}`,
+    });
+    const index = await deps.operationStateStore.getOpIndex?.(buildTtsPlaybackPlanOperationKey({ ...parsed.data, planSignature }));
+    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    return operation ? toComputeOperation(operation) : null;
+  });
+
   app.post('/v1/tts-playback/plans/jobs', {
     schema: {
       body: jsonSchema(ttsPlaybackPlanOperationCreateSchema),

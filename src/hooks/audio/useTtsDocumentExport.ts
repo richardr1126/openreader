@@ -2,11 +2,11 @@
 
 import { useCallback, type MutableRefObject } from 'react';
 
-import { resolveTtsExport } from '@/lib/client/api/tts';
+import { lookupAudiobook, startAudiobook, stopAudiobook, TtsExportRequestError } from '@/lib/client/api/tts';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { TtsPlaybackPlanRequest } from '@/hooks/audio/useTtsPlayback';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
-import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-export';
+import type { Audiobook, TtsExportAction } from '@/types/tts-export';
 
 export type TtsDocumentAudioExportRequest = {
   format: 'mp3' | 'm4b';
@@ -14,6 +14,8 @@ export type TtsDocumentAudioExportRequest = {
   action: TtsExportAction;
   chapterIndex?: number;
   includeProgress?: boolean;
+  /** The audiobook a stop applies to. */
+  audiobookId?: string;
 };
 
 type UseTtsDocumentExportInput = {
@@ -33,7 +35,7 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
   const resolveDocumentAudioExport = useCallback(async (
     options: TtsDocumentAudioExportRequest,
     signal?: AbortSignal,
-  ): Promise<TtsExportResolveSnapshot> => {
+  ): Promise<Audiobook> => {
     const request = buildPlaybackPlanRequest();
     if (!request) {
       throw new Error('No document is ready for audio export.');
@@ -49,21 +51,34 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
       throw new Error('The worker playback plan was empty for export.');
     }
 
-    return resolveTtsExport({
-      documentId: request.payload.documentId,
+    const { documentId } = request.payload;
+    const payload = {
       settings: request.payload.settings,
       ...(request.payload.planning ? { planning: request.payload.planning } : {}),
-      startIntent: { selectedOrdinal: 0 },
-      ...(plan.planId ? { planId: plan.planId } : {}),
       planObjectKey: plan.planObjectKey,
-      ...(plan.planSignature ? { planSignature: plan.planSignature } : {}),
-      generationExtent: 'document',
       format: options.format,
       speed: options.speed,
-      action: options.action,
       includeProgress: options.includeProgress,
-      ...(options.chapterIndex === undefined ? {} : { chapterIndex: options.chapterIndex }),
-    }, request.headers, signal);
+      ...(options.chapterIndex === undefined ? {} : { chapter: options.chapterIndex }),
+    };
+    switch (options.action) {
+      case 'start':
+        return startAudiobook(documentId, payload, signal);
+      case 'retry-skipped':
+        return startAudiobook(documentId, { ...payload, retrySkipped: true }, signal);
+      case 'stop':
+        if (options.audiobookId) {
+          try {
+            return await stopAudiobook(documentId, options.audiobookId, signal);
+          } catch (error) {
+            // Its request already ended, so there is nothing left to stop.
+            if (!(error instanceof TtsExportRequestError) || error.status !== 404) throw error;
+          }
+        }
+        return lookupAudiobook(documentId, payload, signal);
+      default:
+        return lookupAudiobook(documentId, payload, signal);
+    }
   }, [applyWorkerPlan, buildPlaybackPlanRequest, playbackPlanRef]);
 
   return { resolveDocumentAudioExport };

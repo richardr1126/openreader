@@ -1,6 +1,6 @@
 # Public API refactor
 
-Status: accepted; nothing here is implemented yet.
+Status: accepted; phase 1 is implemented, later phases are not.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -132,6 +132,9 @@ All routes are under `/api/v1`.
 | `POST /documents/{id}/audiobooks` | Start an audiobook, or return the matching existing one |
 | `GET /documents/{id}/audiobooks/{audiobookId}` | Status, progress and download link |
 | `DELETE /documents/{id}/audiobooks/{audiobookId}` | Stop generation |
+| `POST /documents/{id}/audiobooks/lookup` | Read the state of given settings without creating anything |
+| `GET /documents/{id}/audiobooks/events?opId=` | Live progress for one of its operations |
+| `GET /documents/{id}/audiobooks/files/{artifactId}` | Download the finished file |
 | `GET`, `POST /folders` | List or create folders |
 | `PATCH`, `DELETE /folders/{id}` | Rename or delete a folder |
 
@@ -365,4 +368,101 @@ self-hosted servers.
 
 ## Implementation history
 
-Nothing has landed yet.
+### Phase 1: Audiobooks
+
+Delivered: the `audiobook_requests` table (migration `0027`, not yet applied to
+production), `advanceAudiobook`, the audiobook routes, the principal helper with cookie
+support, the error shape, the moved export UI, and removal of `/api/tts/export/*`.
+
+Where it differs from the plan above:
+
+- **The existing completion signal is reused.** The signal is `limits/complete`, which
+  already fires for every finished operation. The app now also advances audiobooks from
+  it, in `after()`, because the worker awaits the callback before acknowledging its job.
+  A read-only worker `POST /v1/tts-playback/plans/resolve` distinguishes plan discovery
+  from enqueueing: status reads do not spend admission again or retry a failed plan.
+- **PDF parse is not an `advanceAudiobook` step.** The settings hash needs the detected
+  language, so a request using saved settings on an unparsed PDF starts the parse and
+  returns `409 DOCUMENT_PREPARING` with a retry hint until it is ready. A closed-tab
+  request therefore has to retry until the parse has finished.
+- **Three more routes.** `lookup` exists because the web app must read the state of its
+  current settings without creating a request. `events` and `files` replace the old
+  export events and download routes.
+- **The web app sends explicit settings.** It passes `settings`, `planning` and
+  `planObjectKey` so its cache identity matches the reader. Third parties use saved
+  settings and the optional `voice`.
+- **Explicit plan references are checked.** The plan artifact must match the document,
+  version and reader type, and its stored owner (when present) must match the caller.
+  Legacy artifacts without owner metadata remain readable; bearer-token review is
+  still required in phase 4.
+- **A chapter request never starts generation.** It builds a chapter whose segments are
+  settled, and creates a row only while its file is building or waiting.
+- **`downloadUrl` is relative.** `webUrl` is absolute, from `BASE_URL`.
+- **Stop deletes the request.** `DELETE` returns the stopped audiobook; a later `GET` of
+  that ID is `404`. A changed document version also deletes the row.
+- **Commands are serialized per owner/document.** SQLite uses a process-local queue;
+  Postgres uses a transaction-scoped advisory lock across app instances. This includes
+  formats sharing the same generation session, so a signal/GET cannot double-admit
+  a compile and an in-flight advance cannot restart work after Stop. Chapter Stop is
+  rejected, as in the replaced route.
+- **An operation reference survives session expiry.** `settingsJson` also records the
+  generation operation ID, never its status or credentials. Reads use worker state to
+  preserve failures/usage limits after the session expires. A missing operation needs
+  explicit Resume. Transient reads after enqueueing retain the intent.
+- **Events require operation ownership.** Document ownership alone is insufficient
+  because document IDs identify content shared by different users. The admission must
+  link the requested operation to the caller.
+- **Failed stale-file builds do not loop.** A failed rebuild reports `failed` even when
+  an older stale file exists, and needs an explicit retry.
+- **Saved voice overrides resolve language first.** A requested voice participates in
+  automatic language selection before the audio settings hash is derived.
+
+Separate pre-existing worker fix found during acceptance: ONNX Runtime Node 1.30.0
+executes native session creation/inference synchronously inside `setImmediate`, despite
+returning promises. PDF layout inference now runs on one warm dedicated thread with
+the same CPU budget. No compute defaults, browser timeouts, assertions, retries or
+Playwright worker counts changed.
+
+Evidence (2026-11-01):
+
+- Before the worker fix, two complete branch matrices had 4 and 3 reader failures;
+  an isolated HEAD snapshot with the same stage instrumentation had 5. Playback was
+  skipped by project dependencies in those runs. One branch plan spent 3,672 ms in
+  artifact persistence overlapping a 3,658 ms native PDF inference. Queueing was not
+  the cause of that plan's delay. Completion callback round trips had median 37 ms
+  and maximum 1,075 ms before isolation, versus 24 ms and 324 ms afterward; deferred
+  audiobook advancement is not on the worker's awaited response path.
+- A controlled same-process heartbeat probe using the installed native runtime and
+  identical model/input/thread count measured a 440 ms maximum main-loop gap for
+  direct session creation/inference and 25 ms with the dedicated inference thread.
+  The first full matrix after isolation passed all earlier reader failures; its sole
+  failure was a provider-cleanup HTTP connection reset after the UI journey completed.
+  That reset has no confirmed product fix. Safe socket diagnostics in the final
+  matrix recorded no request resets, and the cleanup case passed; its cause remains
+  unconfirmed rather than being attributed to machine load.
+- On a disposable stack, a signed-in account started an 11-segment MP3 in the visible
+  export panel, then the tab was closed at 0/11. With no browser tab or advancing status
+  request, generation finished in 50.34 seconds, its callback queued assembly about
+  26 ms later, and assembly finished in 74 ms. Storage metadata proved the ready file
+  existed before reopening. The authorized file route downloaded 2,451,742 bytes;
+  `ffprobe` verified 153.23 seconds. The reopened panel showed READY and its Download
+  control also saved the MP3.
+- A separate 7-segment export was stopped at 2/7, then its tab closed. Its intent was
+  deleted, its draining worker run ended, and no replacement run or whole-book artifact
+  appeared. A completed book's final M4B compile returned `waiting` under an exhausted
+  test quota, then `building` and `ready` after restoring the policy and reading status.
+  All changes were confined to disposable local state, and that stack was stopped.
+- Full Vitest: 1,612 passed across 239 files. Complete Playwright: 79 passed in
+  2.7 minutes, including both real Chromium/WebKit playback journeys (about 1.6 minutes
+  each); none skipped. Both application/worker TypeScript checks, `pnpm build`,
+  `lint:route-errors`, `check:compute-boundary` and `check:install-profile` passed.
+  The browser run used a throwaway config only to capture server output and reuse
+  the immediately preceding production build; projects, workers, retries and
+  assertions were unchanged. Temporary diagnostic logging was removed from product
+  code before that build/run. Port 3003 was free after both stacks stopped.
+
+Remaining documented limits: saved-settings PDF requests still require a retry after
+`DOCUMENT_PREPARING`; guests advance only on their own requests; owner-less legacy
+plan metadata remains compatible pending the phase-4 authorization review. No release,
+commit, push or production migration was performed. Migration 0027 still needs the
+owner-coordinated production upgrade.

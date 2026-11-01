@@ -1,0 +1,835 @@
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { NextRequest } from 'next/server';
+
+const hoisted = vi.hoisted(() => ({
+  resolveSession: vi.fn(),
+  resolveArtifact: vi.fn(),
+  createPlayback: vi.fn(),
+  createArtifact: vi.fn(),
+  createAdmitted: vi.fn(),
+  exportProgress: vi.fn(),
+  cancelSession: vi.fn(),
+  artifactId: vi.fn(),
+  getOperation: vi.fn(),
+  plan: vi.fn(),
+  readPlan: vi.fn(),
+  isAnonymous: { value: false },
+  rows: [] as Array<Record<string, unknown>>,
+}));
+
+// A small table: filters compare the mocked column names below.
+vi.mock('drizzle-orm', () => ({
+  eq: (column: string, value: unknown) => [[column, value]],
+  and: (...filters: Array<Array<[string, unknown]>>) => filters.flat(),
+}));
+
+vi.mock('@openreader/database/schema', () => ({
+  audiobookRequests: { id: 'id', userId: 'userId', documentId: 'documentId', planObjectKey: 'planObjectKey' },
+  documentSettings: {},
+  documents: {},
+  userPreferences: {},
+}));
+
+const authUser = { user: { id: 'authUserId', isAnonymous: 'isAnonymous' } };
+vi.mock('@openreader/database/schema-auth-sqlite', () => authUser);
+vi.mock('@openreader/database/schema-auth-postgres', () => authUser);
+
+vi.mock('@openreader/database', () => {
+  const matches = (filters: Array<[string, unknown]>) => (row: Record<string, unknown>) => (
+    filters.every(([column, value]) => row[column] === value)
+  );
+  return {
+    db: {
+      select: () => ({
+        from: (table: unknown) => ({
+          where: (filters: Array<[string, unknown]>) => {
+            const rows = table === authUser.user
+              ? [{ isAnonymous: hoisted.isAnonymous.value }]
+              : hoisted.rows.filter(matches(filters));
+            return Object.assign(Promise.resolve(rows), { limit: async () => rows });
+          },
+        }),
+      }),
+      insert: () => ({
+        values: (row: Record<string, unknown>) => ({
+          onConflictDoNothing: () => ({
+            returning: async () => {
+              if (hoisted.rows.some((existing) => existing.id === row.id)) return [];
+              hoisted.rows.push(row);
+              return [{ id: row.id }];
+            },
+          }),
+        }),
+      }),
+      update: () => ({
+        set: (patch: Record<string, unknown>) => ({
+          where: async (filters: Array<[string, unknown]>) => {
+            hoisted.rows.filter(matches(filters)).forEach((row) => Object.assign(row, patch));
+          },
+        }),
+      }),
+      delete: () => ({
+        where: async (filters: Array<[string, unknown]>) => {
+          const remove = matches(filters);
+          hoisted.rows.splice(0, hoisted.rows.length, ...hoisted.rows.filter((row) => !remove(row)));
+        },
+      }),
+    },
+  };
+});
+
+vi.mock('@/lib/server/reader/bootstrap', () => ({
+  storedRecord: (value: unknown) => (typeof value === 'string' ? JSON.parse(value) : value),
+  ensurePdfReady: vi.fn(),
+  detectParsedPdfLanguage: vi.fn(),
+}));
+
+vi.mock('@/lib/server/reader/playback', () => ({
+  createAdmittedPlaybackPlanOperation: hoisted.plan,
+  resolveDefaultPlaybackRequest: vi.fn(),
+}));
+
+vi.mock('@/lib/server/tts/playback-plans', () => ({ readTtsPlaybackPlanArtifact: hoisted.readPlan }));
+
+vi.mock('@/lib/server/api/principal', () => ({
+  resolveApiPrincipal: vi.fn(async () => ({
+    userId: 'user-1',
+    isAnonymous: false,
+    scopes: ['documents:read', 'documents:write', 'audio:generate'],
+  })),
+}));
+
+vi.mock('@openreader/tts/playback-scope', () => ({
+  buildTtsPlaybackCanonicalSessionId: vi.fn(() => 'session-1'),
+  buildTtsPlaybackExportArtifactId: hoisted.artifactId,
+}));
+
+vi.mock('@/lib/server/compute-worker/client', async (importOriginal) => ({
+  isComputeWorkerUnavailableError: (
+    await importOriginal<typeof import('@/lib/server/compute-worker/client')>()
+  ).isComputeWorkerUnavailableError,
+  isComputeWorkerAvailable: vi.fn(() => true),
+  ComputeWorkerClient: class ComputeWorkerClient {
+    resolveTtsPlaybackSession = hoisted.resolveSession;
+    resolveTtsPlaybackExportArtifact = hoisted.resolveArtifact;
+    createTtsPlaybackOperation = hoisted.createPlayback;
+    createTtsPlaybackExportArtifactOperation = hoisted.createArtifact;
+    getTtsPlaybackExportProgress = hoisted.exportProgress;
+    cancelTtsPlaybackSession = hoisted.cancelSession;
+    getOperation = hoisted.getOperation;
+  },
+}));
+
+vi.mock('@/lib/server/admin/settings', () => ({
+  getRuntimeConfig: vi.fn(async () => ({ computeLimitPolicies: {} })),
+}));
+
+vi.mock('@/lib/server/logger', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/server/logger')>(),
+  createRequestLogger: vi.fn(() => ({ logger: { warn: vi.fn(), error: vi.fn() } })),
+}));
+
+vi.mock('@/lib/server/tts/playback-request', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/server/tts/playback-request')>(),
+  buildTtsPlaybackPlanningInput: vi.fn(async () => ({
+    settingsHash: 'settings-1',
+    settingsJson: {},
+    planning: { selectedOrdinal: 0 },
+  })),
+}));
+
+vi.mock('@/lib/server/tts/segments-auth', () => ({
+  resolveUserDocumentScope: vi.fn(async () => ({
+    userId: 'user-1',
+    storageUserId: 'user-1',
+    documentVersion: 1,
+    readerType: 'html',
+    isAnonymousUser: false,
+  })),
+}));
+
+vi.mock('@/lib/server/compute-limits/run-admitted', () => ({
+  ComputeAdmissionLimitedError: class ComputeAdmissionLimitedError extends Error {
+    code = 'COMPUTE_ADMISSION_RATE_LIMITED';
+    retryAfterMs = 1_000;
+  },
+  createAdmittedComputeOperation: hoisted.createAdmitted,
+}));
+
+vi.mock('@/lib/server/rate-limit/request-ip', () => ({
+  getClientIp: vi.fn(() => '127.0.0.1'),
+}));
+
+vi.mock('@/lib/server/rate-limit/device-id', () => ({
+  getOrCreateDeviceId: vi.fn(() => null),
+  setDeviceIdCookie: vi.fn(),
+}));
+
+vi.mock('@/lib/server/compute-limits/admission', () => ({
+  buildTtsPlaybackAdmissionRequestKey: vi.fn(() => 'playback-request-1'),
+}));
+
+function chapter(index: number, completed: number, skipped = 0, planned = 10) {
+  return {
+    index,
+    title: `Chapter ${index + 1}`,
+    spineHref: null,
+    page: null,
+    plannedSegments: planned,
+    completedSegments: completed,
+    skippedSegments: skipped,
+    generatingSegments: 0,
+    durationMs: completed * 1_000,
+  };
+}
+
+function summary(chapters: ReturnType<typeof chapter>[]) {
+  return {
+    plannedSegments: chapters.reduce((sum, row) => sum + row.plannedSegments, 0),
+    completedSegments: chapters.reduce((sum, row) => sum + row.completedSegments, 0),
+    skippedSegments: chapters.reduce((sum, row) => sum + row.skippedSegments, 0),
+    lastSkipError: null,
+    chapters,
+  };
+}
+
+const noArtifact = { artifact: null, operation: null };
+const queuedArtifact = {
+  artifact: null,
+  operation: { opId: 'artifact-op-1', status: 'queued' },
+};
+const completeSession = {
+  session: { status: 'succeeded' },
+  operation: { opId: 'generation-op-1', status: 'succeeded' },
+  progress: null,
+};
+
+const route = { params: Promise.resolve({ id: 'doc-1' }) };
+const baseUrl = 'http://localhost/api/v1/documents/doc-1/audiobooks';
+
+function jsonRequest(url: string, body: Record<string, unknown>) {
+  return new NextRequest(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      format: 'mp3',
+      speed: 1,
+      settings: { providerRef: 'provider', providerType: 'openai', ttsModel: 'tts-1', voice: 'alloy', nativeSpeed: 1 },
+      planObjectKey: 'plans/doc-1.json',
+      ...body,
+    }),
+  });
+}
+
+async function start(body: Record<string, unknown> = {}) {
+  const { POST } = await import('../../src/app/api/v1/documents/[id]/audiobooks/route');
+  const response = await POST(jsonRequest(baseUrl, body), route);
+  return { status: response.status, json: await response.json() };
+}
+
+async function lookup(body: Record<string, unknown> = {}) {
+  const { POST } = await import('../../src/app/api/v1/documents/[id]/audiobooks/lookup/route');
+  const response = await POST(jsonRequest(`${baseUrl}/lookup`, body), route);
+  return { status: response.status, json: await response.json() };
+}
+
+function itemContext(audiobookId: string) {
+  return { params: Promise.resolve({ id: 'doc-1', audiobookId }) };
+}
+
+async function get(audiobookId: string) {
+  const { GET } = await import('../../src/app/api/v1/documents/[id]/audiobooks/[audiobookId]/route');
+  const response = await GET(new NextRequest(`${baseUrl}/${audiobookId}`), itemContext(audiobookId));
+  return { status: response.status, json: await response.json() };
+}
+
+async function stop(audiobookId: string) {
+  const { DELETE } = await import('../../src/app/api/v1/documents/[id]/audiobooks/[audiobookId]/route');
+  const response = await DELETE(new NextRequest(`${baseUrl}/${audiobookId}`, { method: 'DELETE' }), itemContext(audiobookId));
+  return { status: response.status, json: await response.json() };
+}
+
+describe('/api/v1/documents/[id]/audiobooks', () => {
+  beforeEach(() => {
+    for (const mock of [
+      hoisted.resolveSession, hoisted.resolveArtifact, hoisted.createPlayback, hoisted.createArtifact,
+      hoisted.createAdmitted, hoisted.exportProgress, hoisted.cancelSession, hoisted.artifactId,
+      hoisted.getOperation, hoisted.plan,
+      hoisted.readPlan,
+    ]) mock.mockReset();
+    // Vite sets BASE_URL to its own base path under test.
+    vi.stubEnv('BASE_URL', 'http://localhost:3003');
+    hoisted.rows.length = 0;
+    hoisted.isAnonymous.value = false;
+    hoisted.readPlan.mockResolvedValue({ artifact: {
+      storageUserId: 'user-1', documentId: 'doc-1', documentVersion: 1, readerType: 'html',
+    } });
+    hoisted.getOperation.mockResolvedValue(null);
+    hoisted.artifactId.mockImplementation((input: { chapterIndex?: number }) => (
+      input.chapterIndex === undefined ? 'abcdef1234567890' : `abcdef12345678c${input.chapterIndex}`
+    ));
+    hoisted.createAdmitted.mockImplementation(
+      async (input: { create: () => Promise<unknown> }) => input.create(),
+    );
+    hoisted.createPlayback.mockResolvedValue({ opId: 'generation-op-2', status: 'queued' });
+    hoisted.createArtifact.mockResolvedValue({ opId: 'artifact-op-1', status: 'queued' });
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 10)]));
+    hoisted.cancelSession.mockResolvedValue({ sessionId: 'session-1', status: 'canceled' });
+    hoisted.resolveArtifact
+      .mockResolvedValue(noArtifact)
+      .mockResolvedValueOnce(noArtifact)
+      .mockResolvedValueOnce(queuedArtifact);
+  });
+
+  test('uses the durable succeeded session even when its operation status is stale', async () => {
+    hoisted.resolveSession.mockResolvedValue({
+      ...completeSession,
+      operation: { opId: 'generation-op-old', status: 'failed' },
+    });
+
+    const { status, json } = await start();
+
+    expect(status).toBe(202);
+    expect(json.generation.state).toBe('complete');
+    expect(json.artifact).toEqual({ state: 'building', operationId: 'artifact-op-1', issue: null });
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+    expect(hoisted.createAdmitted).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'tts_playback_export',
+      requestKey: 'abcdef1234567890',
+    }));
+  });
+
+  test('reports a book whose session expired as complete from its cache scope', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0 }, operation: null,
+    });
+
+    const found = await lookup({ includeProgress: false });
+    expect(found.json.generation.state).toBe('complete');
+    expect(found.json.segments.chapters).toHaveLength(2);
+    expect(found.json.filename).toBe('book.mp3');
+    expect(hoisted.exportProgress).toHaveBeenCalledWith({
+      storageUserId: 'user-1',
+      documentId: 'doc-1',
+      documentVersion: 1,
+      settingsHash: 'settings-1',
+      planObjectKey: 'plans/doc-1.json',
+    });
+
+    await start();
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+  });
+
+  test('offers generation for an idle scope with segments still missing', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 4)]));
+    const { json } = await lookup({ includeProgress: false });
+    expect(json.generation.state).toBe('idle');
+    expect(json.segments.completedSegments).toBe(14);
+  });
+
+  test('finds a ready file without entering a slow chapter scan', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockImplementation(() => new Promise(() => undefined));
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 2234, skippedSegments: 0 }, operation: null,
+    });
+    const { status, json } = await lookup({ includeProgress: false });
+    expect(status).toBe(200);
+    expect(json.filename).toBe('book.mp3');
+    expect(json.segments).toBeNull();
+    expect(hoisted.exportProgress).not.toHaveBeenCalled();
+  });
+
+  test('acknowledges Stop without waiting for chapter storage', async () => {
+    const running = {
+      session: { status: 'running', generationRunId: 'observed-run' },
+      operation: { opId: 'generation-op', status: 'running' },
+    };
+    hoisted.resolveSession.mockResolvedValue(running);
+    const { json: started } = await start({ includeProgress: false });
+    hoisted.resolveSession.mockReset();
+    hoisted.resolveSession.mockResolvedValueOnce(running)
+      .mockResolvedValue({ session: { status: 'canceled' }, operation: null });
+    hoisted.exportProgress.mockImplementation(() => new Promise(() => undefined));
+    const { json } = await stop(started.id);
+    expect(hoisted.cancelSession).toHaveBeenCalledWith('session-1', 'observed-run');
+    expect(json.generation.state).toBe('stopped');
+    expect(hoisted.exportProgress).not.toHaveBeenCalled();
+    expect(hoisted.rows).toHaveLength(0);
+  });
+
+  test('detects a stale file using durable operation counts during fast discovery', async () => {
+    hoisted.resolveSession.mockResolvedValue({ ...completeSession,
+      progress: { completedCount: 2234, plannedCount: 2234, skippedCount: 0 },
+    });
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { generatedSegments: 2233, skippedSegments: 1 }, operation: null,
+    });
+    const { json } = await lookup({ includeProgress: false });
+    expect(json.artifact.state).toBe('stale');
+    expect(json.downloadUrl).toBeNull();
+  });
+
+  test('rechecks generation status before creating the artifact in the same request', async () => {
+    hoisted.resolveSession
+      .mockResolvedValueOnce({ session: null, operation: null, progress: null })
+      .mockResolvedValueOnce(completeSession);
+    hoisted.exportProgress.mockResolvedValueOnce(summary([chapter(0, 0), chapter(1, 0)]));
+
+    const { status } = await start();
+
+    expect(status).toBe(202);
+    expect(hoisted.createPlayback).toHaveBeenCalledOnce();
+    expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+    // Export generation is admitted separately from interactive playback.
+    expect(hoisted.createAdmitted.mock.calls.map(([input]) => input.action)).toEqual([
+      'tts_playback_document',
+      'tts_playback_export',
+    ]);
+  });
+
+  test('reports a running session whose run ended as interrupted and resumes it', async () => {
+    const interrupted = {
+      session: { status: 'running' },
+      operation: { opId: 'generation-op-1', status: 'failed', error: { code: 'WORKER_ORPHANED_OP', message: 'stale' } },
+      progress: null,
+    };
+    hoisted.resolveSession.mockResolvedValue(interrupted);
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 4)]));
+
+    const resolved = await lookup();
+    expect(resolved.json.generation).toEqual({
+      state: 'interrupted',
+      operationId: 'generation-op-1',
+      issue: { code: 'WORKER_ORPHANED_OP', message: 'stale' },
+    });
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+
+    hoisted.resolveSession
+      .mockResolvedValueOnce(interrupted)
+      .mockResolvedValueOnce({ session: { status: 'running' }, operation: { opId: 'generation-op-2', status: 'queued' }, progress: null });
+    const resumed = await start();
+    // The new run waits for a document slot before it starts producing audio.
+    expect(resumed.json.generation.state).toBe('queued');
+    expect(hoisted.createPlayback).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      generationExtent: 'document',
+    }));
+    expect(hoisted.createPlayback.mock.calls[0]?.[0]).not.toHaveProperty('retryErroredSegments');
+    expect(hoisted.createArtifact).not.toHaveBeenCalled();
+  });
+
+  test('gives concurrent starts of the same stopped export one run, and a later resume a new one', async () => {
+    const stopped = {
+      session: { status: 'canceled', generationRunId: 'run-1', updatedAt: 100 },
+      operation: { opId: 'generation-op-1', status: 'succeeded' },
+      progress: null,
+    };
+    hoisted.resolveSession.mockResolvedValue(stopped);
+
+    await Promise.all([start(), start()]);
+    const [first, second] = hoisted.createPlayback.mock.calls.map(([input]) => input.generationRunId);
+    expect(first).toBe(second);
+
+    hoisted.resolveSession.mockResolvedValue({
+      ...stopped,
+      session: { status: 'canceled', generationRunId: first, updatedAt: 200 },
+    });
+    await start();
+    expect(hoisted.createPlayback.mock.calls[2]?.[0].generationRunId).not.toBe(first);
+  });
+
+  test('keeps a usage-limited run resumable instead of building an incomplete book', async () => {
+    hoisted.resolveSession.mockResolvedValue({
+      session: { status: 'succeeded', stopReason: 'usage_limit', lastError: 'COMPUTE_USAGE_LIMIT_REACHED' },
+      operation: { opId: 'generation-op-1', status: 'succeeded' },
+      progress: null,
+    });
+
+    const { json } = await lookup();
+
+    expect(json.generation.state).toBe('usage_limited');
+    expect(json.generation.issue.code).toBe('COMPUTE_USAGE_LIMIT_REACHED');
+    expect(json.downloadUrl).toBeNull();
+
+    await start();
+    expect(hoisted.createPlayback).toHaveBeenCalledOnce();
+    expect(hoisted.createArtifact).not.toHaveBeenCalled();
+  });
+
+  test('a stopped audiobook stays stopped until it is asked for again', async () => {
+    hoisted.resolveSession.mockResolvedValue({
+      session: { status: 'running', generationRunId: 'run-1' },
+      operation: { opId: 'generation-op-1', status: 'running' },
+      progress: null,
+    });
+    const { json: started } = await start();
+    hoisted.resolveSession.mockResolvedValue({ session: { status: 'canceled' }, operation: null, progress: null });
+
+    expect((await get(started.id)).json.generation.state).toBe('stopped');
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+
+    await stop(started.id);
+    expect((await get(started.id)).status).toBe(404);
+  });
+
+  test('session expiry does not turn a failed run into a new synthesis request', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: { status: 'running' },
+      operation: { opId: 'generation-op-1', status: 'running' } });
+    const { json } = await start();
+    hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 3)]));
+    hoisted.getOperation.mockResolvedValue({ opId: 'generation-op-1', status: 'failed', error: { message: 'provider failed' } });
+    const found = await get(json.id);
+    expect(found.json.generation.state).toBe('failed');
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+  });
+
+  test('retries skipped segments only when some exist', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 8, 2), chapter(1, 10)]));
+
+    await start({ retrySkipped: true });
+
+    expect(hoisted.createPlayback).toHaveBeenCalledWith(expect.objectContaining({ retryErroredSegments: true }));
+
+    hoisted.createPlayback.mockClear();
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 10)]));
+    await start({ retrySkipped: true });
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+  });
+
+  test('rebuilds a ready artifact whose skipped segments were since generated', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.resolveArtifact.mockReset();
+    hoisted.resolveArtifact.mockResolvedValue({
+      artifact: { artifactId: 'abcdef1234567890', generatedSegments: 18, skippedSegments: 2 },
+      operation: { opId: 'artifact-op-0', status: 'succeeded' },
+    });
+
+    const resolved = await lookup();
+    expect(resolved.json.artifact.state).toBe('stale');
+    expect(resolved.json.downloadUrl).toBeNull();
+
+    await start();
+    expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+  });
+
+  test('a failed stale-artifact rebuild waits for an explicit retry instead of looping on signals', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    await start();
+    hoisted.createArtifact.mockClear();
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { generatedSegments: 18, skippedSegments: 2 },
+      operation: { opId: 'failed-build', status: 'failed', error: { message: 'compile failed' } },
+    });
+    hoisted.getOperation.mockResolvedValue({ subject: { kind: 'tts_playback_export', documentId: 'doc-1' } });
+    const { advanceAudiobooksAfterOperation } = await import('@/lib/server/audiobooks/audiobooks');
+    await advanceAudiobooksAfterOperation('failed-build', 'user-1');
+    expect((await lookup()).json.artifact.state).toBe('failed');
+    expect(hoisted.createArtifact).not.toHaveBeenCalled();
+    await start();
+    expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+  });
+
+  test('returns the ready file with its server filename for the download link', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 10)]));
+    hoisted.resolveArtifact.mockReset();
+    hoisted.resolveArtifact.mockResolvedValue({
+      artifact: {
+        artifactId: 'abcdef1234567890',
+        generatedSegments: 20,
+        skippedSegments: 0,
+        dispositionFilename: 'openreader-document.mp3',
+      },
+      operation: null,
+    });
+
+    const { json } = await lookup();
+
+    expect(json.artifact.state).toBe('ready');
+    expect(json.downloadUrl).toBe('/api/v1/documents/doc-1/audiobooks/files/abcdef1234567890');
+    expect(json.filename).toBe('openreader-document.mp3');
+  });
+
+  test('builds a settled chapter while the rest of the book is still generating', async () => {
+    hoisted.resolveSession.mockResolvedValue({
+      session: { status: 'running' },
+      operation: { opId: 'generation-op-1', status: 'running' },
+      progress: null,
+    });
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 9, 1), chapter(1, 3)]));
+
+    const { json } = await start({ chapter: 0 });
+
+    expect(json.chapter).toBe(0);
+    expect(json.generation.state).toBe('generating');
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+    expect(hoisted.createArtifact).toHaveBeenCalledWith(expect.objectContaining({
+      artifactId: 'abcdef12345678c0',
+      chapterIndex: 0,
+    }));
+
+    hoisted.createArtifact.mockClear();
+    await start({ chapter: 1 });
+    expect(hoisted.createArtifact).not.toHaveBeenCalled();
+  });
+
+  test('stopping a chapter cannot cancel the shared whole-book run', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: { status: 'running', generationRunId: 'book-run' },
+      operation: { opId: 'generation-op-1', status: 'running' } });
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 3)]));
+    const { json } = await start({ chapter: 0 });
+    expect((await stop(json.id)).status).toBe(400);
+    expect(hoisted.cancelSession).not.toHaveBeenCalled();
+  });
+
+  test('rejects chapter indices that are not non-negative integers', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    for (const chapter of ['', false, '0', -1, 1.5]) {
+      const { status } = await lookup({ chapter });
+      expect(status).toBe(400);
+    }
+    expect(hoisted.resolveArtifact).not.toHaveBeenCalled();
+  });
+
+  test('uses the real settings parser and never persists credential fields', async () => {
+    const rejected = await start({ settings: {} });
+    expect(rejected.status).toBe(400);
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    await start({ settings: { providerRef: 'provider', providerType: 'openai', ttsModel: 'tts-1',
+      voice: 'alloy', nativeSpeed: 1, apiKey: 'must-not-persist', baseUrl: 'must-not-persist' } });
+    expect(JSON.stringify(hoisted.rows)).not.toContain('must-not-persist');
+  });
+
+  test('rejects a plan for another owner before starting work', async () => {
+    hoisted.readPlan.mockResolvedValue({ artifact: {
+      storageUserId: 'other-user', documentId: 'doc-1', documentVersion: 1, readerType: 'html',
+    } });
+    expect((await start()).status).toBe(403);
+    expect(hoisted.createAdmitted).not.toHaveBeenCalled();
+    expect(hoisted.rows).toHaveLength(0);
+  });
+
+  test('serializes a signal and GET so they build and admit the file only once', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: { status: 'running' },
+      operation: { opId: 'generation-op-1', status: 'running' } });
+    const { json } = await start();
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.resolveArtifact.mockReset().mockResolvedValue(noArtifact);
+    hoisted.getOperation.mockResolvedValue({ subject: { kind: 'tts_playback', documentId: 'doc-1' } });
+    hoisted.createArtifact.mockImplementation(async () => {
+      hoisted.resolveArtifact.mockResolvedValue(queuedArtifact);
+      return queuedArtifact.operation;
+    });
+    hoisted.createAdmitted.mockClear();
+    const { advanceAudiobooksAfterOperation } = await import('@/lib/server/audiobooks/audiobooks');
+    await Promise.all([get(json.id), advanceAudiobooksAfterOperation('generation-op-1', 'user-1')]);
+    expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+    expect(hoisted.createAdmitted).toHaveBeenCalledOnce();
+  });
+
+  test('a GET waiting behind Stop observes the deleted intent and cannot start work', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: { status: 'running', generationRunId: 'run-1' },
+      operation: { opId: 'generation-op-1', status: 'running' } });
+    const { json } = await start();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let entered!: () => void;
+    const cancelling = new Promise<void>((resolve) => { entered = resolve; });
+    hoisted.cancelSession.mockImplementation(async () => {
+      entered();
+      await gate;
+      hoisted.resolveSession.mockResolvedValue({ session: { status: 'canceled' }, operation: null });
+    });
+    const stopping = stop(json.id);
+    await cancelling;
+    const reading = get(json.id);
+    release();
+    await stopping;
+    expect((await reading).status).toBe(404);
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+  });
+
+  test('rejects a chapter it cannot find, even for a complete book without progress', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue(null);
+
+    const { status } = await start({ chapter: 7 });
+
+    expect(status).toBe(404);
+    expect(hoisted.createAdmitted).not.toHaveBeenCalled();
+    expect(hoisted.createArtifact).not.toHaveBeenCalled();
+  });
+
+  test('a limit at compile keeps the request, reports waiting and retries on the next read', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.resolveArtifact.mockReset().mockResolvedValue(noArtifact);
+    const { ComputeAdmissionLimitedError } = await import('@/lib/server/compute-limits/run-admitted');
+    hoisted.createAdmitted.mockRejectedValueOnce(new ComputeAdmissionLimitedError(90_000));
+
+    const { status, json } = await start();
+
+    expect(status).toBe(202);
+    expect(json.status).toBe('waiting');
+    expect(json.artifact.state).toBe('waiting');
+    expect(json.retryAfterMs).toBe(1_000);
+    expect(hoisted.rows).toHaveLength(1);
+
+    await get(json.id);
+    expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+  });
+
+  test('a limit before any audio refuses the request and remembers nothing', async () => {
+    hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 0), chapter(1, 0)]));
+    const { ComputeAdmissionLimitedError } = await import('@/lib/server/compute-limits/run-admitted');
+    hoisted.createAdmitted.mockRejectedValue(new ComputeAdmissionLimitedError(90_000));
+
+    const { status, json } = await start();
+
+    expect(status).toBe(429);
+    expect(json.error).toEqual(expect.objectContaining({
+      code: 'COMPUTE_ADMISSION_RATE_LIMITED',
+      retryAfterMs: 1_000,
+    }));
+    expect(hoisted.rows).toHaveLength(0);
+  });
+
+  test('a failed read after enqueueing preserves the intent for closed-tab completion', async () => {
+    hoisted.resolveSession.mockReset()
+      .mockResolvedValueOnce({ session: null, operation: null, progress: null })
+      .mockRejectedValueOnce(new TypeError('fetch failed'));
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 0)]));
+    expect((await start()).status).toBe(503);
+    expect(hoisted.createPlayback).toHaveBeenCalledOnce();
+    expect(hoisted.rows).toHaveLength(1);
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10)]));
+    await get(String(hoisted.rows[0].id));
+    expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+  });
+
+  test('a repeated request returns the same audiobook, and another format gets its own', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    const first = await start();
+    const second = await start();
+    const m4b = await start({ format: 'm4b' });
+
+    expect(second.json.id).toBe(first.json.id);
+    expect(m4b.json.id).not.toBe(first.json.id);
+    expect(hoisted.rows).toHaveLength(2);
+  });
+
+  test('looking up settings nobody asked for never starts work', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    const { json } = await lookup();
+
+    expect(json.artifact.state).toBe('none');
+    expect(hoisted.createAdmitted).not.toHaveBeenCalled();
+    expect(hoisted.rows).toHaveLength(0);
+    expect((await get(json.id)).status).toBe(404);
+  });
+
+  test('adopts a run that predates its request so it can be stopped', async () => {
+    hoisted.resolveSession.mockResolvedValue({
+      session: { status: 'running' },
+      operation: { opId: 'generation-op-1', status: 'running' },
+      progress: null,
+    });
+    await lookup();
+    expect(hoisted.rows).toHaveLength(1);
+  });
+
+  describe('worker completion signal', () => {
+    async function requested() {
+      hoisted.getOperation.mockResolvedValue({ opId: 'op-1', subject: { kind: 'tts_playback', documentId: 'doc-1' } });
+      hoisted.resolveSession.mockResolvedValueOnce({
+        session: { status: 'running' },
+        operation: { opId: 'generation-op-1', status: 'running' },
+        progress: null,
+      });
+      await start();
+      hoisted.createArtifact.mockClear();
+      hoisted.resolveSession.mockResolvedValue(completeSession);
+      hoisted.resolveArtifact.mockReset().mockResolvedValue(noArtifact);
+    }
+
+    test('compiles the file with no client when generation finishes', async () => {
+      await requested();
+      const { advanceAudiobooksAfterOperation } = await import('@/lib/server/audiobooks/audiobooks');
+
+      await advanceAudiobooksAfterOperation('generation-op-1', 'user-1');
+
+      expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+      expect(hoisted.createAdmitted).toHaveBeenLastCalledWith(expect.objectContaining({
+        action: 'tts_playback_export',
+        subject: { userId: 'user-1', isAnonymous: false },
+      }));
+    });
+
+    test('leaves a guest export for their next request, which compiles it', async () => {
+      await requested();
+      hoisted.isAnonymous.value = true;
+      const { advanceAudiobooksAfterOperation } = await import('@/lib/server/audiobooks/audiobooks');
+
+      await advanceAudiobooksAfterOperation('generation-op-1', 'user-1');
+      expect(hoisted.createArtifact).not.toHaveBeenCalled();
+
+      await lookup();
+      expect(hoisted.createArtifact).toHaveBeenCalledOnce();
+    });
+
+    test('does not resume a failed run', async () => {
+      await requested();
+      hoisted.resolveSession.mockResolvedValue({
+        session: { status: 'failed', lastError: 'boom' },
+        operation: { opId: 'generation-op-1', status: 'failed' },
+        progress: null,
+      });
+      hoisted.createPlayback.mockClear();
+      const { advanceAudiobooksAfterOperation } = await import('@/lib/server/audiobooks/audiobooks');
+
+      await advanceAudiobooksAfterOperation('generation-op-1', 'user-1');
+
+      expect(hoisted.createPlayback).not.toHaveBeenCalled();
+      expect(hoisted.createArtifact).not.toHaveBeenCalled();
+    });
+
+    test('runs the plan step first when no plan was supplied, then generation on its signal', async () => {
+      hoisted.plan.mockResolvedValueOnce({ opId: 'plan-op', status: 'running' });
+      hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+      hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 0), chapter(1, 0)]));
+      const { json } = await start({ planObjectKey: undefined });
+      expect(json.status).toBe('preparing');
+      expect(hoisted.createPlayback).not.toHaveBeenCalled();
+
+      hoisted.plan.mockResolvedValueOnce({
+        opId: 'plan-op',
+        status: 'succeeded',
+        result: { planObjectKey: 'plans/doc-1.json' },
+      });
+      const { advanceAudiobooksAfterOperation } = await import('@/lib/server/audiobooks/audiobooks');
+      hoisted.getOperation.mockResolvedValue({ opId: 'plan-op', subject: { kind: 'tts_playback_plan', documentId: 'doc-1' } });
+      await advanceAudiobooksAfterOperation('plan-op', 'user-1');
+
+      expect(hoisted.createPlayback).toHaveBeenCalledOnce();
+      expect(hoisted.rows[0]?.planObjectKey).toBe('plans/doc-1.json');
+    });
+  });
+
+  test('reports an unreachable (for example redeploying) worker as retryable', async () => {
+    hoisted.resolveSession.mockRejectedValue(new TypeError('fetch failed'));
+
+    const { status, json } = await lookup();
+
+    expect(status).toBe(503);
+    expect(json.error).toEqual(expect.objectContaining({
+      code: 'COMPUTE_WORKER_UNAVAILABLE',
+      message: expect.stringContaining('compute worker is unavailable'),
+    }));
+  });
+});

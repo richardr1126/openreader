@@ -12,7 +12,8 @@ import { assertAuthoritativePlaybackPlan, normalizePlaybackPlan } from '@/lib/sh
 import { listAdminProviders } from '@/lib/server/admin/providers';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
 import { ComputeWorkerClient, getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
-import type { TtsPlaybackPlanResult } from '@/lib/server/compute-worker/protocol';
+import type { ComputeOperation, TtsPlaybackPlanResult } from '@/lib/server/compute-worker/protocol';
+import type { ComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { ComputeAdmissionLimitedError, createAdmittedComputeOperation } from '@/lib/server/compute-limits/run-admitted';
 import { getClientIp } from '@/lib/server/rate-limit/request-ip';
@@ -38,23 +39,15 @@ function preferenceContext(
   };
 }
 
-export async function resolveReaderPlayback(
-  request: NextRequest,
+/** Resolves the playback request for a user's saved voice and document settings. */
+export async function resolveDefaultPlaybackRequest(
   documentId: string,
   scope: ResolvedSegmentDocumentScope,
   settings: ReturnType<typeof mergeDocumentSettings>,
   storedPreferences: Record<string, unknown>,
   documentLanguage?: string | null,
-): Promise<ReaderBootstrapResolution | { plan: ReaderPayload['plan']; playback: ReaderPlaybackPreparation }> {
-  if (!isComputeWorkerAvailable()) {
-    return {
-      result: {
-        status: 'error',
-        message: 'The compute worker required for reader playback is unavailable.',
-        retryable: true,
-      },
-    };
-  }
+  voiceOverride?: string,
+): Promise<ParsedTtsPlaybackRequestBody | { error: string }> {
   const [runtimeConfig, providers] = await Promise.all([
     getResolvedRuntimeConfig(),
     listAdminProviders(),
@@ -88,7 +81,7 @@ export async function resolveReaderPlayback(
   // Resolve the same unsaved default as the voice picker before naming the
   // audio cache. Plans may be shared by different voices; the plan's settings
   // hash therefore cannot identify the initial cached-audio view.
-  let voice = bookVoice.voice;
+  let voice = voiceOverride || bookVoice.voice;
   // A static catalogue needs no credentials. An unconfigured installation
   // must still support reading with an estimated timeline; only generation
   // requires a configured provider.
@@ -98,7 +91,7 @@ export async function resolveReaderPlayback(
       fallbackProvider: runtimeConfig.defaultTtsProvider,
     });
     if ('error' in credentials) {
-      return { result: { status: 'error', message: 'The playback provider is unavailable.', retryable: true } };
+      return { error: 'The playback provider is unavailable.' };
     }
     const voices = await resolveVoices({
       provider: credentials.provider,
@@ -114,7 +107,7 @@ export async function resolveReaderPlayback(
     documentLanguage,
     voice,
   });
-  const parsed: ParsedTtsPlaybackRequestBody = {
+  return {
     documentId,
     settings: {
       providerRef: provider.providerRef,
@@ -139,26 +132,64 @@ export async function resolveReaderPlayback(
       ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds }
       : {}),
   };
+}
+
+/** Creates or reuses the canonical plan operation for one playback request. */
+export async function createAdmittedPlaybackPlanOperation(input: {
+  parsed: ParsedTtsPlaybackRequestBody;
+  scope: ResolvedSegmentDocumentScope;
+  planningInput: Awaited<ReturnType<typeof buildTtsPlaybackPlanningInput>>;
+  policy: ComputeLimitPolicyDocument;
+  ip: string | null;
+  retryFailed?: boolean;
+}): Promise<ComputeOperation> {
+  const { parsed, scope, planningInput } = input;
+  const client = new ComputeWorkerClient();
+  const request = toTtsPlaybackPlanRequest({ parsed, scope, ...planningInput });
+  const existing = await client.resolveTtsPlaybackPlanOperation(request);
+  if (existing && (existing.status !== 'failed' || input.retryFailed === false)) return existing;
+  return createAdmittedComputeOperation({
+    policy: input.policy,
+    action: 'tts_playback_plan',
+    requestKey: `${parsed.documentId}:${scope.documentVersion}:${planningInput.settingsHash}`,
+    subject: {
+      userId: scope.userId,
+      isAnonymous: scope.isAnonymousUser,
+      ip: input.ip,
+    },
+    create: () => client.createTtsPlaybackPlanOperation(request),
+  });
+}
+
+export async function resolveReaderPlayback(
+  request: NextRequest,
+  documentId: string,
+  scope: ResolvedSegmentDocumentScope,
+  settings: ReturnType<typeof mergeDocumentSettings>,
+  storedPreferences: Record<string, unknown>,
+  documentLanguage?: string | null,
+): Promise<ReaderBootstrapResolution | { plan: ReaderPayload['plan']; playback: ReaderPlaybackPreparation }> {
+  if (!isComputeWorkerAvailable()) {
+    return {
+      result: {
+        status: 'error',
+        message: 'The compute worker required for reader playback is unavailable.',
+        retryable: true,
+      },
+    };
+  }
+  const parsed = await resolveDefaultPlaybackRequest(documentId, scope, settings, storedPreferences, documentLanguage);
+  if ('error' in parsed) return { result: { status: 'error', message: parsed.error, retryable: true } };
+  const runtimeConfig = await getResolvedRuntimeConfig();
   const planningInput = await buildTtsPlaybackPlanningInput(parsed, scope);
   let operation;
   try {
-    operation = await createAdmittedComputeOperation({
+    operation = await createAdmittedPlaybackPlanOperation({
+      parsed,
+      scope,
+      planningInput,
       policy: runtimeConfig.computeLimitPolicies,
-      action: 'tts_playback_plan',
-      requestKey: `${documentId}:${scope.documentVersion}:${planningInput.settingsHash}`,
-      subject: {
-        userId: scope.userId,
-        isAnonymous: scope.isAnonymousUser,
-        ip: getClientIp(request),
-      },
-      create: () => new ComputeWorkerClient().createTtsPlaybackPlanOperation(
-        toTtsPlaybackPlanRequest({
-          parsed,
-          scope,
-          ...planningInput,
-          planning: planningInput.planning,
-        }),
-      ),
+      ip: getClientIp(request),
     });
   } catch (error) {
     if (!(error instanceof ComputeAdmissionLimitedError)) throw error;
@@ -225,7 +256,7 @@ export async function resolveReaderPlayback(
         settings: parsed.settings,
         planning: {
           maxBlockLength: parsed.maxBlockLength,
-          language,
+          language: parsed.language,
           ...(scope.readerType === 'pdf' ? { skipBlockKinds: parsed.skipBlockKinds } : {}),
         },
       },
