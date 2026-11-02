@@ -1,3 +1,4 @@
+import { STORAGE_LIMIT_MESSAGES, isStorageLimitCode } from '@openreader/runtime-config/compute-limit-broker';
 import { TtsExportRequestError } from '@/lib/client/api/tts';
 import type {
   Audiobook,
@@ -25,14 +26,9 @@ function detail(message: string | null): string | null {
 /** One-sentence cause for a worker or provider failure code. */
 export function describeExportIssue(issue: TtsExportIssue | null): string | null {
   if (!issue) return null;
+  if (isStorageLimitCode(issue.code)) return STORAGE_LIMIT_MESSAGES[issue.code];
   const raw = detail(issue.message);
   switch (issue.code) {
-    case 'ACCOUNT_STORAGE_LIMIT_REACHED':
-      return 'Account storage limit reached. Free space in Storage (/app/settings?section=storage).';
-    case 'GUEST_STORAGE_LIMIT_REACHED':
-      return 'Guest storage limit reached. Free space in Storage (/app/settings?section=storage). You can also create an account (/signup).';
-    case 'GUEST_STORAGE_POOL_FULL':
-      return 'Total guest storage limit reached. Free space in Storage (/app/settings?section=storage). You can also create an account (/signup).';
     case 'COMPUTE_USAGE_LIMIT_REACHED':
       return 'The text-to-speech usage limit for your account was reached.';
     case 'COMPUTE_QUEUE_AGE_EXCEEDED':
@@ -67,7 +63,7 @@ export function describeGenerationState(
     case 'stopped':
       return 'Generation stopped. Audio generated so far is kept; resume to continue.';
     case 'usage_limited':
-      if (issue?.code?.includes('STORAGE')) return cause;
+      if (isStorageLimitCode(issue?.code)) return cause;
       return 'Generation paused: the text-to-speech usage limit was reached. Audio generated so far is kept; resume after the limit resets.';
     case 'interrupted':
       return `Generation stopped before finishing.${cause ? ` ${cause}` : ''} Resume to continue from the audio already generated.`;

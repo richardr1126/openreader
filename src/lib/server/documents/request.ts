@@ -19,7 +19,6 @@ export async function documentApi(request: NextRequest, scope: ApiScope, run: (c
     const principal = await resolveApiPrincipal(request, scope);
     if (principal instanceof Response) return principal;
     if (!isS3Configured()) return apiErrorResponse(503, 'OBJECT_STORAGE_REQUIRED', 'Document storage is unavailable.');
-
     const response = await run({ principal, schedule: after, subject: {
       userId: principal.userId, isAnonymous: principal.isAnonymous,
     } });

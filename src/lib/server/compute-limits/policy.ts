@@ -48,10 +48,9 @@ export function deriveComputeScopeKey(scope: ComputeLimitScope, value: string): 
 export function resolveComputeScope(
   scope: ComputeLimitScope,
   subject: ComputeLimitSubject,
-): ResolvedComputeScope | null {
+): ResolvedComputeScope {
   if (scope === 'site') return { scope, key: 'site' };
-  if (scope === 'user') return { scope, key: deriveComputeScopeKey(scope, subject.userId) };
-  return null;
+  return { scope, key: deriveComputeScopeKey(scope, subject.userId) };
 }
 
 export function computePolicyVersion(policy: ComputeLimitPolicyDocument): number {

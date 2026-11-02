@@ -4,7 +4,7 @@ import { useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { AudioWaveIcon, DocumentIcon, TrashIcon } from '@/components/icons/Icons';
+import { AudioWaveIcon, DatabaseIcon, DocumentIcon, TrashIcon } from '@/components/icons/Icons';
 import { Button, RowIcon } from '@/components/ui';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useDesktopBridge } from '@/hooks/useDesktopBridge';
@@ -44,10 +44,31 @@ function UsageRow({
   );
 }
 
+function StorageMeter({ used, cap }: { used: number; cap: number }) {
+  const percent = Math.min(100, Math.round((used / cap) * 100));
+  return (
+    <div className="px-3 pb-3">
+      <div
+        className="h-2 overflow-hidden rounded-full bg-surface-sunken"
+        role="progressbar"
+        aria-label="Storage used"
+        aria-valuemin={0}
+        aria-valuemax={cap}
+        aria-valuenow={Math.min(used, cap)}
+      >
+        <div
+          className={`h-full rounded-full transition-[width] duration-slow ${used >= cap ? 'bg-accent' : 'bg-secondary-accent'}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function StorageSkeleton() {
   return (
     <div className={`animate-pulse ${CARD_CLASS}`} aria-label="Loading storage usage" aria-busy="true">
-      {[true, true, false].map((hasAction, index) => (
+      {[false, false, true].map((hasAction, index) => (
         <div key={index} className="flex min-h-14 items-center gap-3 px-3 py-2.5">
           <div className="h-7 w-7 shrink-0 rounded-md bg-offbase" />
           <div className="min-w-0 flex-1 space-y-1.5">
@@ -120,10 +141,21 @@ export function StorageSettingsPanel() {
     <section className="space-y-3" aria-label="Library storage">
       {usageQuery.isPending ? <StorageSkeleton /> : (
         <div className={CARD_CLASS}>
-          <UsageRow label="Total storage" icon={<DocumentIcon />} bytes={usage?.totalBytes}
-            detail={usage?.capBytes == null ? undefined : `of ${formatBytes(usage.capBytes)}`} />
-          <UsageRow label="Documents" icon={<DocumentIcon />} bytes={usage?.documentBytes}
-            detail={usage ? plural(usage.documentCount, 'document') : undefined} />
+          <div>
+            <UsageRow
+              label="Total storage"
+              icon={<DatabaseIcon />}
+              bytes={usage?.totalBytes}
+              detail={usage?.capBytes == null ? undefined : `of ${formatBytes(usage.capBytes)}`}
+            />
+            {usage?.capBytes == null ? null : <StorageMeter used={usage.totalBytes} cap={usage.capBytes} />}
+          </div>
+          <UsageRow
+            label="Documents"
+            icon={<DocumentIcon />}
+            bytes={usage?.documentBytes}
+            detail={usage ? plural(usage.documentCount, 'document') : undefined}
+          />
           <UsageRow
             label="Audio"
             icon={<AudioWaveIcon />}

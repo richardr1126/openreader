@@ -17,15 +17,20 @@ async function broker(body: Record<string, unknown>): Promise<{ revision: number
   return response.json();
 }
 
+/** Segments, sidecars and exports: everything charged to a user as audio, per document under `docs/`. */
+export function userAudioDocumentRoots(storageUserId: string, s3Prefix: string): string[] {
+  return [
+    `${s3Prefix}/tts_playback_segments_audio_v1/users/${encodeURIComponent(storageUserId)}/docs/`,
+    `${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(storageUserId)}/docs/`,
+    `${ttsPlaybackExportArtifactScopePrefix({ storageUserId, prefix: s3Prefix })}docs/`,
+  ];
+}
+
 /** No object budget or metadata reads: page through just this document, in bounded memory. */
 export async function measureDocumentAudioBytes(input: Input): Promise<number> {
   const { storage, s3Prefix, storageUserId, documentId } = input;
   let bytes = 0;
-  for (const prefix of [
-    `${s3Prefix}/tts_playback_segments_audio_v1/users/${encodeURIComponent(storageUserId)}/docs/${documentId}/`,
-    `${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(storageUserId)}/docs/${documentId}/`,
-    `${ttsPlaybackExportArtifactScopePrefix({ storageUserId, prefix: s3Prefix })}docs/${documentId}/`,
-  ]) for await (const page of storage.listPrefixPages(prefix)) for (const object of page) bytes += object.size;
+  for (const root of userAudioDocumentRoots(storageUserId, s3Prefix)) for await (const page of storage.listPrefixPages(`${root}${documentId}/`)) for (const object of page) bytes += object.size;
   if (!Number.isSafeInteger(bytes)) throw new Error('Audio storage total exceeds the supported range');
   return bytes;
 }

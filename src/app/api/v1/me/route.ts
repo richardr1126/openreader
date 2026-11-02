@@ -4,5 +4,5 @@ import { describeMe } from '@/lib/server/api/me';
 
 export const dynamic = 'force-dynamic';
 export function GET(request: NextRequest) {
-  return apiRequest(request, 'documents:read', principal => describeMe(request, principal));
+  return apiRequest(request, 'documents:read', principal => describeMe(principal));
 }

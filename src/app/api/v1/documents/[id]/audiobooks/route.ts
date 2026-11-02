@@ -21,11 +21,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (retrySkipped && body.chapterIndex !== null) {
       return apiErrorResponse(400, 'REQUEST_INVALID', 'retrySkipped applies to a whole book.');
     }
-    const resolved = await resolveAudiobookCaller(request, documentId, 'audio:generate');
-    if (resolved instanceof Response) return resolved;
-    const intent = await resolveAudiobookIntent(resolved.caller, documentId, body);
+    const caller = await resolveAudiobookCaller(request, documentId, 'audio:generate');
+    if (caller instanceof Response) return caller;
+    const intent = await resolveAudiobookIntent(caller, documentId, body);
     if (intent instanceof Response) return intent;
-    const audiobook = await startAudiobook(resolved.caller, intent, {
+    const audiobook = await startAudiobook(caller, intent, {
       retrySkipped,
       includeProgress: body.record.includeProgress !== false,
     });

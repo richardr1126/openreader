@@ -5,7 +5,9 @@ import {
   AudioWaveIcon, ClockIcon, CubeIcon, DatabaseIcon, DocumentIcon, HeadphonesIcon, HourglassIcon,
   MicrophoneIcon, RefreshIcon, RssIcon, ServerStackIcon, UploadIcon, UserIcon, UserPlusIcon,
 } from '@/components/icons/Icons';
+import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchTasks } from '@/components/admin/AdminTasksPanel';
 import toast from 'react-hot-toast';
 import {
   Section,
@@ -92,12 +94,8 @@ export function AdminFeaturesPanel({
   const multiUser = useRuntimeConfig().installProfile === 'server';
   const { data: taskData } = useQuery({
     queryKey: queryKeys.admin(session?.user?.id ?? 'no-session', 'tasks'),
-    queryFn: async () => {
-      const response = await fetch('/api/admin/tasks');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.json() as Promise<{ tasks: Array<{ key: string; enabled: boolean }> }>;
-    },
-    enabled: multiUser && Boolean(session?.user?.id),
+    queryFn: fetchTasks,
+    enabled: multiUser && scope !== 'compute' && Boolean(session?.user?.id),
   });
   const adminSettingsQueryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
   const { data, error } = useQuery({
@@ -271,15 +269,16 @@ export function AdminFeaturesPanel({
     );
   }
 
-  const numberRow = ({ key, label, icon, info, ariaLabel, unit }: {
+  const numberRow = ({ key, label, icon, info, description, ariaLabel, unit }: {
     key: string;
     label: string;
     icon: ReactNode;
     info?: string;
+    description?: ReactNode;
     ariaLabel?: string;
     unit?: string;
   }) => (
-    <SettingRow label={label} icon={icon} info={info} meta={renderSource(key)} controlClassName="w-40">
+    <SettingRow label={label} icon={icon} info={info} description={description} meta={renderSource(key)} controlClassName="w-40">
       <div className="flex items-center gap-1.5">
         <Input
           type="number"
@@ -294,6 +293,19 @@ export function AdminFeaturesPanel({
         {unit ? <span className="w-9 shrink-0 text-xs text-soft">{unit}</span> : null}
       </div>
     </SettingRow>
+  );
+
+  const guestCleanupOff = taskData?.tasks.some((task) => task.key === 'expire-anonymous-users' && !task.enabled);
+  const limitToggle = ({ key, label, icon, info }: { key: string; label: string; icon: ReactNode; info: string }) => (
+    <ToggleRow
+      label={label}
+      icon={icon}
+      info={info}
+      checked={Boolean(draft[key])}
+      onChange={(checked) => updateDraft(key, checked)}
+      meta={renderSource(key)}
+      variant="plain"
+    />
   );
 
   return (
@@ -375,11 +387,15 @@ export function AdminFeaturesPanel({
           />
         </SettingRow>
         {draft.signupPolicy !== 'closed' ? <>
-          <ToggleRow label="New accounts per IP" checked={Boolean(draft.limitNewAccountsPerIp)}
-            onChange={(checked) => updateDraft('limitNewAccountsPerIp', checked)} variant="plain" />
+          {limitToggle({
+            key: 'limitNewAccountsPerIp',
+            label: 'New accounts per IP',
+            icon: <UserPlusIcon />,
+            info: 'Stops sign-ups from one network once it reaches this count in the period. Existing accounts keep working.',
+          })}
           {draft.limitNewAccountsPerIp ? <>
-            {numberRow({ key: 'newAccountsPerIp', label: 'New accounts', icon: <UserPlusIcon /> })}
-            {numberRow({ key: 'newAccountsPerIpDays', label: 'Account creation period', icon: <ClockIcon />, unit: 'days' })}
+            {numberRow({ key: 'newAccountsPerIp', label: 'Accounts per period', icon: <UserPlusIcon /> })}
+            {numberRow({ key: 'newAccountsPerIpDays', label: 'Account period', icon: <ClockIcon />, unit: 'days' })}
           </> : null}
         </> : null}
         <ToggleRow
@@ -391,19 +407,29 @@ export function AdminFeaturesPanel({
           meta={renderSource('allowAnonymousSessions')}
           variant="plain"
         />
-        {draft.allowAnonymousSessions ? <>{numberRow({
-          key: 'anonymousUserIdleDays',
-          label: 'Guest idle period',
-          icon: <HourglassIcon />,
-          info: 'Guest accounts idle this long are deleted when the Delete idle guest accounts task is on.',
-          unit: 'days',
-        })}
-        <ToggleRow label="New guests per IP" checked={Boolean(draft.limitNewGuestsPerIp)}
-          description={`Over a rolling ${draft.anonymousUserIdleDays}-day guest idle period.`}
-          onChange={(checked) => updateDraft('limitNewGuestsPerIp', checked)} variant="plain" />
-        {draft.limitNewGuestsPerIp ? numberRow({ key: 'newGuestsPerIp', label: 'New guests', icon: <UserIcon /> }) : null}
-        {taskData && !taskData.tasks.find((task) => task.key === 'expire-anonymous-users')?.enabled ?
-          <p className="px-4 py-2 text-xs text-soft">Guests are never removed. Enable Delete idle guest accounts in <a className="underline" href="/app/settings?section=maintenance">Tasks</a>.</p> : null}
+        {draft.allowAnonymousSessions ? <>
+          {numberRow({
+            key: 'anonymousUserIdleDays',
+            label: 'Guest idle period',
+            icon: <HourglassIcon />,
+            info: 'Guest accounts idle this long are deleted when the Delete idle guest accounts task is on.',
+            description: guestCleanupOff ? (
+              <>Guests are never removed while <Link className="underline" href="/app/settings?section=maintenance">Delete idle guest accounts</Link> is off.</>
+            ) : undefined,
+            unit: 'days',
+          })}
+          {limitToggle({
+            key: 'limitNewGuestsPerIp',
+            label: 'New guests per IP',
+            icon: <UserIcon />,
+            info: 'Stops new guests from one network once it reaches this count within the guest idle period. Existing guests keep working.',
+          })}
+          {draft.limitNewGuestsPerIp ? numberRow({
+            key: 'newGuestsPerIp',
+            label: `Guests per ${String(draft.anonymousUserIdleDays)} days`,
+            ariaLabel: 'Guests per idle period',
+            icon: <UserIcon />,
+          }) : null}
         </> : null}
         </> : null}
         <ToggleRow
@@ -454,13 +480,28 @@ export function AdminFeaturesPanel({
       >
         {numberRow({ key: 'maxUploadMb', label: 'Max upload size', icon: <UploadIcon />, ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
         {multiUser ? <>
-          <ToggleRow label="Storage per account" checked={Boolean(draft.limitAccountStorage)} onChange={(checked) => updateDraft('limitAccountStorage', checked)} variant="plain" />
+          {limitToggle({
+            key: 'limitAccountStorage',
+            label: 'Storage per account',
+            icon: <DatabaseIcon />,
+            info: 'Documents plus generated audio. At the cap, uploads and new audio stop until space is freed.',
+          })}
           {draft.limitAccountStorage ? numberRow({ key: 'accountStorageMb', label: 'Account storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
           {draft.allowAnonymousSessions ? <>
-            <ToggleRow label="Storage per guest" checked={Boolean(draft.limitGuestStorage)} onChange={(checked) => updateDraft('limitGuestStorage', checked)} variant="plain" />
+            {limitToggle({
+              key: 'limitGuestStorage',
+              label: 'Storage per guest',
+              icon: <DatabaseIcon />,
+              info: 'Documents plus generated audio. At the cap, uploads and new audio stop until space is freed.',
+            })}
             {draft.limitGuestStorage ? numberRow({ key: 'guestStorageMb', label: 'Guest storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
-            <ToggleRow label="Total guest storage" checked={Boolean(draft.limitGuestStoragePool)} onChange={(checked) => updateDraft('limitGuestStoragePool', checked)} variant="plain" />
-            {draft.limitGuestStoragePool ? numberRow({ key: 'guestStoragePoolMb', label: 'Guest storage pool cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
+            {limitToggle({
+              key: 'limitGuestStoragePool',
+              label: 'Total guest storage',
+              icon: <DatabaseIcon />,
+              info: 'Shared by all guests. When it is full, guests cannot upload or generate new audio. Accounts are unaffected.',
+            })}
+            {draft.limitGuestStoragePool ? numberRow({ key: 'guestStoragePoolMb', label: 'Total guest storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
           </> : null}
         </> : null}
         {multiUser && computePolicy ? (

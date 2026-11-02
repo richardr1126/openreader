@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const uploadId = await stageDocumentUpload({
       principal: { userId, isAnonymous: Boolean(auth.user?.isAnonymous), scopes: API_SCOPES },
       subject: { userId, isAnonymous: Boolean(auth.user?.isAnonymous) }, schedule: after,
-    }, bytes, { name, author: book.authors.slice(0, 3).join(', ') || null, language: book.languages[0] ?? null }, true);
+    }, bytes, { name, author: book.authors.slice(0, 3).join(', ') || null, language: book.languages[0] ?? null });
 
     return NextResponse.json({
       uploadId,

@@ -38,7 +38,11 @@ async function saveReceipt(caller: DocumentCaller, id: string, value: UploadRece
   await putTempDocumentFinalizeReceipt(id, caller.principal.userId, null, Buffer.from(JSON.stringify(value)));
 }
 
-export async function prepareDocumentUpload(caller: DocumentCaller, body: Record<string, unknown>, intakeCharged = false): Promise<PreparedDocumentUpload> {
+export async function prepareDocumentUpload(caller: DocumentCaller, body: Record<string, unknown>): Promise<PreparedDocumentUpload> {
+  return createPreparedUpload(caller, body, (id) => consumeDocumentIntake(caller.subject, id));
+}
+
+async function createPreparedUpload(caller: DocumentCaller, body: Record<string, unknown>, charge?: (id: string) => Promise<void>): Promise<PreparedDocumentUpload> {
   if (typeof body.name !== 'string' || !body.name.trim()) throw new ApiRequestError(400, 'REQUEST_INVALID', 'name is required.');
   const name = safeDocumentName(body.name.trim(), 'document.txt');
   if (!/\.(pdf|epub|docx|txt|md|markdown|mdown|mkd|html|htm)$/i.test(name)) throw new ApiRequestError(415, 'FILE_TYPE_UNSUPPORTED', 'Unsupported document type.');
@@ -50,7 +54,7 @@ export async function prepareDocumentUpload(caller: DocumentCaller, body: Record
   const contentType = documentContentType(name);
   const id = randomUUID();
   await assertStorageAvailable(caller.subject, size, config);
-  if (!intakeCharged) await consumeDocumentIntake(caller.subject, id);
+  await charge?.(id);
   const value: UploadReceipt = { createdAt: Date.now(), size, requested: false, upload: {
     token: id, name, type: toDocumentTypeFromName(name),
     lastModified: typeof body.lastModified === 'number' && Number.isSafeInteger(body.lastModified) && body.lastModified > 0 ? body.lastModified : Date.now(),
@@ -143,8 +147,9 @@ export async function submitDocumentUpload(caller: DocumentCaller, id: string, f
   return readDocumentUpload(caller, id);
 }
 
-export async function stageDocumentUpload(caller: DocumentCaller, body: Buffer, metadata: Record<string, unknown>, intakeCharged = false): Promise<string> {
-  const prepared = await prepareDocumentUpload(caller, { ...metadata, size: body.byteLength }, intakeCharged);
+/** Server-side imports charge daily intake before they fetch, so this does not charge again. */
+export async function stageDocumentUpload(caller: DocumentCaller, body: Buffer, metadata: Record<string, unknown>): Promise<string> {
+  const prepared = await createPreparedUpload(caller, { ...metadata, size: body.byteLength });
   await putTempDocumentBlob(prepared.id, caller.principal.userId, body, documentContentType(String(metadata.name)), null);
   return prepared.id;
 }

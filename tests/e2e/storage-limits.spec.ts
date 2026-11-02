@@ -6,7 +6,7 @@ import { uploadLibraryFiles } from './support/upload';
 test('a guest blocked by storage can free space or create an account', async ({ page }) => {
   await enterAnonymousLibrary(page);
   await page.route('**/api/v1/uploads', (route) => route.fulfill({ status: 429, json: { error: {
-    code: 'GUEST_STORAGE_LIMIT_REACHED', message: 'Guest storage limit reached. Free space in Storage (/app/settings?section=storage). You can also create an account (/signup).',
+    code: 'GUEST_STORAGE_LIMIT_REACHED', message: 'Guest storage limit reached.',
   } } }));
   await uploadLibraryFiles(page, resolve('tests/files/multilingual-sample.txt'), { waitForLibraryEntries: false });
   const failure = page.getByRole('alert').filter({ hasText: 'Guest storage limit reached.' });

@@ -17,9 +17,9 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
   let name: string;
   let author: string | null = null;
   let language: string | null = null;
-  let intakeCharged = false;
   if (record.type === 'text') {
     if (typeof record.text !== 'string' || !record.text.trim()) throw new ApiRequestError(400, 'REQUEST_INVALID', 'text must be a non-empty string.');
+    await consumeDocumentIntake(caller.subject);
     text = record.text;
     name = typeof body.name === 'string' && body.name.trim() ? safeDocumentName(body.name.trim(), 'document.txt') : 'document.txt';
     if (!/\.(txt|md|markdown|mdown|mkd)$/i.test(name)) throw new ApiRequestError(400, 'REQUEST_INVALID', 'Text documents need a text or Markdown filename.');
@@ -28,7 +28,6 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
   } else if (record.type === 'url') {
     if (typeof record.url !== 'string' || !record.url.trim()) throw new ApiRequestError(400, 'REQUEST_INVALID', 'url is required.');
     await consumeDocumentIntake(caller.subject);
-    intakeCharged = true;
     let article;
     try { article = await fetchAndParseUrl(record.url); }
     catch (error) {
@@ -43,6 +42,6 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
   } else throw new ApiRequestError(400, 'REQUEST_INVALID', 'source.type must be url, text or upload.');
   const bytes = Buffer.from(text, 'utf8');
   if (bytes.length > 2 * 1024 * 1024) throw new ApiRequestError(413, 'TEXT_TOO_LARGE', 'Text imports are limited to 2 MB.');
-  const id = await stageDocumentUpload(caller, bytes, { name, author, language }, intakeCharged);
+  const id = await stageDocumentUpload(caller, bytes, { name, author, language });
   return submitDocumentUpload(caller, id, body.folderId);
 }

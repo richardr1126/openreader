@@ -39,7 +39,7 @@ The complete policy, with every value, is in [`examples/openreader-seed.json`](h
 
 ### Storage and daily files
 
-**Daily document limit** uses the `document_intake` policy. It is off by default;
+**New documents** uses the `document_intake` policy. It is off by default;
 enabling it reveals 10 daily files per guest and 100 per account. Each upload
 preparation, text import or URL import counts once, including failed imports.
 URL imports check the allowance before fetching. The allowance resets at midnight

@@ -8,10 +8,13 @@ import { deletePrefix } from '../../src/storage/prefix-cleanup';
 const documentId = 'a'.repeat(64);
 const otherDocumentId = 'b'.repeat(64);
 const measurements = vi.hoisted(() => ({ measure: vi.fn(async () => undefined), scopes: [] as string[] }));
-vi.mock('../../src/storage/audio-usage', () => ({ createDocumentAudioReporter: (input: { documentId: string }) => {
-  measurements.scopes.push(input.documentId);
-  return { measure: measurements.measure };
-} }));
+vi.mock('../../src/storage/audio-usage', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../../src/storage/audio-usage')>(),
+  createDocumentAudioReporter: (input: { documentId: string }) => {
+    measurements.scopes.push(input.documentId);
+    return { measure: measurements.measure };
+  },
+}));
 
 function setup(objects: StoredObjectSummary[] = []) {
   const deleted: string[] = [];

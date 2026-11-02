@@ -19,22 +19,16 @@ export async function resolveAudiobookCaller(
   request: NextRequest,
   documentId: string,
   requiredScope: ApiScope,
-): Promise<{ caller: AudiobookCaller } | Response> {
+): Promise<AudiobookCaller | Response> {
   const principal = await resolveApiPrincipal(request, requiredScope);
   if (principal instanceof Response) return principal;
   const scope = await resolveUserDocumentScope(principal, documentId);
   if (!scope) return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
-
   return {
-    caller: {
-      scope,
-      clientId: principal.clientId,
-      mayGenerate: principal.scopes.includes('audio:generate'),
-      subject: {
-        userId: principal.userId,
-        isAnonymous: principal.isAnonymous,
-      },
-    },
+    scope,
+    clientId: principal.clientId,
+    mayGenerate: principal.scopes.includes('audio:generate'),
+    subject: { userId: principal.userId, isAnonymous: principal.isAnonymous },
   };
 }
 

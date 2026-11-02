@@ -1,5 +1,4 @@
 'use client';
-import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
@@ -26,6 +25,7 @@ import { DocumentSelectionModal } from './DocumentSelectionModal';
 import { DocumentUploader } from './DocumentUploader';
 import { GutenbergCatalogPanel } from './GutenbergCatalogPanel';
 import { useLibraryImport } from './useLibraryImport';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 interface UploadMenuDialogProps {
   isOpen: boolean;

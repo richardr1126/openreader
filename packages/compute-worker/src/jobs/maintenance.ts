@@ -3,9 +3,7 @@ import type { ArtifactStorage } from '../infrastructure/storage';
 import type { MaintenanceJobRequest, MaintenanceJobResult, MaintenanceProgress } from '../operations/contracts';
 import { expireArtifactFoldersUnderRoot } from '../storage/artifact-retention';
 import { clearDocumentPreviewArtifacts, clearPdfLayoutArtifacts, clearTtsPlaybackPlanArtifacts, listDocumentDerivedIds } from '../storage/document-derived-cleanup';
-import { createDocumentAudioReporter } from '../storage/audio-usage';
-import { ttsPlaybackExportArtifactScopePrefix } from '../storage/artifact-addressing';
-import { storageUserHash } from '../storage/prefix-cleanup';
+import { createDocumentAudioReporter, userAudioDocumentRoots } from '../storage/audio-usage';
 import type { registerCleanupRoutes } from '../api/routes/cleanup';
 
 type CleanupRow = { id: string; userId: string; documentId: string | null; notBeforeMs: number; attempts: number };
@@ -66,11 +64,7 @@ export function createMaintenanceHandler(input: {
             for (const id of known.documentIds) documentIds.add(id);
             if (known.documentIds.length < 200) break;
           }
-          for (const root of [
-            `${s3Prefix}/tts_playback_segments_audio_v1/users/${encodeURIComponent(userId)}/docs/`,
-            `${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(userId)}/docs/`,
-            `${ttsPlaybackExportArtifactScopePrefix({ storageUserId: userId, prefix: s3Prefix })}docs/`,
-          ]) for await (const objects of storage.listPrefixPages(root)) for (const object of objects) {
+          for (const root of userAudioDocumentRoots(userId, s3Prefix)) for await (const objects of storage.listPrefixPages(root)) for (const object of objects) {
             const id = object.key.slice(root.length).split('/')[0];
             if (/^[a-f0-9]{64}$/i.test(id)) documentIds.add(id);
           }

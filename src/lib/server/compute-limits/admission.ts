@@ -7,6 +7,7 @@ import type {
   ComputeAction,
   ComputeLimitPolicyDocument,
   ComputeLimitScope,
+  WorkerOperationAction,
 } from '@openreader/runtime-config/compute-limits';
 import {
   computePolicyVersion,
@@ -137,7 +138,7 @@ async function reconcileExpiredAdmissions(
 }
 
 export async function reconcileExpiredComputeAdmissions(
-  action: Exclude<ComputeAction, 'tts_synthesis' | 'document_intake'>,
+  action: WorkerOperationAction,
   nowMs = Date.now(),
 ): Promise<void> {
   await runInDbTransaction((conn) => reconcileExpiredAdmissions(conn, action, nowMs));
@@ -167,7 +168,7 @@ async function existingAdmission(
 
 export async function reserveComputeAdmission(input: {
   policy: ComputeLimitPolicyDocument;
-  action: Exclude<ComputeAction, 'tts_synthesis' | 'document_intake'>;
+  action: WorkerOperationAction;
   requestKey: string;
   subject: ComputeLimitSubject;
   nowMs?: number;
@@ -200,7 +201,6 @@ export async function reserveComputeAdmission(input: {
   }> = [];
   for (const windowPolicy of actionPolicy.admission.windows) {
     const scope = resolveComputeScope(windowPolicy.scope, input.subject);
-    if (!scope) continue;
     const window = fixedWindow(nowMs, windowPolicy.windowSeconds);
     counters.push({
       scope: scope.scope,
@@ -213,7 +213,6 @@ export async function reserveComputeAdmission(input: {
   }
   for (const activePolicy of actionPolicy.admission.active) {
     const scope = resolveComputeScope(activePolicy.scope, input.subject);
-    if (!scope) continue;
     counters.push({
       scope: scope.scope,
       scopeKey: scope.key,

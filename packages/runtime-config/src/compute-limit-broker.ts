@@ -1,3 +1,13 @@
+/** Stable storage cap codes and their text, shared by the app, worker and browser. */
+export const STORAGE_LIMIT_MESSAGES = {
+  ACCOUNT_STORAGE_LIMIT_REACHED: 'Account storage limit reached.',
+  GUEST_STORAGE_LIMIT_REACHED: 'Guest storage limit reached.',
+  GUEST_STORAGE_POOL_FULL: 'Total guest storage limit reached.',
+} as const;
+export type StorageLimitCode = keyof typeof STORAGE_LIMIT_MESSAGES;
+export const isStorageLimitCode = (value: unknown): value is StorageLimitCode =>
+  typeof value === 'string' && Object.hasOwn(STORAGE_LIMIT_MESSAGES, value);
+
 export interface TtsSynthesisConsumeRequest {
   action: 'tts_synthesis';
   sessionId: string;
@@ -11,7 +21,7 @@ export interface TtsSynthesisConsumeResponse {
   charged: boolean;
   idempotent: boolean;
   retryAfterMs: number;
-  storageLimit?: string;
+  storageLimit?: StorageLimitCode;
   usage: {
     used: number;
     limit: number;
@@ -70,7 +80,7 @@ export function parseTtsSynthesisConsumeResponse(value: unknown): TtsSynthesisCo
   const record = value as Record<string, unknown>;
   if (
     Object.keys(record).length !== (record.storageLimit === undefined ? 5 : 6)
-    || (record.storageLimit !== undefined && !['ACCOUNT_STORAGE_LIMIT_REACHED', 'GUEST_STORAGE_LIMIT_REACHED', 'GUEST_STORAGE_POOL_FULL'].includes(String(record.storageLimit)))
+    || (record.storageLimit !== undefined && !isStorageLimitCode(record.storageLimit))
     || typeof record.allowed !== 'boolean'
     || typeof record.charged !== 'boolean'
     || typeof record.idempotent !== 'boolean'
@@ -98,6 +108,6 @@ export function parseTtsSynthesisConsumeResponse(value: unknown): TtsSynthesisCo
     idempotent: record.idempotent,
     retryAfterMs: record.retryAfterMs,
     usage,
-    ...(typeof record.storageLimit === 'string' ? { storageLimit: record.storageLimit } : {}),
+    ...(isStorageLimitCode(record.storageLimit) ? { storageLimit: record.storageLimit } : {}),
   };
 }

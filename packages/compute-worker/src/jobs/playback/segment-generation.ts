@@ -573,7 +573,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       stopScheduling = true;
       return null;
     }
-    const usage = segment.text.trim() ? await (input.consumeUsage ?? (async () => ({ allowed: true })))({
+    const usage: { allowed: boolean; storageLimit?: string } = segment.text.trim() ? await (input.consumeUsage ?? (async () => ({ allowed: true })))({
       action: 'tts_synthesis',
       sessionId: input.request.sessionId,
       userId: input.request.userId,
@@ -586,7 +586,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       characters: segment.text.length,
     }, input.signal) : { allowed: true };
     if (!usage.allowed) {
-      await input.onUsageDenied?.('storageLimit' in usage ? usage.storageLimit : undefined);
+      await input.onUsageDenied?.(usage.storageLimit);
       stopScheduling = true;
       return null;
     }

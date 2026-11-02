@@ -18,11 +18,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const documentId = (await context.params).id.trim().toLowerCase();
     const body = parseAudiobookBody(await request.json().catch(() => null));
     if (body instanceof Response) return body;
-    const resolved = await resolveAudiobookCaller(request, documentId, 'documents:read');
-    if (resolved instanceof Response) return resolved;
-    const intent = await resolveAudiobookIntent(resolved.caller, documentId, body, { observeOnly: true });
+    const caller = await resolveAudiobookCaller(request, documentId, 'documents:read');
+    if (caller instanceof Response) return caller;
+    const intent = await resolveAudiobookIntent(caller, documentId, body, { observeOnly: true });
     if (intent instanceof Response) return intent;
-    const audiobook = await lookupAudiobook(resolved.caller, intent, {
+    const audiobook = await lookupAudiobook(caller, intent, {
       includeProgress: body.record.includeProgress !== false || body.chapterIndex !== null,
     });
     return NextResponse.json(audiobook);

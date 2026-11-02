@@ -238,10 +238,6 @@ caused conflicts, high CPU, misleading failures, and overheating.
 ## Current State
 
 - Public API progress on `refactor/public-api` is tracked in `v5/API_REFACTOR.md`.
-  Phases 4.6 and 4.7 implement creation caps/IP privacy (migration 0029) and
-  storage accounting/caps/daily intake (migration 0030). Run Repair storage usage
-  after upgrading to backfill existing audio before enabling storage caps.
-  Phase 4.8 is deferred to separate UX work. Phase 5 has not started.
 - Migration 0028 was rewritten in place during phase 4.5 and has never shipped. A
   local database that ran the earlier version must be reset.
 - Open follow-ups for the owner: whether the full Compose files should require

@@ -63,16 +63,16 @@ test('admin approves a pending user and inspects the user directory', async ({ b
 
   await page.getByRole('button', { name: 'Instance', exact: true }).first().click();
   await page.getByRole('switch', { name: 'New accounts per IP', exact: true }).click();
-  await expect(page.getByRole('spinbutton', { name: 'New accounts', exact: true })).toHaveValue('5');
-  await expect(page.getByRole('spinbutton', { name: 'Account creation period', exact: true })).toHaveValue('30');
+  await expect(page.getByRole('spinbutton', { name: 'Accounts per period', exact: true })).toHaveValue('5');
+  await expect(page.getByRole('spinbutton', { name: 'Account period', exact: true })).toHaveValue('30');
   await page.getByRole('switch', { name: 'New guests per IP', exact: true }).click();
-  await expect(page.getByRole('spinbutton', { name: 'New guests', exact: true })).toHaveValue('10');
+  await expect(page.getByRole('spinbutton', { name: 'Guests per idle period', exact: true })).toHaveValue('10');
   await page.getByRole('button', { name: 'Discard', exact: true }).click();
-  await expect(page.getByRole('spinbutton', { name: 'New guests', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('spinbutton', { name: 'Guests per idle period', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Compute', exact: true }).first().click();
   await page.getByRole('switch', { name: 'Storage per account', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Account storage cap', exact: true })).toHaveValue('10240');
-  await page.getByText('Daily document limit', { exact: true }).click();
+  await page.getByText('New documents', { exact: true }).click();
   await page.getByRole('switch', { name: 'Limit daily files', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'Guest daily files', exact: true })).toHaveValue('10');
   await expect(page.getByRole('spinbutton', { name: 'Account daily files', exact: true })).toHaveValue('100');

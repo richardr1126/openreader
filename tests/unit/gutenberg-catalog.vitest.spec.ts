@@ -282,7 +282,6 @@ describe('gutenberg import route', () => {
       expect.objectContaining({ principal: expect.objectContaining({ userId: 'user-1' }) }),
       expect.any(Buffer),
       expect.objectContaining({ name: body.name, author: 'Jane Austen', language: 'en' }),
-      true,
     );
   });
 

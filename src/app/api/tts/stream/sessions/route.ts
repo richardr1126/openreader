@@ -106,7 +106,6 @@ export async function POST(request: NextRequest) {
       planObjectKey,
       purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live',
     });
-
     const admissionAction = parsed.generationExtent === 'document' ? 'tts_playback_document' : 'tts_playback';
     const admission = await reserveComputeAdmission({
       policy: runtimeConfig.computeLimitPolicies,

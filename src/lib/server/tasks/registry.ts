@@ -9,13 +9,6 @@ import { enqueueMaintenanceTask } from './enqueue-maintenance';
  * rows with no matching definition).
  */
 export const TASK_REGISTRY: TaskRegistry = {
-  'repair-storage-usage': {
-    name: 'Repair storage usage',
-    description: 'Backfill existing audio totals, then remeasure recently active accounts. Runs on the compute worker.',
-    defaultIntervalMs: 24 * 60 * 60 * 1000,
-    maxRunMs: 45_000,
-    run: async (context) => ({ ...await enqueueMaintenanceTask('repair-storage-usage', context), cursor: String(Date.now()) }),
-  },
   'reap-orphaned-blobs': {
     name: 'Clean up unowned documents',
     description: 'Remove document files and generated artifacts that no longer have an owner.',
@@ -50,6 +43,13 @@ export const TASK_REGISTRY: TaskRegistry = {
     defaultIntervalMs: 15 * 60 * 1000,
     maxRunMs: 45_000,
     run: (context) => enqueueMaintenanceTask('retry-storage-cleanups', context),
+  },
+  'repair-storage-usage': {
+    name: 'Repair storage usage',
+    description: 'Backfill existing audio totals, then remeasure recently active accounts. Runs on the compute worker.',
+    defaultIntervalMs: 24 * 60 * 60 * 1000,
+    maxRunMs: 45_000,
+    run: async (context) => ({ ...await enqueueMaintenanceTask('repair-storage-usage', context), cursor: String(Date.now()) }),
   },
   'expire-anonymous-users': {
     name: 'Delete idle guest accounts',

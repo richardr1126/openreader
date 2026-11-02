@@ -69,12 +69,7 @@ export async function POST(request: NextRequest) {
     if (!parsed) return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
 
     const isAnonymous = Boolean((ctx.user as { isAnonymous?: boolean } | null)?.isAnonymous);
-
-    const subject = {
-      userId,
-      isAnonymous,
-
-    };
+    const subject = { userId, isAnonymous };
     const { computeLimitPolicies: policy } = await getRuntimeConfig();
     const previewId = randomUUID();
     const admission = await reserveComputeAdmission({

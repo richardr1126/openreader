@@ -22,8 +22,8 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     const opId = request.nextUrl.searchParams.get('opId')?.trim() ?? '';
     if (!opId) return apiErrorResponse(400, 'REQUEST_INVALID', 'opId is required.');
 
-    const resolved = await resolveAudiobookCaller(request, documentId, 'documents:read');
-    if (resolved instanceof Response) return resolved;
+    const caller = await resolveAudiobookCaller(request, documentId, 'documents:read');
+    if (caller instanceof Response) return caller;
 
     const operation = await getComputeWorkerClient().getOperation(opId);
     if (!operation) return apiErrorResponse(404, 'OPERATION_NOT_FOUND', 'Operation not found.');
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     // and artifacts whose public operation subject has no owner field.
     const admissions = await db.select({ id: computeLimitAdmissions.id }).from(computeLimitAdmissions).where(and(
       eq(computeLimitAdmissions.operationId, opId),
-      eq(computeLimitAdmissions.userId, resolved.caller.scope.userId),
+      eq(computeLimitAdmissions.userId, caller.scope.userId),
     )).limit(1);
     if (!admissions[0]) return apiErrorResponse(403, 'OPERATION_FORBIDDEN', 'Operation does not belong to this user.');
 

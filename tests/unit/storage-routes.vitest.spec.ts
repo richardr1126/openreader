@@ -4,16 +4,19 @@ import { NextRequest } from 'next/server';
 const mocks = vi.hoisted(() => ({
   usage: vi.fn(),
   totals: vi.fn(),
-  rows: [] as Array<{ documentId: string }>,
+  audioDocumentIds: [] as string[],
   reclaim: vi.fn(),
   owned: new Set<string>(),
   workerAvailable: true,
   authorized: true,
 }));
 
-vi.mock('@openreader/database', () => ({ db: { select: () => ({ from: () => ({ where: async () => mocks.rows }) }) } }));
 vi.mock('@/lib/server/admin/settings', () => ({ getRuntimeConfig: async () => ({}) }));
-vi.mock('@/lib/server/storage/usage', () => ({ getStorageUsage: mocks.totals, storageCapBytes: () => null }));
+vi.mock('@/lib/server/storage/usage', () => ({
+  getStorageUsage: mocks.totals,
+  storageCapBytes: () => null,
+  listAudioDocumentIds: async () => mocks.audioDocumentIds,
+}));
 
 vi.mock('@/lib/server/compute-worker/client', async (importOriginal) => ({
   ...await importOriginal<typeof import('@/lib/server/compute-worker/client')>(),
@@ -158,7 +161,7 @@ describe('storage routes', () => {
 
   test('reclaims only orphaned documents in bounded batches', async () => {
     mocks.owned = new Set(['kept']);
-    mocks.rows = ['kept', 'a', 'b', 'c', 'd', 'e', 'f'].map((documentId) => ({ documentId }));
+    mocks.audioDocumentIds = ['kept', 'a', 'b', 'c', 'd', 'e', 'f'];
     const response = await libraryReclaim(post('/api/tts/storage/reclaim', { target: 'orphaned' }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ reclaimedDocuments: 5, remainingDocuments: 1, deletedObjects: 15 });

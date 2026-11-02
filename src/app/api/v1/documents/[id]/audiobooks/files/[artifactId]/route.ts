@@ -25,9 +25,9 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
     // Authorize the document scope before touching worker state; the artifact
     // key is user/document-scoped, so the read cannot cross ownership.
-    const resolved = await resolveAudiobookCaller(request, documentId, 'documents:read');
-    if (resolved instanceof Response) return resolved;
-    const { storageUserId } = resolved.caller.scope;
+    const caller = await resolveAudiobookCaller(request, documentId, 'documents:read');
+    if (caller instanceof Response) return caller;
+    const { storageUserId } = caller.scope;
 
     const artifact = await new ComputeWorkerClient().getTtsPlaybackExportArtifact({
       artifactId,

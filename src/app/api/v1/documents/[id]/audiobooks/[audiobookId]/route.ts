@@ -22,9 +22,9 @@ export async function GET(request: NextRequest, context: Context) {
     }
     const { id, audiobookId } = await context.params;
     const documentId = id.trim().toLowerCase();
-    const resolved = await resolveAudiobookCaller(request, documentId, 'documents:read');
-    if (resolved instanceof Response) return resolved;
-    const audiobook = await getAudiobook(resolved.caller, audiobookId, documentId);
+    const caller = await resolveAudiobookCaller(request, documentId, 'documents:read');
+    if (caller instanceof Response) return caller;
+    const audiobook = await getAudiobook(caller, audiobookId, documentId);
     if (!audiobook) return notFound();
     return NextResponse.json(audiobook);
   } catch (error) {
@@ -46,9 +46,9 @@ export async function DELETE(request: NextRequest, context: Context) {
     }
     const { id, audiobookId } = await context.params;
     const documentId = id.trim().toLowerCase();
-    const resolved = await resolveAudiobookCaller(request, documentId, 'audio:generate');
-    if (resolved instanceof Response) return resolved;
-    const audiobook = await stopAudiobook(resolved.caller, audiobookId, documentId);
+    const caller = await resolveAudiobookCaller(request, documentId, 'audio:generate');
+    if (caller instanceof Response) return caller;
+    const audiobook = await stopAudiobook(caller, audiobookId, documentId);
     if (!audiobook) return notFound();
     return NextResponse.json(audiobook);
   } catch (error) {

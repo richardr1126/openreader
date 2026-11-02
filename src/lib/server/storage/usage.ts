@@ -1,4 +1,5 @@
-import { and, count, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, count, eq, gt, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { STORAGE_LIMIT_MESSAGES, type StorageLimitCode } from '@openreader/runtime-config/compute-limit-broker';
 import { db } from '@openreader/database';
 import { runInDbTransaction } from '@openreader/database/run-in-transaction';
 import { documents, documentAudioUsage } from '@openreader/database/schema';
@@ -15,59 +16,66 @@ export type StorageUsage = {
   documentBytes: number; audioBytes: number; totalBytes: number; documentCount: number;
   orphanedAudioBytes: number; orphanedDocumentCount: number;
 };
+export type StorageLimit = { code: StorageLimitCode; message: string };
 
-/** The sole SQL aggregation used by settings, the user directory and caps. */
-export async function getStorageUsage(userIds: string[] | 'guests', connection = database()): Promise<Map<string, StorageUsage>> {
-  const database = connection;
-  const empty = (): StorageUsage => ({ documentBytes: 0, audioBytes: 0, totalBytes: 0, documentCount: 0, orphanedAudioBytes: 0, orphanedDocumentCount: 0 });
-  const result = new Map((userIds === 'guests' ? [] : userIds).map((id) => [id, empty()]));
-  if (userIds !== 'guests' && !userIds.length) return result;
-  const ids = userIds === 'guests' ? database.select({ id: user.id }).from(user).where(eq(user.isAnonymous, true)) : userIds;
+/** The sole per-user SQL aggregation used by settings, the user directory and caps. */
+export async function getStorageUsage(userIds: string[], connection = database()): Promise<Map<string, StorageUsage>> {
+  const result = new Map<string, StorageUsage>(userIds.map((id) => [id, {
+    documentBytes: 0, audioBytes: 0, totalBytes: 0, documentCount: 0, orphanedAudioBytes: 0, orphanedDocumentCount: 0,
+  }]));
+  if (!userIds.length) return result;
   const [sources, audio] = await Promise.all([
-    database.select({ userId: documents.userId, documentBytes: sql`coalesce(sum(${documents.size}), 0)`, documentCount: count() })
-      .from(documents).where(inArray(documents.userId, ids)).groupBy(documents.userId),
-    database.select({ userId: documentAudioUsage.userId, audioBytes: sql`coalesce(sum(${documentAudioUsage.audioBytes}), 0)`,
+    connection.select({ userId: documents.userId, documentBytes: sql`coalesce(sum(${documents.size}), 0)`, documentCount: count() })
+      .from(documents).where(inArray(documents.userId, userIds)).groupBy(documents.userId),
+    connection.select({ userId: documentAudioUsage.userId, audioBytes: sql`coalesce(sum(${documentAudioUsage.audioBytes}), 0)`,
       orphanedAudioBytes: sql`coalesce(sum(case when ${documents.id} is null then ${documentAudioUsage.audioBytes} else 0 end), 0)`,
       orphanedDocumentCount: sql`coalesce(sum(case when ${documents.id} is null and ${documentAudioUsage.audioBytes} > 0 then 1 else 0 end), 0)` })
       .from(documentAudioUsage).leftJoin(documents, and(eq(documents.id, documentAudioUsage.documentId), eq(documents.userId, documentAudioUsage.userId)))
-      .where(inArray(documentAudioUsage.userId, ids)).groupBy(documentAudioUsage.userId),
+      .where(inArray(documentAudioUsage.userId, userIds)).groupBy(documentAudioUsage.userId),
   ]);
-  for (const row of [...sources, ...audio]) {
-    if (!result.has(row.userId)) result.set(row.userId, empty());
-    for (const key of ['documentBytes', 'documentCount', 'audioBytes', 'orphanedAudioBytes', 'orphanedDocumentCount'] as const) {
-      if (row[key] !== undefined) result.get(row.userId)![key] = Number(row[key]);
-    }
-  }
+  for (const row of sources) Object.assign(result.get(row.userId)!, { documentBytes: Number(row.documentBytes), documentCount: Number(row.documentCount) });
+  for (const row of audio) Object.assign(result.get(row.userId)!, { audioBytes: Number(row.audioBytes),
+    orphanedAudioBytes: Number(row.orphanedAudioBytes), orphanedDocumentCount: Number(row.orphanedDocumentCount) });
   for (const usage of result.values()) usage.totalBytes = usage.documentBytes + usage.audioBytes;
   return result;
 }
 
-export function storageCapBytes(config: RuntimeConfig, isAnonymous: boolean): number | null {
-  return isAnonymous ? config.limitGuestStorage ? config.guestStorageMb * 1_048_576 : null
-    : config.limitAccountStorage ? config.accountStorageMb * 1_048_576 : null;
+/** One sum for the shared pool: this runs on usage checks, so it must not load every guest. */
+async function getGuestStorageBytes(connection: ReturnType<typeof database>): Promise<number> {
+  const guests = connection.select({ id: user.id }).from(user).where(eq(user.isAnonymous, true));
+  const [[sources], [audio]] = await Promise.all([
+    connection.select({ bytes: sql`coalesce(sum(${documents.size}), 0)` }).from(documents).where(inArray(documents.userId, guests)),
+    connection.select({ bytes: sql`coalesce(sum(${documentAudioUsage.audioBytes}), 0)` }).from(documentAudioUsage).where(inArray(documentAudioUsage.userId, guests)),
+  ]);
+  return Number(sources.bytes) + Number(audio.bytes);
 }
 
-export async function storageLimit(subject: ComputeLimitSubject, additionalBytes = 0, config?: RuntimeConfig, connection = database()): Promise<{ code: string; message: string } | null> {
+export function storageCapBytes(config: RuntimeConfig, isAnonymous: boolean): number | null {
+  if (isAnonymous) return config.limitGuestStorage ? config.guestStorageMb * 1_048_576 : null;
+  return config.limitAccountStorage ? config.accountStorageMb * 1_048_576 : null;
+}
+
+const blockedBy = (code: StorageLimitCode): StorageLimit => ({ code, message: STORAGE_LIMIT_MESSAGES[code] });
+
+/** With no added bytes, a total exactly at the cap blocks new work. */
+export async function storageLimit(subject: ComputeLimitSubject, additionalBytes = 0, config?: RuntimeConfig, connection = database()): Promise<StorageLimit | null> {
   config ??= await getRuntimeConfig();
+  const exceeds = (used: number, cap: number) => additionalBytes ? used + additionalBytes > cap : used >= cap;
   const cap = storageCapBytes(config, subject.isAnonymous);
   if (cap !== null) {
     const usage = (await getStorageUsage([subject.userId], connection)).get(subject.userId)!;
-    if (additionalBytes ? usage.totalBytes + additionalBytes > cap : usage.totalBytes >= cap) return {
-      code: subject.isAnonymous ? 'GUEST_STORAGE_LIMIT_REACHED' : 'ACCOUNT_STORAGE_LIMIT_REACHED',
-      message: subject.isAnonymous ? 'Guest storage limit reached.' : 'Account storage limit reached.',
-    };
+    if (exceeds(usage.totalBytes, cap)) return blockedBy(subject.isAnonymous ? 'GUEST_STORAGE_LIMIT_REACHED' : 'ACCOUNT_STORAGE_LIMIT_REACHED');
   }
-  if (subject.isAnonymous && config.limitGuestStoragePool) {
-    const total = [...(await getStorageUsage('guests', connection)).values()].reduce((sum, usage) => sum + usage.totalBytes, 0);
-    const poolCap = config.guestStoragePoolMb * 1_048_576;
-    if (additionalBytes ? total + additionalBytes > poolCap : total >= poolCap) return { code: 'GUEST_STORAGE_POOL_FULL', message: 'Total guest storage limit reached.' };
-  }
+  if (subject.isAnonymous && config.limitGuestStoragePool
+    && exceeds(await getGuestStorageBytes(connection), config.guestStoragePoolMb * 1_048_576)) return blockedBy('GUEST_STORAGE_POOL_FULL');
   return null;
 }
 
+const storageLimitError = ({ code, message }: StorageLimit) => new ApiRequestError(429, code, message, 60_000);
+
 export async function assertStorageAvailable(subject: ComputeLimitSubject, bytes: number, config?: RuntimeConfig): Promise<void> {
   const limit = await storageLimit(subject, bytes, config);
-  if (limit) throw new ApiRequestError(429, limit.code, `${limit.message} Free space in Storage (/app/settings?section=storage).${subject.isAnonymous ? ' You can also create an account (/signup).' : ''}`, 60_000);
+  if (limit) throw storageLimitError(limit);
 }
 
 /** Recheck at registration so concurrent prepared uploads cannot bypass a cap. */
@@ -86,9 +94,16 @@ export async function withStorageRegistration<T>(input: { userId: string; docume
     const [existing] = await conn.select({ size: documents.size }).from(documents).where(and(eq(documents.userId, input.userId), eq(documents.id, input.documentId))).limit(1);
     const growth = Math.max(0, input.size - Number(existing?.size ?? 0));
     const blocked = growth ? await storageLimit(subject, growth, config, conn) : null;
-    if (blocked) throw new ApiRequestError(429, blocked.code, `${blocked.message} Free space in Storage (/app/settings?section=storage).${subject.isAnonymous ? ' You can also create an account (/signup).' : ''}`, 60_000);
+    if (blocked) throw storageLimitError(blocked);
     return write(conn);
   });
+}
+
+/** Documents with measured audio, including ones whose source document is gone. */
+export async function listAudioDocumentIds(userId: string): Promise<string[]> {
+  const rows: Array<{ documentId: string }> = await database().select({ documentId: documentAudioUsage.documentId }).from(documentAudioUsage)
+    .where(and(eq(documentAudioUsage.userId, userId), gt(documentAudioUsage.audioBytes, 0)));
+  return rows.map((row) => row.documentId);
 }
 
 /** App-issued revisions fence delayed/out-of-order reports, including across clears. */
