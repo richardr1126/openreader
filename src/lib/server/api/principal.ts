@@ -41,7 +41,7 @@ export async function resolveApiPrincipal(
 ): Promise<ApiPrincipal | Response> {
   if (hasBearerAuthorization(request)) {
     const match = /^Bearer ([^\s]+)$/i.exec(request.headers.get('authorization') ?? '');
-    const principal = match ? await resolveOAuthAccess(match[1]) : null;
+    const principal = match ? await resolveOAuthAccess(match[1], oauthUrls(getRequiredAuthEnv().baseUrl).resource) : null;
     if (!principal || !principal.scopes.includes(requiredScope)) {
       const missingScope = Boolean(principal);
       const response = apiErrorResponse(missingScope ? 403 : 401, missingScope ? 'INSUFFICIENT_SCOPE' : 'INVALID_TOKEN',

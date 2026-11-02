@@ -8,6 +8,15 @@ export function oauthRedirectDestination(uri: string): string {
   return `${target.protocol}//${target.host}`;
 }
 
+/**
+ * A client ID Metadata Document client proves its domain by hosting its own
+ * metadata. Registered clients get a generated ID, so they cannot claim one.
+ */
+export function oauthVerifiedDomain(clientId: string): string | null {
+  if (!clientId.startsWith('https://')) return null;
+  try { return new URL(clientId).host; } catch { return null; }
+}
+
 /** Direct SQL reads bypass Better Auth's SQLite JSON decoding. */
 export function oauthStringArray(value: unknown): string[] {
   if (typeof value === 'string') {

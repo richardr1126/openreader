@@ -898,8 +898,8 @@ True v4.4.0-to-v5 full-Compose upgrade checkpoint on 2026-09-02:
   `@better-auth/oauth-provider` 1.7.15. Authorization code with S256 PKCE and
   device authorization issue scoped JWT access tokens for exactly
   `BASE_URL/api/v1`. Refresh tokens rotate. No OAuth token becomes a browser
-  session or reaches private/admin, broker or worker routes. MCP remains a
-  separate, currently disabled resource.
+  session or reaches private/admin, broker or worker routes. MCP is a separate
+  resource, `BASE_URL/api/mcp`, added in phase 5 of `v5/API_REFACTOR.md`.
 - JWT signature, type, issuer, audience and expiry are verified locally. Current
   consent ID, approved scopes, account eligibility and client state are checked
   on every API request. Disconnect deletes consent, refresh/access rows and

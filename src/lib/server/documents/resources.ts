@@ -54,6 +54,11 @@ export async function requireDocument(principal: ApiPrincipal, id: string): Prom
   return toBaseDocument(rows[0]);
 }
 
+export function documentWebUrl(document: Pick<BaseDocument, 'id' | 'type'>): string {
+  const reader = document.type === 'epub' ? 'epub' : document.type === 'pdf' ? 'pdf' : 'html';
+  return new URL(`/${reader}/${document.id}`, process.env.BASE_URL || 'http://localhost').toString();
+}
+
 /** A status read never opens the reader, updates recency or creates a plan. */
 export async function describeDocument(document: BaseDocument): Promise<DocumentResource> {
   let status: DocumentResource['status'] = 'ready';
@@ -72,9 +77,7 @@ export async function describeDocument(document: BaseDocument): Promise<Document
       error = status === 'failed' ? resolved.operation.error?.message ?? 'PDF preparation failed.' : null;
     } else if (!resolved.artifact) status = resolved.operation ? 'processing' : 'not_started';
   }
-  const reader = document.type === 'epub' ? 'epub' : document.type === 'pdf' ? 'pdf' : 'html';
-  return { ...document, status, operationId, error, fileUrl: `/api/v1/documents/${document.id}/file`,
-    webUrl: new URL(`/${reader}/${document.id}`, process.env.BASE_URL || 'http://localhost').toString() };
+  return { ...document, status, operationId, error, fileUrl: `/api/v1/documents/${document.id}/file`, webUrl: documentWebUrl(document) };
 }
 
 export async function updateDocuments(caller: DocumentCaller, ids: string[], patch: Record<string, unknown>) {

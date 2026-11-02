@@ -3,8 +3,6 @@ import { db } from '@openreader/database';
 import * as sqlite from '@openreader/database/schema-auth-sqlite';
 import * as postgres from '@openreader/database/schema-auth-postgres';
 import { getAuth } from './auth';
-import { oauthUrls } from './oauth';
-import { getRequiredAuthEnv } from './config';
 import { API_SCOPES } from '@/lib/shared/api-scopes';
 import type { ApiPrincipal } from '@/lib/server/api/principal';
 import { oauthStringArray } from './oauth-values';
@@ -12,7 +10,7 @@ import { oauthStringArray } from './oauth-values';
 const schema = process.env.POSTGRES_URL ? postgres : sqlite;
 
 /** Verify locally with the auth-owned JWKS, then check current authorization. */
-export async function resolveOAuthAccess(token: string): Promise<ApiPrincipal | null> {
+export async function resolveOAuthAccess(token: string, resource: string): Promise<ApiPrincipal | null> {
   if (token.length > 16384) return null;
   try {
     const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8'));
@@ -20,7 +18,6 @@ export async function resolveOAuthAccess(token: string): Promise<ApiPrincipal | 
   } catch { return null; }
   const auth = await getAuth();
   const { payload } = await auth.api.verifyJWT({ body: { token } });
-  const resource = oauthUrls(getRequiredAuthEnv().baseUrl).resource;
   if (!payload || payload.aud !== resource || typeof payload.sub !== 'string' || typeof payload.client_id !== 'string'
     || payload.azp !== payload.client_id || typeof payload.or_grant !== 'string' || typeof payload.scope !== 'string'
     || typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now() || payload.cnf) return null;

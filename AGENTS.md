@@ -46,7 +46,7 @@ version or tag a release unless asked.
   6. external clients to Next.js v1: OAuth access token, bound to this instance's
      `/api/v1` resource and approved scopes. Cookie session behavior is unchanged;
      OAuth tokens cannot authenticate private/admin routes or worker services.
-     MCP gets its own audience when implemented. Disconnecting an app revokes
+     MCP has its own `/api/mcp` audience and never accepts a cookie. Disconnecting an app revokes
      its consent and refresh access; JWT verification checks the current grant.
 - `installProfile` (`server` | `desktop`, see `v5/DESKTOP_SINGLE_OWNER.md`) is a
   derived, presentation-only fact. It must never take part in authorization;
@@ -133,7 +133,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-11-02 the expected clean result is 1735 Vitest tests and 91 local
+- As of 2026-11-02 the expected clean result is 1743 Vitest tests and 93 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.

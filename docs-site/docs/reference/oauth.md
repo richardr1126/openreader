@@ -12,11 +12,14 @@ pending, suspended and deletion-pending accounts cannot approve access.
 Use the instance's configured public `BASE_URL`, with HTTPS outside local
 development. The exact resource identifier is **`BASE_URL/api/v1`**, without a
 trailing slash. Request it explicitly in authorization, device-code and token
-requests. An MCP resource is not enabled yet; API tokens cannot target it.
+requests. [MCP](./mcp) has its own resource, **`BASE_URL/api/mcp`**. A token works
+only on the resource the user approved it for, and a refresh token stays on it.
+Device authorization is available for `BASE_URL/api/v1` only.
 
 | Discovery | URL relative to the instance origin |
 | --- | --- |
 | Protected resource | `/.well-known/oauth-protected-resource/api/v1` |
+| MCP protected resource | `/.well-known/oauth-protected-resource/api/mcp` |
 | Authorization server | `/.well-known/oauth-authorization-server/api/auth` |
 | API specification | `/api/v1/openapi.json` |
 
@@ -33,12 +36,13 @@ data, signing keys and authorization requests. No separate OAuth secret is neede
 
 ## Register a client
 
-Dynamic registration is open by default. Administrators can disable **Open OAuth
-client registration** in **Settings → Admin → Instance**. This stops new client
-registrations; it does not disconnect existing apps. The setting is also named
-`allowOAuthClientRegistration` in a runtime seed. Registration is the only way to
-add a client; there is no separate client-management API. A client that no user
-has approved is removed 30 days after it registers.
+A client either registers dynamically or uses a client ID metadata document. Both
+are open by default. Administrators can disable both with **Open OAuth client
+registration** in **Settings → Admin → Instance**. This stops new clients; it does
+not disconnect existing apps. The setting is also named
+`allowOAuthClientRegistration` in a runtime seed. There is no separate
+client-management API. A client that no user has approved is removed 30 days after
+it registers.
 
 For a native public client, POST JSON to the discovered `registration_endpoint`:
 
@@ -61,9 +65,15 @@ redirects; web clients use HTTPS redirects. Public clients must not invent a
 client secret. Confidential clients must use their registered authentication
 method and keep their secret out of browsers and source control.
 
-Registration does not grant library access. Names are self-reported, so consent
-and Connected apps label registered clients **Unverified app**. Users should
-check the destination and approve only the app they intended to use. A custom
+Instead of registering, a client can use the HTTPS URL of a client ID metadata
+document, up to 512 characters, as its `client_id`. OpenReader fetches the document
+when the client first connects, and the authorization server metadata reports
+`client_id_metadata_document_supported`.
+
+Neither way grants library access. Consent and Connected apps show the domain of a
+metadata document client, because that domain controls its client ID. Names are
+self-reported, so a dynamically registered client is labeled **Unverified app**.
+Users should check the destination and approve only the app they intended to use. A custom
 redirect scheme is shown in full (`myapp://callback`), because anyone can register
 one that names another site's host. Device approval has no redirect, so it shows no
 destination. Registration limits names to 200 characters, URLs to 2048 characters

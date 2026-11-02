@@ -61,9 +61,10 @@ You cannot remove the last administrator, and you cannot demote, suspend or dele
 ## Connected apps
 
 Third-party clients can request scoped access to a signed-in user's library and
-audiobooks through [OAuth](../reference/oauth). Consent shows the app's
-self-reported name, actual destination, **Unverified app** warning and requested
-permissions. Guests cannot approve access. Apps share the user's existing compute
+audiobooks through [OAuth](../reference/oauth), including assistants that use
+[MCP](../reference/mcp). Consent shows the app's
+self-reported name, actual destination, requested permissions, and either the
+domain that controls the client ID or an **Unverified app** warning. Guests cannot approve access. Apps share the user's existing compute
 limits and cannot change provider credentials or administer the instance.
 
 Users disconnect apps in **Settings → Account → Connected apps**. Disconnect takes

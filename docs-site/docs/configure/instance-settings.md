@@ -20,7 +20,7 @@ description: Defaults and site-wide features in Settings → Admin → Instance.
 | **New account sign-ups** | `signupPolicy` | `open`, `approval` or `closed`. See [Users and Sign-in](./auth#sign-ups-and-guests). |
 | **New accounts per IP** | `limitNewAccountsPerIp`, `newAccountsPerIp`, `newAccountsPerIpDays` | Optional rolling creation cap. Off by default; enabling reveals 5 accounts per 30 days. Existing accounts remain usable. |
 | **Guest sessions** | `allowAnonymousSessions` | Lets visitors use the app without an account. Off by default. |
-| **Open OAuth client registration** | `allowOAuthClientRegistration` | Allows new third-party [OAuth clients](../reference/oauth) to register. On by default; disabling it keeps existing connections usable. |
+| **Open OAuth client registration** | `allowOAuthClientRegistration` | Allows new third-party [OAuth clients](../reference/oauth), including [MCP](../reference/mcp) connectors, to connect. On by default; disabling it keeps existing connections usable. |
 | **Guest idle period** | `anonymousUserIdleDays` | Days without a session before [Delete idle guest accounts](./maintenance#scheduled-tasks) removes a guest and its data. That task is off by default. While it is on, guests are told the period once, and again if it gets shorter. Default 90. |
 | **New guests per IP** | `limitNewGuestsPerIp`, `newGuestsPerIp` | Optional rolling creation cap over the current guest idle period. Off by default; enabling reveals 10 guests. Hidden when Guest sessions is off. |
 | **Audiobook export** | `enableAudiobookExport` | Shows [audiobook export](../guide/audiobook-export) in the reader. |

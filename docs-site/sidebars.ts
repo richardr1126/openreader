@@ -66,6 +66,7 @@ const sidebars: SidebarsConfig = {
       items: [
         'reference/public-api',
         'reference/oauth',
+        'reference/mcp',
         'reference/environment-variables',
         'configure/database',
         'configure/object-blob-storage',

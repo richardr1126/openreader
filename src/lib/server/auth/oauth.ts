@@ -2,11 +2,14 @@ import { jwt } from 'better-auth/plugins';
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api';
 import type { BetterAuthPlugin } from 'better-auth';
 import { extendOAuthProvider, getOAuthProviderApi, oauthDeviceAuthorization, oauthProvider, DEVICE_CODE_GRANT_TYPE, type OAuthOptions } from '@better-auth/oauth-provider';
+import { cimd } from '@better-auth/cimd';
+import { fetchClientMetadataResource } from '@better-auth/cimd/node';
 import { OAUTH_SCOPES } from '@/lib/shared/api-scopes';
 
 export function oauthUrls(baseUrl: string) {
   const origin = baseUrl.replace(/\/$/, '');
-  return { issuer: `${origin}/api/auth`, resource: `${origin}/api/v1`, metadata: `${origin}/.well-known/oauth-protected-resource/api/v1` };
+  return { issuer: `${origin}/api/auth`, resource: `${origin}/api/v1`, metadata: `${origin}/.well-known/oauth-protected-resource/api/v1`,
+    mcpResource: `${origin}/api/mcp`, mcpMetadata: `${origin}/.well-known/oauth-protected-resource/api/mcp` };
 }
 
 function assertOAuthUser(user: Record<string, unknown> | null | undefined, requireVerifiedEmail: boolean) {
@@ -30,7 +33,7 @@ function assertRegistrationLimits(body: Record<string, unknown> | undefined) {
 }
 
 /** Grant identity makes deleting consent invalidate JWTs even after a later reconnect. */
-function oauthGrantPolicy(requireVerifiedEmail: boolean, resource: string): BetterAuthPlugin {
+function oauthGrantPolicy(requireVerifiedEmail: boolean, resource: string, mcpResource: string): BetterAuthPlugin {
   const grants = new WeakMap<Request, { id: string; options: OAuthOptions<string[]> }>();
   const deviceGrants = new WeakMap<Request, string>();
   return {
@@ -74,8 +77,10 @@ function oauthGrantPolicy(requireVerifiedEmail: boolean, resource: string): Bett
         }
         if (context.path === '/oauth2/authorize' || context.path === '/device/code') {
           const requested = context.path === '/oauth2/authorize' ? context.query?.resource : context.body?.resource;
-          if (requested !== resource && !(Array.isArray(requested) && requested.length === 1 && requested[0] === resource)) {
-            throw new APIError('BAD_REQUEST', { error: 'invalid_target', error_description: 'Request the public API resource explicitly.' });
+          const single = Array.isArray(requested) && requested.length === 1 ? requested[0] : requested;
+          // One audience per token. MCP connectors sign in through a browser, so the device flow stays on v1.
+          if (single !== resource && !(context.path === '/oauth2/authorize' && single === mcpResource)) {
+            throw new APIError('BAD_REQUEST', { error: 'invalid_target', error_description: 'Request the public API or MCP resource explicitly.' });
           }
           if (context.path === '/device/code') {
             let clientId = context.body?.client_id;
@@ -138,14 +143,16 @@ function oauthGrantPolicy(requireVerifiedEmail: boolean, resource: string): Bett
 export function oauthPlugins(baseUrl: string, allowRegistration: boolean, requireVerifiedEmail: boolean) {
   const urls = oauthUrls(baseUrl);
   return [
-    jwt({ disableSettingJwtHeader: true, jwt: { issuer: urls.issuer, audience: urls.resource, expirationTime: '15m' } }),
+    jwt({ disableSettingJwtHeader: true, jwt: { issuer: urls.issuer, audience: [urls.resource, urls.mcpResource], expirationTime: '15m' } }),
     oauthProvider({ loginPage: '/signin', consentPage: '/oauth/consent',
       scopes: [...OAUTH_SCOPES], grantTypes: ['authorization_code', 'refresh_token'],
       allowDynamicClientRegistration: allowRegistration,
       allowUnauthenticatedClientRegistration: allowRegistration,
+      // Connectors often omit application_type on a loopback redirect.
+      clientRegistrationDefaultApplicationType: 'infer',
       clientRegistrationRequirePKCE: true, clientRegistrationDefaultScopes: [...OAUTH_SCOPES],
-      resources: [{ identifier: urls.resource, allowedScopes: [...OAUTH_SCOPES], accessTokenTtl: 900 }],
-      clientRegistrationDefaultResources: [urls.resource],
+      resources: [urls.resource, urls.mcpResource].map(identifier => ({ identifier, allowedScopes: [...OAUTH_SCOPES], accessTokenTtl: 900 })),
+      clientRegistrationDefaultResources: [urls.resource, urls.mcpResource],
       resourcePrivileges: () => false,
       accessTokenExpiresIn: 900, refreshTokenExpiresIn: 30 * 24 * 60 * 60, refreshTokenReuseInterval: 0,
       clientPrivileges: ({ user, action }) => action !== 'configure-client-credentials-scopes' && !!user && !user.isAnonymous && (!user.accessStatus || user.accessStatus === 'active'),
@@ -153,6 +160,8 @@ export function oauthPlugins(baseUrl: string, allowRegistration: boolean, requir
         shouldRedirect: ({ user }) => Boolean(user.isAnonymous || (user.accessStatus && user.accessStatus !== 'active')) },
     }),
     oauthDeviceAuthorization({ verificationUri: '/oauth/device' }),
-    oauthGrantPolicy(requireVerifiedEmail, urls.resource),
+    oauthGrantPolicy(requireVerifiedEmail, urls.resource, urls.mcpResource),
+    // Connected apps can only disconnect a client ID up to this length.
+    ...(allowRegistration ? [cimd({ fetchClientMetadataResource, metadataProfile: 'mcp-2026-07-28', isMetadataDocumentUrlAllowed: url => url.length <= 512 })] : []),
   ];
 }

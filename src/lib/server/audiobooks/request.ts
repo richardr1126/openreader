@@ -4,7 +4,7 @@ import { db } from '@openreader/database';
 import { documentSettings, documents, userPreferences } from '@openreader/database/schema';
 import type { AudiobookCaller, AudiobookIntent } from '@/lib/server/audiobooks/audiobooks';
 import { apiErrorResponse } from '@/lib/server/api/responses';
-import { resolveApiPrincipal, type ApiScope } from '@/lib/server/api/principal';
+import { resolveApiPrincipal, type ApiPrincipal, type ApiScope } from '@/lib/server/api/principal';
 import { detectParsedPdfLanguage, ensurePdfReady, storedRecord } from '@/lib/server/reader/bootstrap';
 import { resolveDefaultPlaybackRequest } from '@/lib/server/reader/playback';
 import { parseTtsPlaybackRequestBody } from '@/lib/server/tts/playback-request';
@@ -22,6 +22,10 @@ export async function resolveAudiobookCaller(
 ): Promise<AudiobookCaller | Response> {
   const principal = await resolveApiPrincipal(request, requiredScope);
   if (principal instanceof Response) return principal;
+  return audiobookCaller(principal, documentId);
+}
+
+export async function audiobookCaller(principal: ApiPrincipal, documentId: string): Promise<AudiobookCaller | Response> {
   const scope = await resolveUserDocumentScope(principal, documentId);
   if (!scope) return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
   return {

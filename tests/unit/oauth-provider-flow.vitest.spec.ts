@@ -8,9 +8,15 @@ import { beforeAll, afterAll, expect, test, vi } from 'vitest';
 import { runMigrations } from '@openreader/database/migrate';
 import type { JwtOptions } from 'better-auth/plugins';
 
+vi.mock('@better-auth/cimd/node', () => ({ fetchClientMetadataResource: async () => new Response(JSON.stringify({
+  client_id: 'https://connector.example/client.json', client_name: 'Metadata connector', redirect_uris: ['http://127.0.0.1:43210/callback'],
+  token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'],
+}), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=3600' } }) }));
+
 const directory = mkdtempSync(join(tmpdir(), 'openreader-oauth-'));
 const databasePath = join(directory, 'sqlite.db');
-const origin = 'http://localhost:3003', resource = `${origin}/api/v1`;
+const origin = 'http://localhost:3003', resource = `${origin}/api/v1`, mcpResource = `${origin}/api/mcp`;
+const metadataUrl = 'https://connector.example/client.json';
 const redirect = 'http://127.0.0.1:43210/callback';
 const original = { ...process.env };
 let auth: Awaited<ReturnType<typeof import('@/lib/server/auth/auth').getAuth>>;
@@ -27,25 +33,25 @@ async function call(path: string, body?: unknown, session?: string, form = false
     ...(body === undefined ? { Accept: 'text/html' } : { 'Content-Type': form ? 'application/x-www-form-urlencoded' : 'application/json' }),
   }, ...(body === undefined ? {} : { body: form ? new URLSearchParams(body as Record<string, string>) : JSON.stringify(body) }) }));
 }
-async function authorize(scopes = 'documents:read offline_access') {
+async function authorize(scopes = 'documents:read offline_access', target = resource, client = clientId) {
   const verifier = randomBytes(32).toString('hex');
-  const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirect,
-    code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', scope: scopes, resource, state: 'test-state', prompt: 'consent' });
+  const params = new URLSearchParams({ client_id: client, response_type: 'code', redirect_uri: redirect,
+    code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', scope: scopes, resource: target, state: 'test-state', prompt: 'consent' });
   const response = await call(`/oauth2/authorize?${params}`, undefined, cookie);
   expect(response.status).toBe(302);
   const location = new URL(response.headers.get('location')!, origin);
   expect(location.pathname).toBe('/oauth/consent');
   return { verifier, query: location.searchParams.toString() };
 }
-async function grant(scopes = 'documents:read offline_access') {
-  const intent = await authorize(scopes);
+async function grant(scopes = 'documents:read offline_access', target = resource, client = clientId) {
+  const intent = await authorize(scopes, target, client);
   const consent = await call('/oauth2/consent', { accept: true, scope: scopes, oauth_query: intent.query }, cookie);
   const result = consent.headers.get('location') ? { url: consent.headers.get('location')! } : await consent.json();
   expect(typeof result.url).toBe('string');
   const callback = new URL(result.url);
   expect(callback.origin + callback.pathname).toBe(redirect);
-  const token = await call('/oauth2/token', { grant_type: 'authorization_code', client_id: clientId,
-    code: callback.searchParams.get('code')!, redirect_uri: redirect, code_verifier: intent.verifier, resource }, undefined, true);
+  const token = await call('/oauth2/token', { grant_type: 'authorization_code', client_id: client,
+    code: callback.searchParams.get('code')!, redirect_uri: redirect, code_verifier: intent.verifier, resource: target }, undefined, true);
   expect(token.status).toBe(200);
   return await token.json() as { access_token: string; refresh_token: string };
 }
@@ -125,7 +131,7 @@ test('disconnect immediately cuts off JWTs and refresh tokens, including after r
 });
 
 test('wrong resource, redirect URI, missing PKCE and forged consent requests fail closed', async () => {
-  const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirect, scope: 'documents:read', resource: `${origin}/api/mcp` });
+  const params = new URLSearchParams({ client_id: clientId, response_type: 'code', redirect_uri: redirect, scope: 'documents:read', resource: `${origin}/api/other` });
   const wrong = await call(`/oauth2/authorize?${params}`, undefined, cookie);
   expect(wrong.status).not.toBe(200);
   params.set('resource', resource); params.set('redirect_uri', 'https://foreign.test/callback');
@@ -178,6 +184,90 @@ test('bearer checks reject wrong audiences, issuers, expiry, signatures and cook
   expect((await GET(new NextRequest(`${origin}/api/user/connected-apps`, { headers: { cookie, authorization: `Bearer ${token.access_token}` } }))).status).toBe(403);
 });
 
+async function mcp(token: string | null, method: string, params: unknown = {}, headers: Record<string, string> = {}) {
+  const { POST } = await import('@/app/api/mcp/route');
+  return POST(new NextRequest(mcpResource, { method: 'POST', body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }), headers: {
+    'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers,
+  } }));
+}
+async function mcpResult(response: Response) {
+  expect(response.status).toBe(200);
+  const text = await response.text();
+  return JSON.parse(text.startsWith('{') ? text : /^data: (.+)$/m.exec(text)![1]).result;
+}
+
+test('MCP and v1 tokens only work on their own resource', async () => {
+  const { GET } = await import('@/app/.well-known/oauth-protected-resource/api/mcp/route');
+  expect(await GET().json()).toMatchObject({ resource: mcpResource, authorization_servers: [`${origin}/api/auth`], scopes_supported: expect.arrayContaining(['offline_access']) });
+
+  const token = await grant('documents:read offline_access', mcpResource);
+  const tools = await mcpResult(await mcp(token.access_token, 'tools/list'));
+  expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['list_documents', 'add_document', 'list_voices', 'create_audiobook', 'get_audiobook']);
+  const called = await mcpResult(await mcp(token.access_token, 'tools/call', { name: 'list_documents', arguments: {} }));
+  expect(called.structuredContent).toEqual({ documents: [], nextCursor: null });
+  expect((await principal(token.access_token) as Response).status).toBe(401);
+
+  const api = await grant();
+  const rejected = await mcp(api.access_token, 'tools/list');
+  expect(rejected.status).toBe(401);
+  expect(rejected.headers.get('www-authenticate')).toContain(`resource_metadata="${origin}/.well-known/oauth-protected-resource/api/mcp", error="invalid_token"`);
+
+  // A refresh token stays on the resource the user approved.
+  const crossed = await call('/oauth2/token', { grant_type: 'refresh_token', client_id: clientId, refresh_token: api.refresh_token, resource: mcpResource }, undefined, true);
+  expect(crossed.status).toBe(400);
+  const device = await call('/device/code', { client_id: clientId, scope: 'documents:read', resource: mcpResource }, undefined, true);
+  expect(device.status).toBe(400);
+
+  const { disconnectApp } = await import('@/lib/server/auth/connected-apps');
+  await disconnectApp(userId, clientId);
+  expect((await mcp(token.access_token, 'tools/list')).status).toBe(401);
+});
+
+test('MCP serves the 2026-07-28 protocol with the same tools and token rules', async () => {
+  const version = '2026-07-28';
+  const envelope = { 'io.modelcontextprotocol/protocolVersion': version, 'io.modelcontextprotocol/clientCapabilities': {} };
+  const modern = (token: string | null, method: string, params: Record<string, unknown> = {}) => mcp(token, method, { ...params, _meta: envelope }, { 'MCP-Protocol-Version': version, 'MCP-Method': method, ...(typeof params.name === 'string' ? { 'MCP-Name': params.name } : {}) });
+
+  expect((await modern(null, 'tools/list')).status).toBe(401);
+  const token = await grant('documents:read offline_access', mcpResource);
+  const discovered = await mcpResult(await modern(token.access_token, 'server/discover'));
+  expect(discovered.supportedVersions).toContain(version);
+  const tools = await mcpResult(await modern(token.access_token, 'tools/list'));
+  expect(tools.tools).toHaveLength(5);
+  const called = await mcpResult(await modern(token.access_token, 'tools/call', { name: 'list_documents', arguments: {} }));
+  expect(called.structuredContent).toEqual({ documents: [], nextCursor: null });
+  const missing = await modern(token.access_token, 'tools/call', { name: 'add_document', arguments: { text: 'Hello', name: 'hello.txt' } });
+  expect(missing.status).toBe(403);
+  expect(missing.headers.get('www-authenticate')).toContain('scope="documents:write"');
+});
+
+test('MCP takes only bearer tokens from an allowed origin, and challenges for a missing scope', async () => {
+  const anonymous = await mcp(null, 'tools/list', {}, { cookie });
+  expect(anonymous.status).toBe(401);
+  expect(anonymous.headers.get('www-authenticate')).toBe(`Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/api/mcp"`);
+  const token = await grant('documents:read offline_access', mcpResource);
+  expect((await mcp(token.access_token, 'tools/list', {}, { Origin: 'https://foreign.test' })).status).toBe(403);
+  expect((await mcp(token.access_token, 'tools/list', {}, { Origin: origin })).status).toBe(200);
+  const missing = await mcp(token.access_token, 'tools/call', { name: 'add_document', arguments: { text: 'Hello', name: 'hello.txt' } });
+  expect(missing.status).toBe(403);
+  expect(missing.headers.get('www-authenticate')).toContain('error="insufficient_scope"');
+  expect(missing.headers.get('www-authenticate')).toContain('scope="documents:write"');
+});
+
+test('a client ID metadata document connects without registering and shows its domain', async () => {
+  const server = await (await import('@/app/.well-known/oauth-authorization-server/api/auth/route')).GET(new Request(`${origin}/.well-known/oauth-authorization-server/api/auth`));
+  expect((await server.json()).client_id_metadata_document_supported).toBe(true);
+  const token = await grant('documents:read offline_access', mcpResource, metadataUrl);
+  expect((await mcp(token.access_token, 'tools/list')).status).toBe(200);
+  const { listConnectedApps, oauthRequestInfo } = await import('@/lib/server/auth/connected-apps');
+  expect((await listConnectedApps(userId)).data).toEqual(expect.arrayContaining([expect.objectContaining({ id: metadataUrl, name: 'Metadata connector', verifiedDomain: 'connector.example' })]));
+  const intent = await authorize('documents:read offline_access', mcpResource, metadataUrl);
+  const info = await oauthRequestInfo(new NextRequest(`${origin}/api/oauth/request?${new URLSearchParams({ query: intent.query })}`));
+  expect(info).toMatchObject({ verifiedDomain: 'connector.example', destination: '127.0.0.1:43210' });
+  const { disconnectApp } = await import('@/lib/server/auth/connected-apps');
+  await disconnectApp(userId, metadataUrl);
+});
+
 test('suspension, guest conversion and client disabling immediately invalidate access', async () => {
   const token = await grant();
   const database = new Database(databasePath);
@@ -200,6 +290,11 @@ test('the registration switch takes effect and guests cannot consent or approve 
   await settings.setRuntimeConfigKey('allowOAuthClientRegistration', false);
   auth = await (await import('@/lib/server/auth/auth')).getAuth();
   expect((await call('/oauth2/register', { client_name: 'Disabled registration', redirect_uris: [redirect], token_endpoint_auth_method: 'none' })).status).toBe(403);
+  const server = await (await import('@/app/.well-known/oauth-authorization-server/api/auth/route')).GET(new Request(`${origin}/.well-known/oauth-authorization-server/api/auth`));
+  expect((await server.json()).client_id_metadata_document_supported).toBeUndefined();
+  const unknown = new URLSearchParams({ client_id: 'https://other.example/client.json', response_type: 'code', redirect_uri: redirect, scope: 'documents:read', resource: mcpResource, code_challenge: 'x'.repeat(43), code_challenge_method: 'S256' });
+  expect((await call(`/oauth2/authorize?${unknown}`, undefined, cookie)).headers.get('location')).toContain('error=');
+  expect(sql('select id from oauth_client where client_id=?', 'https://other.example/client.json')).toHaveLength(0);
   await settings.setRuntimeConfigKey('allowOAuthClientRegistration', true);
   await settings.setRuntimeConfigKey('allowAnonymousSessions', true);
   auth = await (await import('@/lib/server/auth/auth')).getAuth();

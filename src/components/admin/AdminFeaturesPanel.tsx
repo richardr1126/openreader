@@ -434,7 +434,7 @@ export function AdminFeaturesPanel({
         </> : null}
         <ToggleRow
           label="Open OAuth client registration"
-          info="Let third-party apps register themselves. Registration does not grant access; each account must approve its scopes."
+          info="Let new third-party apps connect, by registering or with a client ID metadata document. This does not grant access; each account must approve its scopes."
           checked={Boolean(draft.allowOAuthClientRegistration)}
           onChange={(checked) => updateDraft('allowOAuthClientRegistration', checked)}
           meta={renderSource('allowOAuthClientRegistration')}

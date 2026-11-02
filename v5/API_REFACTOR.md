@@ -1,6 +1,6 @@
 # Public API refactor
 
-Status: accepted; phases 1–4.9 are implemented. Phases 5–6 remain planned.
+Status: accepted; phases 1–5 are implemented. Phase 6 remains planned.
 
 Migration numbers 0028 to 0031 in the history below were combined into `0027_public_api`
 by phase 4.9.
@@ -441,7 +441,9 @@ Start with `list_documents`, `add_document`, `list_voices`, `create_audiobook` a
 - No local MCP package is needed at first, since OAuth handles sign-in.
 - Use the MCP SDK (`@modelcontextprotocol/server` v2 with zod).
 - Accept and document the re-consent cutoffs clients have.
-- Test connectors on production during final verification, since there is no preview stack.
+- Test locally with MCP Inspector, and optionally a desktop client, before merging. Hosted
+  connectors need a public HTTPS address, so test those on production during final
+  verification, since there is no preview stack.
 - No request rate limit specific to MCP. Compute, storage and file limits cover cost.
 - Client registration supports CIMD and DCR on all instances, with one admin switch. This
   needs `@better-auth/cimd`.
@@ -790,7 +792,7 @@ Authorization code requires S256 PKCE and exact registered redirects. The device
 flow explicitly approves codes in the browser and exchanges them only at the
 OAuth token endpoint. Unknown device clients are rejected and the companion
 plugin's browser-session token endpoint is disabled. Both flows require the
-explicit `BASE_URL/api/v1` resource. The future MCP audience is not enabled.
+explicit `BASE_URL/api/v1` resource. Phase 5 later added the MCP audience.
 Open dynamic registration is the default; the runtime admin switch stops new
 registrations without disconnecting existing apps. Resource administration and
 client-credentials grants are not exposed.
@@ -1065,3 +1067,44 @@ earlier versions must be reset. Later phases add their own migrations after 0027
 Acceptance: the regenerated snapshots match the old 0031 snapshots in both dialects, and
 every old statement is in the new file. Applying the old and new chains from empty gave
 identical `sqlite_master` contents and an empty `pg_dump --schema-only` diff on PostgreSQL 16.
+
+### Phase 5: MCP
+
+Implemented on 2026-11-02.
+
+- `/api/mcp` is a stateless streamable HTTP endpoint built with `@modelcontextprotocol/server`
+  2.4.0. It serves the 2026-07-28 protocol and stateless legacy traffic with the same five
+  tools: `list_documents`, `add_document`, `list_voices`, `create_audiobook` and
+  `get_audiobook`. The tools call the same shared logic as `/api/v1`.
+- MCP is its own OAuth audience, `BASE_URL/api/mcp`, with its own protected resource metadata.
+  A token for `/api/v1` is rejected here and the reverse. The endpoint never accepts a cookie.
+- `@better-auth/cimd` adds Client ID Metadata Documents beside DCR, under the one
+  `allowOAuthClientRegistration` switch. Consent and Connected apps show the verified domain,
+  or "Unverified app".
+- The re-consent cutoffs are documented in `docs-site/docs/reference/mcp.md`.
+
+The Playwright matrix also exposed a bug in the onboarding flow, unrelated to MCP.
+`PrivacyModal` awaited the PATCH and its refetch, then called `onAccept`, which closed
+whichever modal was open and set the leaving-modal guard. When that landed after privacy's
+leave transition, it closed the next step and left the guard stuck, because no `afterLeave`
+would clear it, so later steps never opened. A slow network makes this happen every time. The
+fix deletes `onAccept`: the flow already reacts to the optimistic consent, and a failed save
+rolls back and reopens privacy. The new `guest-retention` test delays the PATCH by a second. It
+failed 3 of 3 runs without the fix and, together with the existing journey, passed 40 of 40
+with it.
+
+Acceptance:
+
+- 1743 Vitest tests and 93 local Playwright cases passed, with both type checks and the
+  route-error, compute-boundary and install-profile checks.
+- MCP Inspector 2.13.0 against a disposable local stack completed the OAuth flow from the 401
+  through protected resource metadata, DCR, sign-in, consent and token. It listed the five
+  tools; added a document from text and from a URL; listed voices from a real Supertonic
+  server; and created an audiobook, where a repeat call returned the same id, through to
+  ready. Passing both URL and text returned an `isError` result. `webUrl` opened the document.
+
+Not covered yet:
+
+- Inspector connected on the legacy path, so the 2026-07-28 protocol is covered by Vitest only.
+- No desktop client has been run against the endpoint.
+- Hosted connectors need a public HTTPS address, so they wait for final verification.
