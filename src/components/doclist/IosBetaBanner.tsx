@@ -7,8 +7,8 @@ import { IconButton } from '@/components/ui';
 const TESTFLIGHT_URL = 'https://testflight.apple.com/join/eJTYjDwV';
 
 /**
- * Full-width strip between the library toolbar and its panes. It collapses its
- * own height on enter/exit so the library slides with it instead of jumping.
+ * Reserve the full height while fading in so document links do not move under
+ * the pointer when the library remounts.
  */
 export function IosBetaBanner({ show, onDismiss }: { show: boolean; onDismiss: () => void }) {
   return (
@@ -16,11 +16,11 @@ export function IosBetaBanner({ show, onDismiss }: { show: boolean; onDismiss: (
       show={show}
       appear
       as="div"
-      className="grid shrink-0 transition-[grid-template-rows,opacity] duration-slow ease-standard"
-      enterFrom="grid-rows-[0fr] opacity-0"
-      enterTo="grid-rows-[1fr] opacity-100"
-      leaveFrom="grid-rows-[1fr] opacity-100"
-      leaveTo="grid-rows-[0fr] opacity-0"
+      className="shrink-0 transition-opacity duration-slow ease-standard"
+      enterFrom="opacity-0"
+      enterTo="opacity-100"
+      leaveFrom="opacity-100"
+      leaveTo="opacity-0"
     >
       <div className="min-h-0 overflow-hidden">
         <aside
