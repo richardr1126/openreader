@@ -291,7 +291,6 @@ async function advanceAudiobook(input: {
         scope,
         planningInput: { settingsHash, settingsJson, planning },
         policy: runtimeConfig.computeLimitPolicies,
-        ip: subject.ip ?? null,
         retryFailed: explicit,
       });
       // A very short plan can finish before its admission is linked, so its

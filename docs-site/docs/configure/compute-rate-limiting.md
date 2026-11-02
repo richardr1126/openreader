@@ -30,7 +30,7 @@ TTS usage is counted in characters sent to a provider, and only for audio that h
 - Playback can continue through audio that is already generated, and seeking still works.
 - Retries never count twice.
 
-Separate limits apply to signed-in users, guests, and each IP address, plus a backstop per guest device. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**.
+Separate per-user limits apply to signed-in users and guests. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**. Optional creation caps under **Instance** limit new accounts per IP over a rolling period and new guests per IP over the guest idle period. IPv6 addresses share a /64 bucket; stored IP values are keyed hashes. Existing accounts keep working when a creation cap is reached.
 
 The complete policy, with every value, is in [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). An incomplete or unknown policy in a seed stops startup before anything is written.
 

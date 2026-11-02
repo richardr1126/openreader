@@ -67,7 +67,7 @@ describe('bootstrap playback preparation', () => {
     const failed = { opId: 'failed-plan', status: 'failed', error: { message: 'bad document' } };
     mocks.resolvePlan.mockResolvedValue(failed);
     const operation = await createAdmittedPlaybackPlanOperation({ parsed, scope,
-      planningInput: await buildTtsPlaybackPlanningInput(parsed, scope), policy: {} as never, ip: null, retryFailed: false });
+      planningInput: await buildTtsPlaybackPlanningInput(parsed, scope), policy: {} as never, retryFailed: false });
     expect(operation).toBe(failed);
     expect(mocks.enqueue).not.toHaveBeenCalled();
   });

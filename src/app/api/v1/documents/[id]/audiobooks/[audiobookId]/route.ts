@@ -26,7 +26,7 @@ export async function GET(request: NextRequest, context: Context) {
     if (resolved instanceof Response) return resolved;
     const audiobook = await getAudiobook(resolved.caller, audiobookId, documentId);
     if (!audiobook) return notFound();
-    return resolved.finish(NextResponse.json(audiobook));
+    return NextResponse.json(audiobook);
   } catch (error) {
     if (error instanceof ChapterNotFoundError) return apiErrorResponse(404, 'CHAPTER_NOT_FOUND', error.message);
     return apiCatchResponse(error, {
@@ -50,7 +50,7 @@ export async function DELETE(request: NextRequest, context: Context) {
     if (resolved instanceof Response) return resolved;
     const audiobook = await stopAudiobook(resolved.caller, audiobookId, documentId);
     if (!audiobook) return notFound();
-    return resolved.finish(NextResponse.json(audiobook));
+    return NextResponse.json(audiobook);
   } catch (error) {
     if (error instanceof ChapterCommandError) return apiErrorResponse(400, 'REQUEST_INVALID', error.message);
     return apiCatchResponse(error, {

@@ -90,6 +90,15 @@ export function AdminFeaturesPanel({
   // Sign-up policy, guest sessions and per-user limits govern a multi-user
   // instance. The desktop owner is the only account, so they stay hidden there.
   const multiUser = useRuntimeConfig().installProfile === 'server';
+  const { data: taskData } = useQuery({
+    queryKey: queryKeys.admin(session?.user?.id ?? 'no-session', 'tasks'),
+    queryFn: async () => {
+      const response = await fetch('/api/admin/tasks');
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json() as Promise<{ tasks: Array<{ key: string; enabled: boolean }> }>;
+    },
+    enabled: multiUser && Boolean(session?.user?.id),
+  });
   const adminSettingsQueryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
   const { data, error } = useQuery({
     queryKey: adminSettingsQueryKey,
@@ -365,6 +374,14 @@ export function AdminFeaturesPanel({
             className="grid-cols-3"
           />
         </SettingRow>
+        {draft.signupPolicy !== 'closed' ? <>
+          <ToggleRow label="New accounts per IP" checked={Boolean(draft.limitNewAccountsPerIp)}
+            onChange={(checked) => updateDraft('limitNewAccountsPerIp', checked)} variant="plain" />
+          {draft.limitNewAccountsPerIp ? <>
+            {numberRow({ key: 'newAccountsPerIp', label: 'New accounts', icon: <UserPlusIcon /> })}
+            {numberRow({ key: 'newAccountsPerIpDays', label: 'Account creation period', icon: <ClockIcon />, unit: 'days' })}
+          </> : null}
+        </> : null}
         <ToggleRow
           label="Guest sessions"
           icon={<UserIcon />}
@@ -374,13 +391,20 @@ export function AdminFeaturesPanel({
           meta={renderSource('allowAnonymousSessions')}
           variant="plain"
         />
-        {numberRow({
+        {draft.allowAnonymousSessions ? <>{numberRow({
           key: 'anonymousUserIdleDays',
           label: 'Guest idle period',
           icon: <HourglassIcon />,
           info: 'Guest accounts idle this long are deleted when the Delete idle guest accounts task is on.',
           unit: 'days',
         })}
+        <ToggleRow label="New guests per IP" checked={Boolean(draft.limitNewGuestsPerIp)}
+          description={`Over a rolling ${draft.anonymousUserIdleDays}-day guest idle period.`}
+          onChange={(checked) => updateDraft('limitNewGuestsPerIp', checked)} variant="plain" />
+        {draft.limitNewGuestsPerIp ? numberRow({ key: 'newGuestsPerIp', label: 'New guests', icon: <UserIcon /> }) : null}
+        {taskData && !taskData.tasks.find((task) => task.key === 'expire-anonymous-users')?.enabled ?
+          <p className="px-4 py-2 text-xs text-soft">Guests are never removed. Enable Delete idle guest accounts in <a className="underline" href="/app/settings?section=maintenance">Tasks</a>.</p> : null}
+        </> : null}
         </> : null}
         <ToggleRow
           label="Open OAuth client registration"

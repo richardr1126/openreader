@@ -1,7 +1,7 @@
 # Public API refactor
 
-Status: accepted; phases 1–4 are implemented; phase 4.5 hardens them before phases
-5–6, which remain planned.
+Status: accepted; phases 1–4.6 are implemented. Phase 4.7 is next; phase 4.8 is
+deferred to separate UX work. Phases 5–6 remain planned.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -897,4 +897,54 @@ that ran the earlier version must be reset.
 
 No production migration, deployment, version bump, tag or push was performed. Next:
 phases 4.6 to 4.8, then phase 5.
+
+### Phase 4.6: Account creation and IP handling
+
+All sign-up paths now enforce optional rolling guest/account creation caps in
+the user-create hook, using the existing limit buckets. Counters serialize per
+hashed IP and account kind, including concurrent requests at the boundary.
+Guests default to 10 per guest idle period; accounts to 5 per 30 days. Both caps
+default off and skip requests without a known IP. Existing sessions and sign-in
+remain available. A capped guest bootstrap goes directly to Sign in without
+retrying; sign-up displays the server error.
+
+Session creation replaces IPs with a separately labelled keyed hash. IPv6
+addresses group by /64, including canonicalization and mapped IPv4 handling.
+Better Auth still sees the incoming IP for request throttling. Account exports
+omit session IPs. Migration 0029 clears old raw session values, removes retired
+IP/device admission columns and discards their limit buckets. User/site compute
+limits remain; device cookies and their route plumbing are removed. Saved
+schema-2 policies discard only retired scope rows, preserving enabled states
+and remaining user/site values, including policies with only retired usage rows.
+
+Instance settings hide caps when their feature is off and hide all these
+controls on desktop. Enabling a cap reveals its prefilled defaults. Guest caps
+display the current idle period and link to Tasks when guest cleanup is off.
+The privacy policy, consent summary, deployment settings and full seed example
+reflect IP hashing and the removed device cookie.
+
+Acceptance evidence (2026-11-02):
+
+- Visible disposable-stack verification confirmed off-by-default toggles,
+  revealed defaults of 5 accounts / 30 days and 10 guests / guest idle period,
+  and the cleanup-disabled consequence with its Tasks link. Drafts were
+  discarded and the stack stopped before the browser matrix.
+- Real-handler tests cover both creation caps, existing-account sign-in,
+  unknown IPs, IPv6 grouping, hashed session persistence and Better Auth request
+  throttling. Real SQL tests cover concurrent rolling counters and exact expiry.
+  A saved copy of the old policy proves configured user limits survive removal
+  of device/IP rows. Migration coverage preserves sessions while clearing IPs.
+- Complete Vitest: 1,719 passed across 247 files. Application/worker TypeScript,
+  production build, route-error, compute-boundary and install-profile checks
+  passed. Documentation production build passed; schema generation reports no
+  further changes for either dialect.
+- Complete Playwright: 87 passed in 3.1 minutes, including both real playback
+  journeys and the capped-guest journey in Chromium/WebKit, with no failures or
+  retries. The first invocation could not launch Chromium under the macOS
+  sandbox; the unchanged matrix passed with browser-launch permission. Port
+  3003 was free after teardown.
+
+Migration 0029 remains an owner-coordinated production upgrade. No production
+migration, deployment, version bump, tag or push was performed. Phase 4.8 is
+deferred at the owner's request; phase 5 has not started.
 

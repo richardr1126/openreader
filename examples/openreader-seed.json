@@ -7,6 +7,11 @@
     "allowAnonymousSessions": false,
     "allowOAuthClientRegistration": true,
     "anonymousUserIdleDays": 90,
+    "limitNewAccountsPerIp": false,
+    "newAccountsPerIp": 5,
+    "newAccountsPerIpDays": 30,
+    "limitNewGuestsPerIp": false,
+    "newGuestsPerIp": 10,
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,
     "enableDocxConversion": true,
@@ -191,10 +196,7 @@
           "admission": { "windows": [], "active": [] },
           "usage": [
             { "scope": "user", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 50000, "boundary": "soft_unit" },
-            { "scope": "user", "audience": "authenticated", "metric": "characters", "window": "utc_day", "limit": 500000, "boundary": "soft_unit" },
-            { "scope": "anonymous_device", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 50000, "boundary": "soft_unit" },
-            { "scope": "ip", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 100000, "boundary": "soft_unit" },
-            { "scope": "ip", "audience": "authenticated", "metric": "characters", "window": "utc_day", "limit": 1000000, "boundary": "soft_unit" }
+            { "scope": "user", "audience": "authenticated", "metric": "characters", "window": "utc_day", "limit": 500000, "boundary": "soft_unit" }
           ]
         }
       },

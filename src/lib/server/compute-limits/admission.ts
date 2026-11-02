@@ -10,7 +10,6 @@ import type {
 } from '@openreader/runtime-config/compute-limits';
 import {
   computePolicyVersion,
-  deriveComputeScopeKey,
   fixedWindow,
   resolveComputeScope,
   type ComputeLimitSubject,
@@ -61,7 +60,7 @@ function parseChargedActiveScopes(value: string): ChargedActiveScope[] {
   const parsed = JSON.parse(value) as unknown;
   if (!Array.isArray(parsed) || !parsed.every((entry) => (
     entry && typeof entry === 'object'
-      && ['user', 'anonymous_device', 'ip', 'site'].includes(
+      && ['user', 'site'].includes(
         String((entry as Record<string, unknown>).scope),
       )
       && typeof (entry as Record<string, unknown>).scopeKey === 'string'
@@ -272,12 +271,6 @@ export async function reserveComputeAdmission(input: {
         action: input.action,
         state: 'reserved',
         operationId: null,
-        deviceScopeKey: input.subject.isAnonymous && input.subject.deviceId
-          ? deriveComputeScopeKey('anonymous_device', input.subject.deviceId)
-          : input.subject.deviceScopeKey ?? null,
-        ipScopeKey: input.subject.ip
-          ? deriveComputeScopeKey('ip', input.subject.ip)
-          : input.subject.ipScopeKey ?? null,
         activeScopesJson,
         policyVersion: computePolicyVersion(input.policy),
         createdAt: nowMs,

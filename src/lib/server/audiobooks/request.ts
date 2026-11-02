@@ -1,12 +1,10 @@
 import { and, eq } from 'drizzle-orm';
-import type { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
 import { db } from '@openreader/database';
 import { documentSettings, documents, userPreferences } from '@openreader/database/schema';
 import type { AudiobookCaller, AudiobookIntent } from '@/lib/server/audiobooks/audiobooks';
 import { apiErrorResponse } from '@/lib/server/api/responses';
 import { resolveApiPrincipal, type ApiScope } from '@/lib/server/api/principal';
-import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
-import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { detectParsedPdfLanguage, ensurePdfReady, storedRecord } from '@/lib/server/reader/bootstrap';
 import { resolveDefaultPlaybackRequest } from '@/lib/server/reader/playback';
 import { parseTtsPlaybackRequestBody } from '@/lib/server/tts/playback-request';
@@ -21,12 +19,12 @@ export async function resolveAudiobookCaller(
   request: NextRequest,
   documentId: string,
   requiredScope: ApiScope,
-): Promise<{ caller: AudiobookCaller; finish: <T extends NextResponse>(response: T) => T } | Response> {
+): Promise<{ caller: AudiobookCaller } | Response> {
   const principal = await resolveApiPrincipal(request, requiredScope);
   if (principal instanceof Response) return principal;
   const scope = await resolveUserDocumentScope(principal, documentId);
   if (!scope) return apiErrorResponse(404, 'DOCUMENT_NOT_FOUND', 'Document not found.');
-  const device = principal.isAnonymous ? getOrCreateDeviceId(request) : null;
+
   return {
     caller: {
       scope,
@@ -35,13 +33,7 @@ export async function resolveAudiobookCaller(
       subject: {
         userId: principal.userId,
         isAnonymous: principal.isAnonymous,
-        deviceId: device?.deviceId ?? null,
-        ip: principal.clientId ? null : getClientIp(request),
       },
-    },
-    finish: (response) => {
-      if (device?.didCreate) setDeviceIdCookie(response, device.deviceId);
-      return response;
     },
   };
 }
@@ -118,10 +110,10 @@ export async function resolveAudiobookIntent(
     return apiErrorResponse(400, 'REQUEST_INVALID', 'voice must be a voice ID.');
   }
 
-  const { scope, subject } = caller;
+  const { scope } = caller;
   let parsedPdf: ParsedPdfDocument | null = null;
   if (scope.readerType === 'pdf') {
-    const pdf = await ensurePdfReady(subject.ip ?? null, documentId, scope, {
+    const pdf = await ensurePdfReady(documentId, scope, {
       observeOnly: options.observeOnly,
       throwAdmissionLimit: true,
     });

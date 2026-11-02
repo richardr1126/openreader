@@ -1,0 +1,390 @@
+{
+  "schemaVersion": 2,
+  "actions": {
+    "pdf_layout": {
+      "enabled": true,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 8,
+            "windowSeconds": 60
+          },
+          {
+            "scope": "user",
+            "limit": 24,
+            "windowSeconds": 600
+          },
+          {
+            "scope": "ip",
+            "limit": 3,
+            "windowSeconds": 60
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 1,
+            "leaseSeconds": 86400
+          },
+          {
+            "scope": "site",
+            "limit": 8,
+            "leaseSeconds": 86400
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "foreground",
+        "maxQueued": 50,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 600,
+        "resources": {
+          "cpu_heavy": 1,
+          "model_inference": 1
+        }
+      }
+    },
+    "tts_playback": {
+      "enabled": false,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 12,
+            "windowSeconds": 60
+          },
+          {
+            "scope": "user",
+            "limit": 60,
+            "windowSeconds": 3600
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 2,
+            "leaseSeconds": 1800
+          },
+          {
+            "scope": "site",
+            "limit": 50,
+            "leaseSeconds": 1800
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "interactive",
+        "maxQueued": 100,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 60,
+        "resources": {}
+      }
+    },
+    "tts_playback_document": {
+      "enabled": false,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 6,
+            "windowSeconds": 600
+          },
+          {
+            "scope": "user",
+            "limit": 30,
+            "windowSeconds": 86400
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 1,
+            "leaseSeconds": 43200
+          },
+          {
+            "scope": "site",
+            "limit": 20,
+            "leaseSeconds": 43200
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "background",
+        "maxQueued": 50,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 21600,
+        "resources": {}
+      }
+    },
+    "tts_playback_plan": {
+      "enabled": false,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 12,
+            "windowSeconds": 60
+          },
+          {
+            "scope": "user",
+            "limit": 60,
+            "windowSeconds": 3600
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 2,
+            "leaseSeconds": 1800
+          },
+          {
+            "scope": "site",
+            "limit": 20,
+            "leaseSeconds": 1800
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "foreground",
+        "maxQueued": 100,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 600,
+        "resources": {}
+      }
+    },
+    "tts_playback_export": {
+      "enabled": false,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 2,
+            "windowSeconds": 600
+          },
+          {
+            "scope": "user",
+            "limit": 6,
+            "windowSeconds": 86400
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 1,
+            "leaseSeconds": 7200
+          },
+          {
+            "scope": "site",
+            "limit": 4,
+            "leaseSeconds": 7200
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "foreground",
+        "maxQueued": 20,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 600,
+        "resources": {
+          "ffmpeg": 1,
+          "archive_io": 1
+        }
+      }
+    },
+    "document_preview": {
+      "enabled": false,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 30,
+            "windowSeconds": 600
+          },
+          {
+            "scope": "user",
+            "limit": 200,
+            "windowSeconds": 86400
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 4,
+            "leaseSeconds": 1800
+          },
+          {
+            "scope": "site",
+            "limit": 20,
+            "leaseSeconds": 1800
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "background",
+        "maxQueued": 200,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 3600,
+        "resources": {
+          "cpu_heavy": 1
+        }
+      }
+    },
+    "document_conversion": {
+      "enabled": false,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 4,
+            "windowSeconds": 600
+          },
+          {
+            "scope": "user",
+            "limit": 20,
+            "windowSeconds": 86400
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 1,
+            "leaseSeconds": 600
+          },
+          {
+            "scope": "site",
+            "limit": 8,
+            "leaseSeconds": 600
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "foreground",
+        "maxQueued": 50,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 600,
+        "resources": {
+          "cpu_heavy": 1,
+          "libreoffice": 1
+        }
+      }
+    },
+    "account_export": {
+      "enabled": false,
+      "admission": {
+        "windows": [
+          {
+            "scope": "user",
+            "limit": 2,
+            "windowSeconds": 3600
+          },
+          {
+            "scope": "user",
+            "limit": 4,
+            "windowSeconds": 86400
+          }
+        ],
+        "active": [
+          {
+            "scope": "user",
+            "limit": 1,
+            "leaseSeconds": 7200
+          },
+          {
+            "scope": "site",
+            "limit": 4,
+            "leaseSeconds": 7200
+          }
+        ]
+      },
+      "usage": [],
+      "execution": {
+        "priority": "background",
+        "maxQueued": 20,
+        "maxConcurrentPerWorker": 1,
+        "maxQueueAgeSeconds": 3600,
+        "resources": {
+          "archive_io": 1
+        }
+      }
+    },
+    "tts_synthesis": {
+      "enabled": true,
+      "admission": {
+        "windows": [],
+        "active": []
+      },
+      "usage": [
+        {
+          "scope": "user",
+          "audience": "anonymous",
+          "metric": "characters",
+          "window": "utc_day",
+          "limit": 1234,
+          "boundary": "soft_unit"
+        },
+        {
+          "scope": "user",
+          "audience": "authenticated",
+          "metric": "characters",
+          "window": "utc_day",
+          "limit": 500000,
+          "boundary": "soft_unit"
+        },
+        {
+          "scope": "anonymous_device",
+          "audience": "anonymous",
+          "metric": "characters",
+          "window": "utc_day",
+          "limit": 50000,
+          "boundary": "soft_unit"
+        },
+        {
+          "scope": "ip",
+          "audience": "anonymous",
+          "metric": "characters",
+          "window": "utc_day",
+          "limit": 100000,
+          "boundary": "soft_unit"
+        },
+        {
+          "scope": "ip",
+          "audience": "authenticated",
+          "metric": "characters",
+          "window": "utc_day",
+          "limit": 1000000,
+          "boundary": "soft_unit"
+        }
+      ]
+    }
+  },
+  "worker": {
+    "maxExecutingPerWorker": 3,
+    "resources": {
+      "cpu_heavy": 1,
+      "model_inference": 1,
+      "whisper_alignment": 1,
+      "ffmpeg": 1,
+      "libreoffice": 1,
+      "archive_io": 2
+    },
+    "policyRefreshSeconds": 300
+  },
+  "providers": {
+    "defaults": {
+      "enabled": true,
+      "maxConcurrent": 3,
+      "requestsPerMinute": 60,
+      "charactersPerMinute": 100000,
+      "maxWaitSeconds": 30
+    },
+    "overrides": {}
+  }
+}

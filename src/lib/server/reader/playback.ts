@@ -15,7 +15,6 @@ import type { ComputeOperation, TtsPlaybackPlanResult } from '@/lib/server/compu
 import type { ComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { ComputeAdmissionLimitedError, createAdmittedComputeOperation } from '@/lib/server/compute-limits/run-admitted';
-import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { buildTtsPlaybackPlanningInput, toTtsPlaybackPlanRequest, type ParsedTtsPlaybackRequestBody } from '@/lib/server/tts/playback-request';
 import { buildPlaybackGrid, readTtsPlaybackPlanArtifact } from '@/lib/server/tts/playback-plans';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
@@ -122,7 +121,6 @@ export async function createAdmittedPlaybackPlanOperation(input: {
   scope: ResolvedSegmentDocumentScope;
   planningInput: Awaited<ReturnType<typeof buildTtsPlaybackPlanningInput>>;
   policy: ComputeLimitPolicyDocument;
-  ip: string | null;
   retryFailed?: boolean;
 }): Promise<ComputeOperation> {
   const { parsed, scope, planningInput } = input;
@@ -137,7 +135,6 @@ export async function createAdmittedPlaybackPlanOperation(input: {
     subject: {
       userId: scope.userId,
       isAnonymous: scope.isAnonymousUser,
-      ip: input.ip,
     },
     create: () => client.createTtsPlaybackPlanOperation(request),
   });
@@ -171,7 +168,6 @@ export async function resolveReaderPlayback(
       scope,
       planningInput,
       policy: runtimeConfig.computeLimitPolicies,
-      ip: getClientIp(request),
     });
   } catch (error) {
     if (!(error instanceof ComputeAdmissionLimitedError)) throw error;

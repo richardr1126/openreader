@@ -98,6 +98,11 @@ export const RUNTIME_CONFIG_SCHEMA = {
   // Days without activity before the `expire-anonymous-users` task (off by
   // default) deletes a guest account and its data.
   anonymousUserIdleDays: positiveIntValue(90),
+  limitNewAccountsPerIp: runtimeBoolean(false),
+  newAccountsPerIp: positiveIntValue(5),
+  newAccountsPerIpDays: positiveIntValue(30),
+  limitNewGuestsPerIp: runtimeBoolean(false),
+  newGuestsPerIp: positiveIntValue(10),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
   enableTtsProvidersTab: booleanFlag(true),

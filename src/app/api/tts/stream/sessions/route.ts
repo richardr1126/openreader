@@ -17,8 +17,6 @@ import { getRuntimeConfig } from '@/lib/server/admin/settings';
 import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { getClientIp } from '@/lib/server/rate-limit/request-ip';
-import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import {
   activateComputeAdmission,
   buildTtsPlaybackAdmissionRequestKey,
@@ -108,7 +106,7 @@ export async function POST(request: NextRequest) {
       planObjectKey,
       purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live',
     });
-    const device = scope.isAnonymousUser ? getOrCreateDeviceId(request) : null;
+
     const admissionAction = parsed.generationExtent === 'document' ? 'tts_playback_document' : 'tts_playback';
     const admission = await reserveComputeAdmission({
       policy: runtimeConfig.computeLimitPolicies,
@@ -117,8 +115,6 @@ export async function POST(request: NextRequest) {
       subject: {
         userId: scope.userId,
         isAnonymous: scope.isAnonymousUser,
-        deviceId: device?.deviceId ?? null,
-        ip: getClientIp(request),
       },
     });
     if (!admission.allowed || !admission.admissionId) {
@@ -205,7 +201,6 @@ export async function POST(request: NextRequest) {
         expiresAt,
       }),
     }, { status: 202 });
-    if (device?.didCreate) setDeviceIdCookie(response, device.deviceId);
     return response;
   } catch (error) {
     return errorResponse(error, {

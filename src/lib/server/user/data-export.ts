@@ -126,7 +126,13 @@ export function buildUserExportManifest(input: BuildUserExportManifestInput): Us
       computeLimitAdmissions,
       computeLimitEvents,
       documentSettings,
-      authSessions,
+      authSessions: authSessions.map((session) => {
+        if (!session || typeof session !== 'object') return session;
+        const safe = { ...session } as Record<string, unknown>;
+        delete safe.ipAddress;
+        delete safe.ip_address;
+        return safe;
+      }),
       linkedAccounts,
       documents,
     },

@@ -22,6 +22,7 @@ describe('user data export manifest', () => {
 
     expect(manifest.entries.documentSettings).toHaveLength(1);
     expect(manifest.entries.authSessions).toHaveLength(1);
+    expect(manifest.entries.authSessions[0]).not.toHaveProperty('ipAddress');
     expect(manifest.entries.linkedAccounts).toHaveLength(1);
     expect(manifest.entries).not.toHaveProperty('ttsSegmentEntries');
     expect(manifest.entries).not.toHaveProperty('ttsSegmentVariants');

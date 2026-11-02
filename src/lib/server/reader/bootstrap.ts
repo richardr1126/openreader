@@ -31,7 +31,6 @@ import {
   ComputeAdmissionLimitedError,
   createAdmittedComputeOperation,
 } from '@/lib/server/compute-limits/run-admitted';
-import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 import { getS3Config, getS3InternalClient } from '@/lib/server/storage/s3';
 import {
   resolveSegmentDocumentScope,
@@ -86,7 +85,6 @@ function toReadingPosition(row: {
 }
 
 export async function ensurePdfReady(
-  ip: string | null,
   documentId: string,
   scope: ResolvedSegmentDocumentScope,
   options: ReaderBootstrapResolveOptions,
@@ -127,7 +125,6 @@ export async function ensurePdfReady(
         subject: {
           userId: scope.userId,
           isAnonymous: scope.isAnonymousUser,
-          ip,
         },
         create: () => createOrReuseCurrentPdfParseOperation(input),
       });
@@ -215,7 +212,7 @@ export async function resolveReaderBootstrapState(
   }
   let parsedPdfDocument: ParsedPdfDocument | null = null;
   if (scope.readerType === 'pdf') {
-    const pdfState = await ensurePdfReady(getClientIp(request), documentId, scope, options);
+    const pdfState = await ensurePdfReady(documentId, scope, options);
     if ('result' in pdfState) return pdfState;
     parsedPdfDocument = pdfState.parsedDocument;
   }

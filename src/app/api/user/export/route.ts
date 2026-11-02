@@ -198,7 +198,6 @@ export async function POST(req: NextRequest) {
           expiresAt: authSchema.session.expiresAt,
           createdAt: authSchema.session.createdAt,
           updatedAt: authSchema.session.updatedAt,
-          ipAddress: authSchema.session.ipAddress,
           userAgent: authSchema.session.userAgent,
         })
         .from(authSchema.session)

@@ -52,8 +52,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     id: computeLimitAdmissions.id,
     userId: computeLimitAdmissions.userId,
     isAnonymous: computeLimitAdmissions.isAnonymous,
-    deviceScopeKey: computeLimitAdmissions.deviceScopeKey,
-    ipScopeKey: computeLimitAdmissions.ipScopeKey,
     requestKey: computeLimitAdmissions.requestKey,
     action: computeLimitAdmissions.action,
   }).from(computeLimitAdmissions).where(and(
@@ -88,8 +86,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     subject: {
       userId: admission.userId,
       isAnonymous: Boolean(admission.isAnonymous),
-      deviceScopeKey: admission.deviceScopeKey,
-      ipScopeKey: admission.ipScopeKey,
     },
     nowMs,
   });

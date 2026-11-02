@@ -15,7 +15,7 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-type ErrorInfo = { status?: number; message?: string };
+type ErrorInfo = { status?: number; message?: string; code?: string };
 
 function isBetterFetchError(input: unknown): input is BetterFetchError {
   if (!input || typeof input !== 'object') return false;
@@ -66,7 +66,7 @@ function getErrorInfo(input: unknown): ErrorInfo | null {
         const e = err as Record<string, unknown>;
         const status = typeof e.status === 'number' ? e.status : undefined;
         const message = typeof e.message === 'string' ? e.message : undefined;
-        return { status, message };
+        return { status, message, code: typeof e.code === 'string' ? e.code : undefined };
       }
       return { message: typeof err === 'string' ? err : 'Request failed' };
     }
@@ -220,6 +220,11 @@ export function AuthLoader({ children }: { children: ReactNode }) {
             console.info(attemptTag);
             const result = await client.signIn.anonymous();
             const info = getErrorInfo(result);
+            if (info?.code === 'ACCOUNT_CREATION_LIMITED') {
+              setIsRedirecting(true);
+              router.replace('/signin');
+              return;
+            }
             if (info) {
               // better-auth client endpoints often do NOT throw; they return { data, error }.
               // Convert that into a thrown error so our retry/backoff logic works.

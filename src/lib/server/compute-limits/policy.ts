@@ -10,10 +10,6 @@ import type {
 export interface ComputeLimitSubject {
   userId: string;
   isAnonymous: boolean;
-  deviceId?: string | null;
-  ip?: string | null;
-  deviceScopeKey?: string | null;
-  ipScopeKey?: string | null;
 }
 
 export interface ResolvedComputeScope {
@@ -33,7 +29,6 @@ export function applicableUsageLimits(
   const audience = audienceFor(subject);
   return policy.actions[action].usage.filter((limit) => (
     (limit.audience === 'all' || limit.audience === audience)
-    && !(limit.scope === 'anonymous_device' && !subject.isAnonymous)
   ));
 }
 
@@ -56,15 +51,7 @@ export function resolveComputeScope(
 ): ResolvedComputeScope | null {
   if (scope === 'site') return { scope, key: 'site' };
   if (scope === 'user') return { scope, key: deriveComputeScopeKey(scope, subject.userId) };
-  if (scope === 'anonymous_device') {
-    if (!subject.isAnonymous) return null;
-    if (subject.deviceScopeKey?.trim()) return { scope, key: subject.deviceScopeKey };
-    if (!subject.deviceId?.trim()) return null;
-    return { scope, key: deriveComputeScopeKey(scope, subject.deviceId) };
-  }
-  if (subject.ipScopeKey?.trim()) return { scope, key: subject.ipScopeKey };
-  if (!subject.ip?.trim()) return null;
-  return { scope, key: deriveComputeScopeKey(scope, subject.ip) };
+  return null;
 }
 
 export function computePolicyVersion(policy: ComputeLimitPolicyDocument): number {

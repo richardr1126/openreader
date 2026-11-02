@@ -29,7 +29,7 @@ const ext = (href: string, label: string) => (
 );
 
 /* Claim audit
-   Code-verified: Better Auth cookie durations, anonymous-device cookie, local-storage consent/GPC,
+   Code-verified: Better Auth cookie durations, keyed IP hashes, local-storage consent/GPC,
    server-stored privacy acceptance, v5 worker/object-storage data flow, export/delete controls,
    Resend delivery, US geo-gate, and AES256 object writes.
    Deployment-dependent: exact provider regions, logs, backups, and operator-configured providers.
@@ -107,7 +107,7 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
           <ul>
             <li>
               <strong>Account and authentication data:</strong> name, email address, email-verification status,
-              password verification data, linked sign-in provider details, sessions, IP address, user agent, and
+              password verification data, linked sign-in provider details, sessions, a keyed IP hash, user agent, and
               security or recovery tokens. OpenReader also records the time you accept this policy.
             </li>
             <li>
@@ -128,10 +128,9 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
             </li>
             <li>
               <strong>Security and operations data:</strong> request metadata, error and service logs, durable job and
-              operation state, pseudonymous compute-limit counters, and an anonymous-device identifier when anonymous
-              compute controls apply. IP and device values used for compute-limit buckets are stored as keyed hashes
-              rather than raw values in those buckets; authentication sessions can retain IP address and user-agent
-              data.
+              operation state and pseudonymous compute-limit counters. Account-creation counters and authentication
+              sessions store separately labelled keyed IP hashes, with IPv6 grouped by /64, rather than raw IPs.
+              Incoming IPs remain available to authentication request throttling. Account exports omit session IP hashes.
             </li>
             <li>
               <strong>Optional analytics:</strong> only after you opt in, Vercel Web Analytics receives page-view data
@@ -179,12 +178,6 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
                 anonymous sessions.
               </li>
               <li>
-                <strong>Anonymous compute cookie:</strong> when anonymous sessions and the relevant compute controls
-                apply, <code>or_device_id</code> stores a random HTTP-only, SameSite=Lax identifier for up to two years.
-                It helps prevent clearing browser storage from immediately resetting anonymous usage limits. It is not
-                sent to TTS providers or placed in compute jobs.
-              </li>
-              <li>
                 <strong>Consent preference:</strong> your accepted or declined analytics choice is stored in your
                 browser&apos;s local storage under <code>cookie-consent</code>. It is not itself a cookie. A Global
                 Privacy Control signal always overrides a prior choice and keeps analytics disabled.
@@ -197,8 +190,7 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
             <div data-callout>
               Vercel Web Analytics is cookieless and is not loaded by OpenReader until you select{' '}
               <em>Accept Analytics</em>. Selecting <em>Decline Non-Essential</em> keeps it disabled. Clearing local
-              storage resets the displayed choice; clearing cookies signs you out and can remove the anonymous-device
-              identifier.
+              storage resets the displayed choice; clearing cookies signs you out.
             </div>
           </>
         ),

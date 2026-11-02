@@ -9,8 +9,6 @@ import { parseTtsSegmentSettings } from '@/lib/server/tts/playback-request';
 import { getRuntimeConfig } from '@/lib/server/admin/settings';
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
-import { getClientIp } from '@/lib/server/rate-limit/request-ip';
-import { getOrCreateDeviceId, setDeviceIdCookie } from '@/lib/server/rate-limit/device-id';
 import {
   activateComputeAdmission,
   finishComputeAdmission,
@@ -71,12 +69,11 @@ export async function POST(request: NextRequest) {
     if (!parsed) return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
 
     const isAnonymous = Boolean((ctx.user as { isAnonymous?: boolean } | null)?.isAnonymous);
-    const device = isAnonymous ? getOrCreateDeviceId(request) : null;
+
     const subject = {
       userId,
       isAnonymous,
-      deviceId: device?.deviceId ?? null,
-      ip: getClientIp(request),
+
     };
     const { computeLimitPolicies: policy } = await getRuntimeConfig();
     const previewId = randomUUID();
@@ -133,7 +130,6 @@ export async function POST(request: NextRequest) {
           'Cache-Control': 'no-store, private',
         },
       });
-      if (device?.didCreate) setDeviceIdCookie(response, device.deviceId);
       return response;
     } finally {
       await finishComputeAdmission({ admissionId: admission.admissionId, state }).catch(() => undefined);

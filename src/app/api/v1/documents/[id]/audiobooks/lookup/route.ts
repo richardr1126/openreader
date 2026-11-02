@@ -25,7 +25,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const audiobook = await lookupAudiobook(resolved.caller, intent, {
       includeProgress: body.record.includeProgress !== false || body.chapterIndex !== null,
     });
-    return resolved.finish(NextResponse.json(audiobook));
+    return NextResponse.json(audiobook);
   } catch (error) {
     if (error instanceof ChapterNotFoundError) return apiErrorResponse(404, 'CHAPTER_NOT_FOUND', error.message);
     return apiCatchResponse(error, {

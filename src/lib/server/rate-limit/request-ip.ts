@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server';
 
 /**
- * Best-effort client IP extraction for rate-limit backstops.
+ * Best-effort client IP extraction for account-creation caps.
  *
  * Security note: `X-Forwarded-For` is a list the client can *prepend* to, so the
  * left-most entry is attacker-controlled and must never be trusted as the client
@@ -17,8 +17,7 @@ import type { NextRequest } from 'next/server';
  *      trusted proxy), as a best-effort fallback for single-proxy self-hosts.
  *   4. NextRequest.ip — runtime-provided connecting address.
  *
- * IP-based limits remain a backstop only; the per-user bucket is the primary
- * control for authenticated abuse.
+ * Callers hash this value before persistence. Compute limits key on the user.
  */
 function firstIp(value: string | null): string | null {
   if (!value) return null;
@@ -26,7 +25,7 @@ function firstIp(value: string | null): string | null {
   return first || null;
 }
 
-export function getClientIp(req: NextRequest): string | null {
+export function getClientIp(req: Pick<NextRequest, 'headers'>): string | null {
   // 1. Vercel-internal header (clients cannot set x-vercel-* — Vercel strips them).
   if (process.env.VERCEL) {
     const vercelIp = firstIp(req.headers.get('x-vercel-forwarded-for'));

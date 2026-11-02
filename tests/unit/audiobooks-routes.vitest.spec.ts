@@ -176,10 +176,6 @@ vi.mock('@/lib/server/rate-limit/request-ip', () => ({
   getClientIp: vi.fn(() => '127.0.0.1'),
 }));
 
-vi.mock('@/lib/server/rate-limit/device-id', () => ({
-  getOrCreateDeviceId: vi.fn(() => null),
-  setDeviceIdCookie: vi.fn(),
-}));
 
 vi.mock('@/lib/server/compute-limits/admission', () => ({
   buildTtsPlaybackAdmissionRequestKey: vi.fn(() => 'playback-request-1'),
@@ -943,7 +939,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
 
       expect(status).toBe(409);
       expect(json.error.code).toBe('DOCUMENT_PREPARING');
-      expect(hoisted.ensurePdf).toHaveBeenCalledWith(expect.anything(), 'doc-1', expect.anything(), expect.objectContaining({ observeOnly: true }));
+      expect(hoisted.ensurePdf).toHaveBeenCalledWith('doc-1', expect.anything(), expect.objectContaining({ observeOnly: true }));
     });
 
     test('a start begins the parse, and a limit on it reaches the caller with its retry time', async () => {
@@ -955,8 +951,8 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       expect(response.status).toBe(429);
       expect(response.headers.get('retry-after')).toBe('1');
       expect((await response.json()).error.retryAfterMs).toBe(1_000);
-      expect(hoisted.ensurePdf).toHaveBeenCalledWith(expect.anything(), 'doc-1', expect.anything(), expect.objectContaining({ throwAdmissionLimit: true }));
-      expect(hoisted.ensurePdf.mock.calls[0][3].observeOnly).toBeFalsy();
+      expect(hoisted.ensurePdf).toHaveBeenCalledWith('doc-1', expect.anything(), expect.objectContaining({ throwAdmissionLimit: true }));
+      expect(hoisted.ensurePdf.mock.calls[0][2].observeOnly).toBeFalsy();
     });
   });
 

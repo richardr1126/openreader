@@ -2,6 +2,13 @@
 
 Status: implemented; direct admin controls replace the superseded rollout-mode UI.
 
+Phase 4.6 of `API_REFACTOR.md` supersedes the original IP/device compute scopes
+below: compute policies now retain only user and site rows. Migration 0029 drops
+the admission IP/device keys and clears stored session IPs. The app hashes session
+IPs with a separate label from the rolling account/guest creation counters in
+`compute_limit_buckets`; creation caps are the only IP-based resource check.
+Saved schema-2 policies discard retired rows while preserving user/site settings.
+
 This document is the normative v5 plan for limiting user-initiated compute,
 metered TTS usage, provider throughput, queued work, and worker execution. It
 supersedes the separate TTS character limiter and PDF job-event limiter.

@@ -20,6 +20,9 @@ import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import { tryGetOrigin } from "@/lib/shared/urls";
 import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 import { oauthPlugins } from '@/lib/server/auth/oauth';
+import { getClientIp } from '@/lib/server/rate-limit/request-ip';
+import { enforceCreationLimit } from './creation-limits';
+import { hashIp } from './ip-privacy';
 
 // Heavy modules (claim-data, user management, compute client) are loaded
 // lazily via dynamic import() inside the onLinkAccount callback to avoid inflating every serverless function that touches auth.
@@ -141,7 +144,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean, al
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => {
+        before: async (user, context) => {
           const runtimeConfig = await getResolvedRuntimeConfig();
           const isAnonymous = Boolean((user as { isAnonymous?: boolean }).isAnonymous);
           assertUserSignupAllowed({
@@ -149,6 +152,8 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean, al
             allowAnonymousSessions: runtimeConfig.allowAnonymousSessions,
             isAnonymous,
           });
+          await enforceCreationLimit({ config: runtimeConfig, isAnonymous,
+            ip: context?.headers ? getClientIp({ headers: context.headers }) : null });
           return {
             data: {
               ...user,
@@ -196,7 +201,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean, al
               message: 'Your account has been suspended by an administrator.',
             });
           }
-          return { data: session };
+          return { data: { ...session, ipAddress: hashIp(session.ipAddress, 'session') } };
         },
       },
     },

@@ -23,7 +23,7 @@ function PrivacyModalBody({ origin }: { origin: string }) {
       </div>
 
       <p className="leading-relaxed">
-        This application uses necessary cookies for sessions and anonymous abuse prevention. Optional Vercel Web
+        This application uses necessary cookies for sessions. Optional Vercel Web
         Analytics is cookieless and loads only when you consent; your choice is saved in local storage. Your documents
         and generated artifacts are stored with server-side encryption.
       </p>

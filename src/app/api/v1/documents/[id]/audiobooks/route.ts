@@ -34,7 +34,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
       generationState: audiobook.generation.state,
       artifactState: audiobook.artifact.state,
     }, 'Audiobook requested');
-    return resolved.finish(NextResponse.json(audiobook, { status: audiobook.status === 'ready' ? 200 : 202 }));
+    return NextResponse.json(audiobook, { status: audiobook.status === 'ready' ? 200 : 202 });
   } catch (error) {
     if (error instanceof ChapterNotFoundError) return apiErrorResponse(404, 'CHAPTER_NOT_FOUND', error.message);
     return apiCatchResponse(error, {

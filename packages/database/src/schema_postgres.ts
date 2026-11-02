@@ -58,8 +58,8 @@ export const computeLimitAdmissions = pgTable('compute_limit_admissions', {
   action: text('action').notNull(),
   state: text('state').notNull(),
   operationId: text('operation_id'),
-  deviceScopeKey: text('device_scope_key'),
-  ipScopeKey: text('ip_scope_key'),
+
+
   activeScopesJson: text('active_scopes_json').notNull().default('[]'),
   policyVersion: bigint('policy_version', { mode: 'number' }).notNull(),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),

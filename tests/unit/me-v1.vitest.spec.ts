@@ -4,7 +4,6 @@ const state = vi.hoisted(() => ({ userId: 'alice' as string | null, anonymous: f
 vi.mock('@/lib/server/auth/auth', () => ({ getAuthContext: async () => ({ userId: state.userId, user: { isAnonymous: state.anonymous } }), getTrustedOrigins: () => [] }));
 vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ computeLimitPolicies: { actions: { tts_synthesis: { enabled: true } } } }) }));
 vi.mock('@/lib/server/compute-limits/usage', () => ({ getComputeUsage: state.usage }));
-vi.mock('@/lib/server/rate-limit/device-id', () => ({ getOrCreateDeviceId: state.device, setDeviceIdCookie: (response: Response) => response.headers.set('Set-Cookie', 'device=test; HttpOnly') }));
 import { GET } from '@/app/api/v1/me/route';
 beforeEach(() => {
   state.userId = 'alice'; state.anonymous = false;
@@ -21,11 +20,11 @@ test('returns identity, scopes and the binding usage limit without exposing buck
     computeLimits: { allowed: true, currentCount: 95, limit: 100, remainingChars: 5, resetTimeMs: 2000, userType: 'authenticated', enabled: true } });
   expect(state.device).not.toHaveBeenCalled();
 });
-test('uses the guest device for quota checks and returns its cookie without exposing the ID in JSON', async () => {
+test('keys guest quota checks only on the user and creates no device cookie', async () => {
   state.anonymous = true;
   const response = await GET(new NextRequest('http://localhost/api/v1/me'));
-  expect(state.usage).toHaveBeenCalledWith(expect.objectContaining({ subject: expect.objectContaining({ userId: 'alice', isAnonymous: true, deviceId: 'test' }) }));
-  expect(response.headers.get('set-cookie')).toContain('device=test');
+  expect(state.usage).toHaveBeenCalledWith(expect.objectContaining({ subject: { userId: 'alice', isAnonymous: true } }));
+  expect(response.headers.get('set-cookie')).toBeNull();
   expect(await response.json()).not.toHaveProperty('deviceId');
 });
 test('unauthenticated introspection is rejected before reading usage', async () => {

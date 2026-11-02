@@ -348,6 +348,8 @@ describe('runtime config JSON seeding', () => {
       allowAnonymousSessions: true,
       allowOAuthClientRegistration: true,
       anonymousUserIdleDays: 30,
+      limitNewAccountsPerIp: false, newAccountsPerIp: 5, newAccountsPerIpDays: 30,
+      limitNewGuestsPerIp: false, newGuestsPerIp: 10,
       enableTtsProvidersTab: false,
       enableAudiobookExport: false,
       enableDocxConversion: false,
