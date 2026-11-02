@@ -96,6 +96,7 @@ export interface ComputeWorkerRouteContext {
   playbackStorage?: TtsPlaybackStorage;
   s3Prefix: string;
   ensureOrphanedOpRecovery: () => Promise<void>;
+  opStaleMs: number;
   getOpState: (opId: string) => Promise<StreamedOperationState | null>;
   getNatsConnected: () => boolean;
   releaseHttp: (request: FastifyRequest) => void;

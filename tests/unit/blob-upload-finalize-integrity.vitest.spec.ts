@@ -67,7 +67,7 @@ function mismatchError() {
 
 function input() {
   return { upload: { token, name: 'Book.pdf', type: 'pdf' as const, lastModified: Date.now(), folderId: undefined, hints: {} },
-    userId: 'test-user', namespace: null, subject: { userId: 'test-user', isAnonymous: false }, schedulePreview: () => undefined };
+    userId: 'test-user', namespace: null, subject: { userId: 'test-user', isAnonymous: false }, schedulePreview: () => undefined, expectedSize: source.length };
 }
 
 describe('document upload finalization integrity boundary', () => {
@@ -97,6 +97,13 @@ describe('document upload finalization integrity boundary', () => {
     hoisted.copyTempDocumentBlobToDocument.mockResolvedValue(undefined);
     hoisted.putTempDocumentFinalizeReceipt.mockResolvedValue(undefined);
     hoisted.deleteTempDocumentUpload.mockResolvedValue(undefined);
+  });
+
+  test('rejects stored bytes that differ from the declared size before registering them', async () => {
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument({ ...input(), expectedSize: source.length + 1 })).rejects.toMatchObject({ code: 'UPLOAD_INCOMPLETE', status: 400 });
+    expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
+    expect(hoisted.copyTempDocumentBlobToDocument).not.toHaveBeenCalled();
   });
 
   test('registers verified canonical bytes and writes a success receipt', async () => {

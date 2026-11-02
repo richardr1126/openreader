@@ -3,6 +3,7 @@ import { db } from '@openreader/database';
 import { documents, userDocumentProgress } from '@openreader/database/schema';
 import type { ApiPrincipal } from '@/lib/server/api/principal';
 import { ApiRequestError } from '@/lib/server/api/responses';
+import { isComputeWorkerUnavailableError } from '@/lib/server/compute-worker/client';
 import { resolveCurrentPdfParse } from '@/lib/server/pdf-parse/operation';
 import { isCurrentPdfParseOperationAuthoritative } from '@/lib/server/pdf-parse/snapshot';
 import type { BaseDocument } from '@/types/documents';
@@ -59,12 +60,17 @@ export async function describeDocument(document: BaseDocument): Promise<Document
   let operationId: string | null = null;
   let error: string | null = null;
   if (document.type === 'pdf') {
-    const resolved = await resolveCurrentPdfParse({ documentId: document.id, namespace: null });
-    if (isCurrentPdfParseOperationAuthoritative(resolved) && resolved.operation) {
+    // A worker outage must not fail reads or commits that never needed the parse.
+    const resolved = await resolveCurrentPdfParse({ documentId: document.id, namespace: null }).catch((cause: unknown) => {
+      if (isComputeWorkerUnavailableError(cause)) return null;
+      throw cause;
+    });
+    if (!resolved) status = 'unknown';
+    else if (isCurrentPdfParseOperationAuthoritative(resolved) && resolved.operation) {
       operationId = resolved.operation.opId;
       status = resolved.operation.status === 'failed' ? 'failed' : resolved.operation.status === 'succeeded' && resolved.artifact ? 'ready' : 'processing';
       error = status === 'failed' ? resolved.operation.error?.message ?? 'PDF preparation failed.' : null;
-    } else if (!resolved.artifact) status = 'processing';
+    } else if (!resolved.artifact) status = resolved.operation ? 'processing' : 'not_started';
   }
   const reader = document.type === 'epub' ? 'epub' : document.type === 'pdf' ? 'pdf' : 'html';
   return { ...document, status, operationId, error, fileUrl: `/api/v1/documents/${document.id}/file`,

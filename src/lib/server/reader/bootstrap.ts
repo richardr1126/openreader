@@ -52,6 +52,10 @@ export type ReaderBootstrapResolution = {
 
 export type ReaderBootstrapResolveOptions = {
   preparationOperationId?: string | null;
+  /** Report the parse without starting one. */
+  observeOnly?: boolean;
+  /** Let an admission refusal reach the caller, with its retry time. */
+  throwAdmissionLimit?: boolean;
 };
 
 export function storedRecord(value: unknown): Record<string, unknown> {
@@ -111,6 +115,9 @@ export async function ensurePdfReady(
   }
   let resolved = await resolveCurrentPdfParse(input);
   if (!resolved.artifact && !resolved.operation) {
+    if (options.observeOnly) {
+      return { result: { status: 'error', message: 'PDF preparation has not started.', retryable: true } };
+    }
     const runtimeConfig = await getResolvedRuntimeConfig();
     try {
       const operation = await createAdmittedComputeOperation({
@@ -126,7 +133,7 @@ export async function ensurePdfReady(
       });
       resolved = { artifact: null, operation };
     } catch (error) {
-      if (!(error instanceof ComputeAdmissionLimitedError)) throw error;
+      if (!(error instanceof ComputeAdmissionLimitedError) || options.throwAdmissionLimit) throw error;
       return {
         result: {
           status: 'error',

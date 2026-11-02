@@ -42,6 +42,23 @@ describe('middleware matcher', () => {
       else process.env.RICHARDRDEV_PRODUCTION = previous;
     }
   });
+  test('the region gate answers v1 in the API error shape', async () => {
+    const previous = process.env.RICHARDRDEV_PRODUCTION;
+    process.env.RICHARDRDEV_PRODUCTION = 'true';
+    try {
+      const gated = (pathname: string) => middleware(new NextRequest(`http://localhost${pathname}`, {
+        headers: { 'x-vercel-ip-country': 'DE' },
+      }));
+      const v1 = gated('/api/v1/documents');
+      expect(v1.status).toBe(451);
+      expect(await v1.json()).toEqual({ error: { code: 'REGION_UNAVAILABLE', message: expect.any(String) } });
+      expect(await gated('/api/documents').json()).toEqual({ error: expect.any(String) });
+    } finally {
+      if (previous === undefined) delete process.env.RICHARDRDEV_PRODUCTION;
+      else process.env.RICHARDRDEV_PRODUCTION = previous;
+    }
+  });
+
   test('serves the app privacy policies and downloads outside the production region gate without a session', () => {
     const previous = process.env.RICHARDRDEV_PRODUCTION;
     process.env.RICHARDRDEV_PRODUCTION = 'true';

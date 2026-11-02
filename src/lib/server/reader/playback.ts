@@ -105,6 +105,17 @@ export async function resolveDefaultPlaybackRequest(
   };
 }
 
+/** Reports the canonical plan operation for one playback request without creating one. */
+export function findPlaybackPlanOperation(input: {
+  parsed: ParsedTtsPlaybackRequestBody;
+  scope: ResolvedSegmentDocumentScope;
+  planningInput: Awaited<ReturnType<typeof buildTtsPlaybackPlanningInput>>;
+}): Promise<ComputeOperation | null> {
+  return new ComputeWorkerClient().resolveTtsPlaybackPlanOperation(
+    toTtsPlaybackPlanRequest({ parsed: input.parsed, scope: input.scope, ...input.planningInput }),
+  );
+}
+
 /** Creates or reuses the canonical plan operation for one playback request. */
 export async function createAdmittedPlaybackPlanOperation(input: {
   parsed: ParsedTtsPlaybackRequestBody;

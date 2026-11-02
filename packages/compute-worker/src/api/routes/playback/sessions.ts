@@ -7,6 +7,7 @@ import {
   buildTtsPlaybackPlanOperationKey,
 } from '../../../operations/keys';
 import { computePlaybackPlanSignature } from '../../../jobs/playback/plan';
+import { isInflightStatus, shouldReuseExistingOperation } from '../../../operations/state-machine';
 import { toComputeOperation } from '../../compute-operation';
 import type { PlaybackSessionController } from '../../playback/session-controller';
 import type { PlaybackSessionReadModel } from '../../playback/session-read-model';
@@ -273,7 +274,7 @@ export function registerPlaybackJobRoutes(
   context: ComputeWorkerRouteContext,
   controller: PlaybackSessionController,
 ): void {
-  const { app, deps, playbackStorage, ensureOrphanedOpRecovery } = context;
+  const { app, deps, playbackStorage, ensureOrphanedOpRecovery, opStaleMs } = context;
   app.post('/v1/tts-playback/sessions/jobs', {
     schema: {
       body: jsonSchema(ttsPlaybackOperationCreateSchema),
@@ -338,9 +339,16 @@ export function registerPlaybackJobRoutes(
       ...parsed.data,
       sessionId: `plan:${parsed.data.documentId}:${parsed.data.settingsHash}`,
     });
+    await ensureOrphanedOpRecovery();
     const index = await deps.operationStateStore.getOpIndex?.(buildTtsPlaybackPlanOperationKey({ ...parsed.data, planSignature }));
     const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
-    return operation ? toComputeOperation(operation) : null;
+    if (!operation) return null;
+    // A stale in-flight plan is abandoned. Reporting it would make callers wait
+    // forever; null lets a caller that may create one replace it.
+    if (isInflightStatus(operation.status) && !shouldReuseExistingOperation({
+      current: operation, requestKind: operation.kind, now: Date.now(), opStaleMs,
+    })) return null;
+    return toComputeOperation(operation);
   });
 
   app.post('/v1/tts-playback/plans/jobs', {

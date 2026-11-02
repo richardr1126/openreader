@@ -16,6 +16,11 @@ export type ApiPrincipal = {
   clientId?: string;
 };
 
+/** Only this scheme is a token attempt. A proxy's Basic credentials are not meant for us. */
+export function hasBearerAuthorization(request: NextRequest): boolean {
+  return /^bearer(\s|$)/i.test(request.headers.get('authorization') ?? '');
+}
+
 function isCrossSiteWrite(request: NextRequest): boolean {
   if (request.method === 'GET' || request.method === 'HEAD') return false;
   const fetchSite = request.headers.get('sec-fetch-site');
@@ -34,9 +39,8 @@ export async function resolveApiPrincipal(
   request: NextRequest,
   requiredScope: ApiScope,
 ): Promise<ApiPrincipal | Response> {
-  const authorization = request.headers.get('authorization');
-  if (authorization !== null) {
-    const match = /^Bearer ([^\s]+)$/i.exec(authorization);
+  if (hasBearerAuthorization(request)) {
+    const match = /^Bearer ([^\s]+)$/i.exec(request.headers.get('authorization') ?? '');
     const principal = match ? await resolveOAuthAccess(match[1]) : null;
     if (!principal || !principal.scopes.includes(requiredScope)) {
       const missingScope = Boolean(principal);

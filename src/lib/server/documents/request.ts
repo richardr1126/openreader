@@ -26,7 +26,8 @@ export async function documentApi(request: NextRequest, scope: ApiScope, run: (c
       userId: principal.userId, isAnonymous: principal.isAnonymous, ip: principal.clientId ? null : getClientIp(request), deviceId: device?.deviceId,
     } });
     if (device?.didCreate && response instanceof NextResponse) setDeviceIdCookie(response, device.deviceId);
-    response.headers.set('Cache-Control', 'private, no-store');
+    // An event stream keeps its own no-transform header, which proxies need.
+    if (!response.headers.has('Cache-Control')) response.headers.set('Cache-Control', 'private, no-store');
     return response;
   } catch (error) {
     if (error instanceof UploadFolderError) return apiErrorResponse(error.status, 'FOLDER_INVALID', error.message);

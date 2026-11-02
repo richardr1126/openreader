@@ -2727,12 +2727,13 @@
           ],
           "isUnique": false
         },
-        "oauthConsent_userId_idx": {
-          "name": "oauthConsent_userId_idx",
+        "oauthConsent_userId_clientId_uidx": {
+          "name": "oauthConsent_userId_clientId_uidx",
           "columns": [
-            "user_id"
+            "user_id",
+            "client_id"
           ],
-          "isUnique": false
+          "isUnique": true
         }
       },
       "foreignKeys": {

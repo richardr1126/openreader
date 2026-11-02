@@ -6,7 +6,7 @@ import { logServerError } from '@/lib/server/errors/logging';
 import type { ServerLogger } from '@/lib/server/logger';
 
 export class ApiRequestError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(readonly status: number, readonly code: string, message: string, readonly retryAfterMs?: number) {
     super(message);
     this.name = 'ApiRequestError';
   }
@@ -35,7 +35,7 @@ export function apiCatchResponse(
   error: unknown,
   options: { logger: ServerLogger; event: string; msg: string; normalize: ServerErrorContext },
 ): NextResponse {
-  if (error instanceof ApiRequestError) return apiErrorResponse(error.status, error.code, error.message);
+  if (error instanceof ApiRequestError) return apiErrorResponse(error.status, error.code, error.message, { retryAfterMs: error.retryAfterMs });
   if (error instanceof ComputeAdmissionLimitedError) {
     return apiErrorResponse(429, error.code, error.message, { retryAfterMs: error.retryAfterMs });
   }

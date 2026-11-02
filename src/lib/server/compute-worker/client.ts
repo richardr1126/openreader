@@ -50,12 +50,18 @@ class WorkerHttpError extends Error {
   }
 }
 
+// A hung worker must not hold callers forever, including those holding a lock.
+const WORKER_REQUEST_TIMEOUT_MS = 60_000;
+// These walk a user's stored objects before answering.
+const WORKER_STORAGE_TIMEOUT_MS = 10 * 60_000;
+
 /**
  * The worker could not serve the request at all: unreachable (for example
  * while it redeploys) or failing server-side, as opposed to rejecting it.
  */
 export function isComputeWorkerUnavailableError(error: unknown): boolean {
   if (error instanceof WorkerHttpError) return error.status >= 500;
+  if (error instanceof DOMException && error.name === 'TimeoutError') return true;
   // `fetch` rejects with a TypeError when the connection itself fails.
   return error instanceof TypeError && error.message === 'fetch failed';
 }
@@ -325,21 +331,21 @@ export class ComputeWorkerClient {
     invalidatedPlaybackSessions: number;
     invalidatedJobOperations: number;
   }> {
-    return this.requestJson('POST', '/v1/tts-playback/cache/clear', input, init);
+    return this.requestJson('POST', '/v1/tts-playback/cache/clear', input, init ?? { signal: AbortSignal.timeout(WORKER_STORAGE_TIMEOUT_MS) });
   }
 
   reclaimTtsPlaybackCache(
     input: TtsPlaybackCacheReclaimRequest,
     init?: { signal?: AbortSignal },
   ): Promise<TtsPlaybackCacheReclaimResponse> {
-    return this.requestJson('POST', '/v1/tts-playback/cache/reclaim', input, init);
+    return this.requestJson('POST', '/v1/tts-playback/cache/reclaim', input, init ?? { signal: AbortSignal.timeout(WORKER_STORAGE_TIMEOUT_MS) });
   }
 
   getUserStorageUsage(
     input: UserStorageUsageRequest,
     init?: { signal?: AbortSignal },
   ): Promise<UserStorageUsageReport> {
-    return this.requestJson('POST', '/v1/user-storage/usage', input, init);
+    return this.requestJson('POST', '/v1/user-storage/usage', input, init ?? { signal: AbortSignal.timeout(WORKER_STORAGE_TIMEOUT_MS) });
   }
 
   cleanupUserStorage(input: {
@@ -347,7 +353,7 @@ export class ComputeWorkerClient {
     namespace: string | null;
     documentIds: string[];
   }): Promise<{ deletedObjects: number; deletedDocumentArtifacts: number }> {
-    return this.requestJson('POST', '/v1/user-storage/cleanup', input);
+    return this.requestJson('POST', '/v1/user-storage/cleanup', input, { signal: AbortSignal.timeout(WORKER_STORAGE_TIMEOUT_MS) });
   }
 
   /**
@@ -423,7 +429,7 @@ export class ComputeWorkerClient {
         ...(method === 'POST' || method === 'PUT' ? { 'Content-Type': 'application/json' } : {}),
       },
       ...(method === 'POST' || method === 'PUT' ? { body: JSON.stringify(body ?? {}) } : {}),
-      ...(init?.signal ? { signal: init.signal } : {}),
+      signal: init?.signal ?? AbortSignal.timeout(WORKER_REQUEST_TIMEOUT_MS),
       cache: 'no-store',
     });
     if (!response.ok) {

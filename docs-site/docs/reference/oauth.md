@@ -25,7 +25,9 @@ metadata rather than constructing them. An unauthenticated v1 response includes
 a `WWW-Authenticate` challenge pointing to protected-resource metadata. Signing
 keys are available at the discovered `jwks_uri`; private keys stay on the server.
 
-Changing `BASE_URL` changes the issuer and audience. Clients must rediscover the
+`BASE_URL` must be the address clients reach the instance at: it is compared
+exactly against the issuer and token audience. Changing it, or a desktop app
+starting on a different port, changes both, so clients must rediscover the
 instance and reconnect. Keep `AUTH_SECRET` stable: it protects existing account
 data, signing keys and authorization requests. No separate OAuth secret is needed.
 
@@ -34,7 +36,9 @@ data, signing keys and authorization requests. No separate OAuth secret is neede
 Dynamic registration is open by default. Administrators can disable **Open OAuth
 client registration** in **Settings → Admin → Instance**. This stops new client
 registrations; it does not disconnect existing apps. The setting is also named
-`allowOAuthClientRegistration` in a runtime seed.
+`allowOAuthClientRegistration` in a runtime seed. Registration is the only way to
+add a client; there is no separate client-management API. A client that no user
+has approved is removed 30 days after it registers.
 
 For a native public client, POST JSON to the discovered `registration_endpoint`:
 
@@ -59,7 +63,11 @@ method and keep their secret out of browsers and source control.
 
 Registration does not grant library access. Names are self-reported, so consent
 and Connected apps label registered clients **Unverified app**. Users should
-check the destination and approve only the app they intended to use.
+check the destination and approve only the app they intended to use. A custom
+redirect scheme is shown in full (`myapp://callback`), because anyone can register
+one that names another site's host. Device approval has no redirect, so it shows no
+destination. Registration limits names to 200 characters, URLs to 2048 characters
+and `redirect_uris` to 20 entries; larger values return `invalid_client_metadata`.
 
 ## Scopes
 
@@ -71,7 +79,9 @@ check the destination and approve only the app they intended to use.
 | `offline_access` | Obtain a refresh token so access can continue without a browser login |
 
 Scopes do not imply one another. Request `documents:read` along with
-`audio:generate` to read the resulting audiobook. No scope grants admin, provider
+`audio:generate` to read the resulting audiobook; that combination also lets
+status reads advance it. With `documents:read` alone, reads never start work. No
+scope grants admin, provider
 configuration, account management, live reader streaming or worker access. All
 library operations remain limited to the approving user's resources.
 
@@ -135,9 +145,9 @@ and same-origin protections.
 
 ## Self-hosted upgrade
 
-This feature adds migration **0028_oauth_provider** for SQLite and PostgreSQL.
-It creates OAuth, device and signing-key tables without replacing existing users,
-sessions or provider ciphertext. Back up the database and apply it through the
-instance's normal upgrade procedure. Coordinate PostgreSQL production migration
-with the owner before deploying the new web version. The compute worker does not
-need OAuth credentials or database access.
+The public API adds migrations **0027** (audiobook requests) and
+**0028_oauth_provider** (OAuth, device and signing-key tables) for SQLite and
+PostgreSQL, without replacing existing users, sessions or provider ciphertext.
+Back up the database and apply them through the instance's normal upgrade procedure
+before starting the new web version. Update the web app and an external compute
+worker together. The worker does not need OAuth credentials or database access.

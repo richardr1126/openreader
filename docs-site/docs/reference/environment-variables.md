@@ -25,7 +25,7 @@ Upgrading a v4 instance? Follow [Upgrade from v4](../deploy/upgrade-from-v4).
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `BASE_URL` | required | The address people open, for example `https://reader.example.com`. |
+| `BASE_URL` | required | The address people open, for example `https://reader.example.com`. Also the [OAuth](./oauth) issuer and audience, so changing it makes apps reconnect. |
 | `AUTH_SECRET` | required | Signs sessions and encrypts saved keys. App only; never set it on a standalone worker. [Keep it stable](../configure/admin-panel#how-saved-keys-are-protected). |
 | `AUTH_TRUSTED_ORIGINS` | empty | Other addresses allowed to sign in, comma-separated. `BASE_URL` is always trusted. |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | unset | Turn on GitHub sign-in. |

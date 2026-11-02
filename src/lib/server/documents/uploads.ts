@@ -4,19 +4,20 @@ import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { getBrowserStorageTransport } from '@/lib/server/storage/s3';
 import type { DocumentUploadResource, PreparedDocumentUpload } from '@/types/document-api';
 import { createAdmittedComputeOperation } from '@/lib/server/compute-limits/run-admitted';
+import { ComputeAdmissionLimitedError } from '@/lib/server/compute-limits/run-admitted';
 import { createOrReuseCurrentPdfParseOperation, resolveCurrentPdfParse } from '@/lib/server/pdf-parse/operation';
-import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { getComputeWorkerClient, isComputeWorkerAvailable, isComputeWorkerUnavailableError } from '@/lib/server/compute-worker/client';
 import { TEMP_DOCUMENT_UPLOAD_TTL_MS, getTempDocumentFinalizeReceipt, putTempDocumentFinalizeReceipt,
   putTempDocumentBlob, presignTempPut, isValidTempUploadToken, headTempDocumentBlob, verifyDocumentBlobIntegrity } from './blobstore';
 import { finalizeUploadedDocument, verifyUploadFolder, type FinalizeUpload } from './finalize-upload';
 import { describeDocument, requireDocument } from './resources';
-import { safeDocumentName, toDocumentTypeFromName } from './utils';
+import { documentContentType, safeDocumentName, toDocumentTypeFromName } from './utils';
 import { buildDocxConversionRequest, headTempUploadForConversion } from './docx-conversion-jobs';
 import type { DocumentCaller } from './request';
 import type { BaseDocument } from '@/types/documents';
 import { normalizeAuthor, normalizeLanguage } from './import-metadata';
 
-type UploadReceipt = { upload: FinalizeUpload; createdAt: number; size: number; contentType: string; requested: boolean } | { stored: BaseDocument };
+type UploadReceipt = { upload: FinalizeUpload; createdAt: number; size: number; requested: boolean } | { stored: BaseDocument };
 
 export function uploadId(value: string): string {
   const id = value.trim().toLowerCase();
@@ -40,13 +41,12 @@ export async function prepareDocumentUpload(caller: DocumentCaller, body: Record
   const name = safeDocumentName(body.name.trim(), 'document.txt');
   if (!/\.(pdf|epub|docx|txt|md|markdown|mdown|mkd|html|htm)$/i.test(name)) throw new ApiRequestError(415, 'FILE_TYPE_UNSUPPORTED', 'Unsupported document type.');
   const size = body.size;
-  if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 0) throw new ApiRequestError(400, 'REQUEST_INVALID', 'size must be a non-negative integer.');
+  if (typeof size !== 'number' || !Number.isSafeInteger(size) || size <= 0) throw new ApiRequestError(400, 'REQUEST_INVALID', 'size must be a positive integer.');
   const { maxUploadMb } = await getResolvedRuntimeConfig();
   if (size > maxUploadMb * 1024 * 1024) throw new ApiRequestError(413, 'UPLOAD_TOO_LARGE', 'Upload exceeds the configured maximum size.');
-  const contentType = typeof body.contentType === 'string' && body.contentType.trim() ? body.contentType.trim() : 'application/octet-stream';
-  if (contentType.length > 256 || /[\r\n]/.test(contentType)) throw new ApiRequestError(400, 'REQUEST_INVALID', 'Invalid contentType.');
+  const contentType = documentContentType(name);
   const id = randomUUID();
-  const value: UploadReceipt = { createdAt: Date.now(), size, contentType, requested: false, upload: {
+  const value: UploadReceipt = { createdAt: Date.now(), size, requested: false, upload: {
     token: id, name, type: toDocumentTypeFromName(name),
     lastModified: typeof body.lastModified === 'number' && Number.isSafeInteger(body.lastModified) && body.lastModified > 0 ? body.lastModified : Date.now(),
     folderId: undefined, hints: {
@@ -82,18 +82,26 @@ export async function receiveDocumentUpload(caller: DocumentCaller, id: string, 
     reader?.releaseLock();
   }
   if (size !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
-  await putTempDocumentBlob(id, caller.principal.userId, Buffer.concat(chunks), value.contentType, null);
+  await putTempDocumentBlob(id, caller.principal.userId, Buffer.concat(chunks), documentContentType(value.upload.name), null);
 }
 
+/**
+ * The document is already registered, so a refused parse must not fail the
+ * request. It reports as not_started, and the next upload status read tries again.
+ */
 async function readyDocument(caller: DocumentCaller, stored: BaseDocument) {
   if (stored.type === 'pdf' && isComputeWorkerAvailable()) {
-    const current = await resolveCurrentPdfParse({ documentId: stored.id, namespace: null });
-    if (!current.artifact && !current.operation) {
-      const policy = (await getResolvedRuntimeConfig()).computeLimitPolicies;
-      await createAdmittedComputeOperation({ policy, action: 'pdf_layout',
-        requestKey: `${stored.id}:${stored.lastModified}:current`, subject: caller.subject,
-        create: () => createOrReuseCurrentPdfParseOperation({ documentId: stored.id, namespace: null }),
-      });
+    try {
+      const current = await resolveCurrentPdfParse({ documentId: stored.id, namespace: null });
+      if (!current.artifact && !current.operation) {
+        const policy = (await getResolvedRuntimeConfig()).computeLimitPolicies;
+        await createAdmittedComputeOperation({ policy, action: 'pdf_layout',
+          requestKey: `${stored.id}:${stored.lastModified}:current`, subject: caller.subject,
+          create: () => createOrReuseCurrentPdfParseOperation({ documentId: stored.id, namespace: null }),
+        });
+      }
+    } catch (error) {
+      if (!(error instanceof ComputeAdmissionLimitedError) && !isComputeWorkerUnavailableError(error)) throw error;
     }
   }
   return describeDocument(stored);
@@ -108,7 +116,7 @@ export async function readDocumentUpload(caller: DocumentCaller, id: string): Pr
     return { ...base, status: 'ready', document: await readyDocument(caller, { ...document, size }) };
   }
   if (!value.requested) return { ...base, status: 'pending' };
-  const result = await finalizeUploadedDocument({ upload: value.upload, userId: caller.principal.userId, namespace: null, subject: caller.subject, schedulePreview: caller.schedule });
+  const result = await finalizeUploadedDocument({ upload: value.upload, expectedSize: value.size, userId: caller.principal.userId, namespace: null, subject: caller.subject, schedulePreview: caller.schedule });
   if (result.kind === 'stored') return { ...base, status: 'ready', document: await readyDocument(caller, result.stored) };
   const operation = result.kind === 'failed' ? result.failed : result.pending;
   return { ...base, status: result.kind === 'failed' ? 'failed' : 'processing', operationId: operation.opId,
@@ -132,7 +140,7 @@ export async function submitDocumentUpload(caller: DocumentCaller, id: string, f
 
 export async function stageDocumentUpload(caller: DocumentCaller, body: Buffer, metadata: Record<string, unknown>): Promise<string> {
   const prepared = await prepareDocumentUpload(caller, { ...metadata, size: body.byteLength });
-  await putTempDocumentBlob(prepared.id, caller.principal.userId, body, typeof metadata.contentType === 'string' ? metadata.contentType : 'application/octet-stream', null);
+  await putTempDocumentBlob(prepared.id, caller.principal.userId, body, documentContentType(String(metadata.name)), null);
   return prepared.id;
 }
 

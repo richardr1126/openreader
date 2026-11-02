@@ -86,7 +86,7 @@ const lastModified = Date.now();
 
 function input() {
   return { upload: { token, name: 'Report.docx', type: 'docx' as const, lastModified, folderId: undefined, hints: {} },
-    userId: 'user-1', namespace: null, subject: { userId: 'user-1', isAnonymous: false }, schedulePreview: () => undefined };
+    userId: 'user-1', namespace: null, subject: { userId: 'user-1', isAnonymous: false }, schedulePreview: () => undefined, expectedSize: 12 };
 }
 
 describe('DOCX upload finalization', () => {
@@ -270,6 +270,18 @@ describe('DOCX upload finalization', () => {
     expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
     expect(hoisted.putTempDocumentFinalizeReceipt).not.toHaveBeenCalled();
     expect(hoisted.deleteTempDocumentUpload).not.toHaveBeenCalled();
+  });
+
+  test('never converts bytes that differ from the declared size', async () => {
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument({ ...input(), expectedSize: 11 })).rejects.toMatchObject({ code: 'UPLOAD_INCOMPLETE', status: 400 });
+    expect(hoisted.createDocumentConversionOperation).not.toHaveBeenCalled();
+  });
+
+  test('reports a missing worker as a retryable service error', async () => {
+    hoisted.isComputeWorkerAvailable.mockReturnValue(false);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument(input())).rejects.toMatchObject({ code: 'COMPUTE_WORKER_REQUIRED', status: 503 });
   });
 
 });

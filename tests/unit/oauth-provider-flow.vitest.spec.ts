@@ -278,3 +278,115 @@ test('offline refresh remains usable after the browser session expires', async (
   const result = await renewed.json();
   expect(await principal(result.access_token)).toMatchObject({ userId });
 });
+
+test('only a Bearer header is a token attempt', async () => {
+  const { resolveApiPrincipal } = await import('@/lib/server/api/principal');
+  const signedIn = await call('/sign-in/email', { email: 'oauth-reader@example.test', password: 'OAuthFixture#2026' });
+  const session = /better-auth\.session_token=[^;]+/.exec(signedIn.headers.get('set-cookie')!)![0];
+  const proxy = await resolveApiPrincipal(new NextRequest(`${resource}/me`, { headers: { cookie: session, authorization: 'Basic dXNlcjpwYXNz' } }), 'documents:read');
+  expect(proxy).toMatchObject({ userId });
+  for (const authorization of ['Bearer', 'Bearer a b']) {
+    const malformed = await resolveApiPrincipal(new NextRequest(`${resource}/me`, { headers: { cookie: session, authorization } }), 'documents:read');
+    expect((malformed as Response).status).toBe(401);
+  }
+});
+
+test('registration is the only way to manage a client, even with registration off', async () => {
+  const settings = await import('@/lib/server/admin/settings');
+  await settings.setRuntimeConfigKey('allowOAuthClientRegistration', false);
+  try {
+    auth = await (await import('@/lib/server/auth/auth')).getAuth();
+    const created = await call('/oauth2/create-client', { client_name: 'Bypass', redirect_uris: [redirect], token_endpoint_auth_method: 'none' }, cookie);
+    expect(created.status).toBe(404);
+    expect((await call('/oauth2/get-clients', undefined, cookie)).status).toBe(404);
+    expect((await call(`/oauth2/get-client?client_id=${clientId}`, undefined, cookie)).status).toBe(404);
+    expect((await call('/oauth2/update-client', { client_id: clientId, update: { client_name: 'Renamed' } }, cookie)).status).toBe(404);
+    expect((await call('/oauth2/delete-client', { client_id: clientId }, cookie)).status).toBe(404);
+    expect((await call('/oauth2/client/rotate-secret', { client_id: clientId }, cookie)).status).toBe(404);
+  } finally {
+    await settings.setRuntimeConfigKey('allowOAuthClientRegistration', true);
+    auth = await (await import('@/lib/server/auth/auth')).getAuth();
+  }
+  expect(sql<{ name: string }>('select name from oauth_client where client_id=?', clientId)[0].name).toBe('OAuth flow fixture');
+});
+
+test.each([
+  ['client_name', { client_name: 'n'.repeat(201) }],
+  ['logo_uri', { logo_uri: `https://example.test/${'l'.repeat(2048)}` }],
+  ['redirect_uris', { redirect_uris: Array.from({ length: 21 }, (_, index) => `http://127.0.0.1:${40000 + index}/callback`) }],
+  ['contacts', { contacts: Array.from({ length: 11 }, () => 'a@example.test') }],
+])('open registration refuses an oversized %s', async (field, oversized) => {
+  const before = sql<{ count: number }>('select count(*) as count from oauth_client')[0].count;
+  const response = await call('/oauth2/register', { client_name: 'Oversized', redirect_uris: [redirect], token_endpoint_auth_method: 'none', ...oversized });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: 'invalid_client_metadata', error_description: `${field} is too long.` });
+  expect(sql<{ count: number }>('select count(*) as count from oauth_client')[0].count).toBe(before);
+});
+
+test('a custom scheme shows as itself, not as the host it names', async () => {
+  const { oauthRedirectDestination } = await import('@/lib/server/auth/oauth-values');
+  expect(oauthRedirectDestination('https://reader.example/callback')).toBe('reader.example');
+  expect(oauthRedirectDestination('http://127.0.0.1:43210/callback')).toBe('127.0.0.1:43210');
+  expect(oauthRedirectDestination('evil://claude.ai/callback')).toBe('evil://claude.ai');
+  expect(oauthRedirectDestination('com.example.app:/callback')).toBe('com.example.app://');
+  expect(() => oauthRedirectDestination('not a uri')).toThrow();
+});
+
+test('one user has at most one consent per client', () => {
+  const database = new Database(databasePath);
+  try {
+    const index = database.prepare("select sql from sqlite_master where name='oauthConsent_userId_clientId_uidx'").get() as { sql: string };
+    expect(index.sql).toContain('UNIQUE');
+    expect(index.sql).toContain('`client_id`');
+  } finally { database.close(); }
+});
+
+test('the cleanup task removes expired records and abandoned clients, and keeps the rest', async () => {
+  const past = Date.now() - 1000, future = Date.now() + 3_600_000, old = Date.now() - 40 * 86_400_000;
+  const database = new Database(databasePath);
+  const addClient = (id: string, createdAt: number) => database.prepare(
+    'insert into oauth_client (id, client_id, redirect_uris, created_at, updated_at) values (?, ?, ?, ?, ?)',
+  ).run(id, id, JSON.stringify([redirect]), createdAt, createdAt);
+  try {
+    addClient('abandoned-client', old);
+    addClient('recent-client', Date.now());
+    addClient('approved-client', old);
+    database.prepare('insert into oauth_consent (id, client_id, user_id, scopes, created_at, updated_at) values (?, ?, ?, ?, ?, ?)')
+      .run('kept-consent', 'approved-client', userId, '[]', old, old);
+    const addDevice = database.prepare('insert into device_code (id, device_code, user_code, expires_at, status) values (?, ?, ?, ?, ?)');
+    addDevice.run('expired-device', 'expired-device', 'EXPIRED', past, 'pending');
+    addDevice.run('live-device', 'live-device', 'LIVE', future, 'pending');
+  } finally { database.close(); }
+
+  const { pruneApiRecords } = await import('@/lib/server/tasks/handlers/prune-api-records');
+  const result = await pruneApiRecords({ deadlineAt: Date.now() + 30_000 } as never);
+
+  expect(result).toMatchObject({ audiobookRequests: 0 });
+  const clients = sql<{ client_id: string }>('select client_id from oauth_client').map(row => row.client_id);
+  expect(clients).not.toContain('abandoned-client');
+  expect(clients).toEqual(expect.arrayContaining(['recent-client', 'approved-client', clientId]));
+  expect(sql<{ id: string }>('select id from device_code where id in (?, ?)', 'expired-device', 'live-device').map(row => row.id)).toEqual(['live-device']);
+});
+
+test('deleting a document or an account leaves no API records behind', () => {
+  const database = new Database(databasePath);
+  const now = Date.now();
+  const addDocument = (id: string, owner: string) => database.prepare('insert into documents (id, user_id, name, type, size, last_modified, file_path) values (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, owner, 'a.txt', 'html', 1, now, id);
+  const addRequest = (id: string, owner: string, document: string) => database.prepare('insert into audiobook_requests (id, user_id, document_id, document_version, format, speed, settings_json, created_at) values (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, owner, document, 1, 'mp3', 1, '{}', now);
+  try {
+    database.prepare('insert into user (id, name, email, email_verified, created_at, updated_at) values (?, ?, ?, ?, ?, ?)').run('leaving', 'Leaving', 'leaving@example.test', 0, now, now);
+    addDocument('doc-kept', 'leaving'); addDocument('doc-removed', 'leaving');
+    addRequest('request-kept', 'leaving', 'doc-kept'); addRequest('request-removed', 'leaving', 'doc-removed');
+    database.prepare('insert into oauth_consent (id, client_id, user_id, scopes, created_at, updated_at) values (?, ?, ?, ?, ?, ?)').run('leaving-consent', clientId, 'leaving', '[]', now, now);
+
+    database.prepare('delete from documents where id=? and user_id=?').run('doc-removed', 'leaving');
+    const ids = () => (database.prepare('select id from audiobook_requests where user_id=?').all('leaving') as Array<{ id: string }>).map(row => row.id);
+    expect(ids()).toEqual(['request-kept']);
+
+    database.prepare('delete from user where id=?').run('leaving');
+    expect(ids()).toEqual([]);
+    expect(database.prepare('select id from oauth_consent where user_id=?').all('leaving')).toEqual([]);
+  } finally { database.close(); }
+});

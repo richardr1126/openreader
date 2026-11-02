@@ -105,8 +105,9 @@ export function middleware(request: NextRequest) {
     // Strict region gate for the official production instance.
     if (!isUnitedStatesRequest) {
       if (pathname.startsWith('/api/')) {
+        const message = 'OpenReader is only available in the United States.';
         return NextResponse.json(
-          { error: 'OpenReader is only available in the United States.' },
+          { error: pathname.startsWith('/api/v1/') ? { code: 'REGION_UNAVAILABLE', message } : message },
           { status: 451, headers: { 'Cache-Control': 'no-store' } },
         );
       }

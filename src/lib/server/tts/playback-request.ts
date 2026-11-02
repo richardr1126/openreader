@@ -75,7 +75,7 @@ export function parseTtsSegmentSettings(value: unknown): TTSSegmentSettings | nu
   if (typeof rec.ttsModel !== 'string') return null;
   if (typeof rec.voice !== 'string') return null;
   if (typeof rec.nativeSpeed !== 'number' || !Number.isFinite(rec.nativeSpeed)) return null;
-  if (rec.ttsInstructions !== undefined && typeof rec.ttsInstructions !== 'string') return null;
+  if (rec.ttsInstructions !== undefined && (typeof rec.ttsInstructions !== 'string' || rec.ttsInstructions.length > 16384)) return null;
   if (rec.ttsModelOptions !== undefined && (typeof rec.ttsModelOptions !== 'string' || rec.ttsModelOptions.length > 16384)) return null;
   let modelOptions = '';
   try { if (rec.providerType === 'openrouter') modelOptions = normalizeOpenRouterOptions(rec.ttsModelOptions as string | undefined, rec.ttsModel); }

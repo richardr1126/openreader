@@ -38,7 +38,7 @@ function operation(operationId: string, summary: string, scope: string | null, r
     security: scope ? [{ sessionCookie: [] }, { secureSessionCookie: [] }, { oauth: [scope] }] : [],
     responses: { ...responses, ...(scope ? { default: errorResponse, '429': limitedResponse } : {}) }, ...extra };
 }
-const fileResponse = { description: 'File bytes in proxy mode.', content: { '*/*': { schema: { type: 'string', format: 'binary' } } } };
+const fileResponse = { description: 'File bytes in proxy mode, always sent as an attachment.', content: { '*/*': { schema: { type: 'string', format: 'binary' } } } };
 const redirectResponse = { description: 'Follow the short-lived signed storage URL; never persist it.', headers: { Location: { schema: { type: 'string', format: 'uri' } } } };
 const eventsResponse = { description: 'SSE snapshot frames from the authorized operation. Reconnect after disconnect; streams are bounded to 300 seconds.',
   content: { 'text/event-stream': { schema: { type: 'string' } } } };
@@ -83,7 +83,7 @@ export const publicApiSpec = {
     '/documents/{id}/file': { parameters: [parameter('id', 'path', docId)],
       get: operation('getDocumentFile', 'Read the canonical file (PDF for converted DOCX)', 'documents:read', { '200': fileResponse, '307': redirectResponse }) },
     '/uploads': { post: operation('prepareUpload', 'Prepare an owner-scoped file transfer', 'documents:write', { '201': response('Transfer descriptor. PUT bytes to url using every returned header, then POST /documents.', ref('PreparedUpload')) },
-      { requestBody: body(object({ name: { ...string, minLength: 1 }, size: { type: 'integer', minimum: 0 }, contentType: string,
+      { requestBody: body(object({ name: { ...string, minLength: 1 }, size: { type: 'integer', minimum: 1 },
         lastModified: { type: 'integer', minimum: 1 }, author: string, language: string }, ['name', 'size'])) }) },
     '/uploads/{uploadId}': { parameters: [parameter('uploadId', 'path', { type: 'string', format: 'uuid' })],
       get: operation('getUpload', 'Read conversion status and finalize the canonical document', 'documents:write', { '200': response('Upload resource. A successful conversion needs this read to register its document.', ref('Upload')) }) },
@@ -111,11 +111,15 @@ export const publicApiSpec = {
         '409': { ...errorResponse, description: 'DOCUMENT_PREPARING: retry after the indicated delay while PDF parsing completes.' },
       }, { requestBody: body(ref('AudiobookRequest')), description: 'Uses saved settings unless explicit settings are provided. Signed-in whole-book requests advance after the tab closes. Guests advance on their own requests. Repeated matching requests reuse the same identity; retrySkipped is for whole books only.' }) },
     '/documents/{id}/audiobooks/lookup': { parameters: [parameter('id', 'path', docId)],
-      post: operation('lookupAudiobook', 'Read the export state for matching settings', 'documents:read', { '200': response('Current state; no audiobook request is created.', ref('Audiobook')) },
-        { requestBody: body(ref('AudiobookRequest')), description: 'The web app uses explicit settings to inspect its current cached export. Saved-settings requests on unparsed PDFs may start parsing and return DOCUMENT_PREPARING.' }) },
+      post: operation('lookupAudiobook', 'Read the export state for matching settings', 'documents:read', { '200': response('Current state; no audiobook request is created.', ref('Audiobook')),
+        '409': { ...errorResponse, description: 'DOCUMENT_PREPARING: the PDF has not been parsed yet.' } },
+        { requestBody: body(ref('AudiobookRequest')), description: 'Never starts or adopts work. A PDF that has not been parsed returns DOCUMENT_PREPARING when saved settings need its parsed language.' }) },
     '/documents/{id}/audiobooks/{audiobookId}': { parameters: [parameter('id', 'path', docId), parameter('audiobookId', 'path')],
-      get: operation('getAudiobook', 'Read and advance a durable audiobook request', 'documents:read', { '200': response('Current audiobook state. A limited compile reports waiting and can advance on a subsequent read.', ref('Audiobook')) }),
-      delete: operation('stopAudiobook', 'Stop a whole-book request and keep generated audio cached', 'audio:generate', { '200': response('Stopped state; the request is removed and later GET returns 404. Chapter Stop is rejected.', ref('Audiobook')) }),
+      get: operation('getAudiobook', 'Read a durable audiobook request', 'documents:read', { '200': response('Current audiobook state.', ref('Audiobook')),
+        '404': { ...errorResponse, description: 'The request is unknown, was stopped, finished more than 7 days ago, or names a chapter the document no longer has.' } },
+        { description: 'Only a caller with the audio:generate scope also advances the request, for example starting a limited compile that reported waiting. A documents:read caller only observes.' }),
+      delete: operation('stopAudiobook', 'Stop a whole-book request and keep generated audio cached', 'audio:generate', { '200': response('Stopped state; the request is removed and later GET returns 404. Chapter Stop is rejected.', ref('Audiobook')) },
+        { description: 'Formats and speeds of the same settings share one generation run, so stopping it also ends the other whole-book requests that share it. POST resumes from the cached audio.' }),
     },
     '/documents/{id}/audiobooks/events': { parameters: [parameter('id', 'path', docId), parameter('opId', 'query', string, true)],
       get: operation('getAudiobookEvents', 'Observe an audiobook operation owned by the caller', 'documents:read', { '200': eventsResponse }) },
@@ -135,7 +139,7 @@ export const publicApiSpec = {
         scope: enumeration('user'), folderId: string, recentlyOpenedAt: number, contentVersion: string, author: string, language: string,
         readingProgress: object({ fraction: nullableNumber, updatedAtMs: number }),
       }, ['id', 'name', 'size', 'lastModified', 'type']),
-      Document: { allOf: [ref('DocumentMetadata'), object({ status: enumeration('processing', 'ready', 'failed'), operationId: nullableString, error: nullableString,
+      Document: { allOf: [ref('DocumentMetadata'), object({ status: { ...enumeration('not_started', 'processing', 'ready', 'failed', 'unknown'), description: 'not_started: a PDF has not been parsed yet and reading or generating will start it. unknown: the compute worker could not be reached; retry.' }, operationId: nullableString, error: nullableString,
         webUrl: { type: 'string', format: 'uri' }, fileUrl: string })] },
       DocumentList: object({ data: array(ref('DocumentMetadata')), nextCursor: nullableString }),
       CreateDocument: object({ source: { oneOf: [object({ type: { const: 'text' }, text: { ...string, minLength: 1 } }),

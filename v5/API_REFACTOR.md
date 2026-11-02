@@ -1,6 +1,7 @@
 # Public API refactor
 
-Status: accepted; phases 1–4 are implemented; phases 5–6 remain planned.
+Status: accepted; phases 1–4 are implemented; phase 4.5 hardens them before phases
+5–6, which remain planned.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -220,8 +221,8 @@ The grants cover each client type:
 ### Compute limits
 
 Third-party apps share the user's existing compute limits, and the consent screen says
-so. Requests from a hosted MCP client arrive from that vendor's IP, so check that limits
-key on the user. A per-app limit can be added if a runaway client becomes a real problem.
+so. Requests from a hosted MCP client arrive from that vendor's IP, so limits key on the
+user. There is no per-app limit: a client using up its user's quota affects only that user.
 
 ---
 
@@ -297,6 +298,134 @@ the full v1 surface.
 Add the provider, its tables and the `/.well-known` metadata, then the consent
 page, Connected apps, scopes and bearer support on v1.
 
+### Phase 4.5: Hardening before MCP
+
+Phase 5 builds on these routes, so a review of phases 1–4 is closed out first.
+Nothing here adds a public capability.
+
+Blockers:
+
+- Serve stored documents as downloads with a content type the server derives from
+  the document type, so an upload cannot run script on the app origin.
+- `documents:read` never starts or advances compute. Only `audio:generate` does.
+- The off switch for client registration also closes the managed client routes.
+- Audiobook locks use their own small connection pool with lock and transaction
+  timeouts, and worker calls have a default deadline, so a slow worker cannot
+  exhaust the database pool.
+- A document stays registered when its first layout parse is refused or the worker
+  is down. Status polling retries the parse.
+
+Fix soon:
+
+- **Stop:** stopping a running export cancels the shared generation and ends every
+  whole-book request sharing that session. The other format then returns 404, and
+  POST resumes it. Stopping with nothing running ends only that request.
+- **Retention:** finished requests stay addressable for 7 days.
+- Only the `Bearer` scheme counts as a token attempt. The device page keeps its
+  destination through sign-in. Empty uploads are rejected, and the size is rechecked
+  at every finalize.
+- Document status reports `unknown` when the worker cannot answer, and `not_started`
+  when no parse exists. Plan resolve applies the staleness rule.
+- Errors, Retry-After and cache headers match the published contract, and OpenAPI is
+  checked against real responses.
+- Tests cover deletion against a real database. A scheduled task purges expired OAuth
+  rows. Migration 0028 is rewritten in place with a unique `oauth_consent (user_id,
+  client_id)` index, so databases that ran the earlier 0028 must be reset.
+
+Smaller fixes: chapter GET 404, rebuild after retried skips, custom-scheme display
+on consent, registration field limits, 503 when DOCX conversion has no worker.
+
+### Phases 4.6 to 4.8: Limits before MCP
+
+Nothing owns a user's storage total, and nothing bounds what a user or guest can add.
+The admin list sums source files only, while the settings page lists audio and derived
+data by scanning object storage on every load. Adding a document has no limit beyond
+the upload size, and eight of the nine compute actions track guests per user, so a new
+guest session resets them. MCP makes these easier to hit, so they land first. None of
+these phases adds a public capability.
+
+The phases run in order, with one commit each. Each one finishes with the complete Vitest
+suite and Playwright matrix.
+
+Admin settings for all three follow one pattern, and all are hidden on desktop: a toggle,
+off by default, reveals its value already filled in with the default. A limit is hidden
+when its feature is off.
+
+### Phase 4.6: Account creation and IP handling
+
+Limit accounts where they are created, and never store a raw IP.
+
+- **Creation caps:** both are enforced in the user-create hook, which every sign-up path
+  passes through, and count in the existing limit tables.
+  - Guests use a rolling window equal to the guest idle period, so older guests are normally
+    deleted before an IP gets more. Default: 10.
+  - Full accounts have their own count and period, because they are never cleaned up and
+    carry larger limits. Default: 5 per 30 days.
+  - A request with no known IP is not capped.
+- **At a cap:** the app stops retrying guest creation and shows the sign-in page, and
+  sign-up shows an error. Existing guests and accounts keep working.
+- **Hashed IPs:** every stored IP is a keyed hash, with IPv6 grouped by /64.
+  - The session create hook replaces `session.ip_address` before the row is written, using
+    its own label so session values cannot be matched against limit counters.
+  - Do not use `disableIpTracking`, because Better Auth's rate limiter needs the IP. Test
+    that the limiter still works.
+  - The migration clears existing raw values, because SQL cannot compute the keyed hash.
+  - Account exports leave the IP out.
+- **Delete device and per-IP limits:** remove the device limit, the device ID cookie and
+  per-IP limits for guests and signed-in users, along with the IP and device values routes
+  pass to the limits system. The creation caps are the only IP check left. Drop
+  `device_scope_key` and `ip_scope_key` from `compute_limit_admissions`.
+- **Saved policies:** policies that still hold device or IP rows must load with those rows
+  removed. Test this against a saved copy of the old format, because a rejected policy could
+  leave limits not applying as the admin set them.
+- **Settings:** "New accounts per IP", with count and days, goes under New account sign-ups.
+  "New guests per IP" goes under Guest idle period, labelled with the current period. If the
+  Delete idle guest accounts task is off, say that guests are never removed and link to Tasks.
+- **Privacy policy:** update what it says about IP values and the anonymous-device cookie.
+
+### Phase 4.7: Storage and intake
+
+Give each user one storage total, shown everywhere and enforced by caps.
+
+- **Usage table:** one row per user and document holding audio bytes (segments, sidecars
+  and exports). The worker measures only the affected document during a run, when it
+  finishes and after audio is cleared, then reports to an internal route using the broker
+  token. A late report must not bring back a row for audio that has been deleted. Pages
+  never trigger a measurement.
+- **One total:** one server function returns documents (`sum(documents.size)`), audio
+  (`sum` of the usage rows) and their total. The admin list, settings page and caps all
+  read it, and the library scan is deleted. Derived data is shared and regenerable, so
+  it is not charged to a user. The per-document section and audio deletion keep their
+  one-document scan for the breakdown by settings.
+- **Backfill and repair:** one scheduled task creates rows for existing audio and later
+  repairs recently active users. The work runs on the worker.
+- **Storage caps:** separate guest and signed-in values. Uploads are checked in
+  `prepareDocumentUpload`, and audio where daily characters are charged, so cached audio keeps
+  playing. Confirm that check runs when the character limit is off. A run that hits a cap
+  stops in the existing usage-limited state.
+- **Guest storage pool:** one setting for the total all guests can use. When it is full,
+  guests cannot upload or generate new audio. Signed-in users are unaffected.
+- **`document_intake`:** a per-user daily file limit with a smaller guest value, checked
+  before any URL fetch. It has no execution block and joins `ADDITIVE_COMPUTE_ACTIONS`.
+- **Settings:** storage per account, storage per guest and total guest storage go beside Max
+  upload size. The daily file limit goes in the compute limits editor, beside characters.
+- **Showing usage:**
+  - Admin users shows one storage total per user, with documents and audio in its details.
+  - User settings shows the same total and breakdown, with used against the cap when one is on.
+  - When a cap blocks an action, the message says which limit was hit and links to Storage to
+    free space. Guests also get the option to create an account.
+
+### Phase 4.8: Guest retention notice
+
+Tell guests how long their data lasts before the idle period gets shorter.
+
+- When "Delete idle guest accounts" is on, tell a guest once, in the onboarding flow, how long
+  an idle guest account is kept, with a direct way to create an account. Show nothing when
+  the task is off.
+- Claiming an account moves documents, but no audio move was found in the claim code. Check
+  what happens to a guest's audio on sign-up so the notice promises only what is kept.
+- State guest retention in the privacy policy.
+
 ### Phase 5: MCP
 
 Add `/api/mcp` as a stateless streamable HTTP endpoint on the same shared logic.
@@ -304,9 +433,31 @@ Start with `list_documents`, `add_document`, `list_voices`, `create_audiobook` a
 `get_audiobook`.
 
 - Tools return a status at once and never wait for an audiobook to finish.
-- Tools return `webUrl` for the user to open, because a link that needs a bearer
-  token cannot be clicked in chat.
+- Tools return `webUrl`, a ready-to-play link to the reader, for the user to open,
+  because a link that needs a bearer token cannot be clicked in chat. They never
+  return a raw worker audio URL or a playback token.
 - No local MCP package is needed at first, since OAuth handles sign-in.
+- Use the MCP SDK (`@modelcontextprotocol/server` v2 with zod).
+- Accept and document the re-consent cutoffs clients have.
+- Test connectors on production during final verification, since there is no preview stack.
+- No request rate limit specific to MCP. Compute, storage and file limits cover cost.
+- Client registration supports CIMD and DCR on all instances, with one admin switch. This
+  needs `@better-auth/cimd`.
+- No CORS on `/api/mcp`. The Origin check is required either way.
+
+### Final verification before release
+
+Nothing merges to `main` until phase 5 is done, so phases 1 to 5 reach production together.
+These steps are for the owner.
+
+- Take a backup, because dropped columns and cleared IPs can only be recovered from one.
+  Apply the migrations with the old version offline, then deploy web and worker together.
+- Smoke-test production, then test the MCP connectors against it.
+- Run the storage backfill, then set the creation cap, character and storage values from real
+  usage. Production peaked at 5 guests per IP over 14 days.
+- Lower the guest idle period from 90 days to 14 only after the notice has been live for a
+  while, because the next run deletes guests already idle that long.
+- Turn on "Delete idle guest accounts".
 
 ### Phase 6: Chrome extension
 
@@ -352,7 +503,16 @@ self-hosted servers.
 7. **Guests:** OAuth never admits guests. Guest exports in the web app advance only on the
    guest's own requests, so the closed-tab fix is for signed-in users.
 8. **Limit reached at compile:** the audiobook waits and retries rather than failing.
-9. **Third-party usage:** apps share the user's limits, with no per-app limit at first.
+9. **Third-party usage:** apps share the user's limits, with no per-app limit.
+10. **Creation caps replace per-IP limits:** limit guests and accounts where they are created
+    instead of keeping IP limits on characters or adding them to each action. Permanent
+    per-IP counts are out, because IPs get reassigned and shared. The device ID is out too:
+    it is a cookie, so clearing it along with the guest session resets it.
+11. **Stored IPs:** hash every stored IP with a keyed hash. Hashing keeps per-IP counts and
+    same-IP comparison for abuse and account investigations without storing addresses.
+12. **Storage measurement:** the worker measures per document when audio changes. A live
+    byte counter is out, because it would hook every write and delete and still need the
+    same scan to repair drift.
 
 ---
 
@@ -708,3 +868,33 @@ The OAuth implementation is committed as `28d07c9e`; the independent library
 banner fix is `e54360b9`. No production migration, deployment, version bump, tag
 or push was performed. Migration 0028 remains an owner-coordinated deployment
 step. Next: phase 5 adds the separate MCP resource and stateless HTTP tools.
+
+### Phase 4.5
+
+Hardening from the review of phases 1-4, specified above. No new public capability.
+Owner decisions: Stop cancels the shared run and ends every whole-book request on
+it; finished requests stay addressable for 7 days; migration 0028 is rewritten in
+place with a unique `oauth_consent (user_id, client_id)` index, so local databases
+that ran the earlier version must be reset.
+
+- Testing found two defects in the fixes themselves. The default worker timeout had
+  landed on the voice preview rather than the JSON request path, so a hung worker
+  could still hold the audiobook lock. Pruning read `status` alone, which reports
+  `ready` while a run is still changing the audio. Both are fixed and covered.
+- The advisory lock, the cleanup statements and the consent index were checked
+  against a disposable PostgreSQL 16 container: exclusion, release on failure,
+  independent keys, a busy result after 10 seconds, and a refused duplicate consent.
+  The committed lock tests stub the pool, so CI does not need a database.
+- OpenAPI tests now check real document and audiobook responses against the published
+  schemas with a small in-test validator. `lint:route-errors` is unchanged, because
+  those schema checks cover the v1 error shape.
+- Full Vitest: 1,713 passed across 246 files. Application and worker TypeScript,
+  production build, route-error, compute-boundary and install-profile checks passed.
+  Schema generation reports no changes for either dialect.
+- Final complete Playwright: 85 passed in 3.1 minutes, with no failures or retries,
+  adding the signed-out device sign-in journey for both browsers. Port 3003 was free
+  before and after.
+
+No production migration, deployment, version bump, tag or push was performed. Next:
+phases 4.6 to 4.8, then phase 5.
+

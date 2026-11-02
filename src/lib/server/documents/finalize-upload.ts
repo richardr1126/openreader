@@ -25,7 +25,8 @@ import {
 import { registerUploadedDocument } from '@/lib/server/documents/register-upload';
 import { extractImportMetadata, type ImportMetadata } from '@/lib/server/documents/import-metadata';
 import { withDocumentBlobLease } from '@/lib/server/documents/blob-lease';
-import { safeDocumentName } from '@/lib/server/documents/utils';
+import { documentContentType, safeDocumentName } from '@/lib/server/documents/utils';
+import { ApiRequestError } from '@/lib/server/api/responses';
 import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import type {
   ComputeOperation,
@@ -213,9 +214,14 @@ async function registerConvertedDocx(input: {
   return stored;
 }
 
+/** A presigned PUT stays usable after submit, so the bytes can change until finalize reads them. */
+function assertDeclaredSize(actual: number, declared: number) {
+  if (actual !== declared) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
+}
+
 async function finalizeDocx(input: FinalizeInput): Promise<FinalizeResult> {
   if (!isComputeWorkerAvailable()) {
-    throw new Error('Compute worker is required for DOCX conversion.');
+    throw new ApiRequestError(503, 'COMPUTE_WORKER_REQUIRED', 'Compute worker is required for DOCX conversion.');
   }
 
   const temp = await headTempUploadForConversion({
@@ -223,6 +229,7 @@ async function finalizeDocx(input: FinalizeInput): Promise<FinalizeResult> {
     userId: input.userId,
     namespace: input.namespace,
   });
+  assertDeclaredSize(temp.size, input.expectedSize);
 
   if (Date.now() - temp.lastModified > TEMP_DOCUMENT_UPLOAD_TTL_MS) {
     await deleteTempDocumentUpload(input.upload.token, input.userId, input.namespace).catch(() => undefined);
@@ -310,6 +317,7 @@ export async function finalizeUploadedDocument(input: FinalizeInput): Promise<Fi
     userId: input.userId,
     namespace: input.namespace,
   });
+  assertDeclaredSize(temp.size, input.expectedSize);
 
   if (Date.now() - temp.lastModified > TEMP_DOCUMENT_UPLOAD_TTL_MS) {
     await deleteTempDocumentUpload(input.upload.token, input.userId, input.namespace).catch(() => undefined);
@@ -318,10 +326,8 @@ export async function finalizeUploadedDocument(input: FinalizeInput): Promise<Fi
 
   const finalizedType: DocumentType = input.upload.type;
   const finalizedBody = temp.body;
-  const finalizedContentType = finalizedType === 'pdf'
-    ? 'application/pdf'
-    : temp.contentType;
   const finalizedName = input.upload.name;
+  const finalizedContentType = documentContentType(finalizedName);
   const documentId = createHash('sha256').update(finalizedBody).digest('hex');
   const metadata = extractImportMetadata({
     type: finalizedType,
@@ -384,6 +390,7 @@ export async function finalizeUploadedDocument(input: FinalizeInput): Promise<Fi
 
 type FinalizeInput = {
   upload: FinalizeUpload;
+  expectedSize: number;
   userId: string;
   namespace: string | null;
   subject: ComputeLimitSubject;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiCatchResponse, apiErrorResponse } from '@/lib/server/api/responses';
-import { ChapterCommandError, getAudiobook, stopAudiobook } from '@/lib/server/audiobooks/audiobooks';
+import { ChapterCommandError, ChapterNotFoundError, getAudiobook, stopAudiobook } from '@/lib/server/audiobooks/audiobooks';
 import { resolveAudiobookCaller } from '@/lib/server/audiobooks/request';
 import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { createRequestLogger } from '@/lib/server/logger';
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest, context: Context) {
     if (!audiobook) return notFound();
     return resolved.finish(NextResponse.json(audiobook));
   } catch (error) {
+    if (error instanceof ChapterNotFoundError) return apiErrorResponse(404, 'CHAPTER_NOT_FOUND', error.message);
     return apiCatchResponse(error, {
       logger,
       event: 'audiobooks.get_failed',

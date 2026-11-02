@@ -1,5 +1,6 @@
 import type { TaskRegistry } from './types';
 import { pruneComputeLimits } from './handlers/prune-compute-limits';
+import { pruneApiRecords } from './handlers/prune-api-records';
 import { enqueueMaintenanceTask } from './enqueue-maintenance';
 
 /**
@@ -28,6 +29,13 @@ export const TASK_REGISTRY: TaskRegistry = {
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     maxRunMs: 30_000,
     run: pruneComputeLimits,
+  },
+  'prune-api-records': {
+    name: 'Clean up API records',
+    description: 'Remove expired app sign-in records and audiobook requests that finished over seven days ago. Audiobook files are not affected.',
+    defaultIntervalMs: 24 * 60 * 60 * 1000,
+    maxRunMs: 45_000,
+    run: pruneApiRecords,
   },
   'retry-storage-cleanups': {
     name: 'Finish pending deletions',

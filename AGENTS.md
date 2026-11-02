@@ -66,6 +66,7 @@ Normative architecture and history:
 - `v5/USER_MANAGEMENT_AND_BOOTSTRAP.md`
 - `v5/DESKTOP_SINGLE_OWNER.md`
 - `v5/DESKTOP_SHELL.md`
+- `v5/API_REFACTOR.md`
 
 ## Playback Invariants
 
@@ -132,7 +133,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-11-01 the expected clean result is 1651 Vitest tests and 83 local
+- As of 2026-11-01 the expected clean result is 1713 Vitest tests and 85 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.
@@ -234,12 +235,14 @@ caused conflicts, high CPU, misleading failures, and overheating.
 - Example Compose files ship local-only defaults for some secrets. Do not add new
   known-default secrets; the slim files generate the broker token at startup.
 
-## Current State — 2026-09-29
+## Current State — 2026-11-01
 
-- v5.0.0 is released and the package version is `5.0.0`.
-- Work on `feat/upgrade-experience` adds the startup preflight, embedded playback
-  secret derivation, the System check admin section, and the restructured upgrade,
-  environment-variable, and local-development docs.
+- v5 is released (package version 5.4.1). `refactor/public-api` is building the public API from
+  `v5/API_REFACTOR.md`: phases 1-4 and the phase 4.5 hardening are done. Phases 4.6
+  to 4.8 (account creation limits, storage, guest notice) come next, then phase 5 (MCP).
+  None has started.
+- Migration 0028 was rewritten in place during phase 4.5 and has never shipped. A
+  local database that ran the earlier version must be reset.
 - Open follow-ups for the owner: whether the full Compose files should require
   worker/broker/playback secrets instead of shipping known defaults, and whether
   to bump the pinned `kokoro-fastapi-cpu:v0.2.4` image in the Compose examples.

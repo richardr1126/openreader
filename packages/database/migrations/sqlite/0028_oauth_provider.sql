@@ -128,7 +128,7 @@ CREATE TABLE `oauth_consent` (
 );
 --> statement-breakpoint
 CREATE INDEX `oauthConsent_clientId_idx` ON `oauth_consent` (`client_id`);--> statement-breakpoint
-CREATE INDEX `oauthConsent_userId_idx` ON `oauth_consent` (`user_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `oauthConsent_userId_clientId_uidx` ON `oauth_consent` (`user_id`,`client_id`);--> statement-breakpoint
 CREATE TABLE `oauth_refresh_token` (
 	`id` text PRIMARY KEY NOT NULL,
 	`token` text NOT NULL,

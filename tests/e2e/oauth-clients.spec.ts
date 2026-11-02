@@ -95,3 +95,17 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
   await disconnect();
   expect((await page.request.get('/api/v1/me', { headers: deviceBearer })).status()).toBe(401);
 });
+
+test('signing in from a device link returns to the same code', async ({ page }) => {
+  const userCode = 'ABCD-EFGH';
+  await page.goto(`/oauth/device?user_code=${userCode}`);
+  await expect(page.getByRole('heading', { name: 'Authorize your device', exact: true })).toBeVisible();
+  await declineOptionalCookies(page);
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+  await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');
+  await page.getByPlaceholder('Password', { exact: true }).fill('TestAccount#2026');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page).toHaveURL(/\/oauth\/device\?user_code=ABCD-EFGH$/);
+  await expect(page.getByRole('textbox', { name: 'Code shown on your device' })).toHaveValue(userCode);
+});

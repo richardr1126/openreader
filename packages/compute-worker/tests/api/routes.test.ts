@@ -338,6 +338,32 @@ describe('compute worker API routes', () => {
     });
   });
 
+  test('resolving a plan reports an active operation but not an abandoned one', async () => {
+    const payload = {
+      userId: 'user-1',
+      storageUserId: 'user-1',
+      documentId: 'e'.repeat(64),
+      documentVersion: 123,
+      readerType: 'pdf',
+      settingsHash: 'settings-hash',
+      settingsJson: { providerRef: 'p', providerType: 'openai', ttsModel: 'm', voice: 'v', nativeSpeed: 1 },
+      planning: { maxBlockLength: 500, enforceSourceBoundaries: true, language: 'en', documentSource: { namespace: null, extent: 'document' } },
+    };
+    const resolve = () => runtime.app.inject({ method: 'POST', url: '/v1/tts-playback/plans/resolve', headers: AUTH, payload });
+    expect((await resolve()).json()).toBeNull();
+    const created = await runtime.app.inject({ method: 'POST', url: '/v1/tts-playback/plans/jobs', headers: AUTH, payload });
+    expect((await resolve()).json()).toMatchObject({ opId: created.json().opId, status: 'queued' });
+
+    const later = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(later);
+    try {
+      const abandoned = (await resolve()).json();
+      expect(abandoned === null || !['queued', 'running'].includes(abandoned.status)).toBe(true);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   test('creates isolated TTS playback plan operations', async () => {
     const documentId = 'f'.repeat(64);
     const response = await runtime.app.inject({

@@ -112,7 +112,9 @@ export function AuthLoader({ children }: { children: ReactNode }) {
     || pathname === '/signup'
     || pathname === '/verify-email'
     || pathname === '/forgot-password'
-    || pathname === '/reset-password';
+    || pathname === '/reset-password'
+    // These explain signing in themselves and keep the request in their link.
+    || pathname.startsWith('/oauth/');
 
   // If the auth base URL changes, re-run the bootstrap logic.
   useEffect(() => {

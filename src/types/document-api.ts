@@ -1,7 +1,7 @@
 import type { BaseDocument } from './documents';
 
 export type DocumentResource = BaseDocument & {
-  status: 'processing' | 'ready' | 'failed';
+  status: 'not_started' | 'processing' | 'ready' | 'failed' | 'unknown';
   operationId: string | null;
   error: string | null;
   webUrl: string;

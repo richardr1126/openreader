@@ -39,6 +39,6 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
   } else throw new ApiRequestError(400, 'REQUEST_INVALID', 'source.type must be url, text or upload.');
   const bytes = Buffer.from(text, 'utf8');
   if (bytes.length > 2 * 1024 * 1024) throw new ApiRequestError(413, 'TEXT_TOO_LARGE', 'Text imports are limited to 2 MB.');
-  const id = await stageDocumentUpload(caller, bytes, { name, author, language, contentType: name.endsWith('.txt') ? 'text/plain' : 'text/markdown' });
+  const id = await stageDocumentUpload(caller, bytes, { name, author, language });
   return submitDocumentUpload(caller, id, body.folderId);
 }

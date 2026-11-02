@@ -31,6 +31,7 @@ export async function resolveAudiobookCaller(
     caller: {
       scope,
       clientId: principal.clientId,
+      mayGenerate: principal.scopes.includes('audio:generate'),
       subject: {
         userId: principal.userId,
         isAnonymous: principal.isAnonymous,
@@ -58,7 +59,13 @@ export function parseAudiobookBody(value: unknown): AudiobookBody | Response {
     return apiErrorResponse(400, 'REQUEST_INVALID', 'Send a JSON object.');
   }
   const record = value as Record<string, unknown>;
-  const speed = Number(record.speed ?? 1);
+  if (record.format !== undefined && record.format !== 'mp3' && record.format !== 'm4b') {
+    return apiErrorResponse(400, 'REQUEST_INVALID', 'format must be mp3 or m4b.');
+  }
+  const speed = record.speed ?? 1;
+  if (typeof speed !== 'number' || !Number.isFinite(speed) || speed < 0.5 || speed > 3) {
+    return apiErrorResponse(400, 'REQUEST_INVALID', 'speed must be a number from 0.5 to 3.');
+  }
   // JSON numbers only: `Number("")` and `Number(false)` would select chapter 0.
   const chapter = record.chapter;
   if (chapter !== undefined && chapter !== null && !(typeof chapter === 'number' && Number.isInteger(chapter) && chapter >= 0)) {
@@ -66,8 +73,9 @@ export function parseAudiobookBody(value: unknown): AudiobookBody | Response {
   }
   return {
     record,
-    format: record.format === 'm4b' ? 'm4b' : 'mp3',
-    speed: Number.isFinite(speed) ? Math.max(0.5, Math.min(3, speed)) : 1,
+    format: record.format ?? 'mp3',
+    // Speed is part of the request identity, so near-equal values must not multiply requests.
+    speed: Math.round(speed * 100) / 100,
     chapterIndex: typeof chapter === 'number' ? chapter : null,
   };
 }
@@ -76,12 +84,14 @@ export function parseAudiobookBody(value: unknown): AudiobookBody | Response {
  * Builds the intent from explicit settings, which the web app sends so an
  * export matches the reader's plan and audio cache exactly, or from the user's
  * saved settings with an optional voice. Saved settings depend on the PDF's
- * detected language, so a PDF must finish parsing first; asking starts the parse.
+ * detected language, so a PDF must finish parsing first; a start begins the parse,
+ * while a lookup only reports that it is not ready.
  */
 export async function resolveAudiobookIntent(
   caller: AudiobookCaller,
   documentId: string,
   body: AudiobookBody,
+  options: { observeOnly?: boolean } = {},
 ): Promise<AudiobookIntent | Response> {
   const { record, format, speed, chapterIndex } = body;
   const base = { format, speed, chapterIndex };
@@ -111,7 +121,10 @@ export async function resolveAudiobookIntent(
   const { scope, subject } = caller;
   let parsedPdf: ParsedPdfDocument | null = null;
   if (scope.readerType === 'pdf') {
-    const pdf = await ensurePdfReady(subject.ip ?? null, documentId, scope, {});
+    const pdf = await ensurePdfReady(subject.ip ?? null, documentId, scope, {
+      observeOnly: options.observeOnly,
+      throwAdmissionLimit: true,
+    });
     if ('result' in pdf) {
       return pdf.result.status === 'error' && !pdf.result.retryable
         ? apiErrorResponse(422, 'DOCUMENT_UNAVAILABLE', pdf.result.message)

@@ -11,7 +11,7 @@ import { getAuthClient } from '@/lib/client/auth-client';
 import { requestJson } from '@/lib/client/api/http';
 import { API_SCOPE_LABELS } from '@/lib/shared/api-scopes';
 
-type RequestInfo = { name: string; scopes: string[]; destination: string; clientId: string };
+type RequestInfo = { name: string; scopes: string[]; destination: string | null; clientId: string };
 export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
   const search = useSearchParams();
   const query = search.toString();
@@ -63,7 +63,7 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
         <div className="border-b border-line px-6 py-6 sm:px-8">
           <p className="mb-2 text-xs uppercase tracking-widest text-soft">{device ? 'Connect a device' : 'App access'}</p>
           <h1 className="text-2xl font-semibold tracking-tight">{info ? `${info.name} wants to connect` : device ? 'Authorize your device' : 'Connect an app'}</h1>
-          {info && <div className="mt-3 flex flex-wrap items-center gap-2"><Badge tone="muted">Unverified app</Badge><span className="break-all text-sm text-soft">{info.destination}</span></div>}
+          {info && <div className="mt-3 flex flex-wrap items-center gap-2"><Badge tone="muted">Unverified app</Badge>{info.destination && <span className="break-all text-sm text-soft">{info.destination}</span>}</div>}
         </div>
         <div className="space-y-5 px-6 py-6 sm:px-8">
           {isPending ? <LoadingSpinner className="h-6 w-6" /> : !accountReady ? <>
@@ -76,7 +76,7 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
             </form>}
             {loading && <p role="status" className="text-sm text-soft">Reading connection request…</p>}
             {info && <>
-              <p className="text-sm text-soft">App names are self-reported. Check the destination and approve only an app you intended to use.</p>
+              <p className="text-sm text-soft">App names are self-reported. {info.destination ? 'Check the destination and approve' : 'Approve'} only an app you intended to use.</p>
               {device && <p className="rounded-md border border-line bg-surface-sunken p-3 text-sm">Only approve a code displayed by a device you are using. Do not approve an unexpected code sent by someone else.</p>}
               <div><h2 className="mb-3 text-sm font-semibold">This app will be able to</h2><ul className="divide-y divide-line border-y border-line">
                 {info.scopes.map(scope => <li key={scope} className="py-3 text-sm">{API_SCOPE_LABELS[scope] || scope}</li>)}

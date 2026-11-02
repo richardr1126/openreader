@@ -308,7 +308,7 @@ export const oauthConsent = sqliteTable(
   },
   (table) => [
     index("oauthConsent_clientId_idx").on(table.clientId),
-    index("oauthConsent_userId_idx").on(table.userId),
+    uniqueIndex("oauthConsent_userId_clientId_uidx").on(table.userId, table.clientId),
   ],
 );
 

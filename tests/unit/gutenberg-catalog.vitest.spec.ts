@@ -281,7 +281,7 @@ describe('gutenberg import route', () => {
     expect(mocks.stageUpload).toHaveBeenCalledWith(
       expect.objectContaining({ principal: expect.objectContaining({ userId: 'user-1' }) }),
       expect.any(Buffer),
-      expect.objectContaining({ name: body.name, contentType: 'application/epub+zip', author: 'Jane Austen', language: 'en' }),
+      expect.objectContaining({ name: body.name, author: 'Jane Austen', language: 'en' }),
     );
   });
 

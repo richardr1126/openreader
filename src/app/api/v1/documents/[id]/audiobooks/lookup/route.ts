@@ -20,7 +20,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     if (body instanceof Response) return body;
     const resolved = await resolveAudiobookCaller(request, documentId, 'documents:read');
     if (resolved instanceof Response) return resolved;
-    const intent = await resolveAudiobookIntent(resolved.caller, documentId, body);
+    const intent = await resolveAudiobookIntent(resolved.caller, documentId, body, { observeOnly: true });
     if (intent instanceof Response) return intent;
     const audiobook = await lookupAudiobook(resolved.caller, intent, {
       includeProgress: body.record.includeProgress !== false || body.chapterIndex !== null,

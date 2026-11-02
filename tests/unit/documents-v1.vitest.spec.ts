@@ -2,12 +2,12 @@ import { createHash } from 'node:crypto';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { NextRequest } from 'next/server';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   db: null as unknown, sqlite: null as unknown as import('better-sqlite3').Database,
   userId: 'owner' as string | null, blobs: new Map<string, Buffer>(), receipts: new Map<string, unknown>(),
-  parse: vi.fn(), article: vi.fn(), conversion: vi.fn(),
+  parse: vi.fn(), article: vi.fn(), conversion: vi.fn(), workerAvailable: false, admit: vi.fn(),
 }));
 vi.mock('next/server', async original => ({ ...await original<typeof import('next/server')>(), after: () => undefined }));
 vi.mock('@openreader/database', () => ({ get db() { return state.db; } }));
@@ -19,10 +19,10 @@ vi.mock('@/lib/server/documents/previews', () => ({ enqueueDocumentPreview: asyn
 vi.mock('@/lib/server/tts/segments-cache', () => ({ deleteDocumentTtsSegmentCache: async () => undefined }));
 vi.mock('@/lib/server/documents/blob-lease', () => ({ withDocumentBlobLease: async (_id: string, run: () => Promise<unknown>) => run() }));
 vi.mock('@/lib/server/compute-limits/run-admitted', async original => ({
-  ...await original<typeof import('@/lib/server/compute-limits/run-admitted')>(), createAdmittedComputeOperation: async (input: { create: () => Promise<unknown> }) => input.create(),
+  ...await original<typeof import('@/lib/server/compute-limits/run-admitted')>(), createAdmittedComputeOperation: state.admit,
 }));
-vi.mock('@/lib/server/pdf-parse/operation', () => ({ resolveCurrentPdfParse: state.parse }));
-vi.mock('@/lib/server/compute-worker/client', () => ({ isComputeWorkerAvailable: () => false, isComputeWorkerUnavailableError: () => false,
+vi.mock('@/lib/server/pdf-parse/operation', () => ({ resolveCurrentPdfParse: state.parse, createOrReuseCurrentPdfParseOperation: vi.fn() }));
+vi.mock('@/lib/server/compute-worker/client', () => ({ isComputeWorkerAvailable: () => state.workerAvailable, isComputeWorkerUnavailableError: (error: Error) => error.message === 'worker down',
   getComputeWorkerClient: () => ({ resolveDocumentConversion: state.conversion }),
 }));
 vi.mock('@/lib/server/documents/blobstore', () => {
@@ -53,6 +53,8 @@ vi.mock('@/lib/server/documents/blobstore', () => {
   };
 });
 
+import { ComputeAdmissionLimitedError } from '@/lib/server/compute-limits/run-admitted';
+import { responseProblems } from './support/openapi-schema';
 import { GET as list, POST as create, PATCH as move } from '@/app/api/v1/documents/route';
 import { GET as read, PATCH as update } from '@/app/api/v1/documents/[id]/route';
 import { POST as prepare } from '@/app/api/v1/uploads/route';
@@ -71,7 +73,8 @@ function insert(id: string, owner = 'owner', name = 'notes.txt', type = 'html') 
 
 beforeEach(() => {
   vi.stubEnv('BASE_URL', 'http://localhost:3003');
-  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear();
+  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.workerAvailable = false;
+  state.admit.mockReset().mockImplementation(async (input: { create: () => Promise<unknown> }) => input.create());
   state.article.mockReset().mockResolvedValue({ title: 'An article', content: '# Imported article', author: 'Article Author', language: 'de' });
   state.parse.mockReset().mockResolvedValue({ artifact: { objectKey: 'parsed' }, operation: null });
   state.sqlite = new Database(':memory:');
@@ -162,4 +165,72 @@ test('rejects oversized JSON and malformed control bodies before creating a docu
   const malformed = await create(new NextRequest('http://localhost/api/v1/documents', { method: 'POST', body: '{' }));
   expect(malformed.status).toBe(400);
   expect(state.sqlite.prepare('select count(*) as count from documents').get()).toEqual({ count: 0 });
+});
+
+describe('PDF status', () => {
+  const id = 'd'.repeat(64);
+  const status = async () => (await read(request(`/api/v1/documents/${id}`), params(id))).json();
+  beforeEach(() => insert(id, 'owner', 'book.pdf', 'pdf'));
+
+  test('a PDF nobody has parsed yet is not called processing', async () => {
+    state.parse.mockResolvedValue({ artifact: null, operation: null });
+    expect((await status()).status).toBe('not_started');
+  });
+
+  test('a parse in progress is processing', async () => {
+    state.parse.mockResolvedValue({ artifact: null, operation: { opId: 'parse', status: 'running' } });
+    expect((await status()).status).toBe('processing');
+  });
+
+  test('a worker outage is unknown and does not fail the read', async () => {
+    state.parse.mockRejectedValue(new Error('worker down'));
+    const response = await read(request(`/api/v1/documents/${id}`), params(id));
+    expect(response.status).toBe(200);
+    expect((await response.json()).status).toBe('unknown');
+  });
+
+  test('other failures are not disguised as an outage', async () => {
+    state.parse.mockRejectedValue(new Error('corrupt'));
+    expect((await read(request(`/api/v1/documents/${id}`), params(id))).ok).toBe(false);
+  });
+});
+
+describe('committing an uploaded PDF', () => {
+  async function commit() {
+    const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'book.pdf', size: 5 }))).json();
+    await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
+    state.workerAvailable = true;
+    return { prepared, created: await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } })) };
+  }
+
+  test('a compute limit does not lose the document that was just stored', async () => {
+    state.parse.mockResolvedValue({ artifact: null, operation: null });
+    state.admit.mockRejectedValue(new ComputeAdmissionLimitedError(90_000));
+    const { created } = await commit();
+    expect(created.status).toBe(201);
+    expect((await created.json()).status).toBe('not_started');
+    expect(state.sqlite.prepare('select count(*) as count from documents').get()).toEqual({ count: 1 });
+  });
+
+  test('a worker outage does not lose it either', async () => {
+    state.parse.mockRejectedValue(new Error('worker down'));
+    const { created } = await commit();
+    expect(created.status).toBe(201);
+    expect((await created.json()).status).toBe('unknown');
+  });
+});
+
+test('responses match the published specification', async () => {
+  const id = 'e'.repeat(64); insert(id);
+  const expectations: Array<[Parameters<typeof responseProblems>[0], string, Response]> = [
+    ['/documents', 'get', await list(request('/api/v1/documents'))],
+    ['/documents/{id}', 'get', await read(request(`/api/v1/documents/${id}`), params(id))],
+    ['/documents/{id}', 'get', await read(request(`/api/v1/documents/${'f'.repeat(64)}`), params('f'.repeat(64)))],
+    ['/documents', 'post', await create(request('/api/v1/documents', 'POST', { source: { type: 'text', text: 'Published shape.' }, name: 'shape.txt' }))],
+    ['/uploads', 'post', await prepare(request('/api/v1/uploads', 'POST', { name: 'shape.txt', size: 5 }))],
+    ['/uploads', 'post', await prepare(request('/api/v1/uploads', 'POST', { name: 'shape.txt', size: 0 }))],
+  ];
+  for (const [route, method, response] of expectations) {
+    expect(responseProblems(route, method, response.status, await response.json()), `${method} ${route} ${response.status}`).toEqual([]);
+  }
 });

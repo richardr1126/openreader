@@ -17,10 +17,10 @@ const caller = { principal: { userId: 'owner', isAnonymous: false, scopes: ['doc
 function stream(value: string) { return new ReadableStream<Uint8Array>({ start(controller) { controller.enqueue(new TextEncoder().encode(value)); controller.close(); } }); }
 beforeEach(() => { vi.clearAllMocks(); mock.receipts.clear(); mock.transport = 'proxy'; mock.presign.mockResolvedValue({ url: 'https://storage.example/upload', headers: {} }); });
 test('prepares an owned same-origin upload and receives exactly the declared bytes', async () => {
-  const prepared = await prepareDocumentUpload(caller, { name: 'notes.txt', size: 5, contentType: 'text/plain' });
+  const prepared = await prepareDocumentUpload(caller, { name: 'notes.txt', size: 5, contentType: 'text/html' });
   expect(prepared.url).toBe(`/api/v1/uploads/${prepared.id}/file`);
   await receiveDocumentUpload(caller, prepared.id, stream('hello'));
-  expect(mock.put).toHaveBeenCalledWith(prepared.id, 'owner', Buffer.from('hello'), 'text/plain', null);
+  expect(mock.put).toHaveBeenCalledWith(prepared.id, 'owner', Buffer.from('hello'), 'text/plain; charset=utf-8', null);
 });
 test('rejects truncated bytes without writing them', async () => {
   const prepared = await prepareDocumentUpload(caller, { name: 'notes.txt', size: 5 });
@@ -39,10 +39,14 @@ test('an upload ID cannot be transferred by another owner', async () => {
 });
 test('presigned mode signs the declared content length and disallows proxy transfer', async () => {
   mock.transport = 'presigned';
-  const prepared = await prepareDocumentUpload(caller, { name: 'notes.txt', size: 5, contentType: 'text/plain' });
+  const prepared = await prepareDocumentUpload(caller, { name: 'notes.txt', size: 5, contentType: 'text/html' });
   expect(prepared.url).toBe('https://storage.example/upload');
-  expect(mock.presign).toHaveBeenCalledWith(prepared.id, 'owner', 'text/plain', null, { contentLength: 5 });
+  expect(mock.presign).toHaveBeenCalledWith(prepared.id, 'owner', 'text/plain; charset=utf-8', null, { contentLength: 5 });
   await expect(receiveDocumentUpload(caller, prepared.id, stream('hello'))).rejects.toMatchObject({ status: 409 });
+});
+test('an empty upload is rejected before preparing storage', async () => {
+  await expect(prepareDocumentUpload(caller, { name: 'notes.txt', size: 0 })).rejects.toMatchObject({ status: 400 });
+  expect(mock.receipts.size).toBe(0);
 });
 test('validates file type and configured size before preparing storage', async () => {
   await expect(prepareDocumentUpload(caller, { name: 'bad.exe', size: 5 })).rejects.toMatchObject({ status: 415 });

@@ -19,6 +19,8 @@ Third-party clients use [OAuth](./oauth) with authorization code and S256 PKCE, 
 the device flow. Send the resulting access token as `Authorization: Bearer TOKEN`.
 Each token carries only the scopes approved by the user. A bearer header takes
 precedence over cookies; an invalid token never falls back to a browser session.
+Other `Authorization` schemes, such as a reverse proxy's Basic credentials, are
+ignored.
 Personal access tokens and MCP access are not available yet.
 Provider API keys are configured by the administrator; they are never client API
 credentials. The API does not accept a provider key in place of a session.
@@ -63,10 +65,17 @@ text sources; web imports produce Markdown. The resulting ID is the SHA-256 of
 the canonical file. Reimporting the same bytes reuses that identity.
 
 Successful registration returns `201`, a `Location` header and the document.
-`GET /api/v1/documents/{id}` adds preparation status (`processing`, `ready` or
-`failed`), `operationId`, `error`, `fileUrl` and `webUrl` to its metadata. Status
-reads do not open the reader, update recent activity or create playback plans.
-PDFs may need worker parsing before they are ready.
+`GET /api/v1/documents/{id}` adds preparation status, `operationId`, `error`,
+`fileUrl` and `webUrl` to its metadata. Status reads do not open the reader, update
+recent activity, create playback plans or start parsing.
+
+| Status | Meaning |
+| --- | --- |
+| `ready` | The document can be read and used for audio. |
+| `not_started` | A PDF has not been parsed yet. Opening it or requesting an audiobook starts parsing. |
+| `processing` | A PDF is being parsed. |
+| `failed` | Parsing failed; `error` explains why. |
+| `unknown` | The compute worker could not be reached. Read the status again later. |
 
 | Operation | Route |
 | --- | --- |
@@ -89,8 +98,9 @@ the document's audio or change its version.
 
 ## File uploads and DOCX
 
-1. `POST /api/v1/uploads` with `name`, `size` (exact bytes) and `contentType`.
+1. `POST /api/v1/uploads` with `name` and `size` (exact bytes, at least 1).
    Optional fields are `lastModified` (Unix milliseconds), `author` and `language`.
+   The file's content type comes from its extension.
 2. PUT the raw file to the returned `url`, with **every returned header**. The URL
    may be a signed storage URL or a same-origin proxy URL. Use the descriptor's
    `expiresAt` and prepare another upload if its transfer URL has expired.
@@ -103,7 +113,8 @@ registration. Pending uploads expire after 24 hours. Signed transfer URLs expire
 after five minutes; proxy descriptors use the pending-upload lifetime. Storage
 transport and CORS requirements are described in [Object and blob storage](../configure/object-blob-storage).
 
-DOCX is converted to PDF by the compute worker. Until conversion finishes,
+DOCX is converted to PDF by the compute worker, so without a worker the commit
+returns `503 COMPUTE_WORKER_REQUIRED`. Until conversion finishes,
 creation returns **`202` with an upload resource**, rather than inventing a
 temporary document ID. Use its `statusUrl` to read progress or its `eventsUrl` to
 observe SSE snapshots, then read `statusUrl` after completion. That read verifies
@@ -113,7 +124,9 @@ uploads include an error message.
 
 The upload resource uses `pending`, `processing`, `ready` and `failed` status.
 Its `ready` means the file is registered; the returned PDF document may still
-have `status: "processing"` while PDF parsing runs. A converted DOCX's file URL
+have `status: "not_started"` or `"processing"` until PDF parsing finishes. A
+compute limit or worker outage at that moment does not fail the commit; the
+document is registered and parses later. A converted DOCX's file URL
 serves the resulting PDF.
 
 ## Folders and voices
@@ -153,8 +166,8 @@ curl --cookie cookies.txt \
 ```
 
 The request uses the document's saved settings. Optional `voice` selects a
-provider-native voice; `speed` ranges from 0.5 to 3, and `format` is `mp3`
-(default) or `m4b`. Advanced explicit `settings` and planning references used by
+provider-native voice; `speed` ranges from 0.5 to 3 and is rounded to two decimals,
+and `format` is `mp3` (default) or `m4b`. Other values return `400`. Advanced explicit `settings` and planning references used by
 the web app are described in the specification; ordinary clients can omit them.
 
 The response is `200` when the matching file is ready, otherwise `202` with its
@@ -165,13 +178,23 @@ present, then follow it. `webUrl` opens the reader in the normal app.
 
 Signed-in whole-book requests continue through assembly after the tab closes.
 Guest requests advance only on the guest's own requests. If an unparsed PDF
-returns `409 DOCUMENT_PREPARING`, retry after `retryAfterMs`. A compile held back
-by admission limits reports `waiting` and can recover on a later status read or
-completion signal. Usage-limited, failed or interrupted generation needs an
-explicit new POST to resume; status reads do not restart failed generation.
+returns `409 DOCUMENT_PREPARING`, retry after `retryAfterMs`; a POST starts the
+parse, while a lookup only reports it. A compile held back by admission limits
+reports `waiting` and can recover on a later status read or completion signal.
+Usage-limited, failed or interrupted generation needs an explicit new POST to
+resume; status reads do not restart failed generation.
+
+Only a caller with `audio:generate` advances a request when reading it. With
+`documents:read` alone, GET and lookup observe and never start work.
+
+A request stays addressable for **seven days** after its last POST and until it
+has finished, then GET returns `404`. The audio and any finished file are not
+affected: a new POST with the same settings finds them again.
 
 Stop with `DELETE /api/v1/documents/{id}/audiobooks/{audiobookId}`. Generated
-audio remains cached. The request is removed, so a later GET returns `404`.
+audio remains cached. The request is removed, so a later GET returns `404`. Formats
+and speeds of the same settings share one generation run, so stopping that run also
+ends the other whole-book requests on it. POST again to resume any of them.
 `retrySkipped: true` retries skipped whole-book segments. `chapter` is a
 zero-based chapter index for assembling already-settled audio; it does not start
 generation, and chapter Stop is rejected.
@@ -190,11 +213,14 @@ Errors use this shape:
 ```
 
 `429` includes a `Retry-After` header in seconds. Worker unavailability normally
-returns `503` with a retry hint. IDs and operation streams are checked against the
+returns `503` with a retry hint, as does `AUDIOBOOK_BUSY` when another request for
+the same document's audiobooks is still running. IDs and operation streams are checked against the
 caller; identical document content does not grant access to another user's
 uploads, events or audiobooks.
 
-In proxy mode, file routes return bytes. In presigned mode, canonical document
+Files are always sent as attachments, with a content type chosen from the file
+name, so a document cannot run as a page on the instance's origin. In proxy mode,
+file routes return bytes. In presigned mode, canonical document
 files return `307` and audiobook files return `303`, both pointing to short-lived
 storage URLs. Follow redirects and keep the resource URL for later use, rather
 than saving the signed destination. The browser transport is described in

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import { publicApiSpec } from '@/lib/server/api/openapi';
 import { GET } from '@/app/api/v1/openapi.json/route';
+import { schemaProblems } from './support/openapi-schema';
 
 test('the published specification covers every implemented v1 method and no deleted routes', async () => {
   const root = path.resolve(import.meta.dirname, '../../src/app/api/v1');
@@ -38,4 +39,18 @@ test('all schema references resolve and operation IDs are unique', () => {
   visit(publicApiSpec);
   expect(new Set(ids).size).toBe(ids.length);
   expect(publicApiSpec.components.securitySchemes.oauth.flows.authorizationCode.scopes).toHaveProperty('documents:read');
+});
+
+test('the response checker notices a response that breaks the specification', () => {
+  expect(schemaProblems(publicApiSpec.components.schemas.Error, { error: { code: 'X' } })).toEqual(['$.error.message: missing']);
+  expect(schemaProblems(publicApiSpec.components.schemas.Document, { status: 'done' })).toContain('$.status: "done" is not in the enum');
+  expect(schemaProblems({ anyOf: [{ type: 'null' }, { type: 'number' }] }, 'x')).toEqual(['$: matches no anyOf branch']);
+});
+
+test('document statuses and upload fields match what the server sends and accepts', () => {
+  const { requestBody } = publicApiSpec.paths['/uploads'].post as unknown as { requestBody: { content: { 'application/json': { schema: { properties: Record<string, { minimum?: number }> } } } } };
+  const uploads = requestBody.content['application/json'].schema;
+  expect(uploads.properties.size.minimum).toBe(1);
+  expect(uploads.properties).not.toHaveProperty('contentType');
+  expect(JSON.stringify(publicApiSpec.components.schemas.Document)).toContain('not_started');
 });

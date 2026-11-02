@@ -17,7 +17,8 @@
     "./schema-sqlite": "./src/schema_sqlite.ts",
     "./schema-auth-postgres": "./src/schema_auth_postgres.ts",
     "./schema-auth-sqlite": "./src/schema_auth_sqlite.ts",
-    "./run-in-transaction": "./src/run-in-transaction.ts"
+    "./run-in-transaction": "./src/run-in-transaction.ts",
+    "./advisory-lock": "./src/advisory-lock.ts"
   },
   "bin": {
     "openreader-migrate": "./bin/migrate.mjs"

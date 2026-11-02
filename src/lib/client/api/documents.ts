@@ -278,7 +278,7 @@ export async function uploadDocumentSources(sources: UploadSource[], options?: U
   try {
     const uploads = await Promise.all(sources.map(async source => {
       const response = await fetch('/api/v1/uploads', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: source.name, contentType: source.contentType, size: source.size, lastModified: source.lastModified, ...source.metadata }),
+        body: JSON.stringify({ name: source.name, size: source.size, lastModified: source.lastModified, ...source.metadata }),
         signal: controller.signal });
       if (!response.ok) throw await parseApiError(response, 'Failed to prepare upload');
       return await response.json() as PreparedDocumentUpload;

@@ -16,6 +16,19 @@ function assertOAuthUser(user: Record<string, unknown> | null | undefined, requi
   }
 }
 
+/** Registration is open to anyone, and these values are stored and shown on the consent page. */
+function assertRegistrationLimits(body: Record<string, unknown> | undefined) {
+  const invalid = (field: string) => new APIError('BAD_REQUEST', { error: 'invalid_client_metadata', error_description: `${field} is too long.` });
+  for (const [field, limit] of Object.entries({ client_name: 200, client_uri: 2048, logo_uri: 2048, tos_uri: 2048, policy_uri: 2048, software_id: 256, software_version: 256, software_statement: 16384 })) {
+    const value = body?.[field];
+    if (typeof value === 'string' && value.length > limit) throw invalid(field);
+  }
+  for (const [field, count, limit] of [['redirect_uris', 20, 2048], ['post_logout_redirect_uris', 20, 2048], ['contacts', 10, 320]] as const) {
+    const value = body?.[field];
+    if (Array.isArray(value) && (value.length > count || value.some(item => typeof item === 'string' && item.length > limit))) throw invalid(field);
+  }
+}
+
 /** Grant identity makes deleting consent invalidate JWTs even after a later reconnect. */
 function oauthGrantPolicy(requireVerifiedEmail: boolean, resource: string): BetterAuthPlugin {
   const grants = new WeakMap<Request, { id: string; options: OAuthOptions<string[]> }>();
@@ -37,6 +50,9 @@ function oauthGrantPolicy(requireVerifiedEmail: boolean, resource: string): Bett
       } } });
     },
     hooks: { before: [{
+      matcher: context => context.path === '/oauth2/register',
+      handler: createAuthMiddleware(async context => { assertRegistrationLimits(context.body); }),
+    }, {
       matcher: context => ['/oauth2/authorize', '/device/code', '/oauth2/consent', '/device', '/device/approve', '/device/deny'].includes(context.path ?? '')
         || (context.path === '/oauth2/token' && context.body?.grant_type === DEVICE_CODE_GRANT_TYPE),
       handler: createAuthMiddleware(async context => {

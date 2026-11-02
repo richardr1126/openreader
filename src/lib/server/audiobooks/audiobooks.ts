@@ -1,22 +1,23 @@
 import { createHash } from 'node:crypto';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, lt } from 'drizzle-orm';
 import {
   buildTtsPlaybackCanonicalSessionId,
   buildTtsPlaybackExportArtifactId,
 } from '@openreader/tts/playback-scope';
 import { db } from '@openreader/database';
-import { runInDbTransaction } from '@openreader/database/run-in-transaction';
+import { AdvisoryLockBusyError, withPostgresAdvisoryLock } from '@openreader/database/advisory-lock';
 import { audiobookRequests } from '@openreader/database/schema';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import { getRuntimeConfig } from '@/lib/server/admin/settings';
+import { ApiRequestError } from '@/lib/server/api/responses';
 import { buildTtsPlaybackAdmissionRequestKey } from '@/lib/server/compute-limits/admission';
 import type { ComputeLimitSubject } from '@/lib/server/compute-limits/policy';
 import {
   ComputeAdmissionLimitedError,
   createAdmittedComputeOperation,
 } from '@/lib/server/compute-limits/run-admitted';
-import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { ComputeWorkerClient, isComputeWorkerAvailable, isComputeWorkerUnavailableError } from '@/lib/server/compute-worker/client';
 import type {
   TtsPlaybackExportProgressSummary,
   TtsPlaybackPlanResult,
@@ -24,7 +25,7 @@ import type {
 import { serverLogger } from '@/lib/server/logger';
 import { logDegraded } from '@/lib/server/errors/logging';
 import { storedRecord } from '@/lib/server/reader/bootstrap';
-import { createAdmittedPlaybackPlanOperation } from '@/lib/server/reader/playback';
+import { createAdmittedPlaybackPlanOperation, findPlaybackPlanOperation } from '@/lib/server/reader/playback';
 import {
   classifyExportArtifact,
   classifyExportGeneration,
@@ -55,6 +56,8 @@ export type AudiobookCaller = {
   scope: ResolvedSegmentDocumentScope;
   subject: ComputeLimitSubject;
   clientId?: string;
+  /** Without it a caller only observes: no plan, generation, build or adoption. */
+  mayGenerate: boolean;
 };
 
 /**
@@ -90,10 +93,12 @@ const audiobookLocks = (globalThis as typeof globalThis & {
 async function withAudiobookLock<T>(caller: AudiobookCaller, documentId: string, run: () => Promise<T>): Promise<T> {
   const key = JSON.stringify([caller.scope.storageUserId, documentId]);
   if (process.env.POSTGRES_URL) {
-    return runInDbTransaction(async (conn) => {
-      await conn.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`audiobook:${key}`}, 0))`);
-      return run();
-    });
+    try {
+      return await withPostgresAdvisoryLock(`audiobook:${key}`, run);
+    } catch (error) {
+      if (!(error instanceof AdvisoryLockBusyError)) throw error;
+      throw new ApiRequestError(503, 'AUDIOBOOK_BUSY', 'Another request for this audiobook is still running.', 5_000);
+    }
   }
   const previous = audiobookLocks.get(key) ?? Promise.resolve();
   let release!: () => void;
@@ -198,6 +203,14 @@ async function insertRow(id: string, caller: AudiobookCaller, intent: AudiobookI
   return inserted.length > 0;
 }
 
+/** A new request restarts the retention period of one that already exists. */
+async function renewRow(id: string, userId: string): Promise<void> {
+  await db.update(audiobookRequests).set({ createdAt: Date.now() }).where(and(
+    eq(audiobookRequests.id, id),
+    eq(audiobookRequests.userId, userId),
+  ));
+}
+
 async function deleteRow(id: string, userId: string): Promise<void> {
   await db.delete(audiobookRequests).where(and(
     eq(audiobookRequests.id, id),
@@ -216,6 +229,7 @@ async function advanceAudiobook(input: {
   intent: AudiobookIntent;
   command: AudiobookCommand;
   includeProgress: boolean;
+  onRunCancelled?: () => void;
 }): Promise<Audiobook> {
   const { id, caller, intent, command } = input;
   const { scope, subject } = caller;
@@ -265,9 +279,13 @@ async function advanceAudiobook(input: {
 
   let planObjectKey = intent.parsed.planObjectKey ?? null;
   if (!planObjectKey) {
-    if (command === 'read' || command === 'stop') return reportGeneration(command === 'stop' ? 'stopped' : 'idle');
+    if (command === 'stop') return reportGeneration('stopped');
     let operation;
-    try {
+    if (command === 'read') {
+      const existing = await findPlaybackPlanOperation({ parsed: intent.parsed, scope, planningInput: { settingsHash, settingsJson, planning } });
+      if (!existing) return reportGeneration('idle');
+      operation = existing;
+    } else try {
       operation = await createAdmittedPlaybackPlanOperation({
         parsed: intent.parsed,
         scope,
@@ -293,7 +311,7 @@ async function advanceAudiobook(input: {
       return reportGeneration('failed', { operationId: operation.opId, issue: exportOperationIssue(operation) });
     }
     planObjectKey = planResult.planObjectKey;
-    await db.update(audiobookRequests).set({ planObjectKey }).where(eq(audiobookRequests.id, id));
+    if (command !== 'read') await db.update(audiobookRequests).set({ planObjectKey }).where(eq(audiobookRequests.id, id));
   }
 
   const sessionScope = {
@@ -371,6 +389,7 @@ async function advanceAudiobook(input: {
       sessionId,
       typeof observed?.generationRunId === 'string' ? observed.generationRunId : null,
     );
+    input.onRunCancelled?.();
     current = await readGeneration();
   }
 
@@ -446,9 +465,12 @@ async function advanceAudiobook(input: {
   let artifact = await client.resolveTtsPlaybackExportArtifact(artifactScope);
   let artifactState: TtsExportArtifactState = classifyExportArtifact({ artifact, counts });
   // A failed build is only retried on request, so advancing cannot loop on it.
+  // A whole-book run that finished after it changed the audio, so that one is new work.
+  const failedBeforeLatestRun = chapterIndex === null && artifactState === 'failed'
+    && (current.generation.operation?.updatedAt ?? 0) > (artifact.operation?.updatedAt ?? Number.POSITIVE_INFINITY);
   const shouldBuild = settled && (
-    (command === 'start' && artifactState !== 'ready' && artifactState !== 'building')
-    || (command === 'advance' && (artifactState === 'none' || artifactState === 'stale'))
+    ((command === 'start' || command === 'retry-skipped') && artifactState !== 'ready' && artifactState !== 'building')
+    || (command === 'advance' && (artifactState === 'none' || artifactState === 'stale' || failedBeforeLatestRun))
   );
   if (shouldBuild) {
     try {
@@ -532,6 +554,7 @@ async function startAudiobookUnlocked(
     return audiobook;
   }
   const inserted = await insertRow(id, caller, effective);
+  if (!inserted) await renewRow(id, caller.scope.storageUserId);
   try {
     return await advanceAudiobook({ id, caller, intent: effective, command, includeProgress: options.includeProgress });
   } catch (error) {
@@ -557,13 +580,13 @@ async function lookupAudiobookUnlocked(
     id,
     caller,
     intent: stored?.parsed.planObjectKey ? stored : intent,
-    command: row ? 'advance' : 'read',
+    command: row && caller.mayGenerate ? 'advance' : 'read',
     includeProgress: options.includeProgress,
   });
   // A run with no request predates this table; adopting it lets it be stopped
   // and lets its file be built when it finishes.
   const running = audiobook.generation.state === 'generating' || audiobook.generation.state === 'queued';
-  if (!row && running && intent.chapterIndex === null) await insertRow(id, caller, {
+  if (!row && running && caller.mayGenerate && intent.chapterIndex === null) await insertRow(id, caller, {
     ...intent, generationOperationId: audiobook.generation.operationId ?? undefined,
   });
   return audiobook;
@@ -588,10 +611,14 @@ async function getAudiobookUnlocked(
 ): Promise<Audiobook | null> {
   const intent = await loadRequested(caller, id, documentId);
   if (!intent) return null;
-  return advanceAudiobook({ id, caller, intent, command: 'advance', includeProgress: true });
+  return advanceAudiobook({ id, caller, intent, command: caller.mayGenerate ? 'advance' : 'read', includeProgress: true });
 }
 
-/** Stops generation and ends the request. Audio generated so far stays cached. */
+/**
+ * Stops generation and ends the request. Audio generated so far stays cached.
+ * Formats and speeds share one generation, so cancelling it also ends the other
+ * whole-book requests on that session; a new POST resumes any of them.
+ */
 async function stopAudiobookUnlocked(
   caller: AudiobookCaller,
   id: string,
@@ -600,9 +627,34 @@ async function stopAudiobookUnlocked(
   const intent = await loadRequested(caller, id, documentId);
   if (!intent) return null;
   if (intent.chapterIndex !== null) throw new ChapterCommandError();
-  const audiobook = await advanceAudiobook({ id, caller, intent, command: 'stop', includeProgress: false });
+  let runCancelled = false;
+  const audiobook = await advanceAudiobook({
+    id,
+    caller,
+    intent,
+    command: 'stop',
+    includeProgress: false,
+    onRunCancelled: () => { runCancelled = true; },
+  });
   await deleteRow(id, caller.scope.storageUserId);
+  if (runCancelled) await deleteRequestsSharingSession(caller, intent);
   return audiobook;
+}
+
+async function deleteRequestsSharingSession(caller: AudiobookCaller, stopped: AudiobookIntent): Promise<void> {
+  const { documentId } = stopped.parsed;
+  const { settingsHash } = await buildTtsPlaybackPlanningInput(stopped.parsed, caller.scope);
+  const rows = await db.select().from(audiobookRequests).where(and(
+    eq(audiobookRequests.userId, caller.scope.storageUserId),
+    eq(audiobookRequests.documentId, documentId),
+  )) as Row[];
+  for (const row of rows) {
+    if (row.chapterIndex !== null || Number(row.documentVersion) !== caller.scope.documentVersion) continue;
+    const intent = intentFromRow(row);
+    if (!intent) continue;
+    const planned = await buildTtsPlaybackPlanningInput(intent.parsed, caller.scope);
+    if (planned.settingsHash === settingsHash) await deleteRow(row.id, caller.scope.storageUserId);
+  }
 }
 
 export function startAudiobook(caller: AudiobookCaller, intent: AudiobookIntent, options: { retrySkipped: boolean; includeProgress: boolean }): Promise<Audiobook> {
@@ -646,7 +698,7 @@ export async function advanceAudiobooksAfterOperation(operationId: string, userI
     eq(audiobookRequests.documentId, documentId),
   )) as Array<{ id: string }>;
   for (const { id } of rows) {
-    await getAudiobook({ scope, subject: { userId, isAnonymous: false } }, id, documentId).catch((error: unknown) => {
+    await getAudiobook({ scope, subject: { userId, isAnonymous: false }, mayGenerate: true }, id, documentId).catch((error: unknown) => {
       logDegraded(serverLogger, {
         event: 'audiobooks.advance_signal.failed',
         msg: 'Failed to advance an audiobook after a worker operation finished',
@@ -656,4 +708,60 @@ export async function advanceAudiobooksAfterOperation(operationId: string, userI
       });
     });
   }
+}
+
+const SETTLED_REQUEST_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const PRUNE_BATCH = 200;
+const UNSETTLED: ReadonlySet<AudiobookStatus> = new Set(['preparing', 'queued', 'generating', 'building', 'waiting']);
+
+/**
+ * Ends requests past their retention once nothing is left to do for them. Files
+ * and audio are unaffected, and a new POST finds them again. Only observes, so
+ * it never starts work for a request nobody is watching.
+ */
+export async function pruneSettledAudiobookRequests(now: number, deadlineAt: number): Promise<number> {
+  if (!isComputeWorkerAvailable()) return 0;
+  const rows = await db.select({
+    id: audiobookRequests.id,
+    userId: audiobookRequests.userId,
+    documentId: audiobookRequests.documentId,
+  }).from(audiobookRequests)
+    .where(lt(audiobookRequests.createdAt, now - SETTLED_REQUEST_RETENTION_MS))
+    .orderBy(asc(audiobookRequests.createdAt))
+    .limit(PRUNE_BATCH) as Array<{ id: string; userId: string; documentId: string }>;
+  let removed = 0;
+  for (const { id, userId, documentId } of rows) {
+    if (Date.now() >= deadlineAt) break;
+    const scope = await resolveUserDocumentScope({ userId, isAnonymous: false }, documentId);
+    if (!scope) continue;
+    const caller: AudiobookCaller = { scope, subject: { userId, isAnonymous: false }, mayGenerate: false };
+    try {
+      await withAudiobookLock(caller, documentId, async () => {
+        // A chapter that no longer exists has nothing left to do.
+        const settled = await getAudiobookUnlocked(caller, id, documentId).then(
+          // A ready file says nothing about a run that is still changing the audio.
+          audiobook => audiobook !== null && !UNSETTLED.has(audiobook.status) && !UNSETTLED.has(audiobook.generation.state),
+          (error: unknown) => {
+            if (error instanceof ChapterNotFoundError) return true;
+            throw error;
+          },
+        );
+        if (!settled) return;
+        await deleteRow(id, userId);
+        removed += 1;
+      });
+    } catch (error) {
+      // A worker outage only postpones this until the next run.
+      if (isComputeWorkerUnavailableError(error)) break;
+      if (error instanceof ApiRequestError) continue;
+      logDegraded(serverLogger, {
+        event: 'audiobooks.prune.failed',
+        msg: 'Failed to check an old audiobook request',
+        step: 'prune_audiobook_request',
+        context: { documentId },
+        error,
+      });
+    }
+  }
+  return removed;
 }

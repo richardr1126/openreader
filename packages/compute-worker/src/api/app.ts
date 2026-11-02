@@ -393,6 +393,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     playbackStorage: options.routeDeps ? undefined : playbackStorage,
     s3Prefix,
     ensureOrphanedOpRecovery,
+    opStaleMs,
     getOpState,
     getNatsConnected: () => sessionManager.isConnected(),
     releaseHttp,

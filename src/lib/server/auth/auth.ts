@@ -71,7 +71,10 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean, al
   secret: requiredAuthEnv.authSecret,
   baseURL: requiredAuthEnv.baseUrl,
   trustedOrigins: getTrustedOrigins(),
-  disabledPaths: ['/token', '/device/token', '/oauth2/delete-consent', '/oauth2/update-consent', '/oauth2/get-consent', '/oauth2/get-consents'],
+  // Connected apps own consent, and /oauth2/register is the only way to add a
+  // client, so the registration switch cannot be bypassed through client management.
+  disabledPaths: ['/token', '/device/token', '/oauth2/delete-consent', '/oauth2/update-consent', '/oauth2/get-consent', '/oauth2/get-consents',
+    '/oauth2/create-client', '/oauth2/get-client', '/oauth2/get-clients', '/oauth2/update-client', '/oauth2/delete-client', '/oauth2/client/rotate-secret'],
   emailAndPassword: {
     enabled: true,
     autoSignIn: !approvalRequired,
