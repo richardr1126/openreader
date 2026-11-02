@@ -1,6 +1,6 @@
 # Public API refactor
 
-Status: accepted; phases 1–3 are implemented; phases 4–6 remain planned.
+Status: accepted; phases 1–4 are implemented; phases 5–6 remain planned.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -172,10 +172,10 @@ GET /api/v1/documents/{id}/audiobooks/{audiobookId}
 
 ## Authentication
 
-Add `@better-auth/oauth-provider`. Version 1.7.15 requires Better Auth 1.7.15;
-the repo is on 1.7.14. Its published types show dynamic client registration, the
-device code grant and a protected-resource metadata helper. These have not been
-exercised yet.
+`@better-auth/oauth-provider` and Better Auth are both on 1.7.15. Phase 4 adds
+dynamic client registration, authorization code with S256 PKCE, rotating refresh
+tokens, device authorization and discovery metadata. Implementation details and
+acceptance evidence are recorded below.
 
 The grants cover each client type:
 
@@ -612,3 +612,99 @@ Acceptance evidence (2026-11-01):
 Next: phase 4 adds OAuth, consent/revocation, bearer scopes and discovery metadata,
 with the already-planned, owner-coordinated schema migration. No production
 migration, deployment, version bump, tag or push was performed in phase 3.
+
+### Phase 4: OAuth
+
+Better Auth and its OAuth provider are now on matching 1.7.15 versions. Migration
+0028 adds the provider, consent, device and JWKS tables in both database dialects,
+with existing user/session data unchanged. SQLite's Better Auth adapter owns JSON
+serialization; its Drizzle columns use plain text so generated JSON column modes
+cannot double-encode scopes, redirect URIs or resource policy. Direct app reads
+decode and validate those arrays once. PostgreSQL retains native arrays/JSONB.
+
+Authorization code requires S256 PKCE and exact registered redirects. The device
+flow explicitly approves codes in the browser and exchanges them only at the
+OAuth token endpoint. Unknown device clients are rejected and the companion
+plugin's browser-session token endpoint is disabled. Both flows require the
+explicit `BASE_URL/api/v1` resource. The future MCP audience is not enabled.
+Open dynamic registration is the default; the runtime admin switch stops new
+registrations without disconnecting existing apps. Resource administration and
+client-credentials grants are not exposed.
+
+Consent displays the self-reported app name, **Unverified app**, actual callback
+host (or device destination), requested scopes and shared compute limits. The
+signed authorization query survives sign-in. Guests and inactive, deleting or
+verification-required unverified users cannot approve grants. Connected apps
+under Settings → Account lists the caller's grants and disconnects only that
+user's app access, including approved device codes not yet exchanged.
+
+Access JWTs expire in 15 minutes; refresh tokens rotate with no reuse window and
+a 30-day lifetime. The app verifies JWTs locally with its auth-owned keys, exact
+issuer/resource and token type, then checks current consent, account and client
+state on every v1 request. Each JWT and refresh token binds to the consent's
+unique ID, so disconnect is immediate and reconnect cannot revive an old token.
+Device approval persists consent before making the code redeemable, and exchange
+captures that grant before atomic code consumption. Issuance cannot recreate
+consent after a racing disconnect or borrow a later reconnect's grant. Refresh
+binding is checked before token issuance and persisted before returning
+the replacement. Browser login expiry does not revoke an offline grant; explicit
+Disconnect owns that behavior. Native provider consent-edit/delete endpoints are
+disabled so they cannot bypass complete grant revocation.
+
+Bearer headers take precedence over cookies and never fall back to a session.
+The three API scopes are enforced by the same principal helper as cookie access.
+Provider credentials, private/admin/account routes, worker authentication and
+browser sessions stay separate. Bearer compute admission uses the approving user,
+without charging a hosted client's IP or guest device. Explicit audiobook plan
+references from bearer clients additionally require a matching stored owner.
+
+RFC discovery is published at
+`/.well-known/oauth-protected-resource/api/v1` and
+`/.well-known/oauth-authorization-server/api/auth`; unauthenticated challenges
+point to resource metadata. OpenAPI advertises cookie or scoped OAuth access.
+The public API reference and OAuth guide explain registration, PKCE, device
+polling, refresh, disconnect, limits, issuer changes and migration deployment.
+
+Acceptance evidence (2026-11-01):
+
+- On a disposable stack, visible sign-in and new-account sign-up both continued
+  to the signed consent request. The screen showed the actual callback host,
+  scopes, Unverified app warning and shared limits. Allow returned a usable
+  read-only JWT; Deny returned `access_denied`. Device code checking and explicit
+  approval produced a scoped token. Connected apps showed the correct scopes
+  and redirect domain; Disconnect immediately rejected access and refresh for
+  both flows. The stack and callback receiver were stopped before Playwright.
+- Real-handler tests use a migrated SQLite database and the actual provider's
+  PKCE, consent, signing, device and refresh implementation. They cover scope
+  enforcement, audience/issuer/expiry/signature failures, cookie fallback
+  refusal, guest/inactive/client-disable checks, registration policy, user
+  isolation, rotation/reuse, offline refresh after browser expiry, signed-query
+  tampering and sign-up continuation. Forced interleavings prove device
+  exchange cannot recreate consent or borrow a reconnect's grant after
+  Disconnect, and late refresh credentials cannot cross grant identities.
+- Full Vitest: 1,651 passed across 245 files. Application and worker TypeScript,
+  production build, route-error, compute-boundary and install-profile checks
+  passed. Documentation production build and OpenAPI TypeScript generation
+  passed. Both migration snapshots preserve all existing table definitions and
+  add only nine OAuth/device/signing-key tables. The SQLite serialization fix
+  needs no additional DDL; schema generation reports no changes.
+- The first matrix exposed a new-test transport mistake: token exchange carried
+  the browser's cookie without an Origin header and correctly failed CSRF.
+  Native-client requests now use an independent cookie-free request context.
+  A WebKit return-to-library click also landed while the pre-existing beta
+  banner's height animation moved document links. The separate library fix
+  reserves its full height while fading opacity. Visible immediate
+  return-and-open navigation passed, with the existing assertion unchanged.
+- Final complete Playwright: 83 passed in 2.8 minutes, with no failures, skips or
+  retries, including both real playback journeys and both OAuth journeys.
+  Chromium/WebKit, Firefox policy, 50% workers, timeouts and assertions remain
+  unchanged. The matrix reused the immediately preceding production build with
+  the same temporary logging configuration as earlier phases. Its explicit
+  localhost `BASE_URL` keeps discovery, issuer and resource consistent with the
+  browser regardless of the developer's `.env`. Port 3003 and the disposable
+  callback port were free after testing.
+
+The OAuth implementation is committed as `28d07c9e`; the independent library
+banner fix is `e54360b9`. No production migration, deployment, version bump, tag
+or push was performed. Migration 0028 remains an owner-coordinated deployment
+step. Next: phase 5 adds the separate MCP resource and stateless HTTP tools.
