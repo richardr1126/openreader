@@ -215,11 +215,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     setActiveBlockingModal(null);
   }, [claimModalOwnerId]);
 
-  const handlePrivacyAccepted = useCallback(() => {
-    leavingBlockingModalRef.current = 'privacy';
-    setActiveBlockingModal(null);
-  }, []);
-
   const handleGuestRetentionSeen = useCallback((createAccount: boolean) => {
     // A failed save only means the notice returns on the next load.
     if (guestRetentionDays !== null) saveOnboarding({ guestRetentionSeenDays: guestRetentionDays });
@@ -272,7 +267,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       {children}
       <PrivacyModal
         isOpen={activeBlockingModal === 'privacy'}
-        onAccept={handlePrivacyAccepted}
         onDismiss={() => { }}
         onAfterLeave={() => handleBlockingModalAfterLeave('privacy')}
       />

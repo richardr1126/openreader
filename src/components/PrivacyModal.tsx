@@ -7,7 +7,6 @@ import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface PrivacyModalProps {
   isOpen: boolean;
-  onAccept?: () => void;
   onDismiss?: () => void;
   onAfterLeave?: () => void;
 }
@@ -49,7 +48,7 @@ function PrivacyModalBody({ origin }: { origin: string }) {
   );
 }
 
-export function PrivacyModal({ isOpen, onAccept, onDismiss, onAfterLeave }: PrivacyModalProps) {
+export function PrivacyModal({ isOpen, onDismiss, onAfterLeave }: PrivacyModalProps) {
   const { mutation } = useOnboardingState();
   const [origin, setOrigin] = useState('');
   const [agreed, setAgreed] = useState(false);
@@ -71,9 +70,7 @@ export function PrivacyModal({ isOpen, onAccept, onDismiss, onAfterLeave }: Priv
     } catch (error) {
       console.error('Failed to record privacy acceptance:', error);
       toast.error('Could not save your consent. Please try again.');
-      return;
     }
-    onAccept?.();
   };
 
   return (
