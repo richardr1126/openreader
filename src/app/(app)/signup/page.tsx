@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
@@ -13,7 +13,14 @@ import { Button, ButtonLink, Field, IconButton, InlineButton, Input, Surface } f
 import toast from 'react-hot-toast';
 
 export default function SignUpPage() {
+  return <Suspense fallback={<LoadingSpinner className="h-6 w-6" />}><SignUpContent /></Suspense>;
+}
+
+function SignUpContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOAuthSignUp = searchParams.has('sig');
+  const signInHref = isOAuthSignUp ? `/signin?${searchParams}` : '/signin';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
@@ -95,11 +102,14 @@ export default function SignUpPage() {
           setAwaitingVerification(true);
           return;
         }
+        // OAuth's session-creation hook has already returned the validated
+        // consent redirect. Avoid a second sign-in/navigation racing it.
+        if (isOAuthSignUp) return;
         // Auto sign in
         const signInResult = await client.signIn.email({ email: email.trim(), password });
         if (signInResult.error) {
           toast.success('Account created! Please sign in.');
-          router.push('/signin');
+          router.push(signInHref);
         } else {
           await refreshRateLimit();
           toast.success('Account created successfully!');
@@ -141,7 +151,7 @@ export default function SignUpPage() {
           <div className="mt-6 pt-4 border-t border-line-soft text-center">
             <p className="text-xs text-soft">
               Already have an account?{' '}
-              <Link href="/signin" className="underline hover:text-foreground">
+              <Link href={signInHref} className="underline hover:text-foreground">
                 Sign in
               </Link>
             </p>
@@ -166,7 +176,7 @@ export default function SignUpPage() {
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend verification</Button>
             <ButtonLink href="/forgot-password" variant="outline" size="md">Reset password</ButtonLink>
-            <ButtonLink href="/signin" variant="primary" size="md">Sign in</ButtonLink>
+            <ButtonLink href={signInHref} variant="primary" size="md">Sign in</ButtonLink>
           </div>
         </Surface>
       </div>
@@ -189,7 +199,7 @@ export default function SignUpPage() {
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             {accountEmailsEnabled ? <Button variant="outline" size="md" disabled={loading} onClick={resendVerification}>Resend verification</Button> : null}
-            <ButtonLink href="/signin" variant="primary" size="md">Return to sign in</ButtonLink>
+            <ButtonLink href={signInHref} variant="primary" size="md">Return to sign in</ButtonLink>
           </div>
         </Surface>
       </div>
@@ -318,7 +328,7 @@ export default function SignUpPage() {
         <div className="mt-6 pt-4 border-t border-line-soft text-center space-y-2">
           <p className="text-xs text-soft">
             Already have an account?{' '}
-            <Link href="/signin" className="underline hover:text-foreground">
+            <Link href={signInHref} className="underline hover:text-foreground">
               Sign in
             </Link>
           </p>

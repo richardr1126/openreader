@@ -10,19 +10,29 @@ the instance's origin, not against `/api/v1`.
 
 ## Authentication
 
-The current API accepts an existing Better Auth **session cookie**. Sign in through
+The API accepts an existing Better Auth **session cookie**. Sign in through
 the instance normally. Browsers send that cookie automatically. Local scripts can
 use a cookie jar for their own session; keep that file private. Guest sessions can
 access only their own library and remain subject to guest limits.
 
-OAuth, bearer tokens, personal access tokens and MCP access are not available yet.
+Third-party clients use [OAuth](./oauth) with authorization code and S256 PKCE, or
+the device flow. Send the resulting access token as `Authorization: Bearer TOKEN`.
+Each token carries only the scopes approved by the user. A bearer header takes
+precedence over cookies; an invalid token never falls back to a browser session.
+Personal access tokens and MCP access are not available yet.
 Provider API keys are configured by the administrator; they are never client API
 credentials. The API does not accept a provider key in place of a session.
 
 Cookie-authenticated writes must come from the same origin or a configured trusted
 origin. There is no general cross-origin browser API. The documented scopes are
 `documents:read`, `documents:write` and `audio:generate`; an existing web session
-has all three. OAuth scope consent will be added separately.
+has all three. OAuth clients request the smallest set they need. `offline_access`
+additionally requests a rotating refresh token. Guests cannot approve OAuth access.
+
+OAuth tokens work only on `/api/v1`, for this instance's exact resource URL. They
+cannot administer the instance, change provider credentials or manage accounts.
+Disconnect an app in **Settings → Account → Connected apps** to revoke its access
+immediately. Third-party requests share the user's existing compute limits.
 
 `GET /api/v1/me` returns the session's ID, guest flag, scopes and `computeLimits`.
 The latter describes the current binding TTS character quota, including remaining

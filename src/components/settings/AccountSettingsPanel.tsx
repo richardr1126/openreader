@@ -13,6 +13,7 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAccountExport } from './useAccountExport';
 import { AccountSecurityPanel } from './AccountSecurityPanel';
+import { ConnectedAppsPanel } from './ConnectedAppsPanel';
 
 function TtsUsageCard() {
   const {
@@ -160,6 +161,7 @@ export function AccountSettingsPanel() {
     return (
       <div className="space-y-2">
         <AccountSecurityPanel nameOnly />
+        <ConnectedAppsPanel />
         <ExportDataTile />
       </div>
     );
@@ -177,6 +179,7 @@ export function AccountSettingsPanel() {
         )}
 
         {session?.user && <TtsUsageCard />}
+        <ConnectedAppsPanel />
 
         {session?.user && <ExportDataTile />}
 

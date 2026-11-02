@@ -58,6 +58,21 @@ Admins can approve pending accounts, suspend or restore them, grant or remove ad
 
 You cannot remove the last administrator, and you cannot demote, suspend or delete yourself.
 
+## Connected apps
+
+Third-party clients can request scoped access to a signed-in user's library and
+audiobooks through [OAuth](../reference/oauth). Consent shows the app's
+self-reported name, actual destination, **Unverified app** warning and requested
+permissions. Guests cannot approve access. Apps share the user's existing compute
+limits and cannot change provider credentials or administer the instance.
+
+Users disconnect apps in **Settings → Account → Connected apps**. Disconnect takes
+effect immediately, including for already-issued access tokens. Signing out of
+the browser does not disconnect apps with offline access.
+
+**Settings → Admin → Instance → Open OAuth client registration** is on by default.
+Turning it off stops new registrations while keeping existing connections usable.
+
 ## Account email
 
 Account email is off by default. When it is on, OpenReader sends verification and password-reset emails through [Resend](https://resend.com).

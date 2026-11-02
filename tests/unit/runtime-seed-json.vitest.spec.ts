@@ -346,6 +346,7 @@ describe('runtime config JSON seeding', () => {
       changelogFeedUrl: 'https://example.com/changelog/manifest.json',
       signupPolicy: 'approval',
       allowAnonymousSessions: true,
+      allowOAuthClientRegistration: true,
       anonymousUserIdleDays: 30,
       enableTtsProvidersTab: false,
       enableAudiobookExport: false,

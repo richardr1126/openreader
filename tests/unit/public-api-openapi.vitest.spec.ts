@@ -37,5 +37,5 @@ test('all schema references resolve and operation IDs are unique', () => {
   }
   visit(publicApiSpec);
   expect(new Set(ids).size).toBe(ids.length);
-  expect(publicApiSpec.components.securitySchemes).not.toHaveProperty('bearerAuth');
+  expect(publicApiSpec.components.securitySchemes.oauth.flows.authorizationCode.scopes).toHaveProperty('documents:read');
 });

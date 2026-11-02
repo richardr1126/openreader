@@ -1,5 +1,6 @@
 import { BRACKETED_TEXT_MODES } from '@openreader/tts/speech-text';
 import { PARSED_PDF_BLOCK_KINDS } from '@/types/parsed-pdf';
+import { API_SCOPE_LABELS } from '@/lib/shared/api-scopes';
 
 type Schema = Record<string, unknown>;
 const string = { type: 'string' };
@@ -33,7 +34,8 @@ const errorResponse = response('Request failed. Inspect error.code and error.mes
 const limitedResponse = { ...errorResponse, description: 'Compute admission or usage is limited.',
   headers: { 'Retry-After': { description: 'Seconds until retry.', schema: { type: 'integer', minimum: 1 } } } };
 function operation(operationId: string, summary: string, scope: string | null, responses: Record<string, unknown>, extra: Record<string, unknown> = {}) {
-  return { operationId, summary, ...(scope ? { 'x-required-scope': scope } : { security: [] }),
+  return { operationId, summary, ...(scope ? { 'x-required-scope': scope } : {}),
+    security: scope ? [{ sessionCookie: [] }, { secureSessionCookie: [] }, { oauth: [scope] }] : [],
     responses: { ...responses, ...(scope ? { default: errorResponse, '429': limitedResponse } : {}) }, ...extra };
 }
 const fileResponse = { description: 'File bytes in proxy mode.', content: { '*/*': { schema: { type: 'string', format: 'binary' } } } };
@@ -48,13 +50,13 @@ const audiobookBody = object({ voice: { ...string, description: 'Provider-native
   planning: object({ maxBlockLength: integer, language: string, skipBlockKinds: array(enumeration(...PARSED_PDF_BLOCK_KINDS)) }, []), planObjectKey: string,
 }, []);
 
-/** The implemented v1 contract. OAuth schemes are added only when bearer support lands. */
+/** The implemented v1 library and audiobook contract. */
 export const publicApiSpec = {
   openapi: '3.1.0',
   info: { title: 'OpenReader public API', version: '1.0.0', description:
-    'Authenticated library and audiobook control API. Cookie sessions are supported now; OAuth is not implemented yet. Resources belong to the caller, including guest sessions. Heavy work returns status immediately. Relative resource URLs resolve against the instance origin.' },
+    'Library and audiobook control API authenticated by browser cookies or scoped OAuth access tokens. OAuth requires a non-guest account. Use resource={instance origin}/api/v1 during authorization. Resources belong to the caller. Heavy work returns status immediately. Relative resource URLs resolve against the instance origin.' },
   servers: [{ url: '/api/v1' }],
-  security: [{ sessionCookie: [] }, { secureSessionCookie: [] }],
+  security: [{ sessionCookie: [] }, { secureSessionCookie: [] }, { oauth: [] }],
   paths: {
     '/openapi.json': { get: operation('getOpenApi', 'Read this specification', null, { '200': response('OpenAPI 3.1 document.', { type: 'object' }) }) },
     '/me': { get: operation('getMe', 'Read the current identity, scopes and speech usage', 'documents:read', { '200': response('Current caller.', ref('Me')) }) },
@@ -122,7 +124,11 @@ export const publicApiSpec = {
   },
   components: {
     securitySchemes: { sessionCookie: { type: 'apiKey', in: 'cookie', name: 'better-auth.session_token', description: 'Existing Better Auth session on HTTP deployments.' },
-      secureSessionCookie: { type: 'apiKey', in: 'cookie', name: '__Secure-better-auth.session_token', description: 'Existing Better Auth session on HTTPS deployments. Browsers send cookies automatically.' } },
+      secureSessionCookie: { type: 'apiKey', in: 'cookie', name: '__Secure-better-auth.session_token', description: 'Existing Better Auth session on HTTPS deployments. Browsers send cookies automatically.' },
+      oauth: { type: 'oauth2', description: 'Authorization code with S256 PKCE. Discover issuer metadata at /.well-known/oauth-authorization-server/api/auth and resource metadata at /.well-known/oauth-protected-resource/api/v1. Request the /api/v1 resource explicitly. The same token endpoint also supports the advertised OAuth device grant.', flows: {
+        authorizationCode: { authorizationUrl: '/api/auth/oauth2/authorize', tokenUrl: '/api/auth/oauth2/token', refreshUrl: '/api/auth/oauth2/token', scopes: API_SCOPE_LABELS },
+      } },
+    },
     schemas: {
       Error: object({ error: object({ code: string, message: string, retryAfterMs: { type: 'number', minimum: 0 } }, ['code', 'message']) }),
       DocumentMetadata: object({ id: docId, name: string, size: integer, lastModified: number, type: enumeration('pdf', 'epub', 'docx', 'html'),

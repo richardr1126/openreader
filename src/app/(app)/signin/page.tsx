@@ -45,6 +45,16 @@ function SearchParamsLoader({
 
 function SignInContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOAuthSignIn = searchParams.has('sig');
+  const returnTo = (() => {
+    const value = searchParams.get('returnTo');
+    if (!value || !value.startsWith('/oauth/device?')) return '/app';
+    try {
+      const url = new URL(value, 'http://localhost');
+      return url.origin === 'http://localhost' && url.pathname === '/oauth/device' ? `${url.pathname}${url.search}` : '/app';
+    } catch { return '/app'; }
+  })();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loadingEmail, setLoadingEmail] = useState(false);
@@ -106,7 +116,7 @@ function SignInContent() {
         // Immediately refresh rate-limit status so the banner clears without a full reload.
         // This is especially important when an anonymous user upgrades to an account.
         await refreshRateLimit();
-        router.push('/app');
+        if (!isOAuthSignIn) router.push(returnTo);
       }
     } catch (err) {
       console.error('Sign in error:', err);
@@ -141,7 +151,7 @@ function SignInContent() {
       const client = getAuthClient(baseUrl);
       await client.signIn.social({
         provider: 'github',
-        callbackURL: '/app'
+        callbackURL: returnTo
       });
     } finally {
       setLoadingGithub(false);
@@ -156,7 +166,7 @@ function SignInContent() {
       const client = getAuthClient(baseUrl);
       const result = await client.signIn.social({
         provider: oidcAuth.providerId,
-        callbackURL: '/app',
+        callbackURL: returnTo,
         errorCallbackURL: '/signin',
       });
       if (result.error) {
@@ -323,7 +333,7 @@ function SignInContent() {
           )}
 
           {/* Anonymous */}
-          {allowAnonymousSessions && (
+          {allowAnonymousSessions && !isOAuthSignIn && (
             <Button
               type="button"
               disabled={isAnyLoading}
@@ -342,7 +352,7 @@ function SignInContent() {
           {canSignUp && (
             <p className="text-xs text-soft">
               Don&apos;t have an account?{' '}
-              <Link href="/signup" className="underline hover:text-foreground">
+              <Link href={isOAuthSignIn ? `/signup?${searchParams}` : '/signup'} className="underline hover:text-foreground">
                 Sign up
               </Link>
             </p>

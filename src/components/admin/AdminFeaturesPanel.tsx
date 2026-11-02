@@ -383,6 +383,14 @@ export function AdminFeaturesPanel({
         })}
         </> : null}
         <ToggleRow
+          label="Open OAuth client registration"
+          info="Let third-party apps register themselves. Registration does not grant access; each account must approve its scopes."
+          checked={Boolean(draft.allowOAuthClientRegistration)}
+          onChange={(checked) => updateDraft('allowOAuthClientRegistration', checked)}
+          meta={renderSource('allowOAuthClientRegistration')}
+          variant="plain"
+        />
+        <ToggleRow
           label="Audiobook export"
           icon={<HeadphonesIcon />}
           info="Shows Export audiobook on PDF and EPUB pages."

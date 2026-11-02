@@ -94,6 +94,7 @@ export const RUNTIME_CONFIG_SCHEMA = {
   signupPolicy: enumValue(['open', 'approval', 'closed'] as const, 'open'),
   // Guest (anonymous) sessions. Off by default; independent of signupPolicy.
   allowAnonymousSessions: runtimeBoolean(false),
+  allowOAuthClientRegistration: runtimeBoolean(true),
   // Days without activity before the `expire-anonymous-users` task (off by
   // default) deletes a guest account and its data.
   anonymousUserIdleDays: positiveIntValue(90),

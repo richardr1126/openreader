@@ -54,6 +54,7 @@ export type AudiobookIntent = {
 export type AudiobookCaller = {
   scope: ResolvedSegmentDocumentScope;
   subject: ComputeLimitSubject;
+  clientId?: string;
 };
 
 /**

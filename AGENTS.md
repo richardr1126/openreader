@@ -34,7 +34,7 @@ version or tag a release unless asked.
   execution configuration from the authenticated app-owned credential broker.
 - Provider credentials must never appear in NATS jobs, operation state, events,
   logs, browser responses, or artifacts.
-- Keep the five authentication boundaries distinct:
+- Keep the six authentication boundaries distinct:
   1. browser to Next.js: Better Auth session/cookie;
   2. Next.js to worker: `COMPUTE_WORKER_TOKEN`;
   3. browser to worker audio: short-lived HMAC playback token;
@@ -43,6 +43,11 @@ version or tag a release unless asked.
      at `POST /api/auth/desktop/session` for a boundary-1 session for the single
      owner. Unset everywhere except the desktop app; the route is then absent.
      Embedded services never receive it (`packages/bootstrap` filters it).
+  6. external clients to Next.js v1: OAuth access token, bound to this instance's
+     `/api/v1` resource and approved scopes. Cookie session behavior is unchanged;
+     OAuth tokens cannot authenticate private/admin routes or worker services.
+     MCP gets its own audience when implemented. Disconnecting an app revokes
+     its consent and refresh access; JWT verification checks the current grant.
 - `installProfile` (`server` | `desktop`, see `v5/DESKTOP_SINGLE_OWNER.md`) is a
   derived, presentation-only fact. It must never take part in authorization;
   `pnpm check:install-profile` keeps it out of `src/app/api/**`,

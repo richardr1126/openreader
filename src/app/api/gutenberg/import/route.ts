@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
 import { stageDocumentUpload } from '@/lib/server/documents/uploads';
-import { API_SCOPES } from '@/lib/server/api/principal';
+import { API_SCOPES } from '@/lib/shared/api-scopes';
 import { downloadGutenbergEpub } from '@/lib/server/documents/gutenberg';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { serverLogger } from '@/lib/server/logger';

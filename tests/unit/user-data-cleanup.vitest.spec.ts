@@ -54,8 +54,8 @@ describe('user database cleanup', () => {
       documentId: null,
       notBeforeMs: expect.any(Number),
     });
-    // Admissions/events cascade with the user; HMAC-keyed buckets and verification are explicit.
-    expect(mocks.deleteWhere).toHaveBeenCalledTimes(2);
+    // Admissions/events cascade; HMAC-keyed buckets, verification and device codes are explicit.
+    expect(mocks.deleteWhere).toHaveBeenCalledTimes(3);
   });
 
   test('reports a failed row delete so the deletion is retried', async () => {

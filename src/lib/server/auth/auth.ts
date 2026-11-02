@@ -19,6 +19,7 @@ import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import { tryGetOrigin } from "@/lib/shared/urls";
 import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
+import { oauthPlugins } from '@/lib/server/auth/oauth';
 
 // Heavy modules (claim-data, user management, compute client) are loaded
 // lazily via dynamic import() inside the onLinkAccount callback to avoid inflating every serverless function that touches auth.
@@ -61,7 +62,7 @@ const oidcAuthConfig = getOidcAuthConfig();
 // Desktop shell only. Unset everywhere else, so the exchange route is absent.
 const desktopLaunchToken = configuredDesktopLaunchToken();
 
-const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) => betterAuth({
+const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean, allowOAuthRegistration: boolean) => betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   database: drizzleAdapter(db as any, {
     provider: process.env.POSTGRES_URL ? "pg" : "sqlite",
@@ -70,6 +71,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
   secret: requiredAuthEnv.authSecret,
   baseURL: requiredAuthEnv.baseUrl,
   trustedOrigins: getTrustedOrigins(),
+  disabledPaths: ['/token', '/device/token', '/oauth2/delete-consent', '/oauth2/update-consent', '/oauth2/get-consent', '/oauth2/get-consents'],
   emailAndPassword: {
     enabled: true,
     autoSignIn: !approvalRequired,
@@ -217,6 +219,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
     },
   },
   plugins: [
+    ...oauthPlugins(requiredAuthEnv.baseUrl, allowOAuthRegistration, accountEmailsEnabled),
     // Always registered so guest access follows the runtime
     // `allowAnonymousSessions` setting without a restart; the user-create hook
     // above refuses new anonymous users while it is off.
@@ -327,12 +330,14 @@ export async function getAuth(): Promise<ReturnType<typeof createAuth>> {
   }
   // Better Auth captures autoSignIn at construction time, while the admin may
   // change signup policy without restarting the app.
-  const approvalRequired = (await getResolvedRuntimeConfig()).signupPolicy === 'approval';
+  const runtime = await getResolvedRuntimeConfig();
+  const approvalRequired = runtime.signupPolicy === 'approval';
+  const allowOAuthRegistration = runtime.allowOAuthClientRegistration;
   await ensureInitialAdmin();
-  const cacheKey = `${enabled}:${approvalRequired}`;
+  const cacheKey = `${enabled}:${approvalRequired}:${allowOAuthRegistration}`;
   let instance = authInstances.get(cacheKey);
   if (!instance) {
-    instance = createAuth(enabled, approvalRequired);
+    instance = createAuth(enabled, approvalRequired, allowOAuthRegistration);
     authInstances.set(cacheKey, instance);
   }
   return instance;

@@ -30,11 +30,12 @@ export async function resolveAudiobookCaller(
   return {
     caller: {
       scope,
+      clientId: principal.clientId,
       subject: {
         userId: principal.userId,
         isAnonymous: principal.isAnonymous,
         deviceId: device?.deviceId ?? null,
-        ip: getClientIp(request),
+        ip: principal.clientId ? null : getClientIp(request),
       },
     },
     finish: (response) => {
@@ -96,7 +97,8 @@ export async function resolveAudiobookIntent(
       const { artifact } = await readTtsPlaybackPlanArtifact(parsed.planObjectKey);
       if (artifact.documentId !== documentId || artifact.documentVersion !== caller.scope.documentVersion
         || artifact.readerType !== caller.scope.readerType
-        || (artifact.storageUserId !== undefined && artifact.storageUserId !== caller.scope.storageUserId)) {
+        || (artifact.storageUserId !== undefined && artifact.storageUserId !== caller.scope.storageUserId)
+        || (caller.clientId !== undefined && artifact.storageUserId !== caller.scope.storageUserId)) {
         return apiErrorResponse(403, 'PLAN_FORBIDDEN', 'The reading plan does not belong to this document.');
       }
     }

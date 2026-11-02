@@ -12,7 +12,7 @@ export async function describeMe(request: NextRequest, principal: ApiPrincipal) 
   const device = enabled && principal.isAnonymous ? getOrCreateDeviceId(request) : null;
   const decision = await getComputeUsage({ policy, action: 'tts_synthesis', metric: 'characters', subject: {
     userId: principal.userId, isAnonymous: principal.isAnonymous,
-    deviceId: device?.deviceId ?? null, ip: getClientIp(request),
+    deviceId: device?.deviceId ?? null, ip: principal.clientId ? null : getClientIp(request),
   } });
   const binding = decision.buckets.reduce<(typeof decision.buckets)[number] | null>(
     (current, bucket) => !current || bucket.remaining < current.remaining ? bucket : current, null,

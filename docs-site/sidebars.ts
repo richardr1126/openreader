@@ -65,6 +65,7 @@ const sidebars: SidebarsConfig = {
       label: '🧰 Infrastructure Reference',
       items: [
         'reference/public-api',
+        'reference/oauth',
         'reference/environment-variables',
         'configure/database',
         'configure/object-blob-storage',

@@ -23,7 +23,7 @@ export async function documentApi(request: NextRequest, scope: ApiScope, run: (c
     if (!isS3Configured()) return apiErrorResponse(503, 'OBJECT_STORAGE_REQUIRED', 'Document storage is unavailable.');
     const device = principal.isAnonymous ? getOrCreateDeviceId(request) : null;
     const response = await run({ principal, schedule: after, subject: {
-      userId: principal.userId, isAnonymous: principal.isAnonymous, ip: getClientIp(request), deviceId: device?.deviceId,
+      userId: principal.userId, isAnonymous: principal.isAnonymous, ip: principal.clientId ? null : getClientIp(request), deviceId: device?.deviceId,
     } });
     if (device?.didCreate && response instanceof NextResponse) setDeviceIdCookie(response, device.deviceId);
     response.headers.set('Cache-Control', 'private, no-store');
