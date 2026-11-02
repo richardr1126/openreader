@@ -238,8 +238,8 @@ caused conflicts, high CPU, misleading failures, and overheating.
 ## Current State
 
 - Public API progress on `refactor/public-api` is tracked in `v5/API_REFACTOR.md`.
-- Migration 0028 was rewritten in place during phase 4.5 and has never shipped. A
-  local database that ran the earlier version must be reset.
+- Migration 0027 combines this branch's unshipped migrations (phase 4.9). A local
+  database that ran an earlier version of them must be reset.
 - Open follow-ups for the owner: whether the full Compose files should require
   worker/broker/playback secrets instead of shipping known defaults, and whether
   to bump the pinned `kokoro-fastapi-cpu:v0.2.4` image in the Compose examples.

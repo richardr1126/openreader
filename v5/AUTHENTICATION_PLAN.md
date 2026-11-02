@@ -914,7 +914,7 @@ True v4.4.0-to-v5 full-Compose upgrade checkpoint on 2026-09-02:
 - Consent uses a signed authorization query and shows the destination, requested
   scopes, shared quota and Unverified app warning. Guests cannot approve apps.
   Open client registration is controlled by the existing runtime settings system.
-- Migration 0028 creates the OAuth/device/JWKS tables in both dialects. It does
+- Migration 0027 creates the OAuth/device/JWKS tables in both dialects. It does
   not replace users, sessions or existing encrypted provider configuration.
   Signing keys use the existing auth secret's encryption; no new environment
   secret or worker database access is introduced. Production migration remains

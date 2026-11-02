@@ -1,3 +1,31 @@
+CREATE TABLE `audiobook_requests` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`document_id` text NOT NULL,
+	`document_version` integer NOT NULL,
+	`format` text NOT NULL,
+	`speed` real NOT NULL,
+	`chapter_index` integer,
+	`settings_json` text NOT NULL,
+	`plan_object_key` text,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`document_id`,`user_id`) REFERENCES `documents`(`id`,`user_id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `idx_audiobook_requests_user_document` ON `audiobook_requests` (`user_id`,`document_id`);--> statement-breakpoint
+CREATE TABLE `document_audio_usage` (
+	`user_id` text NOT NULL,
+	`document_id` text NOT NULL,
+	`audio_bytes` integer DEFAULT 0 NOT NULL,
+	`revision` integer DEFAULT 0 NOT NULL,
+	`clear_lease_until` integer DEFAULT 0 NOT NULL,
+	`measured_at` integer DEFAULT 0 NOT NULL,
+	PRIMARY KEY(`user_id`, `document_id`),
+	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade,
+	CONSTRAINT "document_audio_usage_nonnegative" CHECK("document_audio_usage"."audio_bytes" >= 0)
+);
+--> statement-breakpoint
 CREATE TABLE `device_code` (
 	`id` text PRIMARY KEY NOT NULL,
 	`device_code` text NOT NULL,
@@ -176,4 +204,9 @@ CREATE TABLE `oauth_resource` (
 	`metadata` text
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `oauth_resource_identifier_unique` ON `oauth_resource` (`identifier`);
+CREATE UNIQUE INDEX `oauth_resource_identifier_unique` ON `oauth_resource` (`identifier`);--> statement-breakpoint
+ALTER TABLE `user_onboarding` ADD `guest_retention_seen_days` integer;--> statement-breakpoint
+ALTER TABLE `compute_limit_admissions` DROP COLUMN `device_scope_key`;--> statement-breakpoint
+ALTER TABLE `compute_limit_admissions` DROP COLUMN `ip_scope_key`;--> statement-breakpoint
+UPDATE session SET ip_address = NULL;--> statement-breakpoint
+DELETE FROM compute_limit_buckets WHERE scope_type IN ('ip', 'anonymous_device');

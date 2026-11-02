@@ -1,3 +1,27 @@
+CREATE TABLE "audiobook_requests" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"document_id" text NOT NULL,
+	"document_version" bigint NOT NULL,
+	"format" text NOT NULL,
+	"speed" double precision NOT NULL,
+	"chapter_index" integer,
+	"settings_json" jsonb NOT NULL,
+	"plan_object_key" text,
+	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint
+);
+--> statement-breakpoint
+CREATE TABLE "document_audio_usage" (
+	"user_id" text NOT NULL,
+	"document_id" text NOT NULL,
+	"audio_bytes" bigint DEFAULT 0 NOT NULL,
+	"revision" integer DEFAULT 0 NOT NULL,
+	"clear_lease_until" bigint DEFAULT 0 NOT NULL,
+	"measured_at" bigint DEFAULT 0 NOT NULL,
+	CONSTRAINT "document_audio_usage_user_id_document_id_pk" PRIMARY KEY("user_id","document_id"),
+	CONSTRAINT "document_audio_usage_nonnegative" CHECK ("document_audio_usage"."audio_bytes" >= 0)
+);
+--> statement-breakpoint
 CREATE TABLE "device_code" (
 	"id" text PRIMARY KEY NOT NULL,
 	"device_code" text NOT NULL,
@@ -148,6 +172,10 @@ CREATE TABLE "oauth_resource" (
 	CONSTRAINT "oauth_resource_identifier_unique" UNIQUE("identifier")
 );
 --> statement-breakpoint
+ALTER TABLE "user_onboarding" ADD COLUMN "guest_retention_seen_days" integer;--> statement-breakpoint
+ALTER TABLE "audiobook_requests" ADD CONSTRAINT "audiobook_requests_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "audiobook_requests" ADD CONSTRAINT "audiobook_requests_document_fk" FOREIGN KEY ("document_id","user_id") REFERENCES "public"."documents"("id","user_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "document_audio_usage" ADD CONSTRAINT "document_audio_usage_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_access_token" ADD CONSTRAINT "oauth_access_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -160,6 +188,7 @@ ALTER TABLE "oauth_consent" ADD CONSTRAINT "oauth_consent_user_id_user_id_fk" FO
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_client_id_oauth_client_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_client"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "idx_audiobook_requests_user_document" ON "audiobook_requests" USING btree ("user_id","document_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "deviceCode_deviceCode_uidx" ON "device_code" USING btree ("device_code");--> statement-breakpoint
 CREATE UNIQUE INDEX "deviceCode_userCode_uidx" ON "device_code" USING btree ("user_code");--> statement-breakpoint
 CREATE INDEX "oauthAccessToken_clientId_idx" ON "oauth_access_token" USING btree ("client_id");--> statement-breakpoint
@@ -176,4 +205,8 @@ CREATE UNIQUE INDEX "oauthConsent_userId_clientId_uidx" ON "oauth_consent" USING
 CREATE INDEX "oauthRefreshToken_clientId_idx" ON "oauth_refresh_token" USING btree ("client_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_sessionId_idx" ON "oauth_refresh_token" USING btree ("session_id");--> statement-breakpoint
 CREATE INDEX "oauthRefreshToken_userId_idx" ON "oauth_refresh_token" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");
+CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");--> statement-breakpoint
+ALTER TABLE "compute_limit_admissions" DROP COLUMN "device_scope_key";--> statement-breakpoint
+ALTER TABLE "compute_limit_admissions" DROP COLUMN "ip_scope_key";--> statement-breakpoint
+UPDATE session SET ip_address = NULL;--> statement-breakpoint
+DELETE FROM compute_limit_buckets WHERE scope_type IN ('ip', 'anonymous_device');

@@ -3,7 +3,7 @@
 Status: implemented; direct admin controls replace the superseded rollout-mode UI.
 
 Phase 4.6 of `API_REFACTOR.md` supersedes the original IP/device compute scopes
-below: compute policies now retain only user and site rows. Migration 0029 drops
+below: compute policies now retain only user and site rows. Migration 0027 drops
 the admission IP/device keys and clears stored session IPs. The app hashes session
 IPs with a separate label from the rolling account/guest creation counters in
 `compute_limit_buckets`; creation caps are the only IP-based resource check.

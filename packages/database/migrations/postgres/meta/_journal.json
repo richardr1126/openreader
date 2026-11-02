@@ -194,36 +194,8 @@
     {
       "idx": 27,
       "version": "7",
-      "when": 1793552019496,
-      "tag": "0027_audiobook_requests",
-      "breakpoints": true
-    },
-    {
-      "idx": 28,
-      "version": "7",
-      "when": 1793583903855,
-      "tag": "0028_oauth_provider",
-      "breakpoints": true
-    },
-    {
-      "idx": 29,
-      "version": "7",
-      "when": 1793645013357,
-      "tag": "0029_account_creation_ip_privacy",
-      "breakpoints": true
-    },
-    {
-      "idx": 30,
-      "version": "7",
-      "when": 1793645914798,
-      "tag": "0030_document_audio_usage",
-      "breakpoints": true
-    },
-    {
-      "idx": 31,
-      "version": "7",
-      "when": 1793649923143,
-      "tag": "0031_guest_retention_seen",
+      "when": 1793650219550,
+      "tag": "0027_public_api",
       "breakpoints": true
     }
   ]

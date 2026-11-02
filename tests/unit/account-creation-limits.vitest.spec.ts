@@ -52,7 +52,10 @@ test('migration clears old raw session IPs and drops retired admission keys with
       insert into compute_limit_admissions values ('kept', 'device', 'ip');
       create table compute_limit_buckets(scope_type text);
       insert into compute_limit_buckets values ('user'), ('ip'), ('anonymous_device');`);
-    database.exec(readFileSync(new URL('../../packages/database/migrations/sqlite/0029_account_creation_ip_privacy.sql', import.meta.url), 'utf8'));
+    const migration = readFileSync(new URL('../../packages/database/migrations/sqlite/0027_public_api.sql', import.meta.url), 'utf8');
+    for (const statement of migration.split('--> statement-breakpoint').map((part) => part.trim())) {
+      if (/^(UPDATE session|DELETE FROM compute_limit_buckets|ALTER TABLE `compute_limit_admissions` DROP)/.test(statement)) database.exec(statement);
+    }
     expect(database.prepare('select * from session').all()).toEqual([{ id: 'kept', ip_address: null }]);
     expect(database.prepare('select * from compute_limit_admissions').all()).toEqual([{ id: 'kept' }]);
     expect(database.prepare('select * from compute_limit_buckets').all()).toEqual([{ scope_type: 'user' }]);

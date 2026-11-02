@@ -145,9 +145,10 @@ and same-origin protections.
 
 ## Self-hosted upgrade
 
-The public API adds migrations **0027** (audiobook requests) and
-**0028_oauth_provider** (OAuth, device and signing-key tables) for SQLite and
-PostgreSQL, without replacing existing users, sessions or provider ciphertext.
-Back up the database and apply them through the instance's normal upgrade procedure
+The public API adds migration **0027_public_api** for SQLite and PostgreSQL. It adds
+the audiobook request, OAuth, device, signing-key and audio usage tables without
+replacing existing users, sessions or provider ciphertext. It also clears stored raw
+session IP addresses and removes retired IP and device limit records. Back up the
+database and apply it through the instance's normal upgrade procedure
 before starting the new web version. Update the web app and an external compute
 worker together. The worker does not need OAuth credentials or database access.

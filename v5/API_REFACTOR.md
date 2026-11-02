@@ -1,6 +1,9 @@
 # Public API refactor
 
-Status: accepted; phases 1–4.8 are implemented. Phases 5–6 remain planned.
+Status: accepted; phases 1–4.9 are implemented. Phases 5–6 remain planned.
+
+Migration numbers 0028 to 0031 in the history below were combined into `0027_public_api`
+by phase 4.9.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -1051,3 +1054,14 @@ Implemented on 2026-11-02.
   transfers.
 - The privacy policy states the rule and not a number, because the operator sets the period
   and the page should not depend on the database.
+
+### Phase 4.9 single migration
+
+Implemented on 2026-11-02. `main` stops at migration 0026, so the branch's unshipped 0027 to
+0031 were deleted and regenerated as one `0027_public_api` for both dialects, with the
+hand-written session IP and limit bucket cleanup appended. A local database that ran the
+earlier versions must be reset. Later phases add their own migrations after 0027.
+
+Acceptance: the regenerated snapshots match the old 0031 snapshots in both dialects, and
+every old statement is in the new file. Applying the old and new chains from empty gave
+identical `sqlite_master` contents and an empty `pg_dump --schema-only` diff on PostgreSQL 16.
