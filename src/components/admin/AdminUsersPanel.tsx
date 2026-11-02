@@ -39,6 +39,8 @@ interface ManagedUser {
   sessionCount: number;
   documentCount: number;
   documentBytes: number;
+  audioBytes: number;
+  storageBytes: number;
   usage: { ttsCharacters: number; inputBytes: number; files: number };
 }
 
@@ -362,7 +364,7 @@ export function AdminUsersPanel() {
                 />
                 User
               </span>
-              <span className="text-right">Documents</span>
+              <span className="text-right">Storage</span>
               <span className="text-right">TTS usage</span>
               <span className="text-right">Manage</span>
             </div>
@@ -396,14 +398,14 @@ export function AdminUsersPanel() {
                             </span>
                             <span className="mt-0.5 block truncate font-mono text-[11px] text-soft">{user.isAnonymous ? user.id : user.email}</span>
                             <span className="mt-0.5 block truncate font-mono text-[11px] tabular-nums text-faint lg:hidden">
-                              {formatCount(user.documentCount)} docs · {formatBytes(user.documentBytes)} · {formatCount(user.usage.ttsCharacters)} chars
+                              {formatCount(user.documentCount)} docs · {formatBytes(user.storageBytes)} · {formatCount(user.usage.ttsCharacters)} chars
                             </span>
                           </span>
                         </div>
                       </button>
                     </div>
 
-                    <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatCount(user.documentCount)} · {formatBytes(user.documentBytes)}</span>
+                    <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatBytes(user.storageBytes)}</span>
                     <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatCount(user.usage.ttsCharacters)} chars</span>
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 pl-16 empty:hidden lg:mt-0 lg:justify-end lg:pl-0">
@@ -437,6 +439,8 @@ export function AdminUsersPanel() {
                       <Detail label="Updated" value={formatDate(user.updatedAt)} />
                       <Detail label="Last session activity" value={formatDate(user.lastActiveAt)} />
                       <Detail label="Sessions" value={formatCount(user.sessionCount)} />
+                      <Detail label="Documents" value={`${formatCount(user.documentCount)} · ${formatBytes(user.documentBytes)}`} />
+                      <Detail label="Audio" value={formatBytes(user.audioBytes)} />
                       <Detail label="Email" value={user.isAnonymous ? 'Not applicable' : user.emailVerified ? 'Verified' : 'Not verified'} />
                       <Detail label="Processed input" value={formatBytes(user.usage.inputBytes)} />
                       <Detail label="Processed files" value={formatCount(user.usage.files)} />

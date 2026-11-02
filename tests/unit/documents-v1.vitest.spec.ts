@@ -13,7 +13,7 @@ vi.mock('next/server', async original => ({ ...await original<typeof import('nex
 vi.mock('@openreader/database', () => ({ get db() { return state.db; } }));
 vi.mock('@/lib/server/auth/auth', () => ({ getAuthContext: async () => ({ userId: state.userId, user: { isAnonymous: false } }), getTrustedOrigins: () => ['http://localhost'] }));
 vi.mock('@/lib/server/storage/s3', () => ({ isS3Configured: () => true, getBrowserStorageTransport: () => 'proxy' }));
-vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ maxUploadMb: 10, computeLimitPolicies: {} }) }));
+vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ maxUploadMb: 10, computeLimitPolicies: { actions: { document_intake: { enabled: false } } } }) }));
 vi.mock('@/lib/server/documents/web-loader', () => ({ fetchAndParseUrl: state.article }));
 vi.mock('@/lib/server/documents/previews', () => ({ enqueueDocumentPreview: async () => undefined }));
 vi.mock('@/lib/server/tts/segments-cache', () => ({ deleteDocumentTtsSegmentCache: async () => undefined }));

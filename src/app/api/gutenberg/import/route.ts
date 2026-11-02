@@ -7,6 +7,8 @@ import { errorResponse } from '@/lib/server/errors/next-response';
 import { serverLogger } from '@/lib/server/logger';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { consumeDocumentIntake } from '@/lib/server/documents/intake';
+import { ApiRequestError } from '@/lib/server/api/responses';
 
 export const dynamic = 'force-dynamic';
 // A large illustrated EPUB from gutenberg.org can take most of a minute.
@@ -36,11 +38,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { maxUploadMb } = await getResolvedRuntimeConfig();
+    await consumeDocumentIntake({ userId, isAnonymous: Boolean(auth.user?.isAnonymous) });
     const { book, name, bytes } = await downloadGutenbergEpub(id, maxUploadMb * 1024 * 1024);
     const uploadId = await stageDocumentUpload({
       principal: { userId, isAnonymous: Boolean(auth.user?.isAnonymous), scopes: API_SCOPES },
       subject: { userId, isAnonymous: Boolean(auth.user?.isAnonymous) }, schedule: after,
-    }, bytes, { name, author: book.authors.slice(0, 3).join(', ') || null, language: book.languages[0] ?? null });
+    }, bytes, { name, author: book.authors.slice(0, 3).join(', ') || null, language: book.languages[0] ?? null }, true);
 
     return NextResponse.json({
       uploadId,
@@ -53,6 +56,10 @@ export async function POST(req: NextRequest) {
       language: book.languages[0] ?? null,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
+    if (error instanceof ApiRequestError) return NextResponse.json({ error: error.message }, {
+      status: error.status,
+      ...(error.retryAfterMs === undefined ? {} : { headers: { 'Retry-After': String(Math.max(1, Math.ceil(error.retryAfterMs / 1000))) } }),
+    });
     return errorResponse(error, {
       logger: serverLogger,
       event: 'gutenberg.import.failed',

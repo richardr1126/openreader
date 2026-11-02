@@ -11,6 +11,7 @@ export interface TtsSynthesisConsumeResponse {
   charged: boolean;
   idempotent: boolean;
   retryAfterMs: number;
+  storageLimit?: string;
   usage: {
     used: number;
     limit: number;
@@ -68,7 +69,8 @@ export function parseTtsSynthesisConsumeResponse(value: unknown): TtsSynthesisCo
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
   if (
-    Object.keys(record).length !== 5
+    Object.keys(record).length !== (record.storageLimit === undefined ? 5 : 6)
+    || (record.storageLimit !== undefined && !['ACCOUNT_STORAGE_LIMIT_REACHED', 'GUEST_STORAGE_LIMIT_REACHED', 'GUEST_STORAGE_POOL_FULL'].includes(String(record.storageLimit)))
     || typeof record.allowed !== 'boolean'
     || typeof record.charged !== 'boolean'
     || typeof record.idempotent !== 'boolean'
@@ -96,5 +98,6 @@ export function parseTtsSynthesisConsumeResponse(value: unknown): TtsSynthesisCo
     idempotent: record.idempotent,
     retryAfterMs: record.retryAfterMs,
     usage,
+    ...(typeof record.storageLimit === 'string' ? { storageLimit: record.storageLimit } : {}),
   };
 }

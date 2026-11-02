@@ -1,4 +1,5 @@
 'use client';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -108,7 +109,7 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
         delete next[book.id];
         return next;
       });
-      toast.error(err instanceof Error ? err.message : 'Failed to import the book');
+      toast.error(<StorageLimitMessage message={err instanceof Error ? err.message : 'Failed to import the book'} />);
     }
   };
 

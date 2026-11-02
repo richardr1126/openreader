@@ -3,6 +3,7 @@ import { fetchAndParseUrl } from './web-loader';
 import { stageDocumentUpload, submitDocumentUpload, uploadId } from './uploads';
 import { safeDocumentName } from './utils';
 import type { DocumentCaller } from './request';
+import { consumeDocumentIntake } from './intake';
 
 export async function createDocument(caller: DocumentCaller, body: Record<string, unknown>) {
   const source = body.source;
@@ -16,6 +17,7 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
   let name: string;
   let author: string | null = null;
   let language: string | null = null;
+  let intakeCharged = false;
   if (record.type === 'text') {
     if (typeof record.text !== 'string' || !record.text.trim()) throw new ApiRequestError(400, 'REQUEST_INVALID', 'text must be a non-empty string.');
     text = record.text;
@@ -25,6 +27,8 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
     language = typeof body.language === 'string' ? body.language : null;
   } else if (record.type === 'url') {
     if (typeof record.url !== 'string' || !record.url.trim()) throw new ApiRequestError(400, 'REQUEST_INVALID', 'url is required.');
+    await consumeDocumentIntake(caller.subject);
+    intakeCharged = true;
     let article;
     try { article = await fetchAndParseUrl(record.url); }
     catch (error) {
@@ -39,6 +43,6 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
   } else throw new ApiRequestError(400, 'REQUEST_INVALID', 'source.type must be url, text or upload.');
   const bytes = Buffer.from(text, 'utf8');
   if (bytes.length > 2 * 1024 * 1024) throw new ApiRequestError(413, 'TEXT_TOO_LARGE', 'Text imports are limited to 2 MB.');
-  const id = await stageDocumentUpload(caller, bytes, { name, author, language });
+  const id = await stageDocumentUpload(caller, bytes, { name, author, language }, intakeCharged);
   return submitDocumentUpload(caller, id, body.folderId);
 }

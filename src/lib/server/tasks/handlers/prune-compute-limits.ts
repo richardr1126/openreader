@@ -19,7 +19,7 @@ function rowsAffected(result: unknown): number {
 
 export async function pruneComputeLimits(): Promise<TaskResult> {
   const nowMs = Date.now();
-  const actions = COMPUTE_ACTIONS.filter((action): action is WorkerOperationAction => action !== 'tts_synthesis');
+  const actions = COMPUTE_ACTIONS.filter((action): action is WorkerOperationAction => action !== 'tts_synthesis' && action !== 'document_intake');
   for (const action of actions) await reconcileExpiredComputeAdmissions(action, nowMs);
 
   const cutoff = nowMs - RETENTION_MS;

@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import type { UserStorageUsageReport } from '@/lib/server/compute-worker/protocol';
 import {
-  orphanedAudioDocumentIds,
   summarizeDocumentStorage,
-  summarizeLibraryStorage,
 } from '@/lib/server/tts/storage-usage';
 
 type DocumentRow = UserStorageUsageReport['documents'][number];
@@ -43,27 +41,4 @@ describe('storage usage summaries', () => {
       .toEqual({ currentAudioBytes: 0, unusedAudioBytes: 0, documentDataBytes: 0, truncated: false });
   });
 
-  test('totals library audio and attributes orphaned audio to removed documents', () => {
-    const owned = new Set(['kept']);
-    const playback = report([
-      document('kept', { variants: [{ documentVersion: 1, settingsHash: 'a', bytes: 50, objects: 1 }] }),
-      document('removed', {
-        variants: [{ documentVersion: 1, settingsHash: 'a', bytes: 20, objects: 1 }],
-        exports: [{ documentVersion: 1, settingsHash: 'a', bytes: 5, objects: 1 }],
-      }),
-      document('removed-empty'),
-    ]);
-    const derived = report([document('kept', { derivedBytes: 300, derivedObjects: 3 })]);
-
-    expect(orphanedAudioDocumentIds(playback, owned)).toEqual(['removed']);
-    expect(summarizeLibraryStorage([playback, derived], owned, { derivedTruncated: false })).toEqual({
-      audioBytes: 75,
-      orphanedAudioBytes: 25,
-      orphanedDocumentCount: 1,
-      documentDataBytes: 300,
-      truncated: false,
-    });
-    expect(summarizeLibraryStorage([playback], owned, { derivedTruncated: true }).truncated).toBe(true);
-    expect(summarizeLibraryStorage([report([], true)], owned, { derivedTruncated: false }).truncated).toBe(true);
-  });
 });

@@ -134,6 +134,19 @@ describe('scheduled task engine', () => {
     expect((await listTasks(registry))[0]).toMatchObject({ running: false, lastStatus: 'error', lastError: 'Deleted 20 accounts; 5 failed' });
   });
 
+  test('retains a repair cursor through durable worker completion for the next scheduled run', async () => {
+    let runId = '';
+    const handler = vi.fn(async (context) => { runId = context.runId; return { operationId: 'op-repair', cursor: 'backfilled' }; });
+    const registry = registryWith(handler);
+    await runDueTasks({ registry });
+    worker.getOperation.mockResolvedValue({ opId: 'op-repair', subject: { kind: 'maintenance', runId }, status: 'succeeded', queuedAt: Date.now(), updatedAt: Date.now(),
+      result: { summary: 'Repaired storage', completed: 1, failed: 0 } });
+    await listTasks(registry);
+    await holder.db.update(tasks).set({ nextRunAt: Date.now() - 1 }).where(eq(tasks.key, KEY));
+    await runDueTasks({ registry });
+    expect(handler.mock.calls[1][0].cursor).toBe('backfilled');
+  });
+
   test('does not reclaim a long-running worker job or start another when its worker is unreachable', async () => {
     const handler = vi.fn(async () => ({ summary: 'wrong duplicate' }));
     const leaseOwner = 'existing-run';

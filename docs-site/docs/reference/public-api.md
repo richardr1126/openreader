@@ -41,6 +41,10 @@ The latter describes the current binding TTS character quota, including remainin
 characters and its reset timestamp. It does not expose internal bucket identifiers
 or provider configuration. Admission limits for conversion, parsing or assembly
 are also enforced and can return `429` independently of that character quota.
+When storage blocks new generation, `computeLimits.storageLimit` explains which
+storage cap was reached, including when daily character limits are off. Uploads
+and URL/text imports also share the user's daily file allowance. Storage and
+guest-pool caps apply equally to browser and OAuth callers; cached audio is kept.
 
 ## Documents
 

@@ -69,6 +69,15 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await expect(page.getByRole('spinbutton', { name: 'New guests', exact: true })).toHaveValue('10');
   await page.getByRole('button', { name: 'Discard', exact: true }).click();
   await expect(page.getByRole('spinbutton', { name: 'New guests', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Compute', exact: true }).first().click();
+  await page.getByRole('switch', { name: 'Storage per account', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Account storage cap', exact: true })).toHaveValue('10240');
+  await page.getByText('Daily document limit', { exact: true }).click();
+  await page.getByRole('switch', { name: 'Limit daily files', exact: true }).click();
+  await expect(page.getByRole('spinbutton', { name: 'Guest daily files', exact: true })).toHaveValue('10');
+  await expect(page.getByRole('spinbutton', { name: 'Account daily files', exact: true })).toHaveValue('100');
+  await page.getByRole('button', { name: 'Discard', exact: true }).click();
+  await page.getByRole('button', { name: 'Instance', exact: true }).first().click();
   // Account email and the Gutenberg catalog save on their own, and only once edited.
   await expect(page.getByRole('heading', { name: 'Account email', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Project Gutenberg', exact: true })).toBeVisible();

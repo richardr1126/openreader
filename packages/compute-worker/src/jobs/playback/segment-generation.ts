@@ -173,7 +173,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   /** Exact word timing was persisted for an already completed segment. */
   onSegmentAligned?: (planOrdinal: number) => Promise<void>;
   onSegmentErrored?: (planOrdinal: number) => Promise<void>;
-  onUsageDenied?: () => Promise<void>;
+  onUsageDenied?: (storageLimit?: string) => Promise<void>;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
   /** Alignment failed; it degrades to no word timing, ending any model download it awaited. */
   onAlignmentFailed?: () => Promise<void>;
@@ -183,7 +183,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     userId: string;
     eventKey: string;
     characters: number;
-  }, signal?: AbortSignal) => Promise<{ allowed: boolean }>;
+  }, signal?: AbortSignal) => Promise<{ allowed: boolean; storageLimit?: string }>;
   acquireProviderCapacity?: (input: {
     providerRef: string;
     characters: number;
@@ -586,7 +586,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       characters: segment.text.length,
     }, input.signal) : { allowed: true };
     if (!usage.allowed) {
-      await input.onUsageDenied?.();
+      await input.onUsageDenied?.('storageLimit' in usage ? usage.storageLimit : undefined);
       stopScheduling = true;
       return null;
     }

@@ -7,6 +7,11 @@ import { deletePrefix } from '../../src/storage/prefix-cleanup';
 
 const documentId = 'a'.repeat(64);
 const otherDocumentId = 'b'.repeat(64);
+const measurements = vi.hoisted(() => ({ measure: vi.fn(async () => undefined), scopes: [] as string[] }));
+vi.mock('../../src/storage/audio-usage', () => ({ createDocumentAudioReporter: (input: { documentId: string }) => {
+  measurements.scopes.push(input.documentId);
+  return { measure: measurements.measure };
+} }));
 
 function setup(objects: StoredObjectSummary[] = []) {
   const deleted: string[] = [];
@@ -31,6 +36,18 @@ function setup(objects: StoredObjectSummary[] = []) {
 }
 
 describe('durable maintenance execution', () => {
+  test('backfills discovered audio and repairs ledger-only documents through the worker', async () => {
+    measurements.scopes.length = 0;
+    const { run, step } = setup([{ key: `test/tts_playback_segments_audio_v1/users/reader/docs/${documentId}/1/hash/segment.mp3`, size: 10, lastModifiedMs: 1 }]);
+    step.mockImplementation(async (body) => {
+      if (body.action === 'storage-users') return { userIds: body.after ? [] : ['reader'] };
+      if (body.action === 'storage-documents') return { documentIds: [otherDocumentId] };
+      throw new Error('Unexpected database step');
+    });
+    expect(await run({ task: 'repair-storage-usage', runId: 'repair', activeSince: 0 }, 0)).toMatchObject({ completed: 1, failed: 0 });
+    expect(measurements.scopes.sort()).toEqual([documentId, otherDocumentId].sort());
+    expect(measurements.measure).toHaveBeenCalledWith(true, true);
+  });
   test('deletes storage before SQL completion and publishes progress for a whole selected batch', async () => {
     const { run, step, cleanup, progress } = setup();
     const result = await run({ task: 'delete-users', runId: 'run', userIds: ['u1', 'u2'] }, 0, { onProgress: progress });

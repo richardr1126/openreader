@@ -1,4 +1,5 @@
 'use client';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
@@ -111,7 +112,7 @@ export function UploadMenuDialog({
     } catch (err) {
       if (isAbortError(err)) return;
       console.error('Failed to create document:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to create document');
+      toast.error(<StorageLimitMessage message={err instanceof Error ? err.message : 'Failed to create document'} />);
     } finally {
       setIsCreatingDoc(false);
     }
@@ -148,7 +149,7 @@ export function UploadMenuDialog({
         err instanceof Error ? err.message : 'An error occurred during import';
       setImportError(message);
       setImportStep('error');
-      toast.error(message);
+      toast.error(<StorageLimitMessage message={message} />);
     }
   };
 
@@ -330,7 +331,7 @@ export function UploadMenuDialog({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold">Import Failed</p>
                       <p className="text-xs mt-1 text-danger-strong overflow-hidden text-ellipsis leading-relaxed">
-                        {importError || 'An unknown error occurred.'}
+                        <StorageLimitMessage message={importError || 'An unknown error occurred.'} />
                       </p>
                       <button
                         onClick={() => setImportStep('idle')}

@@ -94,7 +94,7 @@ function TtsUsageCard() {
               </div>
             </div>
           ) : (
-            <p className="mt-3 text-xs text-soft">No generation limit.</p>
+            <p className="mt-3 text-xs text-soft">No daily character limit.</p>
           )}
         </div>
       </div>

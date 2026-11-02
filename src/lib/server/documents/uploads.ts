@@ -16,6 +16,8 @@ import { buildDocxConversionRequest, headTempUploadForConversion } from './docx-
 import type { DocumentCaller } from './request';
 import type { BaseDocument } from '@/types/documents';
 import { normalizeAuthor, normalizeLanguage } from './import-metadata';
+import { assertStorageAvailable } from '@/lib/server/storage/usage';
+import { consumeDocumentIntake } from './intake';
 
 type UploadReceipt = { upload: FinalizeUpload; createdAt: number; size: number; requested: boolean } | { stored: BaseDocument };
 
@@ -36,16 +38,19 @@ async function saveReceipt(caller: DocumentCaller, id: string, value: UploadRece
   await putTempDocumentFinalizeReceipt(id, caller.principal.userId, null, Buffer.from(JSON.stringify(value)));
 }
 
-export async function prepareDocumentUpload(caller: DocumentCaller, body: Record<string, unknown>): Promise<PreparedDocumentUpload> {
+export async function prepareDocumentUpload(caller: DocumentCaller, body: Record<string, unknown>, intakeCharged = false): Promise<PreparedDocumentUpload> {
   if (typeof body.name !== 'string' || !body.name.trim()) throw new ApiRequestError(400, 'REQUEST_INVALID', 'name is required.');
   const name = safeDocumentName(body.name.trim(), 'document.txt');
   if (!/\.(pdf|epub|docx|txt|md|markdown|mdown|mkd|html|htm)$/i.test(name)) throw new ApiRequestError(415, 'FILE_TYPE_UNSUPPORTED', 'Unsupported document type.');
   const size = body.size;
   if (typeof size !== 'number' || !Number.isSafeInteger(size) || size <= 0) throw new ApiRequestError(400, 'REQUEST_INVALID', 'size must be a positive integer.');
-  const { maxUploadMb } = await getResolvedRuntimeConfig();
+  const config = await getResolvedRuntimeConfig();
+  const { maxUploadMb } = config;
   if (size > maxUploadMb * 1024 * 1024) throw new ApiRequestError(413, 'UPLOAD_TOO_LARGE', 'Upload exceeds the configured maximum size.');
   const contentType = documentContentType(name);
   const id = randomUUID();
+  await assertStorageAvailable(caller.subject, size, config);
+  if (!intakeCharged) await consumeDocumentIntake(caller.subject, id);
   const value: UploadReceipt = { createdAt: Date.now(), size, requested: false, upload: {
     token: id, name, type: toDocumentTypeFromName(name),
     lastModified: typeof body.lastModified === 'number' && Number.isSafeInteger(body.lastModified) && body.lastModified > 0 ? body.lastModified : Date.now(),
@@ -138,8 +143,8 @@ export async function submitDocumentUpload(caller: DocumentCaller, id: string, f
   return readDocumentUpload(caller, id);
 }
 
-export async function stageDocumentUpload(caller: DocumentCaller, body: Buffer, metadata: Record<string, unknown>): Promise<string> {
-  const prepared = await prepareDocumentUpload(caller, { ...metadata, size: body.byteLength });
+export async function stageDocumentUpload(caller: DocumentCaller, body: Buffer, metadata: Record<string, unknown>, intakeCharged = false): Promise<string> {
+  const prepared = await prepareDocumentUpload(caller, { ...metadata, size: body.byteLength }, intakeCharged);
   await putTempDocumentBlob(prepared.id, caller.principal.userId, body, documentContentType(String(metadata.name)), null);
   return prepared.id;
 }

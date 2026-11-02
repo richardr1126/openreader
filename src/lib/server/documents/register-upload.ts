@@ -7,6 +7,7 @@ import {
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import type { BaseDocument, DocumentType } from '@/types/documents';
+import { withStorageRegistration } from '@/lib/server/storage/usage';
 
 type RegisterUploadedDocumentInput = {
   documentId: string;
@@ -41,7 +42,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
     });
   }
 
-  const [storedDocument] = await db
+  const [storedDocument] = await withStorageRegistration(input, async (connection) => connection
     .insert(documents)
     .values({
       id: input.documentId,
@@ -68,7 +69,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
         ...(input.language ? { language: input.language } : {}),
       },
     })
-    .returning({ folderId: documents.folderId, author: documents.author, language: documents.language });
+    .returning({ folderId: documents.folderId, author: documents.author, language: documents.language }));
 
   const enqueuePreview = async () => {
     await enqueueDocumentPreview(

@@ -10,7 +10,7 @@ vi.mock('@/lib/server/documents/blobstore', () => ({
   putTempDocumentBlob: mock.put, presignTempPut: mock.presign,
 }));
 vi.mock('@/lib/server/storage/s3', () => ({ getBrowserStorageTransport: () => mock.transport }));
-vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ maxUploadMb: 1 }) }));
+vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ maxUploadMb: 1, computeLimitPolicies: { actions: { document_intake: { enabled: false } } } }) }));
 import { prepareDocumentUpload, receiveDocumentUpload } from '@/lib/server/documents/uploads';
 
 const caller = { principal: { userId: 'owner', isAnonymous: false, scopes: ['documents:write'] }, subject: { userId: 'owner', isAnonymous: false }, schedule: () => undefined } as DocumentCaller;

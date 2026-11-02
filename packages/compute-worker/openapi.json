@@ -734,7 +734,8 @@
                       "expire-anonymous-users",
                       "reap-orphaned-blobs",
                       "cleanup-temp-uploads",
-                      "retry-storage-cleanups"
+                      "retry-storage-cleanups",
+                      "repair-storage-usage"
                     ]
                   },
                   "runId": {
@@ -1325,7 +1326,8 @@
                           "expire-anonymous-users",
                           "reap-orphaned-blobs",
                           "cleanup-temp-uploads",
-                          "retry-storage-cleanups"
+                          "retry-storage-cleanups",
+                          "repair-storage-usage"
                         ]
                       },
                       "runId": {
@@ -1933,7 +1935,8 @@
                           "expire-anonymous-users",
                           "reap-orphaned-blobs",
                           "cleanup-temp-uploads",
-                          "retry-storage-cleanups"
+                          "retry-storage-cleanups",
+                          "repair-storage-usage"
                         ]
                       },
                       "runId": {
@@ -2641,7 +2644,8 @@
                           "expire-anonymous-users",
                           "reap-orphaned-blobs",
                           "cleanup-temp-uploads",
-                          "retry-storage-cleanups"
+                          "retry-storage-cleanups",
+                          "repair-storage-usage"
                         ]
                       },
                       "runId": {
@@ -3333,7 +3337,8 @@
                           "expire-anonymous-users",
                           "reap-orphaned-blobs",
                           "cleanup-temp-uploads",
-                          "retry-storage-cleanups"
+                          "retry-storage-cleanups",
+                          "repair-storage-usage"
                         ]
                       },
                       "runId": {
@@ -4009,7 +4014,8 @@
                           "expire-anonymous-users",
                           "reap-orphaned-blobs",
                           "cleanup-temp-uploads",
-                          "retry-storage-cleanups"
+                          "retry-storage-cleanups",
+                          "repair-storage-usage"
                         ]
                       },
                       "runId": {
@@ -4680,7 +4686,8 @@
                           "expire-anonymous-users",
                           "reap-orphaned-blobs",
                           "cleanup-temp-uploads",
-                          "retry-storage-cleanups"
+                          "retry-storage-cleanups",
+                          "repair-storage-usage"
                         ]
                       },
                       "runId": {
@@ -5850,7 +5857,8 @@
                                     "expire-anonymous-users",
                                     "reap-orphaned-blobs",
                                     "cleanup-temp-uploads",
-                                    "retry-storage-cleanups"
+                                    "retry-storage-cleanups",
+                                    "repair-storage-usage"
                                   ]
                                 },
                                 "runId": {
@@ -8021,7 +8029,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -8701,7 +8710,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -9373,7 +9383,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -10149,7 +10160,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -10881,7 +10893,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -11614,7 +11627,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -12523,7 +12537,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -13261,7 +13276,8 @@
                                     "expire-anonymous-users",
                                     "reap-orphaned-blobs",
                                     "cleanup-temp-uploads",
-                                    "retry-storage-cleanups"
+                                    "retry-storage-cleanups",
+                                    "repair-storage-usage"
                                   ]
                                 },
                                 "runId": {
@@ -13934,7 +13950,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -14599,7 +14616,8 @@
                                     "expire-anonymous-users",
                                     "reap-orphaned-blobs",
                                     "cleanup-temp-uploads",
-                                    "retry-storage-cleanups"
+                                    "retry-storage-cleanups",
+                                    "repair-storage-usage"
                                   ]
                                 },
                                 "runId": {
@@ -15297,7 +15315,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -15961,7 +15980,8 @@
                       "expire-anonymous-users",
                       "reap-orphaned-blobs",
                       "cleanup-temp-uploads",
-                      "retry-storage-cleanups"
+                      "retry-storage-cleanups",
+                      "repair-storage-usage"
                     ]
                   },
                   "userIds": {
@@ -15976,6 +15996,11 @@
                   "idleBefore": {
                     "type": "integer",
                     "exclusiveMinimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  "activeSince": {
+                    "type": "integer",
+                    "minimum": 0,
                     "maximum": 9007199254740991
                   }
                 },
@@ -16017,7 +16042,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -16725,7 +16751,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {
@@ -17514,7 +17541,8 @@
                                     "expire-anonymous-users",
                                     "reap-orphaned-blobs",
                                     "cleanup-temp-uploads",
-                                    "retry-storage-cleanups"
+                                    "retry-storage-cleanups",
+                                    "repair-storage-usage"
                                   ]
                                 },
                                 "runId": {
@@ -18187,7 +18215,8 @@
                                     "expire-anonymous-users",
                                     "reap-orphaned-blobs",
                                     "cleanup-temp-uploads",
-                                    "retry-storage-cleanups"
+                                    "retry-storage-cleanups",
+                                    "repair-storage-usage"
                                   ]
                                 },
                                 "runId": {
@@ -18969,7 +18998,8 @@
                                     "expire-anonymous-users",
                                     "reap-orphaned-blobs",
                                     "cleanup-temp-uploads",
-                                    "retry-storage-cleanups"
+                                    "retry-storage-cleanups",
+                                    "repair-storage-usage"
                                   ]
                                 },
                                 "runId": {
@@ -19732,7 +19762,8 @@
                                     "expire-anonymous-users",
                                     "reap-orphaned-blobs",
                                     "cleanup-temp-uploads",
-                                    "retry-storage-cleanups"
+                                    "retry-storage-cleanups",
+                                    "repair-storage-usage"
                                   ]
                                 },
                                 "runId": {
@@ -20368,7 +20399,8 @@
                                 "expire-anonymous-users",
                                 "reap-orphaned-blobs",
                                 "cleanup-temp-uploads",
-                                "retry-storage-cleanups"
+                                "retry-storage-cleanups",
+                                "repair-storage-usage"
                               ]
                             },
                             "runId": {

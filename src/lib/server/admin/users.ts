@@ -1,10 +1,11 @@
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, like, lt, max, notExists, or, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { runInDbTransaction } from '@openreader/database/run-in-transaction';
-import { computeLimitEvents, documents } from '@openreader/database/schema';
+import { computeLimitEvents } from '@openreader/database/schema';
 import * as authSchemaSqlite from '@openreader/database/schema-auth-sqlite';
 import * as authSchemaPostgres from '@openreader/database/schema-auth-postgres';
 import { deleteUserDatabaseData } from '@/lib/server/user/data-cleanup';
+import { getStorageUsage } from '@/lib/server/storage/usage';
 
 const authSchema = process.env.POSTGRES_URL ? authSchemaPostgres : authSchemaSqlite;
 const { user, session } = authSchema;
@@ -57,6 +58,8 @@ export interface AdminUserSummary {
   sessionCount: number;
   documentCount: number;
   documentBytes: number;
+  audioBytes: number;
+  storageBytes: number;
   usage: {
     ttsCharacters: number;
     inputBytes: number;
@@ -140,14 +143,10 @@ export async function listAdminUsers(input: {
   ]) as [Array<{ value: number }>, Array<Record<string, unknown>>, Array<Record<string, unknown>>];
 
   const ids = rawUsers.map((entry) => String(entry.id));
-  const [documentRows, sessionRows, usageRows] = ids.length === 0
-    ? [[], [], []]
+  const storageByUser = await getStorageUsage(ids);
+  const [sessionRows, usageRows] = ids.length === 0
+    ? [[], []]
     : await Promise.all([
-      database.select({
-        userId: documents.userId,
-        documentCount: count(),
-        documentBytes: sql<number>`coalesce(sum(${documents.size}), 0)`,
-      }).from(documents).where(inArray(documents.userId, ids)).groupBy(documents.userId),
       database.select({
         userId: session.userId,
         sessionCount: count(),
@@ -159,9 +158,8 @@ export async function listAdminUsers(input: {
         units: sql<number>`coalesce(sum(${computeLimitEvents.units}), 0)`,
       }).from(computeLimitEvents).where(inArray(computeLimitEvents.userId, ids))
         .groupBy(computeLimitEvents.userId, computeLimitEvents.metric),
-    ]) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>, Array<Record<string, unknown>>];
+    ]) as [Array<Record<string, unknown>>, Array<Record<string, unknown>>];
 
-  const documentsByUser = new Map(documentRows.map((row) => [String(row.userId), row]));
   const sessionsByUser = new Map(sessionRows.map((row) => [String(row.userId), row]));
   const usageByUser = new Map<string, AdminUserSummary['usage']>();
   for (const row of usageRows) {
@@ -187,7 +185,7 @@ export async function listAdminUsers(input: {
   return {
     users: rawUsers.map((row) => {
       const id = String(row.id);
-      const document = documentsByUser.get(id);
+      const document = storageByUser.get(id);
       const activeSession = sessionsByUser.get(id);
       return {
         id,
@@ -205,6 +203,8 @@ export async function listAdminUsers(input: {
         sessionCount: numeric(activeSession?.sessionCount),
         documentCount: numeric(document?.documentCount),
         documentBytes: numeric(document?.documentBytes),
+        audioBytes: numeric(document?.audioBytes),
+        storageBytes: numeric(document?.totalBytes),
         usage: usageByUser.get(id) ?? { ttsCharacters: 0, inputBytes: 0, files: 0 },
       };
     }),

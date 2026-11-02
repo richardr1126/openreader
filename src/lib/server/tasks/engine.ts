@@ -137,7 +137,7 @@ function taskTimeoutError(key: string, maxRunMs: number): Error {
 async function reconcileMaintenanceTasks(): Promise<void> {
   const rows = await db.select().from(scheduledTasks).where(eq(scheduledTasks.lastStatus, 'running')) as Array<typeof scheduledTasks.$inferSelect>;
   await Promise.all(rows.map(async (row) => {
-    const { operationId } = decodeStoredResult(row.lastResultJson);
+    const { operationId, cursor } = decodeStoredResult(row.lastResultJson);
     if (!operationId || !row.leaseOwner) return;
     try {
       const operation = await getComputeWorkerClient().getOperation<MaintenanceResult>(operationId, { signal: AbortSignal.timeout(10_000) });
@@ -151,7 +151,7 @@ async function reconcileMaintenanceTasks(): Promise<void> {
       }
       const result = operation?.result;
       await finishTask(row.key, row.leaseOwner, operation?.status === 'succeeded' && result && result.failed === 0
-        ? { status: 'ok', startedAt: operation.queuedAt, summary: result.summary, cursor: null }
+        ? { status: 'ok', startedAt: operation.queuedAt, summary: result.summary, cursor }
         : { status: 'error', startedAt: operation?.queuedAt ?? Number(row.runningSince ?? row.updatedAt), error: result?.summary ?? operation?.error?.message ?? 'Maintenance operation expired; run the task again', cursor: null },
       operation?.updatedAt ?? Date.now());
     } catch (error) {
@@ -191,7 +191,7 @@ async function executeTask(key: string, def: TaskDef, leaseOwner: string): Promi
     const summary = result && typeof result.summary === 'string' ? result.summary : null;
     if (result?.operationId) {
       await db.update(scheduledTasks).set({
-        lastResultJson: encodeStoredResult(summary, null, result.operationId),
+        lastResultJson: encodeStoredResult(summary, result.cursor ?? cursor, result.operationId),
         lastError: null, updatedAt: Date.now(),
       }).where(and(eq(scheduledTasks.key, key), eq(scheduledTasks.leaseOwner, leaseOwner)));
       return;

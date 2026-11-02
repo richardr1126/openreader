@@ -133,7 +133,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-11-01 the expected clean result is 1713 Vitest tests and 85 local
+- As of 2026-11-02 the expected clean result is 1733 Vitest tests and 89 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.
@@ -238,8 +238,10 @@ caused conflicts, high CPU, misleading failures, and overheating.
 ## Current State
 
 - Public API progress on `refactor/public-api` is tracked in `v5/API_REFACTOR.md`.
-  Phase 4.6 implements creation caps and IP privacy with migration 0029; phase 4.7
-  is next. Phase 4.8 is deferred to separate UX work. Phase 5 has not started.
+  Phases 4.6 and 4.7 implement creation caps/IP privacy (migration 0029) and
+  storage accounting/caps/daily intake (migration 0030). Run Repair storage usage
+  after upgrading to backfill existing audio before enabling storage caps.
+  Phase 4.8 is deferred to separate UX work. Phase 5 has not started.
 - Migration 0028 was rewritten in place during phase 4.5 and has never shipped. A
   local database that ran the earlier version must be reset.
 - Open follow-ups for the owner: whether the full Compose files should require

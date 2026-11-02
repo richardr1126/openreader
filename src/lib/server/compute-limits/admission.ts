@@ -137,7 +137,7 @@ async function reconcileExpiredAdmissions(
 }
 
 export async function reconcileExpiredComputeAdmissions(
-  action: Exclude<ComputeAction, 'tts_synthesis'>,
+  action: Exclude<ComputeAction, 'tts_synthesis' | 'document_intake'>,
   nowMs = Date.now(),
 ): Promise<void> {
   await runInDbTransaction((conn) => reconcileExpiredAdmissions(conn, action, nowMs));
@@ -167,7 +167,7 @@ async function existingAdmission(
 
 export async function reserveComputeAdmission(input: {
   policy: ComputeLimitPolicyDocument;
-  action: Exclude<ComputeAction, 'tts_synthesis'>;
+  action: Exclude<ComputeAction, 'tts_synthesis' | 'document_intake'>;
   requestKey: string;
   subject: ComputeLimitSubject;
   nowMs?: number;

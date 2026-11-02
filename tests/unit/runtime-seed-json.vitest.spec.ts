@@ -360,6 +360,7 @@ describe('runtime config JSON seeding', () => {
       ttsUpstreamTimeoutMs: 120_000,
       computeLimitPolicies: cloneComputeLimitPolicyDocument(),
       maxUploadMb: 150,
+      limitAccountStorage: false, accountStorageMb: 10240, limitGuestStorage: false, guestStorageMb: 1024, limitGuestStoragePool: false, guestStoragePoolMb: 10240,
       ttsPlaybackBackgroundExtent: 'document',
     };
     try {

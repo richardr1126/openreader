@@ -116,6 +116,12 @@ export const RUNTIME_CONFIG_SCHEMA = {
   computeLimitPolicies: computeLimitPoliciesValue(),
   // Maximum size (MB) accepted for a single document upload.
   maxUploadMb: positiveIntValue(200),
+  limitAccountStorage: runtimeBoolean(false),
+  accountStorageMb: positiveIntValue(10_240),
+  limitGuestStorage: runtimeBoolean(false),
+  guestStorageMb: positiveIntValue(1_024),
+  limitGuestStoragePool: runtimeBoolean(false),
+  guestStoragePoolMb: positiveIntValue(10_240),
   // How far ahead the worker generates a background ("disconnected") TTS playback
   // session. 'section' = just the current PDF page / EPUB chapter; 'document' =
   // the whole document from the current position onward, so background playback

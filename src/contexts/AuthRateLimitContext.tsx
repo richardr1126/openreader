@@ -7,6 +7,7 @@ import { queryKeys } from '@/lib/client/query-keys';
 import { getAuthClient } from '@/lib/client/auth-client';
 
 export interface RateLimitStatus {
+  storageLimit?: string;
   allowed: boolean;
   currentCount: number;
   limit: number | null;
@@ -88,6 +89,7 @@ function parseRateLimitStatus(raw: unknown): RateLimitStatus | null {
     resetTimeMs: coerceTimestampMs(data.resetTimeMs ?? data.resetTime, nextUtcMidnightTimestampMs()),
     userType,
     enabled: data.enabled === true,
+    ...(typeof data.storageLimit === 'string' ? { storageLimit: data.storageLimit } : {}),
   };
 }
 
@@ -163,8 +165,8 @@ export function AuthRateLimitProvider({
   }, [refetch]);
 
   const timeUntilReset = status ? calculateTimeUntilReset(status.resetTimeMs) : '';
-  const isAtLimit = status?.enabled === true
-    && ((status.remainingChars !== null && status.remainingChars <= 0) || !status.allowed);
+  const isAtLimit = Boolean(status?.storageLimit) || (status?.enabled === true
+    && ((status.remainingChars !== null && status.remainingChars <= 0) || !status.allowed));
 
   const contextValue: AuthRateLimitContextType = {
     authBaseUrl,

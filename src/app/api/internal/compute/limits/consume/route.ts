@@ -13,6 +13,7 @@ import {
   touchComputeAdmission,
 } from '@/lib/server/compute-limits/admission';
 import { consumeComputeUsage } from '@/lib/server/compute-limits/usage';
+import { storageLimit } from '@/lib/server/storage/usage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -76,6 +77,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ].admission.active.map((limit) => limit.leaseSeconds),
   );
   await touchComputeAdmission({ admissionId: admission.id, leaseSeconds, nowMs });
+  const blockedStorage = await storageLimit({ userId: admission.userId, isAnonymous: Boolean(admission.isAnonymous) }, 0, runtimeConfig);
+  if (blockedStorage) return NextResponse.json({ allowed: false, charged: false, idempotent: false, retryAfterMs: 0, usage: null,
+    storageLimit: blockedStorage.code } satisfies TtsSynthesisConsumeResponse, { headers: NO_STORE_HEADERS });
   const decision = await consumeComputeUsage({
     policy: runtimeConfig.computeLimitPolicies,
     action: 'tts_synthesis',

@@ -306,6 +306,7 @@ describe('server-state architecture', () => {
       '/api/internal/compute/limits/consume',
       '/api/internal/compute/limits/policy',
       '/api/internal/compute/maintenance',
+      '/api/internal/compute/storage',
       '/api/internal/compute/tts-credentials',
       '/api/local-library',
       '/api/local-library/content',

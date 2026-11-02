@@ -9,12 +9,13 @@ export type DocumentStorageUsage = {
 };
 
 export type LibraryStorageUsage = {
+  documentBytes: number;
+  totalBytes: number;
+  capBytes: number | null;
   audioBytes: number;
   orphanedAudioBytes: number;
   orphanedDocumentCount: number;
-  documentDataBytes: number;
   documentCount: number;
-  truncated: boolean;
 };
 
 export type DocumentAudioReclaimResult = {

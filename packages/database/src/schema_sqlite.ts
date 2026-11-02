@@ -110,6 +110,19 @@ export const userPreferences = sqliteTable('user_preferences', {
   updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 });
 
+// Zero-byte rows retain the revision fence after audio deletion.
+export const documentAudioUsage = sqliteTable('document_audio_usage', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  audioBytes: integer('audio_bytes').notNull().default(0),
+  revision: integer('revision').notNull().default(0),
+  clearLeaseUntil: integer('clear_lease_until').notNull().default(0),
+  measuredAt: integer('measured_at').notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.documentId] }),
+  check('document_audio_usage_nonnegative', sql`${table.audioBytes} >= 0`),
+]);
+
 export const userOnboarding = sqliteTable('user_onboarding', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   privacyAcceptedAtMs: integer('privacy_accepted_at_ms'),

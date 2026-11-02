@@ -273,9 +273,10 @@ export const userStorageUsageResponseSchema = z.object({
 
 export const maintenanceOperationCreateSchema = z.object({
   runId: z.string().uuid(),
-  task: z.enum(['delete-users', 'expire-anonymous-users', 'reap-orphaned-blobs', 'cleanup-temp-uploads', 'retry-storage-cleanups']),
+  task: z.enum(['delete-users', 'expire-anonymous-users', 'reap-orphaned-blobs', 'cleanup-temp-uploads', 'retry-storage-cleanups', 'repair-storage-usage']),
   userIds: z.array(z.string().min(1).max(256)).max(100).optional(),
   idleBefore: z.number().int().positive().optional(),
+  activeSince: z.number().int().nonnegative().optional(),
 }).strict().refine((body) => body.task !== 'expire-anonymous-users' || body.idleBefore !== undefined, {
   // Without a cutoff the claim only finds already-marked accounts.
   message: 'idleBefore is required for expire-anonymous-users',

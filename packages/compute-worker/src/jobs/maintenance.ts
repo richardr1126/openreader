@@ -3,6 +3,9 @@ import type { ArtifactStorage } from '../infrastructure/storage';
 import type { MaintenanceJobRequest, MaintenanceJobResult, MaintenanceProgress } from '../operations/contracts';
 import { expireArtifactFoldersUnderRoot } from '../storage/artifact-retention';
 import { clearDocumentPreviewArtifacts, clearPdfLayoutArtifacts, clearTtsPlaybackPlanArtifacts, listDocumentDerivedIds } from '../storage/document-derived-cleanup';
+import { createDocumentAudioReporter } from '../storage/audio-usage';
+import { ttsPlaybackExportArtifactScopePrefix } from '../storage/artifact-addressing';
+import { storageUserHash } from '../storage/prefix-cleanup';
 import type { registerCleanupRoutes } from '../api/routes/cleanup';
 
 type CleanupRow = { id: string; userId: string; documentId: string | null; notBeforeMs: number; attempts: number };
@@ -50,6 +53,37 @@ export function createMaintenanceHandler(input: {
       }
     };
     await report('Starting');
+
+    if (request.task === 'repair-storage-usage') {
+      let after: string | null = null;
+      for (;;) {
+        const page: { userIds: string[] } = await database({ action: 'storage-users', after, activeSince: request.activeSince ?? 0 });
+        if (!page.userIds.length) break;
+        for (const userId of page.userIds) {
+          const documentIds = new Set<string>();
+          for (;;) {
+            const known: { documentIds: string[] } = await database({ action: 'storage-documents', userId, after: [...documentIds].at(-1) ?? null });
+            for (const id of known.documentIds) documentIds.add(id);
+            if (known.documentIds.length < 200) break;
+          }
+          for (const root of [
+            `${s3Prefix}/tts_playback_segments_audio_v1/users/${encodeURIComponent(userId)}/docs/`,
+            `${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(userId)}/docs/`,
+            `${ttsPlaybackExportArtifactScopePrefix({ storageUserId: userId, prefix: s3Prefix })}docs/`,
+          ]) for await (const objects of storage.listPrefixPages(root)) for (const object of objects) {
+            const id = object.key.slice(root.length).split('/')[0];
+            if (/^[a-f0-9]{64}$/i.test(id)) documentIds.add(id);
+          }
+          for (const documentId of documentIds) {
+            await createDocumentAudioReporter({ storage, s3Prefix, storageUserId: userId, documentId, logger: input.logger }).measure(true, true);
+          }
+          completed++;
+          await report('Measuring audio');
+        }
+        after = page.userIds.at(-1)!;
+      }
+      return { summary: `Repaired storage usage for ${completed} user(s)`, completed, failed };
+    }
 
     const deleteAccounts = async (claim: boolean) => {
       let after: string | null = null;

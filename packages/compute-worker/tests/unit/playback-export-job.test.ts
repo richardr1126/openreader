@@ -9,6 +9,8 @@ const { getCbrSilenceSecond } = vi.hoisted(() => ({
   getCbrSilenceSecond: vi.fn(async () => Buffer.from('pause')),
 }));
 
+vi.mock('../../src/storage/audio-usage', () => ({ createDocumentAudioReporter: () => ({ measure: async () => undefined }) }));
+
 vi.mock('@openreader/tts/audio-format', () => ({ getCbrSilenceSecond }));
 
 class MemoryStorage implements ArtifactStorage {

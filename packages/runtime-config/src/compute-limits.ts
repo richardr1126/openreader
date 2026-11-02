@@ -8,12 +8,13 @@ export const COMPUTE_ACTIONS = [
   'document_conversion',
   'account_export',
   'tts_synthesis',
+  'document_intake',
 ] as const;
 
 export type ComputeAction = typeof COMPUTE_ACTIONS[number];
 /** Actions introduced after policy schema 2 shipped; saved policies may omit them. */
-const ADDITIVE_COMPUTE_ACTIONS: readonly ComputeAction[] = ['tts_playback_document'];
-export type WorkerOperationAction = Exclude<ComputeAction, 'tts_synthesis'>;
+const ADDITIVE_COMPUTE_ACTIONS: readonly ComputeAction[] = ['tts_playback_document', 'document_intake'];
+export type WorkerOperationAction = Exclude<ComputeAction, 'tts_synthesis' | 'document_intake'>;
 export type ComputeLimitScope = 'user' | 'site';
 export type ComputeLimitAudience = 'anonymous' | 'authenticated' | 'all';
 export type ComputeUsageMetric = 'starts' | 'characters' | 'input_bytes' | 'files';
@@ -191,6 +192,14 @@ export const DEFAULT_COMPUTE_LIMIT_POLICIES: ComputeLimitPolicyDocument = {
         { scope: 'user', audience: 'authenticated', metric: 'characters', window: 'utc_day', limit: 500_000, boundary: 'soft_unit' },
       ],
     },
+    document_intake: {
+      enabled: false,
+      admission: { windows: [], active: [] },
+      usage: [
+        { scope: 'user', audience: 'anonymous', metric: 'files', window: 'utc_day', limit: 10, boundary: 'strict' },
+        { scope: 'user', audience: 'authenticated', metric: 'files', window: 'utc_day', limit: 100, boundary: 'strict' },
+      ],
+    },
   },
   worker: {
     maxExecutingPerWorker: 3,
@@ -284,7 +293,7 @@ function parseExecution(value: unknown): ComputeExecutionPolicy | null {
 }
 
 function parseActionPolicy(action: ComputeAction, value: unknown): ComputeActionPolicy | null {
-  if (!isRecord(value) || !hasExactKeys(value, action === 'tts_synthesis'
+  if (!isRecord(value) || !hasExactKeys(value, action === 'tts_synthesis' || action === 'document_intake'
     ? ['enabled', 'admission', 'usage']
     : ['enabled', 'admission', 'usage', 'execution'])) return null;
   if (typeof value.enabled !== 'boolean' || !isRecord(value.admission)
@@ -299,9 +308,11 @@ function parseActionPolicy(action: ComputeAction, value: unknown): ComputeAction
   const active = value.admission.active.map(parseActiveLimit);
   const usage = value.usage.filter(retained).map(parseUsageLimit);
   if (windows.some((entry) => !entry) || active.some((entry) => !entry) || usage.some((entry) => !entry)) return null;
-  if (action === 'tts_synthesis') {
+  if (action === 'tts_synthesis' || action === 'document_intake') {
     if (windows.length > 0 || active.length > 0
-      || usage.some((entry) => entry?.metric !== 'characters' || entry.boundary !== 'soft_unit')) return null;
+      || usage.some((entry) => action === 'tts_synthesis'
+        ? entry?.metric !== 'characters' || entry.boundary !== 'soft_unit'
+        : entry?.metric !== 'files' || entry.boundary !== 'strict')) return null;
     return {
       enabled: value.enabled,
       admission: { windows: [], active: [] },

@@ -1,7 +1,7 @@
 # Public API refactor
 
-Status: accepted; phases 1–4.6 are implemented. Phase 4.7 is next; phase 4.8 is
-deferred to separate UX work. Phases 5–6 remain planned.
+Status: accepted; phases 1–4.7 are implemented. Phase 4.8 is deferred to separate
+UX work. Phases 5–6 remain planned.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -947,4 +947,88 @@ Acceptance evidence (2026-11-02):
 Migration 0029 remains an owner-coordinated production upgrade. No production
 migration, deployment, version bump, tag or push was performed. Phase 4.8 is
 deferred at the owner's request; phase 5 has not started.
+
+### Phase 4.7: Storage and intake
+
+Migration 0030 adds `document_audio_usage`, one user/document row for segment
+audio, timing sidecars and exports. A single SQL aggregation supplies source
+document bytes, audio bytes and their total to storage settings, the admin user
+directory and caps. Shared derived artifacts are excluded. Library-wide scans
+and their summary helpers are removed; document settings and scoped audio
+deletion retain their one-document breakdown scans. Orphaned audio stays charged
+until cleanup removes it; zero-byte rows preserve the deletion fence.
+
+The worker measures the affected document during generation, at run completion
+and after audio deletion. Reports use the existing credential broker token at
+`/api/internal/compute/storage`. The app issues revisions before measurement;
+clearing takes a short lease and a newer revision before deleting objects.
+Older reports cannot overwrite the cleared total, and report updates cannot
+recreate a deleted user or usage row. The worker scans paged listings in bounded
+memory and never queries SQL. Settings pages only read SQL.
+
+Repair storage usage is a durable scheduled worker task. Its first run backfills
+all existing users; later runs repair users with account, session, document or
+audio activity in the last seven days. It discovers stored audio and includes
+ledger-only scopes so missing objects are repaired to zero. Successful worker
+completion now retains the scheduled cursor; failed repair starts a full pass
+again. No new polling loop is added to the reader.
+
+Storage caps are separate for accounts, guests and the shared guest pool. All
+default off; enabling reveals 10,240 MB/account, 1,024 MB/guest or 10,240 MB for
+the pool. Upload preparation checks the projected total. Registration checks
+again in a transaction, with a user row lock and a separate PostgreSQL advisory
+lock for the guest pool; SQLite serializes through BEGIN IMMEDIATE. This prevents
+concurrent prepared uploads from bypassing the cap.
+
+Uncached synthesis checks storage at the character-charge boundary even when
+daily character limits are disabled. Periodic measurements and in-flight
+segments mean audio can cross the byte threshold before stopping in the existing
+usage-limited state. Cached playback remains available. The stored limit reason
+reaches audiobook status and the existing quota banner. Blocked upload/import
+and generation views link to Storage, and guests can create an account when
+sign-ups are open. Both audio cleanup views refresh storage and quota state.
+
+`document_intake` is an additive, app-owned UTC-day file allowance with no worker
+execution block. It defaults off with 10 files/guest and 100 files/account ready
+to enable. File preparation, text and URL imports count once, including failed
+imports. URL and Gutenberg imports charge before fetching; staging does not
+charge them again. Existing upload status/finalization reads do not consume
+another file. The new controls follow the opt-in pattern and stay hidden on
+desktop or when their parent feature is off.
+
+Acceptance evidence (2026-11-02):
+
+- A disposable local stack visibly verified the storage breakdown and unsaved
+  cap/file defaults. With a 1 MB guest cap and character limits off, a real
+  24-segment export paused at 8/24 with a guest-storage message and working
+  Storage/Create an account links. Its approximately 1.9 MB included segments
+  already in flight. Cached audio still played. Delete all audio left the
+  document's 4.9 KB and reported 0 B of audio. The stack was stopped.
+- Real-SQL tests cover shared totals, owner isolation, orphaned audio, concurrent
+  account/guest-pool caps, daily intake before URL fetching, idempotent charges,
+  storage enforcement with characters off, late-report fencing, account deletion,
+  broker authentication and API activity without a browser session. Worker tests
+  cover scoped measurement, sidecars/exports, clear fencing, interrupted deletion,
+  throttling and backfill discovery. Durable-task tests preserve the repair cursor.
+- A disposable PostgreSQL 16 database passed migration 0030, source/audio totals,
+  concurrent account and shared-pool cap enforcement, maintenance selection and
+  late-report fencing. Its temporary test and container were removed. SQLite and
+  PostgreSQL schema generation report no further changes.
+- Complete Vitest: 1,733 passed across 249 files. Application/worker TypeScript,
+  production build, route-error, compute-boundary and install-profile checks
+  passed. Documentation production build passed, and worker OpenAPI/types were
+  regenerated for the maintenance task.
+- The first browser matrix found a deterministic new-test locator error:
+  Chromium/WebKit expose the native summary without a button role. Its action
+  now targets the exact visible label; all value assertions remain unchanged.
+- Final complete Playwright: 89 passed in 3.2 minutes with no failures or retries,
+  including both consolidated real playback journeys. They verify positive
+  measured audio, a matching source-plus-audio total, zero audio after clearing,
+  preserved document bytes and refreshed quota state. Both browsers also cover
+  the new cap/file controls and blocked-guest Storage/Create an account links.
+  Port 3003 was free after teardown.
+
+Migration 0030 and the initial audio backfill remain owner-coordinated production
+upgrade steps. No production migration, deployment, version bump, tag or push was
+performed. Phase 4.8 remains deferred; phase 5 has not started.
 

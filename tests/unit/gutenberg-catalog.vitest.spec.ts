@@ -37,7 +37,7 @@ vi.mock('@/lib/server/documents/blobstore', () => ({ putTempDocumentBlob: mocks.
 vi.mock('@/lib/server/documents/uploads', () => ({ stageDocumentUpload: mocks.stageUpload }));
 vi.mock('@/lib/server/storage/s3', () => ({ isS3Configured: () => true }));
 vi.mock('@/lib/server/runtime-config', () => ({
-  getResolvedRuntimeConfig: async () => ({ maxUploadMb: 1 }),
+  getResolvedRuntimeConfig: async () => ({ computeLimitPolicies: { actions: { document_intake: { enabled: false } } }, maxUploadMb: 1 }),
 }));
 
 import {
@@ -282,6 +282,7 @@ describe('gutenberg import route', () => {
       expect.objectContaining({ principal: expect.objectContaining({ userId: 'user-1' }) }),
       expect.any(Buffer),
       expect.objectContaining({ name: body.name, author: 'Jane Austen', language: 'en' }),
+      true,
     );
   });
 

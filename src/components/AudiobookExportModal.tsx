@@ -1,4 +1,5 @@
 'use client';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ProgressPopup } from '@/components/ProgressPopup';
@@ -404,7 +405,7 @@ export function AudiobookExportModal({
                 />
               )}
 
-              {generationNotice && <p role="status" className="text-xs text-warning">{generationNotice}</p>}
+              {generationNotice && <p role="status" className="text-xs text-warning"><StorageLimitMessage message={generationNotice} /></p>}
               {refreshError && <div role="status" className="space-y-2 text-xs text-warning">
                 <p>{refreshError}</p>
                 <Button size="sm" variant="ghost" onClick={() => void refresh()}>Retry lookup</Button>

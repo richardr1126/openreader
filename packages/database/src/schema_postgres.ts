@@ -112,6 +112,19 @@ export const userPreferences = pgTable('user_preferences', {
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });
 
+// Zero-byte rows retain the revision fence after audio deletion.
+export const documentAudioUsage = pgTable('document_audio_usage', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  audioBytes: bigint('audio_bytes', { mode: 'number' }).notNull().default(0),
+  revision: integer('revision').notNull().default(0),
+  clearLeaseUntil: bigint('clear_lease_until', { mode: 'number' }).notNull().default(0),
+  measuredAt: bigint('measured_at', { mode: 'number' }).notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.documentId] }),
+  check('document_audio_usage_nonnegative', sql`${table.audioBytes} >= 0`),
+]);
+
 export const userOnboarding = pgTable('user_onboarding', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   privacyAcceptedAtMs: bigint('privacy_accepted_at_ms', { mode: 'number' }),

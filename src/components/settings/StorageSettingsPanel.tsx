@@ -106,7 +106,10 @@ export function StorageSettingsPanel() {
       toast.success(`${target === 'orphaned' ? 'Reclaimed' : 'Deleted'} audio for ${plural(reclaimedDocuments, 'document')}.`);
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : 'Failed to delete audio'),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.storageUsage(sessionKey) }),
+    onSettled: () => Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.storageUsage(sessionKey) }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.computeLimits(sessionKey) }),
+    ]),
   });
 
   const usage = usageQuery.data;
@@ -117,6 +120,10 @@ export function StorageSettingsPanel() {
     <section className="space-y-3" aria-label="Library storage">
       {usageQuery.isPending ? <StorageSkeleton /> : (
         <div className={CARD_CLASS}>
+          <UsageRow label="Total storage" icon={<DocumentIcon />} bytes={usage?.totalBytes}
+            detail={usage?.capBytes == null ? undefined : `of ${formatBytes(usage.capBytes)}`} />
+          <UsageRow label="Documents" icon={<DocumentIcon />} bytes={usage?.documentBytes}
+            detail={usage ? plural(usage.documentCount, 'document') : undefined} />
           <UsageRow
             label="Audio"
             icon={<AudioWaveIcon />}
@@ -150,12 +157,6 @@ export function StorageSettingsPanel() {
               </Button>
             )}
           />
-          <UsageRow
-            label="Document data"
-            icon={<DocumentIcon />}
-            bytes={usage?.documentDataBytes}
-            detail={usage ? plural(usage.documentCount, 'document') : undefined}
-          />
         </div>
       )}
       {usageQuery.isError ? (
@@ -170,9 +171,6 @@ export function StorageSettingsPanel() {
             Show data folder
           </Button>
         </div>
-      ) : null}
-      {usage?.truncated ? (
-        <p className="px-1 text-xs text-soft">Totals are partial; your library has more stored objects than one scan covers.</p>
       ) : null}
       <ConfirmDialog
         isOpen={pendingCopy !== null}

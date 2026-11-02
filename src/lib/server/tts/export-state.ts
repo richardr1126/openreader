@@ -76,7 +76,7 @@ export function classifyExportGeneration(
   switch (session.status) {
     case 'succeeded':
       return session.stopReason === 'usage_limit'
-        ? { state: 'usage_limited', issue: { code: 'COMPUTE_USAGE_LIMIT_REACHED', message: null } }
+        ? { state: 'usage_limited', issue: { code: lastError ?? 'COMPUTE_USAGE_LIMIT_REACHED', message: null } }
         : { state: 'complete', issue: null };
     case 'canceled':
       return { state: 'stopped', issue: null };

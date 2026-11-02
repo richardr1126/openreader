@@ -11,6 +11,7 @@ import { resolveAndPersistTtsPlaybackPlan } from './plan';
 import { generateExplicitTtsPlaybackSegments } from './segment-generation';
 import { ttsPlaybackRequestSchema } from './schemas';
 import { consumeTtsSynthesisUsage } from '../compute-limit-broker';
+import { createDocumentAudioReporter } from '../../storage/audio-usage';
 
 const CURSOR_STALE_MS = 15_000;
 // Whole-document exports are throughput-bound, not latency-bound: a slow
@@ -84,6 +85,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         timing: { queueWaitMs, computeMs: Date.now() - startedAt },
       };
     }
+    const audioUsage = createDocumentAudioReporter({ ...input, storageUserId: parsed.storageUserId, documentId: parsed.documentId });
     try {
       const { planObjectKey, plannedSegments, startOrdinal } = await resolveAndPersistTtsPlaybackPlan({
         request: parsed,
@@ -214,6 +216,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
 
       let stoppedEarly = false;
       let usageLimited = false;
+      let usageLimitCode = 'COMPUTE_USAGE_LIMIT_REACHED';
       const satisfaction: {
         value: { fromOrdinal: number; throughOrdinal: number } | null;
       } = { value: null };
@@ -299,6 +302,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         return 'stop';
       };
       const onSegmentCompleted = async (planOrdinal: number): Promise<void> => {
+        void audioUsage.measure();
         completedOrdinals.add(planOrdinal);
         if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
         await emitProgress();
@@ -349,7 +353,8 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
             if (planOrdinal > lastCompletedThrough) lastCompletedThrough = planOrdinal;
             await emitProgress();
           },
-          onUsageDenied: async () => {
+          onUsageDenied: async (storageLimit) => {
+            usageLimitCode = storageLimit ?? 'COMPUTE_USAGE_LIMIT_REACHED';
             usageLimited = true;
             stoppedEarly = true;
             await emitProgress();
@@ -413,7 +418,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         await playbackStorage.sessions.patchSessionIfGenerationRun(parsed.sessionId, generationRunId, {
           status: 'succeeded',
           planObjectKey,
-          lastError: 'COMPUTE_USAGE_LIMIT_REACHED',
+          lastError: usageLimitCode,
           stopReason: 'usage_limit',
         });
       } else if (!stoppedEarly) {
@@ -448,6 +453,8 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         }).catch(() => undefined);
       }
       throw error;
+    } finally {
+      await audioUsage.measure(true);
     }
   };
 }

@@ -3,6 +3,7 @@ import type { TtsPlaybackResetScope, TtsPlaybackStorage } from '../../playback/s
 import { ttsPlaybackResetScopeFromOperationKey } from '../../operations/keys';
 import { cleanupUserStorageArtifacts } from '../../storage/user-storage-cleanup';
 import { collectStorageUsage, reclaimableVariants } from '../../storage/storage-usage';
+import { createDocumentAudioReporter } from '../../storage/audio-usage';
 import { invalidatePlaybackOperationsForScope } from '../playback/operation-invalidation';
 import type { PlaybackSessionReadModel } from '../playback/session-read-model';
 import type { ComputeWorkerRouteContext } from '../route-context';
@@ -65,7 +66,7 @@ export function registerCleanupRoutes(
     return [...documentIds];
   };
 
-  const resetPlaybackScope = async (
+  const resetPlaybackScopeObjects = async (
     playbackStorage: TtsPlaybackStorage,
     requestId: string,
     scope: TtsPlaybackResetScope,
@@ -97,6 +98,10 @@ export function registerCleanupRoutes(
       invalidatedPlaybackSessions, invalidatedJobOperations }, 'tts.playback.cache_clear_completed');
     return { ...deleted, invalidatedPlaybackSessions, invalidatedJobOperations };
   };
+
+  const resetPlaybackScope: typeof resetPlaybackScopeObjects = (playbackStorage, requestId, scope, options) =>
+    createDocumentAudioReporter({ storage, s3Prefix, ...scope, logger: app.log })
+      .clear(() => resetPlaybackScopeObjects(playbackStorage, requestId, scope, options));
 
   app.post('/v1/tts-playback/cache/clear', {
     schema: {

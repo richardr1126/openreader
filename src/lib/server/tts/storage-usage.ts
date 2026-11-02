@@ -1,11 +1,5 @@
 import type { UserStorageUsageReport } from '@/lib/server/compute-worker/protocol';
 
-type DocumentUsage = UserStorageUsageReport['documents'][number];
-
-/** Library summaries list derived artifacts for at most this many owned documents. */
-export const LIBRARY_DERIVED_DOCUMENT_LIMIT = 1_000;
-/** Worker usage requests accept this many derived document ids each. */
-export const DERIVED_DOCUMENT_BATCH = 100;
 /** Library reclaim resets at most this many documents per request; the client repeats. */
 export const LIBRARY_RECLAIM_DOCUMENT_BATCH = 5;
 
@@ -18,20 +12,6 @@ export type DocumentStorageSummary = {
   documentDataBytes: number;
   truncated: boolean;
 };
-
-export type LibraryStorageSummary = {
-  audioBytes: number;
-  /** Audio left behind by documents this user no longer has. */
-  orphanedAudioBytes: number;
-  orphanedDocumentCount: number;
-  documentDataBytes: number;
-  truncated: boolean;
-};
-
-function audioBytes(document: DocumentUsage): number {
-  return document.variants.reduce((total, row) => total + row.bytes, 0)
-    + document.exports.reduce((total, row) => total + row.bytes, 0);
-}
 
 /**
  * Split one document's playback storage by cache identity. Audio is current
@@ -60,44 +40,5 @@ export function summarizeDocumentStorage(
     unusedAudioBytes,
     documentDataBytes: document?.derivedBytes ?? 0,
     truncated: report.truncated,
-  };
-}
-
-/** Documents with playback audio in the report that the user no longer owns. */
-export function orphanedAudioDocumentIds(
-  report: UserStorageUsageReport,
-  ownedDocumentIds: ReadonlySet<string>,
-): string[] {
-  return report.documents
-    .filter((row) => !ownedDocumentIds.has(row.documentId) && audioBytes(row) > 0)
-    .map((row) => row.documentId);
-}
-
-export function summarizeLibraryStorage(
-  reports: UserStorageUsageReport[],
-  ownedDocumentIds: ReadonlySet<string>,
-  options: { derivedTruncated: boolean },
-): LibraryStorageSummary {
-  let totalAudioBytes = 0;
-  let orphanedAudioBytes = 0;
-  let documentDataBytes = 0;
-  const orphaned = new Set<string>();
-  for (const report of reports) {
-    for (const document of report.documents) {
-      const bytes = audioBytes(document);
-      totalAudioBytes += bytes;
-      documentDataBytes += document.derivedBytes;
-      if (bytes > 0 && !ownedDocumentIds.has(document.documentId)) {
-        orphanedAudioBytes += bytes;
-        orphaned.add(document.documentId);
-      }
-    }
-  }
-  return {
-    audioBytes: totalAudioBytes,
-    orphanedAudioBytes,
-    orphanedDocumentCount: orphaned.size,
-    documentDataBytes,
-    truncated: options.derivedTruncated || reports.some((report) => report.truncated),
   };
 }

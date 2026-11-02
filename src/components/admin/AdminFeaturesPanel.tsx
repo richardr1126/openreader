@@ -453,6 +453,16 @@ export function AdminFeaturesPanel({
         footer={multiUser ? 'Cached audio stays playable after a limit is reached.' : undefined}
       >
         {numberRow({ key: 'maxUploadMb', label: 'Max upload size', icon: <UploadIcon />, ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
+        {multiUser ? <>
+          <ToggleRow label="Storage per account" checked={Boolean(draft.limitAccountStorage)} onChange={(checked) => updateDraft('limitAccountStorage', checked)} variant="plain" />
+          {draft.limitAccountStorage ? numberRow({ key: 'accountStorageMb', label: 'Account storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
+          {draft.allowAnonymousSessions ? <>
+            <ToggleRow label="Storage per guest" checked={Boolean(draft.limitGuestStorage)} onChange={(checked) => updateDraft('limitGuestStorage', checked)} variant="plain" />
+            {draft.limitGuestStorage ? numberRow({ key: 'guestStorageMb', label: 'Guest storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
+            <ToggleRow label="Total guest storage" checked={Boolean(draft.limitGuestStoragePool)} onChange={(checked) => updateDraft('limitGuestStoragePool', checked)} variant="plain" />
+            {draft.limitGuestStoragePool ? numberRow({ key: 'guestStoragePoolMb', label: 'Guest storage pool cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
+          </> : null}
+        </> : null}
         {multiUser && computePolicy ? (
           <ComputeLimitsEditor
             policy={computePolicy}

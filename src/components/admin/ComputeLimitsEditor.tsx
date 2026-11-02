@@ -65,6 +65,11 @@ const ACTION_DETAILS: Record<ComputeAction, { label: string; icon: ComponentType
     label: 'New TTS generation',
     description: 'Counts only uncached segments immediately before a provider call.',
   },
+  document_intake: {
+    icon: DocumentIcon,
+    label: 'Daily document limit',
+    description: 'Each prepared file or URL import counts once, including failed imports. Resets at midnight UTC.',
+  },
 };
 
 const RESOURCE_LABELS: Record<WorkerResource, string> = {
@@ -223,7 +228,7 @@ export function ComputeLimitsEditor({
                       ? 'bg-accent-wash text-accent'
                       : 'bg-surface-sunken text-muted'
                   }`}>
-                    {action === 'tts_synthesis'
+                    {action === 'tts_synthesis' || action === 'document_intake'
                       ? (actionPolicy.enabled ? 'Limited' : 'Unlimited')
                       : (actionPolicy.enabled ? 'On' : 'Off')}
                   </span>
@@ -233,28 +238,29 @@ export function ComputeLimitsEditor({
               <div className="space-y-3 px-3 pb-3 pt-1">
                 <p className="text-xs text-faint">{detail.description}</p>
                 <ToggleRow
-                  label={action === 'tts_synthesis' ? 'Limit new generation' : 'Enforce request limits'}
+                  label={action === 'tts_synthesis' ? 'Limit new generation' : action === 'document_intake' ? 'Limit daily files' : 'Enforce request limits'}
                   info={action === 'tts_synthesis'
                     ? 'The segment that crosses a daily threshold finishes; the next uncached segment stops.'
-                    : 'Rejects new work once any start-window or active-work limit is reached. Worker queues and provider capacity apply either way.'}
+                    : action === 'document_intake' ? undefined : 'Rejects new work once any start-window or active-work limit is reached. Worker queues and provider capacity apply either way.'}
                   checked={actionPolicy.enabled}
                   onChange={(enabled) => update((draft) => { draft.actions[action].enabled = enabled; })}
                   variant="flat"
                 />
 
-                {action === 'tts_synthesis' ? (
+                {action === 'tts_synthesis' || action === 'document_intake' ? (actionPolicy.enabled ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {actionPolicy.usage.map((limit, index) => (
                       <LimitNumber
                         key={`${limit.scope}:${limit.audience}`}
-                        label={`${usageLabel(limit.scope, limit.audience)} daily characters`}
+                        label={action === 'document_intake' ? `${limit.audience === 'anonymous' ? 'Guest' : limit.audience === 'authenticated' ? 'Account' : 'All users'} daily files` : `${usageLabel(limit.scope, limit.audience)} daily characters`}
                         value={limit.limit}
                         onChange={(next) => update((draft) => {
-                          draft.actions.tts_synthesis.usage[index].limit = next;
+                          draft.actions[action].usage[index].limit = next;
                         })}
                       />
                     ))}
                   </div>
+                ) : null
                 ) : (
                   <>
                     <div>
