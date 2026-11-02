@@ -10,6 +10,7 @@ import { Button, ChoiceTile } from '@/components/ui';
 import { formatCharCount, useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAccountExport } from './useAccountExport';
 import { AccountSecurityPanel } from './AccountSecurityPanel';
@@ -125,6 +126,7 @@ function ExportDataTile() {
 
 export function AccountSettingsPanel() {
   const runtimeConfig = useRuntimeConfig();
+  const guestRetentionDays = useOnboardingState().query.data?.guestRetentionDays ?? null;
   const { baseUrl: authBaseUrl } = useAuthConfig();
   const { data: session } = useAuthSession();
   const router = useRouter();
@@ -209,9 +211,12 @@ export function AccountSettingsPanel() {
               <p className="text-sm text-soft mb-3">
                 {session?.user?.isAnonymous
                   ? (runtimeConfig.signupPolicy !== 'closed'
-                    ? 'Sign up to keep your progress. Your current data transfers automatically.'
+                    ? 'Sign up to keep your documents, reading progress and settings. Generated audio isn\'t transferred.'
                     : 'Sign-ups are currently disabled.')
                   : 'Sign in to continue.'}
+                {guestRetentionDays !== null
+                  ? ` Guest data is deleted after ${guestRetentionDays} ${guestRetentionDays === 1 ? 'day' : 'days'} without use.`
+                  : null}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Link href="/signin">

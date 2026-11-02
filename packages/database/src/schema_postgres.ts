@@ -129,6 +129,7 @@ export const userOnboarding = pgTable('user_onboarding', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   privacyAcceptedAtMs: bigint('privacy_accepted_at_ms', { mode: 'number' }),
   lastSeenAppVersion: text('last_seen_app_version'),
+  guestRetentionSeenDays: integer('guest_retention_seen_days'),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });

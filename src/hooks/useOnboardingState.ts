@@ -4,7 +4,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/client/query-keys';
 import { useAuthSession } from '@/hooks/useAuthSession';
 
-export type OnboardingState = { privacyAcceptedAtMs: number | null; lastSeenAppVersion: string | null };
+export type OnboardingState = {
+  privacyAcceptedAtMs: number | null;
+  lastSeenAppVersion: string | null;
+  /** Days an idle guest is kept; null for accounts and while guests aren't being deleted. */
+  guestRetentionDays: number | null;
+  guestRetentionSeenDays: number | null;
+};
 
 async function fetchOnboarding(signal?: AbortSignal): Promise<OnboardingState> {
   const res = await fetch('/api/user/state/onboarding', { signal });
@@ -19,7 +25,7 @@ export function useOnboardingState() {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: key, queryFn: ({ signal }) => fetchOnboarding(signal), enabled: !isPending });
   const mutation = useMutation({
-    mutationFn: async (patch: { privacyAccepted?: boolean; lastSeenAppVersion?: string }) => {
+    mutationFn: async (patch: { privacyAccepted?: boolean; lastSeenAppVersion?: string; guestRetentionSeenDays?: number }) => {
       const res = await fetch('/api/user/state/onboarding', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -36,6 +42,8 @@ export function useOnboardingState() {
           ? current?.privacyAcceptedAtMs ?? null
           : patch.privacyAccepted ? Date.now() : null,
         lastSeenAppVersion: patch.lastSeenAppVersion ?? current?.lastSeenAppVersion ?? null,
+        guestRetentionDays: current?.guestRetentionDays ?? null,
+        guestRetentionSeenDays: patch.guestRetentionSeenDays ?? current?.guestRetentionSeenDays ?? null,
       }));
       return { previous };
     },

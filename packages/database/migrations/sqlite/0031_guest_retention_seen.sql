@@ -1,0 +1,1 @@
+ALTER TABLE `user_onboarding` ADD `guest_retention_seen_days` integer;

@@ -30,7 +30,7 @@ const ext = (href: string, label: string) => (
 
 /* Claim audit
    Code-verified: Better Auth cookie durations, keyed IP hashes, local-storage consent/GPC,
-   server-stored privacy acceptance, v5 worker/object-storage data flow, export/delete controls,
+   server-stored privacy acceptance, guest deletion and claim transfer, v5 worker/object-storage data flow, export/delete controls,
    Resend delivery, US geo-gate, and AES256 object writes.
    Deployment-dependent: exact provider regions, logs, backups, and operator-configured providers.
    Operator-statement: OpenReader and the official production service do not sell personal information.
@@ -259,7 +259,7 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
       {
         id: 'retention',
         title: 'Retention and security',
-        summary: 'Kept while your account is active, encrypted at rest, and cleaned up when you delete it.',
+        summary: 'Kept while your account is active, encrypted at rest, and cleaned up when you delete it. Idle guest accounts can be deleted.',
         body: (
           <>
             <p>
@@ -269,6 +269,13 @@ export async function getWebPolicy(): Promise<PolicyDocument> {
               cleaned up after seven days by the shipped scheduled task. Finished audiobook files remain until the
               relevant audio, document, or account is deleted. An operator can change task scheduling and may retain
               infrastructure logs or backups on a different schedule.
+            </p>
+            <p>
+              An operator can turn on deletion of idle guest accounts and sets how long they are kept without use. While
+              it is on, the app tells guests the period, and a guest account past it is deleted with its data. Creating
+              an account from a guest session moves documents, reading progress, bookmarks, settings, folders, and saved
+              voices to the new account. Generated audio and audiobook files are not moved and are deleted with the guest
+              account.
             </p>
             <p>
               OpenReader requests AES-256 server-side encryption for uploaded documents and generated object-storage

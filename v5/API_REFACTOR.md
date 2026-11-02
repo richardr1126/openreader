@@ -1,7 +1,6 @@
 # Public API refactor
 
-Status: accepted; phases 1–4.7 are implemented. Phase 4.8 is deferred to separate
-UX work. Phases 5–6 remain planned.
+Status: accepted; phases 1–4.8 are implemented. Phases 5–6 remain planned.
 
 This document plans one public API that the web app and third-party clients
 share, such as MCP servers, a Chrome extension and scripts, on the hosted
@@ -455,9 +454,11 @@ These steps are for the owner.
 - Smoke-test production, then test the MCP connectors against it.
 - Run the storage backfill, then set the creation cap, character and storage values from real
   usage. Production peaked at 5 guests per IP over 14 days.
-- Lower the guest idle period from 90 days to 14 only after the notice has been live for a
-  while, because the next run deletes guests already idle that long.
-- Turn on "Delete idle guest accounts".
+- Turn on "Delete idle guest accounts" at the 90-day period. The guest notice only appears
+  while the task is on, and the first run deletes guests already idle 90 days.
+- Lower the idle period to 14 days only after the notice has been live for a while, because
+  the next run deletes guests already idle that long. Guests who saw the longer period are
+  told again.
 
 ### Phase 6: Chrome extension
 
@@ -1032,3 +1033,21 @@ Migration 0030 and the initial audio backfill remain owner-coordinated productio
 upgrade steps. No production migration, deployment, version bump, tag or push was
 performed. Phase 4.8 remains deferred; phase 5 has not started.
 
+### Phase 4.8 guest retention notice
+
+Implemented on 2026-11-02.
+
+- `/api/user/state/onboarding` returns `guestRetentionDays`: the idle period for a guest
+  while "Delete idle guest accounts" is on and guests are allowed, otherwise null. It is
+  read only for guests, so accounts pay no extra query.
+- The onboarding flow shows the notice after privacy, with a direct way to create an
+  account. Migration 0031 adds nullable `user_onboarding.guest_retention_seen_days` beside
+  the other onboarding state, because browser storage is limited to theme and analytics
+  consent. The notice returns if the period gets shorter than the one the guest saw.
+- Claim audit: `claimAnonymousData` moves documents, progress, bookmarks, document settings,
+  folders, preferences and cloned voices. Generated audio and audiobook files stay under the
+  guest's storage scope and are deleted with the guest. The notice, the guest Account panel
+  and the privacy policy now say so; the Account panel previously promised that all data
+  transfers.
+- The privacy policy states the rule and not a number, because the operator sets the period
+  and the page should not depend on the database.

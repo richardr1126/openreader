@@ -127,6 +127,7 @@ export const userOnboarding = sqliteTable('user_onboarding', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   privacyAcceptedAtMs: integer('privacy_accepted_at_ms'),
   lastSeenAppVersion: text('last_seen_app_version'),
+  guestRetentionSeenDays: integer('guest_retention_seen_days'),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
   updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 });
