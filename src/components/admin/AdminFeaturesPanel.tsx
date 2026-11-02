@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AudioWaveIcon, ClockIcon, CubeIcon, DatabaseIcon, DocumentIcon, HeadphonesIcon, HourglassIcon,
-  MicrophoneIcon, RefreshIcon, RssIcon, ServerStackIcon, UploadIcon, UserIcon, UserPlusIcon,
+  MicrophoneIcon, RefreshIcon, RssIcon, ServerStackIcon, UploadIcon, UserIcon, UserPlusIcon, UsersIcon,
 } from '@/components/icons/Icons';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -395,7 +395,7 @@ export function AdminFeaturesPanel({
           })}
           {draft.limitNewAccountsPerIp ? <>
             {numberRow({ key: 'newAccountsPerIp', label: 'Accounts per period', icon: <UserPlusIcon /> })}
-            {numberRow({ key: 'newAccountsPerIpDays', label: 'Account period', icon: <ClockIcon />, unit: 'days' })}
+            {numberRow({ key: 'newAccountsPerIpDays', label: 'Account period', icon: <HourglassIcon />, unit: 'days' })}
           </> : null}
         </> : null}
         <ToggleRow
@@ -421,14 +421,14 @@ export function AdminFeaturesPanel({
           {limitToggle({
             key: 'limitNewGuestsPerIp',
             label: 'New guests per IP',
-            icon: <UserIcon />,
+            icon: <UserPlusIcon />,
             info: 'Stops new guests from one network once it reaches this count within the guest idle period. Existing guests keep working.',
           })}
           {draft.limitNewGuestsPerIp ? numberRow({
             key: 'newGuestsPerIp',
             label: `Guests per ${String(draft.anonymousUserIdleDays)} days`,
             ariaLabel: 'Guests per idle period',
-            icon: <UserIcon />,
+            icon: <UserPlusIcon />,
           }) : null}
         </> : null}
         </> : null}
@@ -498,10 +498,10 @@ export function AdminFeaturesPanel({
             {limitToggle({
               key: 'limitGuestStoragePool',
               label: 'Total guest storage',
-              icon: <DatabaseIcon />,
+              icon: <UsersIcon />,
               info: 'Shared by all guests. When it is full, guests cannot upload or generate new audio. Accounts are unaffected.',
             })}
-            {draft.limitGuestStoragePool ? numberRow({ key: 'guestStoragePoolMb', label: 'Total guest storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
+            {draft.limitGuestStoragePool ? numberRow({ key: 'guestStoragePoolMb', label: 'Total guest storage cap', icon: <UsersIcon />, unit: 'MB' }) : null}
           </> : null}
         </> : null}
         {multiUser && computePolicy ? (
