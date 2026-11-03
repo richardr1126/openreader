@@ -33,13 +33,13 @@ export async function listConnectedApps(userId: string) {
     createdAt: schema.oauthConsent.createdAt }).from(schema.oauthConsent)
     .innerJoin(schema.oauthClient, eq(schema.oauthClient.clientId, schema.oauthConsent.clientId))
     .where(eq(schema.oauthConsent.userId, userId));
-  const grouped = new Map<string, { id: string; name: string; verifiedDomain: string | null; logoUrl: string | null; redirectDomains: string[]; scopes: string[]; createdAt: number }>();
+  const grouped = new Map<string, { id: string; name: string; verifiedDomain: string | null; logoUrl: string | null; redirectDestinations: string[]; scopes: string[]; createdAt: number }>();
   for (const row of rows) {
     const scopes = oauthStringArray(row.scopes);
     const existing = grouped.get(row.clientId);
     if (existing) { existing.scopes = [...new Set([...existing.scopes, ...scopes])]; continue; }
     grouped.set(row.clientId, { id: row.clientId, name: row.name || 'Unnamed app', verifiedDomain: oauthVerifiedDomain(row.clientId), logoUrl: oauthClientLogoUrl(row), scopes, createdAt: row.createdAt.getTime(),
-      redirectDomains: [...new Set(oauthStringArray(row.redirectUris).flatMap(uri => {
+      redirectDestinations: [...new Set(oauthStringArray(row.redirectUris).flatMap(uri => {
         try { return [oauthRedirectDestination(uri)]; } catch { return []; }
       }))] });
   }

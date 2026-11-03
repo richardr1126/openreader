@@ -88,14 +88,19 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
     : device ? 'Only allow a code shown by a device you are using, never one someone sent you.'
     : info.verifiedDomain ? null
     : 'OpenReader can’t confirm who made this app. Allow it only if you just started connecting it.';
-  const returnsElsewhere = info?.destination && info.destination !== info.verifiedDomain;
+  const returnsElsewhere = info?.destination && info.destination !== `https://${info.verifiedDomain}`;
 
-  return <AuthCard title={title} description={info && !finished && <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+  return <AuthCard title={title} description={info && !finished && <div className="flex items-start gap-3">
     <AppAvatar name={info.name} logoUrl={info.logoUrl} />
-    {info.verifiedDomain
-      ? <span className="inline-flex items-center gap-1 text-foreground"><CheckIcon className="h-4 w-4 text-accent" />Verified as {info.verifiedDomain}</span>
-      : <Badge tone="foreground">Unverified app</Badge>}
-    {returnsElsewhere && <span>Returns to <span className="break-words font-medium text-foreground">{info.destination}</span></span>}
+    <div className="min-w-0 space-y-1">
+      {info.verifiedDomain
+        ? <>
+          <div className="flex items-center gap-1 text-foreground"><CheckIcon className="h-4 w-4 shrink-0 text-accent" /><span className="min-w-0 break-words">Verified as {info.verifiedDomain}</span></div>
+          <div className="break-all text-xs">{info.clientId}</div>
+        </>
+        : <Badge tone="foreground">Unverified app</Badge>}
+      {returnsElsewhere && <div>Returns to <span className="break-words font-medium text-foreground">{info.destination}</span></div>}
+    </div>
   </div>}>
         {isPending ? <LoadingSpinner className="mx-auto h-6 w-6 text-soft" /> : !accountReady ? <>
           <p className="text-sm text-soft">Guest sessions can’t approve access.</p>

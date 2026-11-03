@@ -71,7 +71,8 @@ when the client first connects, and the authorization server metadata reports
 `client_id_metadata_document_supported`.
 
 Neither way grants library access. Consent and Connected apps show the domain of a
-metadata document client, because that domain controls its client ID. Names are
+metadata document client, because that domain controls its client ID. Both also show
+the full client ID, because a domain can host files for many people. Names are
 self-reported, so a dynamically registered client is labeled **Unverified app**.
 
 Only a Client ID Metadata Document client can show a logo. `logo_uri` must be an HTTPS
@@ -79,9 +80,9 @@ PNG, JPEG or WebP of at most 256 KB on the same origin as the client ID, includi
 redirects. OpenReader fetches it on the server and serves it from its own domain, so
 the browser never contacts the client's host. Other clients, and any logo that fails
 these checks or can't be fetched, show a letter instead. Browsers keep a logo for a day.
-Users should check the destination and approve only the app they intended to use. A custom
-redirect scheme is shown in full (`myapp://callback`), because anyone can register
-one that names another site's host. Device approval has no redirect, so it shows no
+Users should check the destination and approve only the app they intended to use. It
+always includes the scheme, so `http://` can't pass for `https://` and a custom scheme
+(`myapp://callback`) can't pass for the site it names. The path is left out. Device approval has no redirect, so it shows no
 destination. Registration limits names to 200 characters, URLs to 2048 characters
 and `redirect_uris` to 20 entries; larger values return `invalid_client_metadata`.
 

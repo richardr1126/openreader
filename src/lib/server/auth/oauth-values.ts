@@ -1,10 +1,10 @@
 /**
- * What a person should check before approving. A custom scheme is the app that
- * registered it, whatever host follows, so `evil://claude.ai` must not read as claude.ai.
+ * What a person should check before approving. The scheme stays visible: a custom
+ * scheme is the app that registered it, whatever host follows, so `evil://claude.ai`
+ * must not read as claude.ai, and plain HTTP must not read as HTTPS.
  */
 export function oauthRedirectDestination(uri: string): string {
   const target = new URL(uri);
-  if (target.protocol === 'http:' || target.protocol === 'https:') return target.host;
   return `${target.protocol}//${target.host}`;
 }
 

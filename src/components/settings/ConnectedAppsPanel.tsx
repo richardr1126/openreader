@@ -3,10 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { requestJson } from '@/lib/client/api/http';
 import { AppAvatar } from '@/components/auth/AppAvatar';
+import { CheckIcon } from '@/components/icons/Icons';
 import { Badge, Button } from '@/components/ui';
 import { API_SCOPE_LABELS } from '@/lib/shared/api-scopes';
 
-type App = { id: string; name: string; verifiedDomain: string | null; logoUrl: string | null; redirectDomains: string[]; scopes: string[]; createdAt: number };
+type App = { id: string; name: string; verifiedDomain: string | null; logoUrl: string | null; redirectDestinations: string[]; scopes: string[]; createdAt: number };
 export function ConnectedAppsPanel() {
   const { data: session } = useAuthSession();
   const client = useQueryClient();
@@ -22,12 +23,28 @@ export function ConnectedAppsPanel() {
     {query.isPending ? <p role="status" className="mt-4 text-sm text-soft">Loading connected apps…</p>
       : query.isError ? <p role="alert" className="mt-4 text-sm text-danger">Unable to load connected apps.</p>
         : !query.data?.data.length ? <p className="mt-4 text-sm text-soft">No connected apps.</p>
-          : <ul className="mt-4 divide-y divide-line">{query.data.data.map(app => <li key={app.id} className="py-4 first:pt-0 last:pb-0">
-            <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h4 className="text-sm font-semibold">{app.name}</h4><p className="mt-1 break-all text-xs text-soft">{app.redirectDomains.join(', ') || 'Device authorization'}</p></div>
-              <Button variant="secondary" size="sm" disabled={disconnect.isPending} onClick={() => disconnect.mutate(app.id)}>Disconnect</Button></div>
-            <div className="mt-2 flex items-center gap-2"><AppAvatar name={app.name} logoUrl={app.logoUrl} /><Badge>{app.verifiedDomain ? `Verified as ${app.verifiedDomain}` : 'Unverified app'}</Badge></div>
-            <ul className="mt-2 space-y-1 text-xs text-soft">{app.scopes.map(scope => <li key={scope}>{API_SCOPE_LABELS[scope] || scope}</li>)}</ul>
-          </li>)}</ul>}
+          : <ul className="mt-4 divide-y divide-line">{query.data.data.map(app => {
+            const elsewhere = app.redirectDestinations.filter(destination => destination !== `https://${app.verifiedDomain}`);
+            return <li key={app.id} className="flex items-start gap-3 py-4 first:pt-0 last:pb-0">
+              <AppAvatar name={app.name} logoUrl={app.logoUrl} />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-3">
+                  <h4 className="min-w-0 text-sm font-semibold">{app.name}</h4>
+                  <Button variant="secondary" size="sm" className="shrink-0" disabled={disconnect.isPending} onClick={() => disconnect.mutate(app.id)}>Disconnect</Button>
+                </div>
+                <div className="mt-1 space-y-1 text-xs text-soft">
+                  {app.verifiedDomain
+                    ? <>
+                      <div className="flex items-center gap-1 text-foreground"><CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" /><span className="min-w-0 break-words">Verified as {app.verifiedDomain}</span></div>
+                      <div className="break-all">{app.id}</div>
+                    </>
+                    : <Badge tone="foreground">Unverified app</Badge>}
+                  {elsewhere.length > 0 && <div className="break-words">Returns to <span className="font-medium text-foreground">{elsewhere.join(', ')}</span></div>}
+                </div>
+                <ul className="mt-3 space-y-1 text-xs text-soft">{app.scopes.map(scope => <li key={scope}>{API_SCOPE_LABELS[scope] || scope}</li>)}</ul>
+              </div>
+            </li>;
+          })}</ul>}
     {disconnect.isError && <p role="alert" className="mt-3 text-sm text-danger">Unable to disconnect app. Try again.</p>}
   </section>;
 }

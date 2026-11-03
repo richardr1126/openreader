@@ -96,7 +96,7 @@ test('authorization code, PKCE, consent and JWT give only the granted API scopes
   expect(sql<{ reference_id: string }>('select reference_id from oauth_refresh_token where user_id=?', userId)[0].reference_id).toBe(consent.id);
   const { listConnectedApps } = await import('@/lib/server/auth/connected-apps');
   expect((await listConnectedApps(userId)).data).toEqual([expect.objectContaining({
-    id: clientId, name: 'OAuth flow fixture', logoUrl: null, scopes: ['documents:read', 'offline_access'], redirectDomains: ['127.0.0.1:43210'],
+    id: clientId, name: 'OAuth flow fixture', logoUrl: null, scopes: ['documents:read', 'offline_access'], redirectDestinations: ['http://127.0.0.1:43210'],
   })]);
   expect(JSON.parse(sql<{ scopes: string }>('select scopes from oauth_consent where id=?', consent.id)[0].scopes)).toEqual(['documents:read', 'offline_access']);
 });
@@ -263,7 +263,7 @@ test('a client ID metadata document connects without registering and shows its d
   expect((await listConnectedApps(userId)).data).toEqual(expect.arrayContaining([expect.objectContaining({ id: metadataUrl, name: 'Metadata connector', verifiedDomain: 'connector.example', logoUrl: `/api/oauth/client-logo?client_id=${encodeURIComponent(metadataUrl)}` })]));
   const intent = await authorize('documents:read offline_access', mcpResource, metadataUrl);
   const info = await oauthRequestInfo(new NextRequest(`${origin}/api/oauth/request?${new URLSearchParams({ query: intent.query })}`));
-  expect(info).toMatchObject({ verifiedDomain: 'connector.example', destination: '127.0.0.1:43210', logoUrl: `/api/oauth/client-logo?client_id=${encodeURIComponent(metadataUrl)}` });
+  expect(info).toMatchObject({ verifiedDomain: 'connector.example', destination: 'http://127.0.0.1:43210', logoUrl: `/api/oauth/client-logo?client_id=${encodeURIComponent(metadataUrl)}` });
   const { disconnectApp } = await import('@/lib/server/auth/connected-apps');
   await disconnectApp(userId, metadataUrl);
 });
@@ -420,8 +420,8 @@ test.each([
 
 test('a custom scheme shows as itself, not as the host it names', async () => {
   const { oauthRedirectDestination } = await import('@/lib/server/auth/oauth-values');
-  expect(oauthRedirectDestination('https://reader.example/callback')).toBe('reader.example');
-  expect(oauthRedirectDestination('http://127.0.0.1:43210/callback')).toBe('127.0.0.1:43210');
+  expect(oauthRedirectDestination('https://reader.example/callback')).toBe('https://reader.example');
+  expect(oauthRedirectDestination('http://127.0.0.1:43210/callback')).toBe('http://127.0.0.1:43210');
   expect(oauthRedirectDestination('evil://claude.ai/callback')).toBe('evil://claude.ai');
   expect(oauthRedirectDestination('com.example.app:/callback')).toBe('com.example.app://');
   expect(() => oauthRedirectDestination('not a uri')).toThrow();

@@ -35,7 +35,7 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: `${name} wants to connect`, exact: true })).toBeVisible();
   await expect(page.getByText('Unverified app', { exact: true })).toBeVisible();
-  await expect(page.getByText('127.0.0.1:43210', { exact: true })).toBeVisible();
+  await expect(page.getByText('http://127.0.0.1:43210', { exact: true })).toBeVisible();
   await expect(page.getByText('Read your documents, folders, voices and audiobooks', { exact: true })).toBeVisible();
   await expect(page.getByText(/OpenReader can’t confirm who made this app/)).toBeVisible();
   // Approving from the wrong account is a mistake a person can only catch here.
@@ -68,7 +68,7 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
     await page.goto('/app/settings?section=account');
     const apps = page.getByRole('region', { name: 'Connected apps', exact: true });
     const app = apps.getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) });
-    await expect(app.getByText('127.0.0.1:43210', { exact: true })).toBeVisible();
+    await expect(app.getByText('http://127.0.0.1:43210', { exact: true })).toBeVisible();
     await expect(app.getByText('Read your documents, folders, voices and audiobooks', { exact: true })).toBeVisible();
     await app.getByRole('button', { name: 'Disconnect', exact: true }).click();
     await expect(apps.getByRole('heading', { name, exact: true })).toHaveCount(0);
@@ -120,6 +120,7 @@ test('a verified app shows its logo from our domain, and falls back to no image'
   await page.getByPlaceholder('Password', { exact: true }).press('Enter');
   await expect(page.getByText('Verified as connector.example', { exact: true })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Connector logo', exact: true })).toBeVisible();
+  await expect(page.getByText('https://connector.example/client.json', { exact: true })).toBeVisible();
 
   logoAvailable = false;
   await page.reload();
