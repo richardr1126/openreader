@@ -3,9 +3,10 @@ import { declineOptionalCookies } from './support/onboarding';
 
 const password = 'TestAccount#2026';
 
-async function signUp(page: import('@playwright/test').Page, email: string) {
+async function signUp(page: import('@playwright/test').Page, name: string, email: string) {
   await page.goto('/signup');
   await declineOptionalCookies(page);
+  await page.getByRole('textbox', { name: 'Display name' }).fill(name);
   await page.getByPlaceholder('me@example.com').fill(email);
   await page.getByPlaceholder('Password', { exact: true }).fill(password);
   await page.getByPlaceholder('Confirm Password').fill(password);
@@ -16,6 +17,7 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   test.setTimeout(90_000);
   const adminEmail = 'admin-e2e@example.test';
   const readerEmail = `reader-e2e-${testInfo.project.name}@example.test`;
+  const readerName = `Reader ${testInfo.project.name}`;
   await page.goto('/signin');
   await declineOptionalCookies(page);
   await page.getByPlaceholder('me@example.com').fill(adminEmail);
@@ -33,7 +35,11 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   // Parallel guest journeys can push the oldest account past the first page.
   const userSearch = page.getByRole('searchbox', { name: 'Search users' });
   await userSearch.fill(adminEmail);
-  await expect(page.getByText(adminEmail).first()).toBeVisible();
+  // The directory lists names; an address stays hidden until asked for.
+  await page.getByRole('button', { name: /First Administrator/ }).click();
+  await expect(page.getByText(adminEmail)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Show email', exact: true }).click();
+  await expect(page.getByText(adminEmail)).toBeVisible();
   await userSearch.clear();
   await page.getByRole('radio', { name: 'Anon', exact: true }).click();
   await expect(page.getByText('Anonymous', { exact: true }).first()).toBeVisible();
@@ -99,7 +105,7 @@ test('admin approves a pending user and inspects the user directory', async ({ b
 
   const reader = await browser.newPage();
   try {
-    await signUp(reader, readerEmail);
+    await signUp(reader, readerName, readerEmail);
     await expect(reader.getByRole('heading', { name: 'Request received' })).toBeVisible();
     await reader.getByRole('link', { name: 'Return to sign in' }).click();
     await reader.getByPlaceholder('me@example.com').fill(readerEmail);
@@ -109,7 +115,7 @@ test('admin approves a pending user and inspects the user directory', async ({ b
 
     await page.goto('/app/settings?section=users');
     await page.getByRole('searchbox', { name: 'Search users' }).fill(readerEmail);
-    await expect(page.getByText(readerEmail).first()).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: `Select ${readerName}`, exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Approve', exact: true }).last().click();
     await expect(page.getByText('User updated')).toBeVisible();
 
@@ -117,11 +123,11 @@ test('admin approves a pending user and inspects the user directory', async ({ b
     await expect(reader).toHaveURL(/\/app$/, { timeout: 30_000 });
 
     // Account deletion is one durable worker operation, observed through SSE.
-    await page.getByRole('checkbox', { name: `Select ${readerEmail}`, exact: true }).check();
+    await page.getByRole('checkbox', { name: `Select ${readerName}`, exact: true }).check();
     await page.getByRole('button', { name: 'Delete (1)', exact: true }).click();
     await page.getByRole('dialog', { name: 'Delete selected users?' }).getByRole('button', { name: 'Delete users', exact: true }).click();
     await expect(page.getByText('Deleted 1 account(s); 0 failed', { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(readerEmail, { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('checkbox', { name: `Select ${readerName}`, exact: true })).toHaveCount(0);
   } finally {
     await reader.close();
   }

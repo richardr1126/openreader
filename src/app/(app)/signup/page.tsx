@@ -21,6 +21,7 @@ function SignUpContent() {
   const searchParams = useSearchParams();
   const isOAuthSignUp = searchParams.has('sig');
   const signInHref = isOAuthSignUp ? `/signin?${searchParams}` : '/signin';
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordConfirmation, setPasswordConfirmation] = useState('');
@@ -57,6 +58,10 @@ function SignUpContent() {
       return;
     }
 
+    if (!name.trim()) {
+      setError('Please enter a display name');
+      return;
+    }
     if (!email.trim() || !validateEmail(email)) {
       setError('Please enter a valid email address');
       return;
@@ -82,7 +87,7 @@ function SignUpContent() {
       const result = await client.signUp.email({
         email: email.trim(),
         password,
-        name: email.trim().split('@')[0], // Use part of email as name
+        name: name.trim(),
         callbackURL: '/verify-email?status=success',
       });
 
@@ -199,6 +204,17 @@ function SignUpContent() {
       description={signupPolicy === 'approval' ? 'An administrator approves new accounts.' : undefined}
     >
       <form className="space-y-4" noValidate onSubmit={(event) => { event.preventDefault(); void handleSignUp(); }}>
+        <Field label="Display name">
+          <Input
+            aria-label="Display name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+            controlSize="lg"
+            maxLength={100}
+            autoComplete="name"
+          />
+        </Field>
         <Field label="Email">
           <Input
             type="email"

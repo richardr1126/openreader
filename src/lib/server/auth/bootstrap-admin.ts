@@ -112,7 +112,7 @@ async function seedInitialAdmin(): Promise<void> {
     const now = new Date();
     await conn.insert(authSchema.user).values({
       id: userId,
-      name: email.split('@')[0],
+      name: 'Administrator',
       email,
       emailVerified: false,
       isAnonymous: false,

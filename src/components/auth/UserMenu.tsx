@@ -70,7 +70,7 @@ export function UserMenu({
     );
   }
 
-  const accountLabel = session.user.email || 'Account';
+  const accountLabel = session.user.name || 'Account';
 
   if (variant === 'sidebar') {
     return (

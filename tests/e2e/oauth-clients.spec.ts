@@ -44,7 +44,7 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
   await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');
   await page.getByPlaceholder('Password', { exact: true }).fill('TestAccount#2026');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByText('admin-e2e@example.test', { exact: true })).toBeVisible();
+  await expect(page.getByText('First Administrator', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Allow access', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Returned to reader tool' })).toBeVisible();
   const callback = new URL(page.url());

@@ -102,6 +102,10 @@ sign-ups and turns guest sessions off.
 
 ## Account self-service
 
+Sign-up asks for a display name, and the UI identifies accounts by it. Email
+addresses stay hidden behind a reveal control in **Settings → Account** and the
+admin user directory.
+
 Registered users can edit their display name and change a known password in
 **Settings → Account**. Password changes revoke other sessions. When account
 email delivery is enabled, the tab also lets users resend current-address
