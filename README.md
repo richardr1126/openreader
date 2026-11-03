@@ -43,6 +43,7 @@ Want to self-host for several people instead? **Get started in the [docs](https:
 - 🌐 **Multilingual support** — choose a document language for language-aware narration and highlighting. Available languages depend on the configured TTS provider and voice.
 - 🎧 **Audiobook export** in M4B or MP3, assembled by the worker from the same playback cache.
 - 🗂️ **Flexible backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync.
+- 🤖 **Connect AI assistants and apps** — a built-in [MCP server](https://docs.openreader.richardr.dev/reference/mcp) and a versioned [REST API](https://docs.openreader.richardr.dev/reference/public-api) let approved clients add documents and make audiobooks, with [scoped OAuth sign-in](https://docs.openreader.richardr.dev/reference/oauth) and no API keys to copy.
 - 💻 **Desktop app** for macOS, Windows, and Linux, with local voices and automatic updates.
 - 🐳 **Self-host friendly** — Docker (amd64/arm64), built-in auth/session support, and automatic startup migrations.
 
@@ -61,6 +62,8 @@ Want to self-host for several people instead? **Get started in the [docs](https:
 | Configure TTS providers | [TTS Providers](https://docs.openreader.richardr.dev/configure/tts-providers) |
 | Run Kokoro locally | [Kokoro-FastAPI](https://docs.openreader.richardr.dev/configure/tts-provider-guides/kokoro-fastapi) |
 | Run KittenTTS locally | [KittenTTS-FastAPI](https://docs.openreader.richardr.dev/configure/tts-provider-guides/kitten-tts-fastapi) |
+| Connect an AI assistant or app | [Connected Apps](https://docs.openreader.richardr.dev/guide/connected-apps) · [MCP](https://docs.openreader.richardr.dev/reference/mcp) |
+| Build on the API | [Public API](https://docs.openreader.richardr.dev/reference/public-api) · [OAuth clients](https://docs.openreader.richardr.dev/reference/oauth) |
 | Upgrade a v4 instance | [Upgrade from v4](https://docs.openreader.richardr.dev/deploy/upgrade-from-v4) |
 | Get support or contribute | [Support and Contributing](https://docs.openreader.richardr.dev/about/support-and-contributing) |
 

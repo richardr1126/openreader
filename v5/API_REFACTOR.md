@@ -432,8 +432,8 @@ Tell guests how long their data lasts before the idle period gets shorter.
 ### Phase 5: MCP
 
 Add `/api/mcp` as a stateless streamable HTTP endpoint on the same shared logic.
-Start with `list_documents`, `add_document`, `list_voices`, `create_audiobook` and
-`get_audiobook`.
+Tools: `list_documents`, `add_document`, `list_providers`, `list_voices`,
+`create_audiobook` and `get_audiobook`.
 
 - Tools return a status at once and never wait for an audiobook to finish.
 - Tools return `webUrl`, a ready-to-play link to the reader, for the user to open,
@@ -1076,8 +1076,8 @@ Implemented on 2026-11-02.
 
 - `/api/mcp` is a stateless streamable HTTP endpoint built with `@modelcontextprotocol/server`
   2.4.0. It serves the 2026-07-28 protocol and stateless legacy traffic with the same
-  tools: `list_documents`, `add_document`, `list_voices`, `create_audiobook` and
-  `get_audiobook`. The tools call the same shared logic as `/api/v1`.
+  tools: `list_documents`, `add_document`, `list_providers`, `list_voices`,
+  `create_audiobook` and `get_audiobook`. The tools call the same shared logic as `/api/v1`.
 - MCP is its own OAuth audience, `BASE_URL/api/mcp`, with its own protected resource metadata.
   A token for `/api/v1` is rejected here and the reverse. The endpoint never accepts a cookie.
 - `@better-auth/cimd` adds Client ID Metadata Documents beside DCR, under the one
@@ -1097,6 +1097,9 @@ Implemented on 2026-11-02.
   listed. The web picker keeps its own clone library.
 - Voice names now come from the catalogue. They had repeated the ID, so Fish Audio showed
   IDs instead of names.
+- Consent and device approval were simplified and show the signed-in account with Switch
+  account. A device link checks its code automatically. `AuthCard` now frames every sign-in,
+  account and consent screen.
 
 The Playwright matrix also exposed a bug in the onboarding flow, unrelated to MCP.
 `PrivacyModal` awaited the PATCH and its refetch, then called `onAccept`, which closed
@@ -1110,16 +1113,18 @@ with it.
 
 Acceptance:
 
-- 1749 Vitest tests and 93 local Playwright cases passed, with both type checks and the
+- 1748 Vitest tests and 93 local Playwright cases passed, with both type checks and the
   route-error, compute-boundary and install-profile checks.
 - MCP Inspector 2.13.0 against a disposable local stack completed the OAuth flow from the 401
-  through protected resource metadata, DCR, sign-in, consent and token. It listed the five
-  tools; added a document from text and from a URL; listed voices from a real Supertonic
+  through protected resource metadata, DCR, sign-in, consent and token. It listed the
+  tools, five at that point; added a document from text and from a URL; listed voices from a real Supertonic
   server; and created an audiobook, where a repeat call returned the same id, through to
   ready. Passing both URL and text returned an `isError` result. `webUrl` opened the document.
+- Antigravity, a desktop client, connected to a local instance, signed in through OAuth and
+  listed voices.
 
 Not covered yet:
 
 - Inspector connected on the legacy path, so the 2026-07-28 protocol is covered by Vitest only.
-- No desktop client has been run against the endpoint.
+- No client has generated an audiobook with a provider other than the saved one.
 - Hosted connectors need a public HTTPS address, so they wait for final verification.

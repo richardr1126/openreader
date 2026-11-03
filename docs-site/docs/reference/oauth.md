@@ -83,7 +83,7 @@ and `redirect_uris` to 20 entries; larger values return `invalid_client_metadata
 
 | Scope | Access |
 | --- | --- |
-| `documents:read` | Read identity/limits, documents, folders, voices and audiobook status/files |
+| `documents:read` | Read identity/limits, documents, folders, speech providers, voices and audiobook status/files |
 | `documents:write` | Create, upload, rename, move and delete owned documents and folders |
 | `audio:generate` | Start and stop audiobook generation |
 | `offline_access` | Obtain a refresh token so access can continue without a browser login |
@@ -101,7 +101,8 @@ library operations remain limited to the approving user's resources.
    challenge. Open the discovered authorization endpoint in the user's browser
    with `response_type=code`, `client_id`, the exact `redirect_uri`, `scope`,
    `resource`, `state`, `code_challenge` and `code_challenge_method=S256`.
-2. The user signs in and approves the displayed app, destination and scopes.
+2. The user signs in and approves the displayed app, destination and scopes, under
+   the account shown, and can switch account first.
    Denial returns an OAuth error to the registered redirect.
 3. At the callback, validate state before accepting the code. Exchange it at the
    token endpoint with form encoding: `grant_type=authorization_code`,
@@ -120,7 +121,8 @@ window and have a 30-day lifetime. Serialize refreshes per grant.
 
 POST form-encoded `client_id`, `scope` and `resource` to the discovered
 `device_authorization_endpoint`. Present its `user_code` and verification URL to
-the user. The user signs in, checks the code and explicitly allows or denies it.
+the user. The user signs in, checks the code and explicitly allows or denies it. A
+`verification_uri_complete` link fills in the code and shows the request directly.
 Only approve a code displayed by a device you are using; an unexpected code sent
 by someone else can authorize that person's device.
 

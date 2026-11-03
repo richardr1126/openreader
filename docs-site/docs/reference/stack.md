@@ -23,7 +23,8 @@ OpenReader is a [pnpm](https://pnpm.io/) workspace written in TypeScript. The ar
 - **Readers**: [react-pdf](https://github.com/wojtekmaj/react-pdf) and [pdf.js](https://mozilla.github.io/pdf.js/) for PDF, [epub.js](https://github.com/futurepress/epub.js/) for EPUB, [react-markdown](https://github.com/remarkjs/react-markdown) with [remark-gfm](https://github.com/remarkjs/remark-gfm) for Markdown and text
 - **Web import**: [Readability](https://github.com/mozilla/readability), [Turndown](https://github.com/mixmark-io/turndown), [linkedom](https://github.com/WebReflection/linkedom)
 - **Text matching**: [cmpstr](https://github.com/remsky/cmpstr)
-- **Sign-in**: [Better Auth](https://www.better-auth.com/)
+- **Sign-in**: [Better Auth](https://www.better-auth.com/), with its OAuth provider and client metadata plugins for connected apps
+- **MCP**: [`@modelcontextprotocol/server`](https://modelcontextprotocol.io/) with [Zod](https://zod.dev/) tool schemas
 - **Database**: [Drizzle ORM](https://orm.drizzle.team/) with SQLite (`better-sqlite3`) or Postgres (`pg`)
 - **Storage**: AWS SDK v3 against embedded [SeaweedFS](https://github.com/seaweedfs/seaweedfs) or any S3-compatible service
 - **Logging**: [Pino](https://getpino.io/)

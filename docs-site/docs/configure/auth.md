@@ -40,6 +40,8 @@ OIDC_PROVIDER_NAME=Pocket ID
 
 ## Sign-ups and guests
 
+Sign-up asks for a display name, and the app identifies accounts by it. Email addresses stay hidden until revealed in **Settings → Account** and **Settings → Admin → Users**.
+
 Both settings are in **Settings → Admin → Instance → Site features**.
 
 - **New account sign-ups**:
@@ -63,8 +65,9 @@ You cannot remove the last administrator, and you cannot demote, suspend or dele
 Third-party clients can request scoped access to a signed-in user's library and
 audiobooks through [OAuth](../reference/oauth), including assistants that use
 [MCP](../reference/mcp). Consent shows the app's
-self-reported name, actual destination, requested permissions, and either the
-domain that controls the client ID or an **Unverified app** warning. Guests cannot approve access. Apps share the user's existing compute
+self-reported name, actual destination, requested permissions, the account being
+used, and either the domain that controls the client ID or an **Unverified app**
+warning. See [Connected Apps](../guide/connected-apps) for what users see. Guests cannot approve access. Apps share the user's existing compute
 limits and cannot change provider credentials or administer the instance.
 
 Users disconnect apps in **Settings → Account → Connected apps**. Disconnect takes

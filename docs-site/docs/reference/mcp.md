@@ -18,6 +18,17 @@ For example, in Claude Code:
 claude mcp add --transport http openreader https://reader.example/api/mcp
 ```
 
+Clients configured with a JSON file usually take the same address, though field names
+vary between clients:
+
+```json
+{
+  "mcpServers": {
+    "openreader": { "url": "https://reader.example/api/mcp" }
+  }
+}
+```
+
 Hosted connectors connect from the vendor's servers, so they need an instance with a
 public HTTPS address. A client on your own computer can reach a local instance.
 
@@ -55,6 +66,9 @@ download an audiobook, open that link and sign in; tools do not return audio fil
 audio links. A tool that fails returns an error result with a `code`, a `message` and,
 when it applies, `retryAfterMs`. A call without the scope it needs gets an HTTP 403
 `insufficient_scope` challenge, so the client can ask for more access.
+
+See [Connected Apps](../guide/connected-apps) for what the approval screen shows and how
+to disconnect.
 
 MCP shares the user's [compute limits](../configure/compute-rate-limiting) and storage with
 the web app. It has no request limit of its own.

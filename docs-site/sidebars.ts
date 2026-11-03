@@ -19,6 +19,7 @@ const sidebars: SidebarsConfig = {
         'guide/library',
         'guide/reading-and-listening',
         'guide/audiobook-export',
+        'guide/connected-apps',
         'guide/keyboard-shortcuts',
       ],
     },

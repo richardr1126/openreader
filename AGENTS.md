@@ -239,6 +239,8 @@ caused conflicts, high CPU, misleading failures, and overheating.
 ## Current State
 
 - Public API progress on `refactor/public-api` is tracked in `v5/API_REFACTOR.md`.
+- Phases 1 to 5 are done (MCP at `/api/mcp`). The owner's final verification before
+  release is outstanding, including hosted connectors over public HTTPS.
 - Migration 0027 combines this branch's unshipped migrations (phase 4.9). A local
   database that ran an earlier version of them must be reset.
 - Open follow-ups for the owner: whether the full Compose files should require

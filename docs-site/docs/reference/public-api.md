@@ -21,7 +21,8 @@ Each token carries only the scopes approved by the user. A bearer header takes
 precedence over cookies; an invalid token never falls back to a browser session.
 Other `Authorization` schemes, such as a reverse proxy's Basic credentials, are
 ignored.
-Personal access tokens and MCP access are not available yet.
+Personal access tokens are not available. Assistants can use the separate
+[MCP endpoint](./mcp).
 Provider API keys are configured by the administrator; they are never client API
 credentials. The API does not accept a provider key in place of a session.
 
@@ -175,8 +176,12 @@ curl --cookie cookies.txt \
   https://reader.example/api/v1/documents/DOCUMENT_ID/audiobooks
 ```
 
-The request uses the document's saved settings. Optional `voice` selects a
-provider-native voice; `speed` ranges from 0.5 to 3 and is rounded to two decimals,
+The request uses the document's saved settings. Optional `provider` and `model` select
+any enabled provider and a model the instance allows. Saved voices, speeds and options
+apply only to the saved provider and model; any other choice starts from that provider's
+defaults. Optional `voice` selects a
+voice from that provider and model, including a `clone:` voice. A disabled or unknown
+provider, or a voice that is not available there, returns `400`. `speed` ranges from 0.5 to 3 and is rounded to two decimals,
 and `format` is `mp3` (default) or `m4b`. Other values return `400`. Advanced explicit `settings` and planning references used by
 the web app are described in the specification; ordinary clients can omit them.
 
