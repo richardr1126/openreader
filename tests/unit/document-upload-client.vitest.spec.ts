@@ -104,6 +104,33 @@ describe('document upload client', () => {
     });
   });
 
+  test('reads the conversion status at once when its event stream closes for good', async () => {
+    class ClosedEventSource {
+      static readonly CLOSED = 2;
+      readonly readyState = ClosedEventSource.CLOSED;
+      onerror: (() => void) | null = null;
+      constructor() { queueMicrotask(() => this.onerror?.()); }
+      addEventListener() {}
+      close() {}
+    }
+    const id = '123e4567-e89b-12d3-a456-426614174000';
+    vi.stubGlobal('EventSource', ClosedEventSource);
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url === '/api/v1/uploads') return Response.json({ id, url: 'https://uploads.example/sample.docx', headers: {} });
+      if (init?.method === 'PUT') return new Response(null, { status: 200 });
+      if (url === '/api/v1/documents') return Response.json({ id, status: 'processing', statusUrl: `/api/v1/uploads/${id}`,
+        eventsUrl: `/api/v1/uploads/${id}/events?opId=op-1`, operationId: 'op-1', document: null }, { status: 202 });
+      return Response.json({ id, status: 'failed', error: 'Conversion failed.', document: null });
+    }));
+
+    await expect(uploadDocumentSources([{
+      name: 'sample.docx', type: 'docx', size: 3, lastModified: 1,
+      contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      body: new Uint8Array([1, 2, 3]),
+    }])).rejects.toThrow('Conversion failed.');
+  });
+
   test('reports byte-level storage transfer progress through XMLHttpRequest', async () => {
     const progressEvents: Array<Record<string, unknown>> = [];
     const requestHeaders: Record<string, string> = {};

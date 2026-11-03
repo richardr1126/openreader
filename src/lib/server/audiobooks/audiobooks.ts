@@ -735,7 +735,12 @@ export async function pruneSettledAudiobookRequests(now: number, deadlineAt: num
   for (const { id, userId, documentId } of rows) {
     if (Date.now() >= deadlineAt) break;
     const scope = await resolveUserDocumentScope({ userId, isAnonymous: false }, documentId);
-    if (!scope) continue;
+    if (!scope) {
+      // The document is gone, and these rows would otherwise fill every batch.
+      await deleteRow(id, userId);
+      removed += 1;
+      continue;
+    }
     const caller: AudiobookCaller = { scope, subject: { userId, isAnonymous: false }, mayGenerate: false };
     try {
       await withAudiobookLock(caller, documentId, async () => {

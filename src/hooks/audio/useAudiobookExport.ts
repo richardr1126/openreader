@@ -133,7 +133,7 @@ export function useAudiobookExport(input: {
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
       lastRefreshAtRef.current = Date.now();
       refreshFailuresRef.current = 0;
-      setSnapshot((previous) => ({ ...next, segments: next.segments ?? previous?.segments ?? null }));
+      setSnapshot((previous) => ({ ...next, segments: next.segments ?? (previous?.id === next.id ? previous.segments : null) }));
       if (includeProgress) setLiveCounts(null);
       if (!options?.quiet) setRequestError(null);
       setRefreshError(null);

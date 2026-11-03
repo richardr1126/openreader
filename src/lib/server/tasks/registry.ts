@@ -49,7 +49,11 @@ export const TASK_REGISTRY: TaskRegistry = {
     description: 'Backfill existing audio totals, then remeasure recently active accounts. Runs on the compute worker.',
     defaultIntervalMs: 24 * 60 * 60 * 1000,
     maxRunMs: 45_000,
-    run: async (context) => ({ ...await enqueueMaintenanceTask('repair-storage-usage', context), cursor: String(Date.now()) }),
+    // The cursor marks the backfill as started, so a skipped run must not set it.
+    run: async (context) => {
+      const result = await enqueueMaintenanceTask('repair-storage-usage', context);
+      return result.operationId ? { ...result, cursor: String(Date.now()) } : result;
+    },
   },
   'expire-anonymous-users': {
     name: 'Delete idle guest accounts',

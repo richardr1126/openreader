@@ -68,6 +68,8 @@ function waitForDocumentConversion(upload: DocumentUploadResource, sourceIndex: 
         else onProgress?.({ phase: 'processing', sourceIndex, operationStatus: snapshot.status, workerPhase: snapshot.progress?.phase });
       } catch { /* A malformed frame must not replace valid operation state. */ }
     });
+    // A closed stream will not reconnect, so the caller reads the current status instead.
+    source.onerror = () => { if (source.readyState === EventSource.CLOSED) { cleanup(); resolve(); } };
     signal?.addEventListener('abort', abort, { once: true });
   });
 }

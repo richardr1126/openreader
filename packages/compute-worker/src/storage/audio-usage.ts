@@ -57,7 +57,12 @@ export function createDocumentAudioReporter(input: Input) {
     // A failed begin prevents deletion: the SQL fence must exist first.
     const { revision } = await broker({ action: 'begin-clear', ...scope });
     try { return await run(); }
-    finally { if (revision !== null) await report(revision); }
+    finally {
+      // The deletion's own outcome stands. Repair remeasures a missed total.
+      if (revision !== null) await report(revision).catch((error) => {
+        input.logger?.warn?.({ error: String(error), documentId: input.documentId }, 'storage.usage_report_failed');
+      });
+    }
   };
   return { measure, clear };
 }

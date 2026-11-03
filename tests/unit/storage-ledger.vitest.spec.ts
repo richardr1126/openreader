@@ -101,8 +101,9 @@ test('concurrent final registrations cannot bypass the per-account or shared gue
   const accounts = await Promise.allSettled([register('account', doc), register('account', orphan)]);
   expect(accounts.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
   await settings.setRuntimeConfigKey('limitGuestStoragePool', true); await settings.setRuntimeConfigKey('guestStoragePoolMb', 1);
-  const guests = await Promise.allSettled([register('guest', doc), register('other-guest', orphan)]);
+  const guests = await Promise.allSettled([register('guest', 'c'.repeat(64)), register('other-guest', 'd'.repeat(64))]);
   expect(guests.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+  expect(guests.find((result) => result.status === 'rejected')).toMatchObject({ reason: { code: 'GUEST_STORAGE_POOL_FULL' } });
 });
 
 test('daily file limits are strict, audience-specific and stop URL imports before fetching', async () => {
@@ -117,6 +118,17 @@ test('daily file limits are strict, audience-specific and stop URL imports befor
   expect(mocks.fetchUrl).not.toHaveBeenCalled();
   await consumeDocumentIntake(account, 'first'); await consumeDocumentIntake(account, 'second');
   await expect(consumeDocumentIntake(account, 'third')).rejects.toMatchObject({ code: 'DOCUMENT_INTAKE_LIMIT_REACHED' });
+});
+
+test('invalid text imports use no daily file allowance', async () => {
+  const policy = (await settings.getRuntimeConfig()).computeLimitPolicies;
+  policy.actions.document_intake.enabled = true;
+  await settings.setRuntimeConfigKey('computeLimitPolicies', policy);
+  const before = sql('select * from compute_limit_events').length;
+  const { createDocument } = await import('@/lib/server/documents/create');
+  await expect(createDocument(caller(account), { source: { type: 'text', text: 'x'.repeat(2 * 1024 * 1024 + 1) } })).rejects.toMatchObject({ code: 'TEXT_TOO_LARGE' });
+  await expect(createDocument(caller(account), { source: { type: 'text', text: 'x' }, name: 'notes.pdf' })).rejects.toMatchObject({ code: 'REQUEST_INVALID' });
+  expect(sql('select * from compute_limit_events')).toHaveLength(before);
 });
 
 test('uncached audio is storage-limited even with daily characters off, then resumes after clearing', async () => {

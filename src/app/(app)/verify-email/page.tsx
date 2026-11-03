@@ -32,10 +32,7 @@ function VerifyEmailContent() {
       description={!accountEmailsEnabled ? 'Account email actions are disabled on this OpenReader instance.' : displayState === 'working' ? 'This should only take a moment.' : displayState === 'success' ? 'Your address is confirmed. Sign in to continue reading.' : 'This verification link is invalid, expired, or has already been used.'}
     >
       {displayState === 'working' ? <LoadingSpinner className="mx-auto h-6 w-6 text-soft" /> : (
-        <div className="space-y-2">
-          <ButtonLink href="/signin" variant="primary" className="w-full">Sign in</ButtonLink>
-          {displayState === 'error' && <ButtonLink href="/signin" variant="secondary" className="w-full">Resend from sign in</ButtonLink>}
-        </div>
+        <ButtonLink href="/signin" variant="primary" className="w-full">Sign in</ButtonLink>
       )}
     </AuthCard>
   );

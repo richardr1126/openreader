@@ -7,7 +7,8 @@ export class AdvisoryLockBusyError extends Error {
 }
 
 const LOCK_WAIT_MS = 10_000;
-// Longer than one bounded worker call, the longest idle stretch while a lock is held.
+// This connection is idle for all of `fn`, so this limits the whole hold. Past it,
+// Postgres ends the session and the lock while `fn` keeps running.
 const LOCK_HOLD_IDLE_MS = 120_000;
 const LOCK_NOT_AVAILABLE = '55P03';
 

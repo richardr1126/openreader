@@ -1,11 +1,11 @@
 import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 
-/** Canonical addresses prevent alternate IPv6 spellings from bypassing /64 caps. */
+/** Canonical addresses prevent alternate IPv6 spellings, including zones, from bypassing /64 caps. */
 export function normalizeIp(value: string): string | null {
   if (isIP(value) === 4) return value;
   if (isIP(value) !== 6) return null;
-  const canonical = new URL(`http://[${value}]/`).hostname.slice(1, -1);
+  const canonical = new URL(`http://[${value.split('%')[0]}]/`).hostname.slice(1, -1);
   const [left, right] = canonical.split('::');
   const head = left ? left.split(':') : [];
   const tail = right ? right.split(':') : [];

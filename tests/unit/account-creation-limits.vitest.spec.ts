@@ -42,6 +42,8 @@ test('normalizes IPv6 /64s, mapped IPv4, and separates session and creation hash
   expect(normalizeIp('::ffff:192.0.2.1')).toBe('192.0.2.1');
   expect(hashIp('192.0.2.1', 'session')).not.toBe(hashIp('192.0.2.1', 'guest-creation'));
   expect(hashIp('invalid', 'session')).toBeNull();
+  expect(normalizeIp('fe80::1%eth0')).toBe(normalizeIp('fe80::1'));
+  expect(hashIp('fe80::1%eth0', 'session')).toBe(hashIp('fe80::1', 'session'));
 });
 test('migration clears old raw session IPs and drops retired admission keys without deleting sessions', () => {
   const database = new Database(':memory:');

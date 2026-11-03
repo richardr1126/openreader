@@ -61,6 +61,14 @@ describe('worker-owned audio accounting', () => {
     expect(clear).not.toHaveBeenCalled();
     await expect(createDocumentAudioReporter(input).measure(true, true)).rejects.toThrow('503');
   });
+  test('a failed report after a clear does not change the clear result', async () => {
+    const { input, fetch } = setup();
+    fetch.mockResolvedValueOnce(Response.json({ revision: 7 })).mockResolvedValueOnce(new Response(null, { status: 503 }));
+    await expect(createDocumentAudioReporter(input).clear(async () => 'deleted')).resolves.toBe('deleted');
+    expect(input.logger.warn).toHaveBeenCalledWith(expect.anything(), 'storage.usage_report_failed');
+    fetch.mockResolvedValueOnce(Response.json({ revision: 8 })).mockResolvedValueOnce(new Response(null, { status: 503 }));
+    await expect(createDocumentAudioReporter(input).clear(async () => { throw new Error('deletion interrupted'); })).rejects.toThrow('deletion interrupted');
+  });
   test('a clear lease skips concurrent measurements, and partial deletion is measured after failure', async () => {
     const { input, objects, fetch, requests, prefixes } = setup();
     fetch.mockResolvedValueOnce(Response.json({ revision: null }));

@@ -1113,6 +1113,14 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       expect(hoisted.rows).toHaveLength(1);
     });
 
+    test('a request whose document is gone is removed', async () => {
+      await aged(8);
+      const { resolveUserDocumentScope } = await import('@/lib/server/tts/segments-auth');
+      vi.mocked(resolveUserDocumentScope).mockResolvedValueOnce(null);
+      expect(await prune()).toBe(1);
+      expect(hoisted.rows).toHaveLength(0);
+    });
+
     test('a request that is still running stays, however old', async () => {
       await aged(30);
       hoisted.resolveSession.mockResolvedValue({
