@@ -24,6 +24,8 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await page.getByPlaceholder('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 30_000 });
+  // The URL changes before the sign-in navigation settles; WebKit lets its end interrupt a goto.
+  await expect(page.getByText('Drop your file(s) here, or click to select', { exact: true })).toBeVisible();
   const privacy = page.getByRole('dialog', { name: 'Privacy & Data Usage' });
   if (await privacy.isVisible()) {
     await privacy.getByRole('checkbox', { name: 'I have read and agree to the' }).check();
