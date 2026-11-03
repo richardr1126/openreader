@@ -451,6 +451,56 @@ Tools: `list_documents`, `add_document`, `list_providers`, `list_voices`,
   needs `@better-auth/cimd`.
 - No CORS on `/api/mcp`. The Origin check is required either way.
 
+### Phase 5.2: No automatic guests, no full-screen loader
+
+Planned, not built. Today, on an instance with guest sessions on, any signed-out visit to an
+app page creates a guest account. Every visitor who reaches an app page, on any instance, also
+waits behind the full-screen loader in `AuthLoader` while the browser checks the session. This
+phase removes both, because both come from checking the session only in the browser.
+
+**Guests become a choice.**
+
+- A signed-out visitor goes to `/signin`, which keeps the link through `signInPathFor`.
+  "Continue as guest" stays there and is the only way to start a guest session.
+- The middleware redirects page requests with no session cookie. It needs no SQL setting,
+  because the redirect is the same whether guests are on or off.
+- `/audiobooks/…` and `/oauth/*` stay public in the middleware, because they explain signing
+  in themselves. API routes keep authenticating themselves and are never redirected.
+- The admin setting, existing guest data, retention, creation caps and linking a guest into
+  an account all stay as they are. No schema change.
+
+**The session is known before the page renders.**
+
+- The `(app)` layout validates the session on the server and passes it down.
+- `useAuthSession`, the one hook behind all 34 callers, uses that value until the client
+  check resolves, so pages render at once with the right user and no loader.
+- A stale cookie passes the middleware but validates to no session, so the client redirects it.
+
+**`AuthLoader` shrinks.** It keeps two jobs: redirecting when a session ends, and signing out
+a guest once guests are turned off. The anonymous bootstrap, its retry and backoff, the error
+screen and the full-screen loader are deleted, along with `getErrorInfo` and related helpers
+if nothing else uses them.
+
+**This closes the phase 5.1 known limit.** A signed-out visitor to a reader link goes straight
+to sign-in and back, instead of getting a guest first and then the no-access card.
+
+Check while building:
+
+- The desktop launch-token exchange happens before the first page load, so the owner never
+  sees `/signin`.
+- Signing in from a guest session still links that guest's data, and the guest retention
+  notice still appears.
+- Landing page links into `/app` read correctly now that they can end at `/signin`.
+
+Tests and docs:
+
+- Update `enterAnonymousLibrary` to choose "Continue as guest", and the 5 tests that open
+  `/app` directly.
+- Add journeys for a signed-out visit to `/app` and to a reader link, each returning after
+  sign-in. Assert that the full-screen loader never shows.
+- Update `docs-site/docs/configure/auth.md` and `instance-settings.md` to say guests start
+  from the sign-in page. Add the implementation notes under Implementation history.
+
 ### Final verification before release
 
 Nothing merges to `main` until phase 5 is done, so phases 1 to 5 reach production together.
@@ -1151,4 +1201,4 @@ download through the existing v1 file route, so the file route gained no browser
   `AuthLoader` uses it too, so sign-out and instances without guest sessions keep the link.
 - **Known limit.** A signed-out visitor to a reader link gets a guest session before the
   reader can report no access, because `AuthLoader` runs first. Signing in then links that
-  empty guest into the account, as it does for any guest.
+  empty guest into the account, as it does for any guest. Phase 5.2 removes this limit.
