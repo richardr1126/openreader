@@ -38,9 +38,14 @@ already connected keep working.
 | --- | --- | --- |
 | `list_documents` | `documents:read` | Lists or searches the library, a page at a time |
 | `add_document` | `documents:write` | Adds a public web page, or up to 2 MB of text |
-| `list_voices` | `documents:read` | Lists voices from the user's speech settings |
+| `list_providers` | `documents:read` | Lists the speech providers and models the user can use |
+| `list_voices` | `documents:read` | Lists voices for one provider and model, including the user's cloned voices |
 | `create_audiobook` | `audio:generate` | Starts an audiobook of a document or one chapter |
 | `get_audiobook` | `documents:read` | Reports an audiobook's status and progress |
+
+`create_audiobook` can use any enabled provider, model and voice. If it names none, it
+uses the user's saved settings. A model outside what the instance allows falls back to
+the provider's default, and the result reports the provider, model and voice it used.
 
 `create_audiobook` returns at once with a status, and sending the same request again
 returns the same audiobook. Use `get_audiobook` to check on it.

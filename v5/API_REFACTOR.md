@@ -1073,7 +1073,7 @@ identical `sqlite_master` contents and an empty `pg_dump --schema-only` diff on 
 Implemented on 2026-11-02.
 
 - `/api/mcp` is a stateless streamable HTTP endpoint built with `@modelcontextprotocol/server`
-  2.4.0. It serves the 2026-07-28 protocol and stateless legacy traffic with the same five
+  2.4.0. It serves the 2026-07-28 protocol and stateless legacy traffic with the same
   tools: `list_documents`, `add_document`, `list_voices`, `create_audiobook` and
   `get_audiobook`. The tools call the same shared logic as `/api/v1`.
 - MCP is its own OAuth audience, `BASE_URL/api/mcp`, with its own protected resource metadata.
@@ -1082,6 +1082,19 @@ Implemented on 2026-11-02.
   `allowOAuthClientRegistration` switch. Consent and Connected apps show the verified domain,
   or "Unverified app".
 - The re-consent cutoffs are documented in `docs-site/docs/reference/mcp.md`.
+- After the first desktop client connected, `create_audiobook`
+  and the v1 audiobook body accept `provider` and `model` beside `voice`. A named provider
+  uses its own defaults: saved voices, speeds, options and instructions apply only to the
+  saved provider and model. `showAllProviderModels` still limits the model. A voice that is
+  not in a static catalogue, or a clone from another provider or model, is rejected at once.
+- `GET /api/v1/providers` lists enabled providers and their allowed models, and MCP's
+  `list_providers` returns the same data. v1 and MCP voice lists share one implementation,
+  with catalogue names and the caller's clones for that provider and model. Clone summaries
+  come from object metadata through HEAD requests, so samples are not downloaded, and only
+  providers that can speak a clone look them up. A storage failure leaves the catalogue
+  listed. The web picker keeps its own clone library.
+- Voice names now come from the catalogue. They had repeated the ID, so Fish Audio showed
+  IDs instead of names.
 
 The Playwright matrix also exposed a bug in the onboarding flow, unrelated to MCP.
 `PrivacyModal` awaited the PATCH and its refetch, then called `onAccept`, which closed
@@ -1095,7 +1108,7 @@ with it.
 
 Acceptance:
 
-- 1743 Vitest tests and 93 local Playwright cases passed, with both type checks and the
+- 1749 Vitest tests and 93 local Playwright cases passed, with both type checks and the
   route-error, compute-boundary and install-profile checks.
 - MCP Inspector 2.13.0 against a disposable local stack completed the OAuth flow from the 401
   through protected resource metadata, DCR, sign-in, consent and token. It listed the five

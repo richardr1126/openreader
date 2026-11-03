@@ -9,7 +9,7 @@ import { createDocument } from '@/lib/server/documents/create';
 import { documentCaller, documentRequestFailure } from '@/lib/server/documents/request';
 import { documentId, documentWebUrl, listDocumentResources } from '@/lib/server/documents/resources';
 import { serverLogger } from '@/lib/server/logger';
-import { listVoices } from '@/lib/server/tts/voices';
+import { listSpeechProviders, listVoices } from '@/lib/server/tts/voices';
 import { API_SCOPES } from '@/lib/shared/api-scopes';
 import type { BaseDocument } from '@/types/documents';
 import type { Audiobook } from '@/types/tts-export';
@@ -100,10 +100,20 @@ export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServe
       : { status: upload.status, error: upload.error };
   }));
 
+  server.registerTool('list_providers', {
+    title: 'List speech providers',
+    description: 'List the speech providers the user can use, with their models, and which one is saved in their settings.',
+    annotations: { readOnlyHint: true },
+    scopeChallenge: scope('documents:read'),
+  }, () => run(async principal => ({ providers: await listSpeechProviders(principal) })));
+
   server.registerTool('list_voices', {
     title: 'List voices',
-    description: 'List voice IDs for the user\'s selected speech provider, or for a provider and model you name.',
-    inputSchema: z.object({ provider: z.string().max(200).optional(), model: z.string().max(512).optional() }),
+    description: 'List voices, with their IDs and names, for a provider and model you name, or for the user\'s saved ones. Includes the user\'s own cloned voices.',
+    inputSchema: z.object({
+      provider: z.string().max(200).optional().describe('A provider ID from list_providers.'),
+      model: z.string().max(512).optional().describe('A model ID from list_providers.'),
+    }),
     annotations: { readOnlyHint: true },
     scopeChallenge: scope('documents:read'),
   }, ({ provider, model }) => run(principal => listVoices(principal, new URLSearchParams({
@@ -112,10 +122,12 @@ export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServe
 
   server.registerTool('create_audiobook', {
     title: 'Create audiobook',
-    description: 'Start an audiobook of a document, or one chapter of it, using the user\'s saved speech settings. Returns at once with a status; the same request returns the same audiobook. Use get_audiobook to check progress.',
+    description: 'Start an audiobook of a document, or one chapter of it, using any provider and voice the user can use, or their saved speech settings if you name none. Returns at once with a status; the same request returns the same audiobook. Use get_audiobook to check progress.',
     inputSchema: z.object({
       documentId: id,
-      voice: z.string().max(512).optional().describe('A voice ID from list_voices. Defaults to the user\'s saved voice.'),
+      provider: z.string().max(200).optional().describe('A provider ID from list_providers. Defaults to the user\'s saved provider.'),
+      model: z.string().max(512).optional().describe('A model ID from list_providers. Defaults to the saved model, or to the default model of the provider you name.'),
+      voice: z.string().max(512).optional().describe('A voice ID from list_voices for that provider and model. Defaults to the user\'s saved voice, or to the first voice of the provider you name.'),
       format: z.enum(['mp3', 'm4b']).optional(),
       speed: z.number().min(0.5).max(3).optional(),
       chapter: z.number().int().min(0).optional().describe('Zero-based chapter. Omit for the whole document.'),
@@ -131,7 +143,9 @@ export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServe
     if (caller instanceof Response) return caller;
     const intent = await resolveAudiobookIntent(caller, bookId, body);
     if (intent instanceof Response) return intent;
-    return audiobookSummary(await startAudiobook(caller, intent, { retrySkipped: false, includeProgress: true }));
+    const { providerRef, ttsModel, voice } = intent.parsed.settings;
+    return { ...audiobookSummary(await startAudiobook(caller, intent, { retrySkipped: false, includeProgress: true })),
+      provider: providerRef, model: ttsModel, voice };
   }));
 
   server.registerTool('get_audiobook', {

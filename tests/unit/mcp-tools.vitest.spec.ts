@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { beforeEach, expect, test, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  access: vi.fn(), create: vi.fn(), voices: vi.fn(), start: vi.fn(), get: vi.fn(), caller: vi.fn(), intent: vi.fn(), worker: vi.fn(() => true),
+  access: vi.fn(), create: vi.fn(), voices: vi.fn(), providers: vi.fn(), start: vi.fn(), get: vi.fn(), caller: vi.fn(), intent: vi.fn(), worker: vi.fn(() => true),
 }));
 vi.mock('@/lib/server/auth/auth', () => ({ getTrustedOrigins: () => ['http://localhost:3003'] }));
 vi.mock('@/lib/server/auth/config', () => ({ getRequiredAuthEnv: () => ({ baseUrl: 'http://localhost:3003' }) }));
@@ -17,7 +17,7 @@ vi.mock('@/lib/server/documents/request', async () => {
 vi.mock('@/lib/server/documents/resources', () => ({
   documentId: (value: string) => value, documentWebUrl: (document: { id: string }) => `http://localhost:3003/html/${document.id}`, listDocumentResources: vi.fn(),
 }));
-vi.mock('@/lib/server/tts/voices', () => ({ listVoices: mocks.voices }));
+vi.mock('@/lib/server/tts/voices', () => ({ listVoices: mocks.voices, listSpeechProviders: mocks.providers }));
 vi.mock('@/lib/server/audiobooks/audiobooks', () => ({ ChapterNotFoundError: class extends Error {}, getAudiobook: mocks.get, startAudiobook: mocks.start }));
 vi.mock('@/lib/server/audiobooks/request', async () => ({ audiobookCaller: mocks.caller, resolveAudiobookIntent: mocks.intent,
   parseAudiobookBody: (record: Record<string, unknown>) => ({ record, format: record.format ?? 'mp3', speed: record.speed ?? 1, chapterIndex: record.chapter ?? null }) }));
@@ -57,12 +57,29 @@ test('add_document imports a URL or text and returns a clickable link, not a v1 
 });
 
 test('create_audiobook returns a status at once, with no download link or internal operation', async () => {
+  mocks.intent.mockResolvedValueOnce({ parsed: { settings: { providerRef: 'kokoro', ttsModel: 'kokoro', voice: 'af_sky' } } });
   mocks.start.mockResolvedValue(audiobook);
   const result = await callTool('create_audiobook', { documentId: 'doc', voice: 'af_sky', format: 'm4b' });
   expect(mocks.intent.mock.calls[0][2]).toMatchObject({ format: 'm4b', record: { voice: 'af_sky' } });
   expect(result.structuredContent).toEqual({ id: 'book', documentId: 'doc', status: 'generating', progress: 0.5, format: 'mp3', speed: 1, chapter: null, filename: null,
-    webUrl: 'http://localhost:3003/html/doc', retryAfterMs: null, issue: null });
+    webUrl: 'http://localhost:3003/html/doc', retryAfterMs: null, issue: null, provider: 'kokoro', model: 'kokoro', voice: 'af_sky' });
   expect(JSON.stringify(result)).not.toMatch(/secret|op-internal/);
+});
+
+test('a client can pick any provider and sees its named voices', async () => {
+  mocks.providers.mockResolvedValue([{ id: 'fish', name: 'Fish Audio', type: 'fish-audio', selected: false }]);
+  expect((await callTool('list_providers', {})).structuredContent).toEqual({
+    providers: [{ id: 'fish', name: 'Fish Audio', type: 'fish-audio', selected: false }] });
+  mocks.voices.mockResolvedValue({ provider: 'fish', model: 's2', nextCursor: null, data: [{ id: 'abc', name: 'Sarah' }] });
+  const listed = await callTool('list_voices', { provider: 'fish', model: 's2' });
+  expect(mocks.voices.mock.calls.at(-1)?.[1].toString()).toBe('provider=fish&model=s2');
+  expect(listed.structuredContent.data).toEqual([{ id: 'abc', name: 'Sarah' }]);
+
+  mocks.intent.mockResolvedValueOnce({ parsed: { settings: { providerRef: 'fish', ttsModel: 's2', voice: 'abc' } } });
+  mocks.start.mockResolvedValue(audiobook);
+  const created = await callTool('create_audiobook', { documentId: 'doc', provider: 'fish', model: 's2', voice: 'abc' });
+  expect(mocks.intent.mock.calls.at(-1)?.[2]).toMatchObject({ record: { provider: 'fish', model: 's2', voice: 'abc' } });
+  expect(created.structuredContent).toMatchObject({ provider: 'fish', model: 's2', voice: 'abc' });
 });
 
 test('tool failures come back as readable errors with their code', async () => {

@@ -107,6 +107,12 @@ export async function resolveAudiobookIntent(
   if (record.voice !== undefined && (typeof record.voice !== 'string' || !record.voice.trim())) {
     return apiErrorResponse(400, 'REQUEST_INVALID', 'voice must be a voice ID.');
   }
+  if (record.provider !== undefined && (typeof record.provider !== 'string' || !record.provider.trim() || record.provider.length > 200)) {
+    return apiErrorResponse(400, 'REQUEST_INVALID', 'provider must be a speech provider ID.');
+  }
+  if (record.model !== undefined && (typeof record.model !== 'string' || !record.model.trim() || record.model.length > 512)) {
+    return apiErrorResponse(400, 'REQUEST_INVALID', 'model must be a speech model ID.');
+  }
 
   const { scope } = caller;
   let parsedPdf: ParsedPdfDocument | null = null;
@@ -141,8 +147,13 @@ export async function resolveAudiobookIntent(
     mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, storedRecord(settingsRows[0]?.dataJson)),
     storedRecord(preferenceRows[0]?.dataJson),
     savedLanguage || (parsedPdf ? detectParsedPdfLanguage(parsedPdf) : null),
-    typeof record.voice === 'string' ? record.voice.trim() : undefined,
+    {
+      provider: typeof record.provider === 'string' ? record.provider.trim() : undefined,
+      model: typeof record.model === 'string' ? record.model.trim() : undefined,
+      voice: typeof record.voice === 'string' ? record.voice.trim() : undefined,
+    },
   );
+  if ('error' in parsed && parsed.invalid) return apiErrorResponse(400, 'REQUEST_INVALID', parsed.error);
   if ('error' in parsed) return apiErrorResponse(503, 'PROVIDER_UNAVAILABLE', parsed.error, { retryAfterMs: 5_000 });
   return {
     ...base,

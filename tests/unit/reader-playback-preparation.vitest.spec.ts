@@ -74,8 +74,31 @@ describe('bootstrap playback preparation', () => {
 
   test('resolves the requested voice before deriving an automatic language', async () => {
     const parsed = await resolveDefaultPlaybackRequest(documentId, scope, DEFAULT_DOCUMENT_SETTINGS,
-      { ...preferences, voice: 'af_heart' }, 'tr', 'jf_alpha');
+      { ...preferences, voice: 'af_heart' }, 'tr', { voice: 'jf_alpha' });
     expect(parsed).toMatchObject({ settings: { voice: 'jf_alpha', language: 'ja' }, language: 'ja' });
+  });
+
+  test('a named provider starts from its own defaults, not the saved provider\'s speech', async () => {
+    mocks.providers.mockResolvedValue([
+      { slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true },
+      { slug: 'fish', providerType: 'fish-audio', defaultModel: 's2.1-pro-free', enabled: true },
+      { slug: 'off', providerType: 'openai', defaultModel: 'tts-1', enabled: false },
+    ]);
+    const saved = { ...preferences, voice: 'expr-voice-2-f', voiceSpeed: 1.5, ttsInstructions: 'Whisper' };
+    const select = (selection: { provider?: string; model?: string; voice?: string }) =>
+      resolveDefaultPlaybackRequest(documentId, scope, DEFAULT_DOCUMENT_SETTINGS, saved, 'en', selection);
+
+    const fish = await select({ provider: 'fish' });
+    expect(fish).toMatchObject({ settings: { providerRef: 'fish', providerType: 'fish-audio', ttsModel: 's2.1-pro-free',
+      voice: '933563129e564b19a115bedd57b7406a', nativeSpeed: 1 } });
+    expect(fish).not.toHaveProperty('settings.ttsInstructions');
+    expect(await select({ provider: 'fish', voice: 'bf322df2096a46f18c579d0baa36f41d' }))
+      .toMatchObject({ settings: { voice: 'bf322df2096a46f18c579d0baa36f41d' } });
+    expect(await select({ voice: 'expr-voice-3-m' })).toMatchObject({ settings: { providerRef: 'kitten', ttsModel: 'KittenTTS', voice: 'expr-voice-3-m' } });
+
+    expect(await select({ provider: 'off' })).toMatchObject({ invalid: true });
+    expect(await select({ provider: 'missing' })).toMatchObject({ invalid: true });
+    expect(await select({ provider: 'fish', voice: 'Sarah' })).toMatchObject({ invalid: true });
   });
 
   test('uses global PDF skip and segment defaults, then applies independent book overrides', async () => {

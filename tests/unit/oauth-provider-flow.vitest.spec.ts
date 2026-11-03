@@ -202,7 +202,7 @@ test('MCP and v1 tokens only work on their own resource', async () => {
 
   const token = await grant('documents:read offline_access', mcpResource);
   const tools = await mcpResult(await mcp(token.access_token, 'tools/list'));
-  expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['list_documents', 'add_document', 'list_voices', 'create_audiobook', 'get_audiobook']);
+  expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['list_documents', 'add_document', 'list_providers', 'list_voices', 'create_audiobook', 'get_audiobook']);
   const called = await mcpResult(await mcp(token.access_token, 'tools/call', { name: 'list_documents', arguments: {} }));
   expect(called.structuredContent).toEqual({ documents: [], nextCursor: null });
   expect((await principal(token.access_token) as Response).status).toBe(401);
@@ -233,7 +233,7 @@ test('MCP serves the 2026-07-28 protocol with the same tools and token rules', a
   const discovered = await mcpResult(await modern(token.access_token, 'server/discover'));
   expect(discovered.supportedVersions).toContain(version);
   const tools = await mcpResult(await modern(token.access_token, 'tools/list'));
-  expect(tools.tools).toHaveLength(5);
+  expect(tools.tools).toHaveLength(6);
   const called = await mcpResult(await modern(token.access_token, 'tools/call', { name: 'list_documents', arguments: {} }));
   expect(called.structuredContent).toEqual({ documents: [], nextCursor: null });
   const missing = await modern(token.access_token, 'tools/call', { name: 'add_document', arguments: { text: 'Hello', name: 'hello.txt' } });

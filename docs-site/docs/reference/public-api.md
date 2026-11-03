@@ -148,11 +148,17 @@ hyphens; omit `id` to generate a UUID.
 documents**, moving them to the unfiled library. Deletes return `204` without a
 body. Folder write bodies are limited to 64 KB.
 
+`GET /api/v1/providers` returns `data` and `nextCursor: null`, with one entry per
+enabled speech provider: `id`, `name`, `type`, `defaultModel`, `selected`,
+`selectedModel`, `models: [{id, name}]`, and `acceptsCustomModel`. Keys and base URLs
+are never included.
+
 `GET /api/v1/voices` returns `data: [{id, name}]`, `nextCursor: null`, and the
 resolved `provider` and `model`. Without selection parameters, it follows the
 caller's saved speech provider/model, then the instance default. Optional
 `provider` (a configured shared-provider slug) and `model` query parameters select
-a different catalogue, subject to the administrator's model policy.
+a different catalogue, subject to the administrator's model policy. The list includes
+the caller's cloned voices for that provider and model; their IDs start with `clone:`.
 
 Voice IDs are the existing **provider-native strings**, stable within that
 provider and model. They are not global voice names. Use a voice from the same

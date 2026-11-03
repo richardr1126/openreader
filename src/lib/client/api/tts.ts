@@ -19,7 +19,8 @@ export const getVoices = async (selection: { provider: string; model: string }, 
 
   if (!response.ok) throw await parseApiError(response, 'Failed to fetch voices');
   const resource = await response.json() as VoiceListResource;
-  return { voices: resource.data.map(voice => voice.id) };
+  // Personal voices have their own library in the picker.
+  return { voices: resource.data.map(voice => voice.id).filter(id => !id.startsWith('clone:')) };
 };
 
 export const createTtsPlaybackSession = async (

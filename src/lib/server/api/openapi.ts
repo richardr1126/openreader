@@ -42,7 +42,9 @@ const fileResponse = { description: 'File bytes in proxy mode, always sent as an
 const redirectResponse = { description: 'Follow the short-lived signed storage URL; never persist it.', headers: { Location: { schema: { type: 'string', format: 'uri' } } } };
 const eventsResponse = { description: 'SSE snapshot frames from the authorized operation. Reconnect after disconnect; streams are bounded to 300 seconds.',
   content: { 'text/event-stream': { schema: { type: 'string' } } } };
-const audiobookBody = object({ voice: { ...string, description: 'Provider-native ID within the saved speech provider/model. Omit to use saved settings.' },
+const audiobookBody = object({ provider: { ...string, maxLength: 200, description: 'Shared provider slug. Omit to use the saved provider.' },
+  model: { ...string, maxLength: 512, description: 'Model ID. Omit to use the saved model, or the default model of the named provider.' },
+  voice: { ...string, description: 'Voice ID within that provider and model. Omit to use the saved voice, or the first voice of the named provider.' },
   format: { ...enumeration('mp3', 'm4b'), default: 'mp3' }, speed: { type: 'number', minimum: 0.5, maximum: 3, default: 1 },
   chapter: { type: ['integer', 'null'], minimum: 0, description: 'Zero-based index. A chapter builds already-settled audio; it does not start generation.' },
   retrySkipped: { ...boolean, description: 'Retry skipped segments of a whole book.' }, includeProgress: { ...boolean, default: true },
@@ -103,7 +105,8 @@ export const publicApiSpec = {
         { requestBody: body(object({ name: { ...string, minLength: 1 }, position: integer }, [])) }),
       delete: operation('deleteFolder', 'Remove a folder while keeping its documents', 'documents:write', { '204': noContent }),
     },
-    '/voices': { get: operation('listVoices', 'List voice IDs for an enabled speech provider and model', 'documents:read', { '200': response('Entire provider/model catalogue; nextCursor is null. IDs remain provider-native strings.', ref('VoiceList')) },
+    '/providers': { get: operation('listProviders', 'List enabled speech providers and the models this instance allows', 'documents:read', { '200': response('Every enabled provider; nextCursor is null. Keys and base URLs are never included.', ref('ProviderList')) }) },
+    '/voices': { get: operation('listVoices', 'List voices for an enabled speech provider and model', 'documents:read', { '200': response('Entire provider/model catalogue with display names, then the caller\'s cloned voices for that provider and model; nextCursor is null. IDs remain provider-native strings.', ref('VoiceList')) },
       { parameters: [parameter('provider', 'query', { ...string, maxLength: 200 }, false, 'Shared provider slug; omitted follows the caller\'s saved speech provider, then the instance default.'), parameter('model', 'query', { ...string, maxLength: 512 }, false, 'Omitted follows saved model selection when provider is omitted, otherwise the configured provider model policy.')] }) },
     '/documents/{id}/audiobooks': { parameters: [parameter('id', 'path', docId)],
       post: operation('createAudiobook', 'Start or resume a matching audiobook', 'audio:generate', {
@@ -150,6 +153,7 @@ export const publicApiSpec = {
       Upload: object({ id: { type: 'string', format: 'uuid' }, status: enumeration('pending', 'processing', 'ready', 'failed'),
         document: { anyOf: [ref('Document'), { type: 'null' }] }, operationId: nullableString, error: nullableString, statusUrl: string, eventsUrl: nullableString }),
       Folder: object({ id: folderId, name: string, position: integer, createdAt: number, updatedAt: number }),
+      ProviderList: object({ data: array(object({ id: string, name: string, type: string, defaultModel: string, selected: boolean, selectedModel: { type: ['string', 'null'] }, models: array(object({ id: string, name: string })), acceptsCustomModel: boolean })), nextCursor: { type: 'null' } }),
       VoiceList: object({ data: array(object({ id: string, name: string })), nextCursor: { type: 'null' }, provider: string, model: string }),
       Me: object({ id: string, isAnonymous: boolean, scopes: array(enumeration('documents:read', 'documents:write', 'audio:generate')),
         computeLimits: object({ enabled: boolean, allowed: boolean, currentCount: number, limit: nullableNumber, remainingChars: nullableNumber,

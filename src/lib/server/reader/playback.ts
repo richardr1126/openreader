@@ -4,7 +4,7 @@ import { resolveEffectiveOpenRouterOptions } from '@openreader/tts/openrouter';
 import { normalizeSpeechText } from '@openreader/tts/speech-text';
 import { effectiveVoiceCustomization } from '@openreader/tts/voice-customization';
 import { resolveVoices } from '@openreader/tts/voice-resolution';
-import { resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
+import { resolveProviderDefaults, resolveTtsModelForProvider, resolveTtsProviderModelPolicy } from '@openreader/tts/provider-policy';
 import type { ReaderPayload, ReaderPlaybackPreparation } from '@/types/reader-bootstrap';
 import { mergeDocumentSettings, resolveBookVoice } from '@/lib/shared/document-settings';
 import { assertAuthoritativePlaybackPlan, normalizePlaybackPlan } from '@/lib/shared/playback-plan';
@@ -18,24 +18,44 @@ import { ComputeAdmissionLimitedError, createAdmittedComputeOperation } from '@/
 import { buildTtsPlaybackPlanningInput, toTtsPlaybackPlanRequest, type ParsedTtsPlaybackRequestBody } from '@/lib/server/tts/playback-request';
 import { buildPlaybackGrid, readTtsPlaybackPlanArtifact } from '@/lib/server/tts/playback-plans';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
+import { listClonedVoices } from '@/lib/server/tts/cloned-voices';
 import { resolveSpeechPreferences } from '@/lib/server/tts/speech-preferences';
 import type { ReaderBootstrapResolution } from './bootstrap';
 
-/** Resolves the playback request for a user's saved voice and document settings. */
+/** A caller's choice of an enabled provider, its model and a voice from it. */
+export type SpeechSelection = { provider?: string; model?: string; voice?: string };
+
+/**
+ * Resolves the playback request for a user's saved voice and document settings.
+ * A selection replaces them, and saved values apply only to the saved provider
+ * and model, because voices, speeds and options do not carry across them.
+ */
 export async function resolveDefaultPlaybackRequest(
   documentId: string,
   scope: ResolvedSegmentDocumentScope,
   settings: ReturnType<typeof mergeDocumentSettings>,
   storedPreferences: Record<string, unknown>,
   documentLanguage?: string | null,
-  voiceOverride?: string,
-): Promise<ParsedTtsPlaybackRequestBody | { error: string }> {
+  selection: SpeechSelection = {},
+): Promise<ParsedTtsPlaybackRequestBody | { error: string; invalid?: true }> {
   const [runtimeConfig, providers] = await Promise.all([
     getResolvedRuntimeConfig(),
     listAdminProviders(),
   ]);
-  const { normalization, preferences, provider } = resolveSpeechPreferences(storedPreferences, runtimeConfig, providers);
-  const model = preferences.ttsModel || provider.defaultModel;
+  const { normalization, preferences, provider: savedProvider } = resolveSpeechPreferences(storedPreferences, runtimeConfig, providers);
+  const { sharedProviders } = normalization;
+  if (selection.provider && !sharedProviders.some(({ slug }) => slug === selection.provider)) {
+    return { error: 'That speech provider is not available. Use one from the list of providers.', invalid: true };
+  }
+  const provider = selection.provider && selection.provider !== savedProvider.providerRef
+    ? resolveProviderDefaults({ providerRef: selection.provider, sharedProviders, fallbackProviderRef: runtimeConfig.defaultTtsProvider })
+    : savedProvider;
+  const savedModel = preferences.ttsModel || savedProvider.defaultModel;
+  const model = selection.model
+    ? resolveTtsModelForProvider({ providerRef: provider.providerRef, providerType: provider.providerType, model: selection.model,
+      sharedProviders, fallbackProviderRef: runtimeConfig.defaultTtsProvider, showAllProviderModels: runtimeConfig.showAllProviderModels })
+    : provider === savedProvider ? savedModel : provider.defaultModel;
+  const usesSavedSpeech = provider === savedProvider && model === savedModel;
   const policy = resolveTtsProviderModelPolicy({
     providerRef: provider.providerRef,
     providerType: provider.providerType,
@@ -45,13 +65,21 @@ export async function resolveDefaultPlaybackRequest(
     override: settings.voiceOverride,
     providerRef: provider.providerRef,
     ttsModel: model,
-    defaultVoice: preferences.voice,
-    defaultVoiceSpeed: preferences.voiceSpeed,
+    defaultVoice: usesSavedSpeech ? preferences.voice : '',
+    defaultVoiceSpeed: usesSavedSpeech ? preferences.voiceSpeed : 1,
   });
   // Resolve the same unsaved default as the voice picker before naming the
   // audio cache. Plans may be shared by different voices; the plan's settings
   // hash therefore cannot identify the initial cached-audio view.
-  let voice = voiceOverride || bookVoice.voice;
+  if (selection.voice?.startsWith('clone:')) {
+    const clones = await listClonedVoices(scope.userId);
+    if (!clones.some(({ id, providerRef, model: cloneModel }) => id === selection.voice && providerRef === provider.providerRef && cloneModel === model)) {
+      return { error: 'That voice is not available for this provider and model. Use one from the list of voices.', invalid: true };
+    }
+  } else if (selection.voice && policy.voiceSource === 'static' && !selection.voice.includes('+') && !policy.defaultVoices.includes(selection.voice)) {
+    return { error: 'That voice is not available for this provider and model. Use an ID from the list of voices.', invalid: true };
+  }
+  let voice = selection.voice || bookVoice.voice;
   // A static catalogue needs no credentials. An unconfigured installation
   // must still support reading with an estimated timeline; only generation
   // requires a configured provider.
@@ -86,10 +114,10 @@ export async function resolveDefaultPlaybackRequest(
       voice,
       nativeSpeed: policy.supportsNativeModelSpeed ? bookVoice.voiceSpeed : 1,
       ...(provider.providerType === 'openrouter'
-        ? { ttsModelOptions: resolveEffectiveOpenRouterOptions(model, preferences.ttsModelOptions, provider.defaultModelOptions) }
+        ? { ttsModelOptions: resolveEffectiveOpenRouterOptions(model, usesSavedSpeech ? preferences.ttsModelOptions : undefined, provider.defaultModelOptions) }
         : {}),
-      ...(policy.supportsInstructions && (preferences.ttsInstructions || provider.defaultInstructions)
-        ? { ttsInstructions: preferences.ttsInstructions || provider.defaultInstructions }
+      ...(policy.supportsInstructions && ((usesSavedSpeech && preferences.ttsInstructions) || provider.defaultInstructions)
+        ? { ttsInstructions: (usesSavedSpeech && preferences.ttsInstructions) || provider.defaultInstructions }
         : {}),
       language,
       speechText: normalizeSpeechText({ ...preferences.speechText, ...settings.speechText }),

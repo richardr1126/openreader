@@ -348,6 +348,7 @@ describe('server-state architecture', () => {
       '/api/v1/folders/[id]',
       '/api/v1/me',
       '/api/v1/openapi.json',
+      '/api/v1/providers',
       '/api/v1/uploads',
       '/api/v1/uploads/[uploadId]',
       '/api/v1/uploads/[uploadId]/events',
