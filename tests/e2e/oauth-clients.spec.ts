@@ -105,6 +105,28 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
   expect((await page.request.get('/api/v1/me', { headers: deviceBearer })).status()).toBe(401);
 });
 
+test('a verified app shows its logo from our domain, and falls back to no image', async ({ page }) => {
+  const logoUrl = '/api/oauth/client-logo?client_id=connector';
+  await page.route('**/api/oauth/request**', route => route.fulfill({ json: { clientId: 'https://connector.example/client.json', name: 'Connector',
+    scopes: ['documents:read'], destination: null, verifiedDomain: 'connector.example', logoUrl } }));
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+  let logoAvailable = true;
+  await page.route(`**${logoUrl}`, route => logoAvailable ? route.fulfill({ contentType: 'image/png', body: png }) : route.fulfill({ status: 404 }));
+  await page.goto('/oauth/device?user_code=ABCD-EFGH');
+  await declineOptionalCookies(page);
+  await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+  await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');
+  await page.getByPlaceholder('Password', { exact: true }).fill('TestAccount#2026');
+  await page.getByPlaceholder('Password', { exact: true }).press('Enter');
+  await expect(page.getByText('Verified as connector.example', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Connector logo', exact: true })).toBeVisible();
+
+  logoAvailable = false;
+  await page.reload();
+  await expect(page.getByText('Verified as connector.example', { exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Connector logo', exact: true })).toHaveCount(0);
+});
+
 test('signing in from a device link returns to the same code', async ({ page }) => {
   const userCode = 'ABCD-EFGH';
   await page.goto(`/oauth/device?user_code=${userCode}`);

@@ -9,7 +9,7 @@ import { runMigrations } from '@openreader/database/migrate';
 import type { JwtOptions } from 'better-auth/plugins';
 
 vi.mock('@better-auth/cimd/node', () => ({ fetchClientMetadataResource: async () => new Response(JSON.stringify({
-  client_id: 'https://connector.example/client.json', client_name: 'Metadata connector', redirect_uris: ['http://127.0.0.1:43210/callback'],
+  client_id: 'https://connector.example/client.json', client_name: 'Metadata connector', logo_uri: 'https://connector.example/logo.png', redirect_uris: ['http://127.0.0.1:43210/callback'],
   token_endpoint_auth_method: 'none', grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'],
 }), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=3600' } }) }));
 
@@ -96,7 +96,7 @@ test('authorization code, PKCE, consent and JWT give only the granted API scopes
   expect(sql<{ reference_id: string }>('select reference_id from oauth_refresh_token where user_id=?', userId)[0].reference_id).toBe(consent.id);
   const { listConnectedApps } = await import('@/lib/server/auth/connected-apps');
   expect((await listConnectedApps(userId)).data).toEqual([expect.objectContaining({
-    id: clientId, name: 'OAuth flow fixture', scopes: ['documents:read', 'offline_access'], redirectDomains: ['127.0.0.1:43210'],
+    id: clientId, name: 'OAuth flow fixture', logoUrl: null, scopes: ['documents:read', 'offline_access'], redirectDomains: ['127.0.0.1:43210'],
   })]);
   expect(JSON.parse(sql<{ scopes: string }>('select scopes from oauth_consent where id=?', consent.id)[0].scopes)).toEqual(['documents:read', 'offline_access']);
 });
@@ -260,10 +260,10 @@ test('a client ID metadata document connects without registering and shows its d
   const token = await grant('documents:read offline_access', mcpResource, metadataUrl);
   expect((await mcp(token.access_token, 'tools/list')).status).toBe(200);
   const { listConnectedApps, oauthRequestInfo } = await import('@/lib/server/auth/connected-apps');
-  expect((await listConnectedApps(userId)).data).toEqual(expect.arrayContaining([expect.objectContaining({ id: metadataUrl, name: 'Metadata connector', verifiedDomain: 'connector.example' })]));
+  expect((await listConnectedApps(userId)).data).toEqual(expect.arrayContaining([expect.objectContaining({ id: metadataUrl, name: 'Metadata connector', verifiedDomain: 'connector.example', logoUrl: `/api/oauth/client-logo?client_id=${encodeURIComponent(metadataUrl)}` })]));
   const intent = await authorize('documents:read offline_access', mcpResource, metadataUrl);
   const info = await oauthRequestInfo(new NextRequest(`${origin}/api/oauth/request?${new URLSearchParams({ query: intent.query })}`));
-  expect(info).toMatchObject({ verifiedDomain: 'connector.example', destination: '127.0.0.1:43210' });
+  expect(info).toMatchObject({ verifiedDomain: 'connector.example', destination: '127.0.0.1:43210', logoUrl: `/api/oauth/client-logo?client_id=${encodeURIComponent(metadataUrl)}` });
   const { disconnectApp } = await import('@/lib/server/auth/connected-apps');
   await disconnectApp(userId, metadataUrl);
 });

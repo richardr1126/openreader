@@ -1100,6 +1100,10 @@ Implemented on 2026-11-02.
 - Consent and device approval were simplified and show the signed-in account with Switch
   account. A device link checks its code automatically. `AuthCard` now frames every sign-in,
   account and consent screen.
+- Verified CIMD clients can show a logo. `/api/oauth/client-logo` fetches `logo_uri` live through
+  the shared SSRF fetch (`src/lib/server/external-fetch.ts`) and stores nothing; the browser
+  caches it for a day. Same-origin HTTPS only, PNG, JPEG or WebP by file signature, 256 KB. Every
+  other client, and any failure, shows a letter.
 
 The Playwright matrix also exposed a bug in the onboarding flow, unrelated to MCP.
 `PrivacyModal` awaited the PATCH and its refetch, then called `onAccept`, which closed

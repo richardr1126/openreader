@@ -12,7 +12,8 @@ import { getRequiredAuthEnv } from './config';
 import { oauthUrls } from './oauth';
 import { verifyOAuthQueryParams } from '@better-auth/oauth-provider';
 import { OAUTH_SCOPES } from '@/lib/shared/api-scopes';
-import { oauthRedirectDestination, oauthStringArray, oauthVerifiedDomain } from './oauth-values';
+import { fetchOAuthClientLogo } from './oauth-client-logo';
+import { oauthClientLogoUrl, oauthRedirectDestination, oauthStringArray, oauthVerifiedDomain } from './oauth-values';
 
 const schema = process.env.POSTGRES_URL ? postgres : sqlite;
 export function oauthCookieRequest(request: NextRequest, run: (principal: ApiPrincipal) => Promise<Response>) {
@@ -27,17 +28,17 @@ export function oauthCookieRequest(request: NextRequest, run: (principal: ApiPri
 }
 
 export async function listConnectedApps(userId: string) {
-  const rows = await db.select({ clientId: schema.oauthClient.clientId, name: schema.oauthClient.name,
+  const rows = await db.select({ clientId: schema.oauthClient.clientId, name: schema.oauthClient.name, clientDiscoveryId: schema.oauthClient.clientDiscoveryId, icon: schema.oauthClient.icon,
     redirectUris: schema.oauthClient.redirectUris, consentId: schema.oauthConsent.id, scopes: schema.oauthConsent.scopes,
     createdAt: schema.oauthConsent.createdAt }).from(schema.oauthConsent)
     .innerJoin(schema.oauthClient, eq(schema.oauthClient.clientId, schema.oauthConsent.clientId))
     .where(eq(schema.oauthConsent.userId, userId));
-  const grouped = new Map<string, { id: string; name: string; verifiedDomain: string | null; redirectDomains: string[]; scopes: string[]; createdAt: number }>();
+  const grouped = new Map<string, { id: string; name: string; verifiedDomain: string | null; logoUrl: string | null; redirectDomains: string[]; scopes: string[]; createdAt: number }>();
   for (const row of rows) {
     const scopes = oauthStringArray(row.scopes);
     const existing = grouped.get(row.clientId);
     if (existing) { existing.scopes = [...new Set([...existing.scopes, ...scopes])]; continue; }
-    grouped.set(row.clientId, { id: row.clientId, name: row.name || 'Unnamed app', verifiedDomain: oauthVerifiedDomain(row.clientId), scopes, createdAt: row.createdAt.getTime(),
+    grouped.set(row.clientId, { id: row.clientId, name: row.name || 'Unnamed app', verifiedDomain: oauthVerifiedDomain(row.clientId), logoUrl: oauthClientLogoUrl(row), scopes, createdAt: row.createdAt.getTime(),
       redirectDomains: [...new Set(oauthStringArray(row.redirectUris).flatMap(uri => {
         try { return [oauthRedirectDestination(uri)]; } catch { return []; }
       }))] });
@@ -87,8 +88,16 @@ export async function oauthRequestInfo(request: NextRequest) {
     catch { throw new ApiRequestError(400, 'OAUTH_REQUEST_INVALID', 'A valid redirect URI is required.'); }
   }
   if (!scopes.length || scopes.some(scope => !(OAUTH_SCOPES as readonly string[]).includes(scope))) throw new ApiRequestError(400, 'OAUTH_REQUEST_INVALID', 'Unsupported requested scopes.');
-  const clients = await db.select({ name: schema.oauthClient.name, disabled: schema.oauthClient.disabled })
+  const clients = await db.select({ name: schema.oauthClient.name, disabled: schema.oauthClient.disabled, clientDiscoveryId: schema.oauthClient.clientDiscoveryId, icon: schema.oauthClient.icon })
     .from(schema.oauthClient).where(eq(schema.oauthClient.clientId, clientId)).limit(1);
   if (!clients[0] || clients[0].disabled) throw new ApiRequestError(404, 'APP_NOT_FOUND', 'App not found.');
-  return { clientId, name: clients[0].name || 'Unnamed app', scopes, destination, verifiedDomain: oauthVerifiedDomain(clientId) };
+  return { clientId, name: clients[0].name || 'Unnamed app', scopes, destination, verifiedDomain: oauthVerifiedDomain(clientId), logoUrl: oauthClientLogoUrl({ clientId, ...clients[0] }) };
+}
+
+export async function oauthClientLogo(clientId: string) {
+  if (!clientId || clientId.length > 512) return null;
+  const clients = await db.select({ disabled: schema.oauthClient.disabled, clientDiscoveryId: schema.oauthClient.clientDiscoveryId, icon: schema.oauthClient.icon })
+    .from(schema.oauthClient).where(eq(schema.oauthClient.clientId, clientId)).limit(1);
+  if (!clients[0] || clients[0].disabled) return null;
+  return fetchOAuthClientLogo({ clientId, ...clients[0] });
 }

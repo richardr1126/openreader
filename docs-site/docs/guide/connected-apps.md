@@ -20,6 +20,7 @@ Some apps show you a code instead of opening a browser. Enter it on your instanc
 ## Before you allow access
 
 - **Verified as** names the domain that controls the app's identity. **Unverified app** means OpenReader can't confirm who made it, because apps choose their own names. Allow it only if you just started connecting it.
+- A logo appears only beside **Verified as**. Every other app shows the first letter of its name, even if it declares a logo.
 - **Returns to** is where your browser goes next.
 - **Signed in as** is the account the app will use. Choose **Switch account** if it is the wrong one. The desktop app has one owner, so it skips this.
 

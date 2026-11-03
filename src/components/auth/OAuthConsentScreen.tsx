@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Badge, Button, ButtonLink, Field, InlineButton, Input } from '@/components/ui';
 import { AuthCard } from '@/components/auth/AuthCard';
+import { AppAvatar } from '@/components/auth/AppAvatar';
 import { CheckIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -13,7 +14,7 @@ import { getAuthClient } from '@/lib/client/auth-client';
 import { requestJson } from '@/lib/client/api/http';
 import { API_SCOPE_LABELS } from '@/lib/shared/api-scopes';
 
-type RequestInfo = { name: string; scopes: string[]; destination: string | null; clientId: string; verifiedDomain: string | null };
+type RequestInfo = { name: string; scopes: string[]; destination: string | null; clientId: string; logoUrl: string | null; verifiedDomain: string | null };
 export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
   const search = useSearchParams();
   const query = search.toString();
@@ -90,6 +91,7 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
   const returnsElsewhere = info?.destination && info.destination !== info.verifiedDomain;
 
   return <AuthCard title={title} description={info && !finished && <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <AppAvatar name={info.name} logoUrl={info.logoUrl} />
     {info.verifiedDomain
       ? <span className="inline-flex items-center gap-1 text-foreground"><CheckIcon className="h-4 w-4 text-accent" />Verified as {info.verifiedDomain}</span>
       : <Badge tone="foreground">Unverified app</Badge>}

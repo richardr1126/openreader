@@ -17,6 +17,20 @@ export function oauthVerifiedDomain(clientId: string): string | null {
   try { return new URL(clientId).host; } catch { return null; }
 }
 
+/** Only a client that proved its domain gets a logo, and only one on that same HTTPS origin. */
+export function oauthClientLogoSource(client: { clientId: string; clientDiscoveryId: string | null; icon: string | null }): string | null {
+  if (client.clientDiscoveryId !== 'cimd' || !client.icon || !oauthVerifiedDomain(client.clientId)) return null;
+  try {
+    const logo = new URL(client.icon);
+    if (logo.protocol !== 'https:' || logo.username || logo.password || logo.origin !== new URL(client.clientId).origin) return null;
+    return logo.href;
+  } catch { return null; }
+}
+
+export function oauthClientLogoUrl(client: { clientId: string; clientDiscoveryId: string | null; icon: string | null }): string | null {
+  return oauthClientLogoSource(client) ? `/api/oauth/client-logo?client_id=${encodeURIComponent(client.clientId)}` : null;
+}
+
 /** Direct SQL reads bypass Better Auth's SQLite JSON decoding. */
 export function oauthStringArray(value: unknown): string[] {
   if (typeof value === 'string') {

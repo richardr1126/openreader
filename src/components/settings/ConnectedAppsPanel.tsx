@@ -2,10 +2,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { requestJson } from '@/lib/client/api/http';
+import { AppAvatar } from '@/components/auth/AppAvatar';
 import { Badge, Button } from '@/components/ui';
 import { API_SCOPE_LABELS } from '@/lib/shared/api-scopes';
 
-type App = { id: string; name: string; verifiedDomain: string | null; redirectDomains: string[]; scopes: string[]; createdAt: number };
+type App = { id: string; name: string; verifiedDomain: string | null; logoUrl: string | null; redirectDomains: string[]; scopes: string[]; createdAt: number };
 export function ConnectedAppsPanel() {
   const { data: session } = useAuthSession();
   const client = useQueryClient();
@@ -24,7 +25,7 @@ export function ConnectedAppsPanel() {
           : <ul className="mt-4 divide-y divide-line">{query.data.data.map(app => <li key={app.id} className="py-4 first:pt-0 last:pb-0">
             <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h4 className="text-sm font-semibold">{app.name}</h4><p className="mt-1 break-all text-xs text-soft">{app.redirectDomains.join(', ') || 'Device authorization'}</p></div>
               <Button variant="secondary" size="sm" disabled={disconnect.isPending} onClick={() => disconnect.mutate(app.id)}>Disconnect</Button></div>
-            <div className="mt-2"><Badge>{app.verifiedDomain ?? 'Unverified app'}</Badge></div>
+            <div className="mt-2 flex items-center gap-2"><AppAvatar name={app.name} logoUrl={app.logoUrl} /><Badge>{app.verifiedDomain ? `Verified as ${app.verifiedDomain}` : 'Unverified app'}</Badge></div>
             <ul className="mt-2 space-y-1 text-xs text-soft">{app.scopes.map(scope => <li key={scope}>{API_SCOPE_LABELS[scope] || scope}</li>)}</ul>
           </li>)}</ul>}
     {disconnect.isError && <p role="alert" className="mt-3 text-sm text-danger">Unable to disconnect app. Try again.</p>}

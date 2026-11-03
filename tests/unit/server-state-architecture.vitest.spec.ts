@@ -311,6 +311,7 @@ describe('server-state architecture', () => {
       '/api/local-library',
       '/api/local-library/content',
       '/api/mcp',
+      '/api/oauth/client-logo',
       '/api/oauth/request',
       '/api/tts/cloned-voices',
       '/api/tts/models',
