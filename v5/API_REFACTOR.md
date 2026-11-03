@@ -436,9 +436,10 @@ Tools: `list_documents`, `add_document`, `list_providers`, `list_voices`,
 `create_audiobook` and `get_audiobook`.
 
 - Tools return a status at once and never wait for an audiobook to finish.
-- Tools return `webUrl`, a ready-to-play link to the reader, for the user to open,
-  because a link that needs a bearer token cannot be clicked in chat. They never
-  return a raw worker audio URL or a playback token.
+- Tools return `webUrl`, a ready-to-play link to the reader, and, once an audiobook
+  is ready, `webDownloadUrl` (phase 5.1), for the user to open, because a link that
+  needs a bearer token cannot be clicked in chat. They never return a raw worker audio
+  URL or a playback token.
 - No local MCP package is needed at first, since OAuth handles sign-in.
 - Use the MCP SDK (`@modelcontextprotocol/server` v2 with zod).
 - Accept and document the re-consent cutoffs clients have.
@@ -1132,3 +1133,22 @@ Not covered yet:
 - Inspector connected on the legacy path, so the 2026-07-28 protocol is covered by Vitest only.
 - No client has generated an audiobook with a provider other than the saved one.
 - Hosted connectors need a public HTTPS address, so they wait for final verification.
+
+### Phase 5.1: Download links and access pages
+
+Delivered: `webDownloadUrl` on v1 audiobooks and MCP tool results, pointing to
+`/audiobooks/{documentId}/{artifactId}`. That page authorizes on the server and starts the
+download through the existing v1 file route, so the file route gained no browser handling.
+
+- **A page, not a browser redirect from the file route.** A sign-in redirect would leave the
+  tab on the sign-in form when the attachment starts. The page also gives the wrong-account
+  case somewhere to go, and a link preview without a session starts nothing.
+- **No access looks the same for every link.** Signed-out visitors, guests and other accounts
+  never learn whether the document exists. A guest is asked to sign in; an account is offered
+  Switch account. Reader links (`/pdf`, `/epub`, `/html`) use the same card when
+  reader bootstrap returns `404`, which also covers a document its owner deleted.
+- **Sign-in returns to the link.** `src/lib/shared/sign-in-return.ts` owns the allowed paths.
+  `AuthLoader` uses it too, so sign-out and instances without guest sessions keep the link.
+- **Known limit.** A signed-out visitor to a reader link gets a guest session before the
+  reader can report no access, because `AuthLoader` runs first. Signing in then links that
+  empty guest into the account, as it does for any guest.

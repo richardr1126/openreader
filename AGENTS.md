@@ -134,7 +134,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-11-02 the expected clean result is 1766 Vitest tests and 95 local
+- As of 2026-11-03 the expected clean result is 1773 Vitest tests and 99 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.
@@ -239,7 +239,7 @@ caused conflicts, high CPU, misleading failures, and overheating.
 ## Current State
 
 - Public API progress on `refactor/public-api` is tracked in `v5/API_REFACTOR.md`.
-- Phases 1 to 5 are done (MCP at `/api/mcp`). The owner's final verification before
+- Phases 1 to 5.1 are done (MCP at `/api/mcp`, download links and access pages). The owner's final verification before
   release is outstanding, including hosted connectors over public HTTPS.
 - Migration 0027 combines this branch's unshipped migrations (phase 4.9). A local
   database that ran an earlier version of them must be reset.

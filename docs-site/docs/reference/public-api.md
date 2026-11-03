@@ -189,7 +189,9 @@ The response is `200` when the matching file is ready, otherwise `202` with its
 status and ID. A repeated request with matching document version, settings,
 format, speed and chapter reuses the same audiobook. Read
 `GET /api/v1/documents/{id}/audiobooks/{audiobookId}` until `downloadUrl` is
-present, then follow it. `webUrl` opens the reader in the normal app.
+present, then follow it. `webUrl` opens the reader in the normal app. `webDownloadUrl`,
+present with `downloadUrl`, is a page for a person to open in a browser: it starts
+the download, or offers to sign in or switch account if that browser lacks access.
 
 Signed-in whole-book requests continue through assembly after the tab closes.
 Guest requests advance only on the guest's own requests. If an unparsed PDF

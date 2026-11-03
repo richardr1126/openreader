@@ -543,7 +543,7 @@ describe('server-state architecture', () => {
     expect(clientTts).toContain('/api/v1/documents/');
     expect(audiobooks).toContain('buildTtsPlaybackExportArtifactId');
     expect(audiobooks).toContain('createTtsPlaybackExportArtifactOperation');
-    expect(audiobookFileRoute).toContain('getTtsPlaybackExportArtifact');
+    expect(audiobookFileRoute).toContain('findAudiobookFile');
     expect(audiobookFileRoute).toContain('sendStorageArtifact');
     expect(audiobookEventsRoute).toContain('proxyOperationEvents');
     expect(workerHandlers).toContain('runTtsPlaybackExportArtifact');

@@ -61,9 +61,12 @@ the provider's default, and the result reports the provider, model and voice it 
 `create_audiobook` returns at once with a status, and sending the same request again
 returns the same audiobook. Use `get_audiobook` to check on it.
 
-Results include a `webUrl` that opens the document in OpenReader. To listen to or
-download an audiobook, open that link and sign in; tools do not return audio files or
-audio links. A tool that fails returns an error result with a `code`, a `message` and,
+Results include a `webUrl` that opens the document in OpenReader. Once an audiobook is
+ready, `get_audiobook` also returns a `webDownloadUrl`, a page that starts the download.
+Both links need the user to be signed in to the account that owns the document, in the
+browser that opens them. Without access, the page offers to sign in or switch account
+and then returns to the link. Tools do not return audio files, API file addresses or
+storage links. A tool that fails returns an error result with a `code`, a `message` and,
 when it applies, `retryAfterMs`. A call without the scope it needs gets an HTTP 403
 `insufficient_scope` challenge, so the client can ask for more access.
 
