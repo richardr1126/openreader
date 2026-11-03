@@ -27,6 +27,8 @@ import type { ReaderType } from '@/types/user-state';
 import { ReaderHeader } from './ReaderHeader';
 import { ReaderAppearanceProvider } from '@/contexts/ReaderAppearanceContext';
 import { ReaderError, ReaderLoader, ReaderReplanStatus } from './ReaderLoader';
+import { AccessRequiredCard } from '@/components/auth/AccessRequiredCard';
+import { useAuthSession } from '@/hooks/useAuthSession';
 
 export type ReaderRendererProps<T extends ReaderType> = {
   payload: Extract<ReaderPayload, { readerType: T }>;
@@ -49,6 +51,7 @@ export function ReaderShell<T extends ReaderType>({
   children: (props: ReaderRendererProps<T>) => ReactNode;
 }) {
   const bootstrap = useReaderBootstrap(documentId);
+  const { data: session } = useAuthSession();
   const { result } = bootstrap;
   const {
     initializeReaderSession,
@@ -213,6 +216,14 @@ export function ReaderShell<T extends ReaderType>({
   if (result.status === 'pending') {
     return statusScreen(
       <ReaderLoader progress={result.progress} />,
+    );
+  }
+
+  if (result.status === 'error' && result.notFound) {
+    return (
+      <main className="flex h-dvh flex-col">
+        <AccessRequiredCard subject="document" accountName={session?.user && !session.user.isAnonymous ? session.user.name : null} />
+      </main>
     );
   }
 

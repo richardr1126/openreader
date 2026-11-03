@@ -11,6 +11,9 @@ export async function getReaderBootstrap(
       cache: 'no-store',
     },
   );
+  if (response.status === 404) {
+    return { status: 'error', message: 'Document not found.', retryable: false, notFound: true };
+  }
   if (!response.ok && response.status !== 202) {
     const body = (await response.json().catch(() => null)) as Partial<ReaderBootstrapResult> | null;
     if (body?.status === 'error' && typeof body.message === 'string') {

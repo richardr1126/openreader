@@ -10,6 +10,7 @@ import { useSessionQueryReset } from '@/hooks/useSessionQueryReset';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button } from '@/components/ui';
+import { signInPathFor } from '@/lib/shared/sign-in-return';
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -142,7 +143,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
           } finally {
             clearingDisallowedAnonymousRef.current = false;
           }
-          router.replace('/signin');
+          router.replace(signInPathFor(pathname));
           return;
         }
 
@@ -157,7 +158,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
         setBootstrapError(null);
         if (!isAuthPage) {
           setIsRedirecting(true);
-          router.replace('/signin');
+          router.replace(signInPathFor(pathname));
         }
         return;
       }
@@ -185,7 +186,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
         setIsAutoLoggingIn(false);
         setBootstrapError(null);
         setIsRedirecting(true);
-        router.replace('/signin');
+        router.replace(signInPathFor(pathname));
         return;
       }
 
@@ -223,7 +224,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
             const info = getErrorInfo(result);
             if (info?.code === 'ACCOUNT_CREATION_LIMITED') {
               setIsRedirecting(true);
-              router.replace('/signin');
+              router.replace(signInPathFor(pathname));
               return;
             }
             if (info) {
@@ -286,6 +287,7 @@ export function AuthLoader({ children }: { children: ReactNode }) {
     refetchSession,
     retryNonce,
     isAuthPage,
+    pathname,
     router,
   ]);
 

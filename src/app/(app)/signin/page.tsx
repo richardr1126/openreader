@@ -11,6 +11,7 @@ import { GithubIcon, KeyIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { Button, Checkbox, Field, InlineButton, Input } from '@/components/ui';
 import { AuthCard, AuthFallback, AuthFooter } from '@/components/auth/AuthCard';
+import { signInReturnPath } from '@/lib/shared/sign-in-return';
 
 function describeOAuthError(code: string): string {
   switch (code) {
@@ -31,15 +32,7 @@ function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOAuthSignIn = searchParams.has('sig');
-  const returnTo = (() => {
-    const value = searchParams.get('returnTo');
-    if (!value) return '/app';
-    try {
-      const url = new URL(value, 'http://localhost');
-      const allowed = url.pathname === '/oauth/device' || /^\/audiobooks\/[^/]+\/[^/]+$/.test(url.pathname);
-      return url.origin === 'http://localhost' && allowed ? `${url.pathname}${url.search}` : '/app';
-    } catch { return '/app'; }
-  })();
+  const returnTo = signInReturnPath(searchParams.get('returnTo'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loadingEmail, setLoadingEmail] = useState(false);
