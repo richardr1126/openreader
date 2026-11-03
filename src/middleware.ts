@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getRequiredAuthEnv } from '@/lib/server/auth/config';
+import { signInPathFor } from '@/lib/shared/sign-in-return';
 
 /**
  * Better Auth session cookie name (default prefix + session_token).
@@ -48,6 +49,9 @@ const SERVICE_AUTHENTICATED_PATHS = new Set([
   '/api/internal/compute/limits/consume',
   '/api/internal/compute/limits/complete',
 ]);
+
+/** Pages that need a session. Everything else, static files included, passes through. */
+const SESSION_REQUIRED_PATH = /^\/(?:app|pdf|epub|html)(?:\/|$)/;
 
 function isPublicPath(pathname: string): boolean {
   // Root landing page
@@ -124,10 +128,11 @@ export function middleware(request: NextRequest) {
 
   getRequiredAuthEnv();
 
+  const hasSession = SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
+
   // Fast-path redirect for signed-in users hitting the public landing page.
   // This avoids extra server work in the landing page render path.
   if (pathname === '/' && request.nextUrl.searchParams.get('redirect') !== 'false') {
-    const hasSession = SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
     if (hasSession) {
       const appUrl = request.nextUrl.clone();
       appUrl.pathname = '/app';
@@ -141,10 +146,12 @@ export function middleware(request: NextRequest) {
     return publicRouteResponse(pathname);
   }
 
-  // Guest sessions are the admin-editable `allowAnonymousSessions` runtime
-  // setting, which lives in SQL and cannot be read here. Signed-out visitors
-  // therefore reach the page: AuthLoader.tsx either bootstraps an anonymous
-  // session or redirects to /signin, and every API route authenticates itself.
+  // Only the cookie's presence is checked here. A stale cookie reaches the page,
+  // where AuthLoader.tsx redirects, and every API route authenticates itself.
+  if (!hasSession && SESSION_REQUIRED_PATH.test(pathname)) {
+    return NextResponse.redirect(new URL(signInPathFor(pathname), request.url));
+  }
+
   return NextResponse.next();
 }
 

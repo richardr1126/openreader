@@ -172,7 +172,7 @@ function SignInContent() {
         return;
       }
       await refreshRateLimit();
-      router.push('/app');
+      router.push(returnTo);
     } catch (e) {
       console.error('Anonymous sign-in failed:', e);
       setError('Unable to continue as a guest. Please try again.');

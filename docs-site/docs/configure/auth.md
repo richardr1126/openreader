@@ -50,7 +50,7 @@ Both settings are in **Settings → Admin → Instance → Site features**.
   - **Closed** refuses new accounts.
 
   None of these block the [first-admin](./admin-panel#create-the-first-administrator) account.
-- **Guest sessions** (off by default) let visitors use the app without an account. A guest who later signs up can keep their documents and progress. Turning it off refuses new guest sessions and signs existing guests out on their next page load.
+- **Guest sessions** (off by default) add a **Continue as guest** button to the sign-in page, so visitors can use the app without an account. A guest who later signs up can keep their documents and progress. Turning it off refuses new guest sessions and signs existing guests out on their next page load.
 
 ## Managing users
 

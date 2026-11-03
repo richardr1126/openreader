@@ -3,6 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+import { AuthSessionProvider, type AuthSessionData } from '@/contexts/AuthSessionContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
 import { AuthRateLimitProvider, type OidcAuthPublicConfig } from '@/contexts/AuthRateLimitContext';
 import { RuntimeConfigProvider } from '@/contexts/RuntimeConfigContext';
@@ -14,9 +15,10 @@ interface ProvidersProps {
   authBaseUrl: string | null;
   githubAuthEnabled: boolean;
   oidcAuth: OidcAuthPublicConfig | null;
+  initialSession: AuthSessionData | null;
 }
 
-export function Providers({ children, authBaseUrl, githubAuthEnabled, oidcAuth }: ProvidersProps) {
+export function Providers({ children, authBaseUrl, githubAuthEnabled, oidcAuth, initialSession }: ProvidersProps) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -47,18 +49,20 @@ export function Providers({ children, authBaseUrl, githubAuthEnabled, oidcAuth }
   return (
     <QueryClientProvider client={queryClient}>
       <RuntimeConfigProvider>
-        <AuthRateLimitProvider
-          authBaseUrl={authBaseUrl}
-          githubAuthEnabled={githubAuthEnabled}
-          oidcAuth={oidcAuth}
-        >
-          <ThemeProvider>
-            <DesktopTitleBarColors />
-            <AuthLoader>
-              {children}
-            </AuthLoader>
-          </ThemeProvider>
-        </AuthRateLimitProvider>
+        <AuthSessionProvider authBaseUrl={authBaseUrl} initialSession={initialSession}>
+          <AuthRateLimitProvider
+            authBaseUrl={authBaseUrl}
+            githubAuthEnabled={githubAuthEnabled}
+            oidcAuth={oidcAuth}
+          >
+            <ThemeProvider>
+              <DesktopTitleBarColors />
+              <AuthLoader>
+                {children}
+              </AuthLoader>
+            </ThemeProvider>
+          </AuthRateLimitProvider>
+        </AuthSessionProvider>
       </RuntimeConfigProvider>
     </QueryClientProvider>
   );

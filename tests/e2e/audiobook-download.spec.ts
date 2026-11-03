@@ -23,9 +23,14 @@ test('a download link asks for sign-in, then offers another account when this on
   await signIn();
 });
 
-test('a reader link for a document this session cannot open offers sign-in and returns to it', async ({ page }) => {
+test('a reader link keeps its place through sign-in, a guest session and a switch of account', async ({ page }) => {
   await page.goto(`/pdf/${missingDocument}`);
+  await expect(page).toHaveURL(new RegExp(`/signin\\?returnTo=%2Fpdf%2F${missingDocument}$`));
   await declineOptionalCookies(page);
+  await page.getByRole('button', { name: 'Continue as guest', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in to open this document', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/pdf/${missingDocument}$`));
+
   await page.getByRole('link', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { closeChangelog, declineOptionalCookies } from './support/onboarding';
+import { closeChangelog, declineOptionalCookies, startGuestSession } from './support/onboarding';
 
 /** Enabling the task for real would reach every guest in the parallel suite. */
 async function retainGuestsFor(page: Page, days: () => number) {
@@ -16,7 +16,7 @@ test('the next onboarding step stays open while privacy consent is still saving'
     if (route.request().method() === 'PATCH') await new Promise((resolve) => setTimeout(resolve, 1_000));
     await route.fallback();
   });
-  await page.goto('/app');
+  await startGuestSession(page);
 
   const privacy = page.getByRole('dialog', { name: 'Privacy & Data Usage', exact: true });
   await privacy.getByRole('checkbox', { name: 'I have read and agree to the', exact: true }).check();
@@ -35,7 +35,7 @@ test('the next onboarding step stays open while privacy consent is still saving'
 test('a guest is told once how long idle data is kept, and again when the period shrinks', async ({ page }) => {
   let days = 30;
   await retainGuestsFor(page, () => days);
-  await page.goto('/app');
+  await startGuestSession(page);
 
   const privacy = page.getByRole('dialog', { name: 'Privacy & Data Usage', exact: true });
   await privacy.getByRole('checkbox', { name: 'I have read and agree to the', exact: true }).check();

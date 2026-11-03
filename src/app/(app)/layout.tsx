@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
+import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
 
 import { Providers } from '@/app/providers';
 import { ConfigProvider } from '@/contexts/ConfigContext';
 import { AppMain, AppShell } from '@/components/layout';
+import { getAuthContext } from '@/lib/server/auth/auth';
 import { getAuthBaseUrl, getOidcPublicAuthConfig, isGithubAuthEnabled } from '@/lib/server/auth/config';
 
 export const dynamic = 'force-dynamic';
@@ -23,16 +25,26 @@ export const metadata: Metadata = {
   },
 };
 
-export default function AppLayout({ children }: { children: ReactNode }) {
+export default async function AppLayout({ children }: { children: ReactNode }) {
   const authBaseUrl = getAuthBaseUrl();
   const githubAuthEnabled = isGithubAuthEnabled();
   const oidcAuth = getOidcPublicAuthConfig();
+  const { session, user } = await getAuthContext({ headers: await headers() });
+  const initialSession = session && user && {
+    user,
+    session: {
+      id: session.session.id,
+      userId: session.session.userId,
+      expiresAt: session.session.expiresAt,
+    },
+  };
 
   return (
     <Providers
       authBaseUrl={authBaseUrl}
       githubAuthEnabled={githubAuthEnabled}
       oidcAuth={oidcAuth}
+      initialSession={initialSession}
     >
       {/* Keep the preferences query/context mounted across library and reader navigation. */}
       <ConfigProvider>

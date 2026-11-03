@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-test('a capped visitor reaches sign-in without retrying guest creation', async ({ page }) => {
+test('a capped visitor stays on sign-in without retrying guest creation', async ({ page }) => {
   let attempts = 0;
   await page.route('**/api/auth/sign-in/anonymous', async (route) => {
     attempts++;
@@ -10,6 +10,8 @@ test('a capped visitor reaches sign-in without retrying guest creation', async (
   });
   await page.goto('/app');
   await expect(page).toHaveURL(/\/signin$/);
+  await page.getByRole('button', { name: 'Continue as guest', exact: true }).click();
+  await expect(page.getByText('Too many new guests from this network.', { exact: false })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Sign up', exact: true })).toBeVisible();
   expect(attempts).toBe(1);

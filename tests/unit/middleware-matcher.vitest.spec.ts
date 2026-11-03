@@ -23,6 +23,23 @@ describe('middleware matcher', () => {
     }
   });
 
+  test('sends signed-out visitors from session pages to sign-in, keeping reader links', () => {
+    const location = (pathname: string, cookie?: string) => middleware(new NextRequest(`http://localhost${pathname}`, {
+      headers: cookie ? { cookie } : {},
+    })).headers.get('location');
+
+    expect(location('/app')).toBe('http://localhost/signin');
+    expect(location('/app/settings')).toBe('http://localhost/signin');
+    expect(location('/pdf/abc')).toBe('http://localhost/signin?returnTo=%2Fpdf%2Fabc');
+    expect(location('/epub/abc')).toBe('http://localhost/signin?returnTo=%2Fepub%2Fabc');
+    expect(location('/html/abc')).toBe('http://localhost/signin?returnTo=%2Fhtml%2Fabc');
+    for (const pathname of ['/audiobooks/abc/def', '/oauth/device', '/signin', '/api/v1/me', '/applications.png', '/logo.svg']) {
+      expect(location(pathname)).toBeNull();
+    }
+    expect(location('/app', 'better-auth.session_token=stale')).toBeNull();
+    expect(location('/pdf/abc', '__Secure-better-auth.session_token=stale')).toBeNull();
+  });
+
   test('passes service-authenticated compute callbacks to their bearer-token route', () => {
     const previous = process.env.RICHARDRDEV_PRODUCTION;
     process.env.RICHARDRDEV_PRODUCTION = 'true';
