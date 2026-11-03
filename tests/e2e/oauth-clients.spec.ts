@@ -37,7 +37,14 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
   await expect(page.getByText('Unverified app', { exact: true })).toBeVisible();
   await expect(page.getByText('127.0.0.1:43210', { exact: true })).toBeVisible();
   await expect(page.getByText('Read your documents, folders, voices and audiobooks', { exact: true })).toBeVisible();
-  await expect(page.getByText(/The app shares your existing compute limits/)).toBeVisible();
+  await expect(page.getByText(/OpenReader can’t confirm who made this app/)).toBeVisible();
+  // Approving from the wrong account is a mistake a person can only catch here.
+  await page.getByRole('button', { name: 'Switch account', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+  await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');
+  await page.getByPlaceholder('Password', { exact: true }).fill('TestAccount#2026');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await expect(page.getByText('admin-e2e@example.test', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Allow access', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Returned to reader tool' })).toBeVisible();
   const callback = new URL(page.url());
@@ -77,10 +84,12 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
   expect(requested.status()).toBe(200);
   const device = await requested.json();
   await page.goto(device.verification_uri_complete);
-  await expect(page.getByRole('textbox', { name: 'Code shown on your device' })).toHaveValue(device.user_code);
-  await page.getByRole('button', { name: 'Check code', exact: true }).click();
   await expect(page.getByRole('heading', { name: `${name} wants to connect`, exact: true })).toBeVisible();
-  await expect(page.getByText(/Only approve a code displayed by a device you are using/)).toBeVisible();
+  await expect(page.getByText(device.user_code, { exact: true })).toBeVisible();
+  await expect(page.getByText(/Only allow a code shown by a device you are using/)).toBeVisible();
+  await page.getByRole('button', { name: 'Use a different code', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Code shown on your device' }).fill(device.user_code);
+  await page.getByRole('button', { name: 'Check code', exact: true }).click();
   await page.getByRole('button', { name: 'Allow access', exact: true }).click();
   await expect(page.getByRole('status')).toHaveText('Device approved. Return to your device to finish connecting.');
   const deviceToken = await request.post(metadata.token_endpoint, { form: {
@@ -99,7 +108,7 @@ test('connects scoped apps with PKCE and device approval, then revokes their acc
 test('signing in from a device link returns to the same code', async ({ page }) => {
   const userCode = 'ABCD-EFGH';
   await page.goto(`/oauth/device?user_code=${userCode}`);
-  await expect(page.getByRole('heading', { name: 'Authorize your device', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Sign in to connect', exact: true })).toBeVisible();
   await declineOptionalCookies(page);
   await page.getByRole('link', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();

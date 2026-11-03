@@ -223,7 +223,8 @@ The grants cover each client type:
 ### Compute limits
 
 Third-party apps share the user's existing compute limits, and the consent screen says
-so. Requests from a hosted MCP client arrive from that vendor's IP, so limits key on the
+so when an app asks to generate audio. Requests from a hosted MCP client arrive from that
+vendor's IP, so limits key on the
 user. There is no per-app limit: a client using up its user's quota affects only that user.
 
 ---
@@ -798,7 +799,8 @@ registrations without disconnecting existing apps. Resource administration and
 client-credentials grants are not exposed.
 
 Consent displays the self-reported app name, **Unverified app**, actual callback
-host (or device destination), requested scopes and shared compute limits. The
+host (or device code), requested scopes and the signed-in account, with a way to
+switch account. The
 signed authorization query survives sign-in. Guests and inactive, deleting or
 verification-required unverified users cannot approve grants. Connected apps
 under Settings → Account lists the caller's grants and disconnects only that
