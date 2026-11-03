@@ -103,7 +103,8 @@ flags, independent seek polling, duplicate cursor writers, or scattered teardown
 
 Commands:
 
-- `pnpm test` runs all Vitest projects.
+- `pnpm test` runs all Vitest projects on a migrated temporary SQLite database,
+  never `docstore/` or `POSTGRES_URL`.
 - `pnpm test:e2e` runs Playwright.
 - `pnpm exec tsc --noEmit` checks the application.
 - `pnpm --dir packages/compute-worker exec tsc --noEmit` checks the worker.
