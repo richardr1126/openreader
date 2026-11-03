@@ -168,7 +168,7 @@ export const publicApiSpec = {
       AudiobookRequest: audiobookBody,
       Audiobook: object({ id: string, documentId: docId, status: enumeration(...generationStates, 'building', 'waiting', 'ready'),
         progress: { type: ['number', 'null'], minimum: 0, maximum: 1 }, format: enumeration('mp3', 'm4b'), speed: number,
-        chapter: { type: ['integer', 'null'] }, downloadUrl: nullableString, filename: nullableString, webUrl: { type: 'string', format: 'uri' }, retryAfterMs: nullableNumber,
+        chapter: { type: ['integer', 'null'] }, downloadUrl: nullableString, filename: nullableString, webUrl: { type: 'string', format: 'uri' }, webDownloadUrl: { type: ['string', 'null'], format: 'uri' }, retryAfterMs: nullableNumber,
         generation: object({ state: enumeration(...generationStates), operationId: nullableString, issue: { anyOf: [issue, { type: 'null' }] } }),
         segments: { anyOf: [segmentProgress, { type: 'null' }] }, artifact: object({ state: enumeration(...artifactStates), operationId: nullableString, issue: { anyOf: [issue, { type: 'null' }] } }),
       }),

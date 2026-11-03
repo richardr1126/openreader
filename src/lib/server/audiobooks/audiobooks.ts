@@ -128,8 +128,8 @@ function audiobookId(caller: AudiobookCaller, intent: AudiobookIntent, settingsH
     .slice(0, 32);
 }
 
-function webUrl(scope: ResolvedSegmentDocumentScope, documentId: string): string {
-  return new URL(`/${scope.readerType}/${documentId}`, (process.env.BASE_URL ?? '').trim() || 'http://localhost').toString();
+function webUrl(path: string): string {
+  return new URL(path, (process.env.BASE_URL ?? '').trim() || 'http://localhost').toString();
 }
 
 function audiobookStatus(
@@ -245,6 +245,7 @@ async function advanceAudiobook(input: {
     segments?: Audiobook['segments'];
     artifact?: Audiobook['artifact'];
     downloadUrl?: string | null;
+    webDownloadUrl?: string | null;
     filename?: string | null;
     retryAfterMs?: number | null;
   }): Audiobook => {
@@ -262,7 +263,8 @@ async function advanceAudiobook(input: {
       chapter: chapterIndex,
       downloadUrl: fields.downloadUrl ?? null,
       filename: fields.filename ?? null,
-      webUrl: webUrl(scope, documentId),
+      webUrl: webUrl(`/${scope.readerType}/${documentId}`),
+      webDownloadUrl: fields.webDownloadUrl ?? null,
       retryAfterMs: fields.retryAfterMs ?? null,
       generation: fields.generation,
       segments,
@@ -523,6 +525,7 @@ async function advanceAudiobook(input: {
       issue: artifactState === 'failed' ? exportOperationIssue(artifact.operation) : null,
     },
     downloadUrl: ready ? `/api/v1/documents/${documentId}/audiobooks/files/${artifactId}` : null,
+    webDownloadUrl: ready ? webUrl(`/audiobooks/${documentId}/${artifactId}`) : null,
     filename: ready?.dispositionFilename ?? null,
     retryAfterMs,
   });

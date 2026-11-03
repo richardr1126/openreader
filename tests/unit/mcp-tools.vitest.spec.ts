@@ -24,7 +24,7 @@ vi.mock('@/lib/server/audiobooks/request', async () => ({ audiobookCaller: mocks
 vi.mock('@/lib/server/compute-worker/client', () => ({ isComputeWorkerAvailable: mocks.worker, isComputeWorkerUnavailableError: () => false }));
 
 const audiobook = { id: 'book', documentId: 'doc', status: 'generating', progress: 0.5, format: 'mp3', speed: 1, chapter: null,
-  downloadUrl: '/api/v1/documents/doc/audiobooks/files/secret', filename: null, webUrl: 'http://localhost:3003/html/doc', retryAfterMs: null,
+  downloadUrl: '/api/v1/documents/doc/audiobooks/files/secret', filename: null, webUrl: 'http://localhost:3003/html/doc', webDownloadUrl: null, retryAfterMs: null,
   generation: { state: 'generating', operationId: 'op-internal', issue: null }, segments: null, artifact: { state: 'none', operationId: null, issue: null } };
 
 async function callTool(name: string, args: Record<string, unknown>) {
@@ -56,14 +56,21 @@ test('add_document imports a URL or text and returns a clickable link, not a v1 
   expect(mocks.create).toHaveBeenCalledTimes(1);
 });
 
-test('create_audiobook returns a status at once, with no download link or internal operation', async () => {
+test('create_audiobook returns a status at once, with no internal operation or token-only link', async () => {
   mocks.intent.mockResolvedValueOnce({ parsed: { settings: { providerRef: 'kokoro', ttsModel: 'kokoro', voice: 'af_sky' } } });
   mocks.start.mockResolvedValue(audiobook);
   const result = await callTool('create_audiobook', { documentId: 'doc', voice: 'af_sky', format: 'm4b' });
   expect(mocks.intent.mock.calls[0][2]).toMatchObject({ format: 'm4b', record: { voice: 'af_sky' } });
   expect(result.structuredContent).toEqual({ id: 'book', documentId: 'doc', status: 'generating', progress: 0.5, format: 'mp3', speed: 1, chapter: null, filename: null,
-    webUrl: 'http://localhost:3003/html/doc', retryAfterMs: null, issue: null, provider: 'kokoro', model: 'kokoro', voice: 'af_sky' });
+    webUrl: 'http://localhost:3003/html/doc', webDownloadUrl: null, retryAfterMs: null, issue: null, provider: 'kokoro', model: 'kokoro', voice: 'af_sky' });
   expect(JSON.stringify(result)).not.toMatch(/secret|op-internal/);
+});
+
+test('get_audiobook gives a ready audiobook a link a person can click', async () => {
+  mocks.get.mockResolvedValueOnce({ ...audiobook, status: 'ready', webDownloadUrl: 'http://localhost:3003/audiobooks/doc/abcdef12' });
+  const result = await callTool('get_audiobook', { documentId: 'doc', audiobookId: 'book' });
+  expect(result.structuredContent).toMatchObject({ status: 'ready', webDownloadUrl: 'http://localhost:3003/audiobooks/doc/abcdef12' });
+  expect(JSON.stringify(result)).not.toContain('/api/v1');
 });
 
 test('a client can pick any provider and sees its named voices', async () => {

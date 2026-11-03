@@ -77,6 +77,8 @@ export type Audiobook = {
   downloadUrl: string | null;
   filename: string | null;
   webUrl: string;
+  /** A page that starts the download in a signed-in browser, present with `downloadUrl`. */
+  webDownloadUrl: string | null;
   /** How long a limited step waits before it is tried again. */
   retryAfterMs: number | null;
   generation: {
@@ -91,3 +93,10 @@ export type Audiobook = {
     issue: TtsExportIssue | null;
   };
 };
+
+/** What the page behind `webDownloadUrl` shows the person who opened it. */
+export type AudiobookDownload =
+  | { access: 'sign-in' }
+  | { access: 'denied'; accountName: string }
+  | { access: 'missing'; webPath: string }
+  | { access: 'ready'; webPath: string; fileUrl: string; filename: string };

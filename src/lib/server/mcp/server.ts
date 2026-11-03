@@ -32,8 +32,8 @@ function documentSummary(document: BaseDocument) {
 }
 
 function audiobookSummary(audiobook: Audiobook) {
-  const { id, documentId: bookDocumentId, status, progress, format, speed, chapter, filename, webUrl, retryAfterMs } = audiobook;
-  return { id, documentId: bookDocumentId, status, progress, format, speed, chapter, filename, webUrl, retryAfterMs,
+  const { id, documentId: bookDocumentId, status, progress, format, speed, chapter, filename, webUrl, webDownloadUrl, retryAfterMs } = audiobook;
+  return { id, documentId: bookDocumentId, status, progress, format, speed, chapter, filename, webUrl, webDownloadUrl, retryAfterMs,
     issue: audiobook.generation.issue ?? audiobook.artifact.issue ?? null };
 }
 
@@ -61,7 +61,7 @@ const id = z.string().min(1).max(128);
 
 export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServer {
   const server = new McpServer({ name: 'openreader', version: '1' }, {
-    instructions: 'Add documents to the user\'s OpenReader library and turn them into audiobooks. Audiobooks generate in the background: create_audiobook returns at once, get_audiobook reports progress, and webUrl opens the document for the user.',
+    instructions: 'Add documents to the user\'s OpenReader library and turn them into audiobooks. Audiobooks generate in the background: create_audiobook returns at once, get_audiobook reports progress, webUrl opens the document for the user, and webDownloadUrl, once the audiobook is ready, starts its download. Give the user these links as they are.',
   });
   const run = (work: (principal: ApiPrincipal) => Promise<unknown>) => toolResult(() => Promise.resolve().then(() => work(mcpPrincipal(authInfo))));
 

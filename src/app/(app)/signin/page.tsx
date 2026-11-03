@@ -33,10 +33,11 @@ function SignInContent() {
   const isOAuthSignIn = searchParams.has('sig');
   const returnTo = (() => {
     const value = searchParams.get('returnTo');
-    if (!value || !value.startsWith('/oauth/device?')) return '/app';
+    if (!value) return '/app';
     try {
       const url = new URL(value, 'http://localhost');
-      return url.origin === 'http://localhost' && url.pathname === '/oauth/device' ? `${url.pathname}${url.search}` : '/app';
+      const allowed = url.pathname === '/oauth/device' || /^\/audiobooks\/[^/]+\/[^/]+$/.test(url.pathname);
+      return url.origin === 'http://localhost' && allowed ? `${url.pathname}${url.search}` : '/app';
     } catch { return '/app'; }
   })();
   const [email, setEmail] = useState('');

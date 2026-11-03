@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiCatchResponse, apiErrorResponse } from '@/lib/server/api/responses';
-import { resolveAudiobookCaller } from '@/lib/server/audiobooks/request';
-import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { findAudiobookFile, isAudiobookFileId, resolveAudiobookCaller } from '@/lib/server/audiobooks/request';
+import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { createRequestLogger } from '@/lib/server/logger';
 import { sendStorageArtifact } from '@/lib/server/storage/artifact-download';
 import { isS3Configured } from '@/lib/server/storage/s3';
@@ -19,22 +19,16 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
     const { id, artifactId } = await context.params;
     const documentId = id.trim().toLowerCase();
-    if (!/^[a-f0-9]{8,128}$/i.test(artifactId)) {
+    if (!isAudiobookFileId(artifactId)) {
       return apiErrorResponse(400, 'REQUEST_INVALID', 'Invalid audiobook file reference.');
     }
 
-    // Authorize the document scope before touching worker state; the artifact
-    // key is user/document-scoped, so the read cannot cross ownership.
+    // Authorize the document scope before touching worker state.
     const caller = await resolveAudiobookCaller(request, documentId, 'documents:read');
     if (caller instanceof Response) return caller;
-    const { storageUserId } = caller.scope;
 
-    const artifact = await new ComputeWorkerClient().getTtsPlaybackExportArtifact({
-      artifactId,
-      storageUserId,
-      documentId,
-    });
-    if (!artifact || artifact.storageUserId !== storageUserId) {
+    const artifact = await findAudiobookFile(caller.scope, documentId, artifactId);
+    if (!artifact) {
       return apiErrorResponse(404, 'AUDIOBOOK_FILE_NOT_READY', 'This audiobook file is not ready.');
     }
 

@@ -386,6 +386,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     const { json } = await lookup({ includeProgress: false });
     expect(json.artifact.state).toBe('stale');
     expect(json.downloadUrl).toBeNull();
+    expect(json.webDownloadUrl).toBeNull();
   });
 
   test('rechecks generation status before creating the artifact in the same request', async () => {
@@ -568,6 +569,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
 
     expect(json.artifact.state).toBe('ready');
     expect(json.downloadUrl).toBe('/api/v1/documents/doc-1/audiobooks/files/abcdef1234567890');
+    expect(new URL(json.webDownloadUrl).pathname).toBe('/audiobooks/doc-1/abcdef1234567890');
     expect(json.filename).toBe('openreader-document.mp3');
   });
 

@@ -4,6 +4,7 @@ import { db } from '@openreader/database';
 import { documentSettings, documents, userPreferences } from '@openreader/database/schema';
 import type { AudiobookCaller, AudiobookIntent } from '@/lib/server/audiobooks/audiobooks';
 import { apiErrorResponse } from '@/lib/server/api/responses';
+import { ComputeWorkerClient } from '@/lib/server/compute-worker/client';
 import { resolveApiPrincipal, type ApiPrincipal, type ApiScope } from '@/lib/server/api/principal';
 import { detectParsedPdfLanguage, ensurePdfReady, storedRecord } from '@/lib/server/reader/bootstrap';
 import { resolveDefaultPlaybackRequest } from '@/lib/server/reader/playback';
@@ -34,6 +35,17 @@ export async function audiobookCaller(principal: ApiPrincipal, documentId: strin
     mayGenerate: principal.scopes.includes('audio:generate'),
     subject: { userId: principal.userId, isAnonymous: principal.isAnonymous },
   };
+}
+
+export function isAudiobookFileId(artifactId: string): boolean {
+  return /^[a-f0-9]{8,128}$/i.test(artifactId);
+}
+
+/** The artifact key is user/document-scoped, so the read cannot cross ownership. */
+export async function findAudiobookFile(scope: AudiobookCaller['scope'], documentId: string, artifactId: string) {
+  const { storageUserId } = scope;
+  const artifact = await new ComputeWorkerClient().getTtsPlaybackExportArtifact({ artifactId, storageUserId, documentId });
+  return artifact?.storageUserId === storageUserId ? artifact : null;
 }
 
 export type AudiobookBody = {
