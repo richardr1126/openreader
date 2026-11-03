@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { Badge, Button, ButtonLink, Field, InlineButton, Input, Surface } from '@/components/ui';
+import { Badge, Button, ButtonLink, Field, InlineButton, Input } from '@/components/ui';
+import { AuthCard } from '@/components/auth/AuthCard';
 import { CheckIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
 import { useAuthSession } from '@/hooks/useAuthSession';
@@ -89,20 +89,12 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
     : 'OpenReader can’t confirm who made this app. Allow it only if you just started connecting it.';
   const returnsElsewhere = info?.destination && info.destination !== info.verifiedDomain;
 
-  return <div className="min-h-0 flex-1 overflow-y-auto"><div className="mx-auto flex min-h-full w-full max-w-md items-center px-4 py-8">
-    <div className="w-full space-y-4">
-      <Link href="/app" className="block text-center text-xs font-semibold tracking-widest uppercase text-accent">OpenReader</Link>
-      <Surface elevation="3" className="space-y-5 p-6">
-        <div className="space-y-2">
-          <h1 className="text-xl font-semibold tracking-tight text-foreground">{title}</h1>
-          {info && !finished && <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-soft">
-            {info.verifiedDomain
-              ? <span className="inline-flex items-center gap-1 text-foreground"><CheckIcon className="h-4 w-4 text-accent" />Verified as {info.verifiedDomain}</span>
-              : <Badge tone="foreground">Unverified app</Badge>}
-            {returnsElsewhere && <span>Returns to <span className="break-words font-medium text-foreground">{info.destination}</span></span>}
-          </div>}
-        </div>
-
+  return <AuthCard title={title} description={info && !finished && <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+    {info.verifiedDomain
+      ? <span className="inline-flex items-center gap-1 text-foreground"><CheckIcon className="h-4 w-4 text-accent" />Verified as {info.verifiedDomain}</span>
+      : <Badge tone="foreground">Unverified app</Badge>}
+    {returnsElsewhere && <span>Returns to <span className="break-words font-medium text-foreground">{info.destination}</span></span>}
+  </div>}>
         {isPending ? <LoadingSpinner className="mx-auto h-6 w-6 text-soft" /> : !accountReady ? <>
           <p className="text-sm text-soft">Guest sessions can’t approve access.</p>
           <ButtonLink href={signIn} variant="primary" className="w-full">Sign in</ButtonLink>
@@ -136,7 +128,5 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
           </>}
         </>}
         {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      </Surface>
-    </div>
-  </div></div>;
+  </AuthCard>;
 }

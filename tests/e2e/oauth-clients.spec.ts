@@ -114,7 +114,7 @@ test('signing in from a device link returns to the same code', async ({ page }) 
   await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
   await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');
   await page.getByPlaceholder('Password', { exact: true }).fill('TestAccount#2026');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByPlaceholder('Password', { exact: true }).press('Enter');
   await expect(page).toHaveURL(/\/oauth\/device\?user_code=ABCD-EFGH$/);
   await expect(page.getByRole('textbox', { name: 'Code shown on your device' })).toHaveValue(userCode);
 });
