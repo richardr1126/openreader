@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { AudioWaveIcon, DatabaseIcon, DocumentIcon, TrashIcon } from '@/components/icons/Icons';
-import { Button, RowIcon } from '@/components/ui';
+import { Button, Tooltip } from '@/components/ui';
 import { useAuthSession } from '@/hooks/useAuthSession';
 import { useDesktopBridge } from '@/hooks/useDesktopBridge';
 import {
@@ -18,22 +17,36 @@ import { formatBytes } from '@/lib/shared/format-bytes';
 
 const CARD_CLASS = 'divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid';
 
+type StorageCategory = 'documents' | 'audio' | 'orphaned';
+
+// Each mark uses theme tokens so the bar follows the reader's theme. Foreground
+// stays clear of the accent in every theme, and the hatch never relies on color.
+const CATEGORY_FILL: Record<StorageCategory, { className: string; style?: CSSProperties }> = {
+  documents: { className: 'bg-accent' },
+  audio: { className: 'bg-foreground' },
+  orphaned: {
+    className: 'bg-muted',
+    style: { backgroundImage: 'repeating-linear-gradient(135deg, var(--foreground) 0 2px, transparent 2px 5px)' },
+  },
+};
+
 function UsageRow({
+  category,
   label,
-  icon,
   bytes,
   detail,
   action,
 }: {
+  category: StorageCategory;
   label: string;
-  icon: ReactNode;
   bytes: number | undefined;
   detail?: string;
   action?: ReactNode;
 }) {
+  const fill = CATEGORY_FILL[category];
   return (
-    <div className="flex min-h-14 items-center gap-3 px-3 py-2.5">
-      <RowIcon>{icon}</RowIcon>
+    <div className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+      <span aria-hidden="true" className={`h-3 w-3 shrink-0 rounded-sm ${fill.className}`} style={fill.style} />
       <div className="min-w-0 flex-1">
         <div className="text-sm text-foreground">{label}</div>
         {detail ? <div className="mt-0.5 text-xs text-faint">{detail}</div> : null}
@@ -44,23 +57,40 @@ function UsageRow({
   );
 }
 
-function StorageMeter({ used, cap }: { used: number; cap: number }) {
-  const percent = Math.min(100, Math.round((used / cap) * 100));
+function StorageBar({ segments, total, cap }: {
+  segments: { category: StorageCategory; label: string; bytes: number }[];
+  total: number;
+  cap: number | null;
+}) {
+  const scale = Math.max(total, cap ?? 0, 1);
+  // Over the limit the bar scales to usage, so this marks where the limit falls.
+  const limitPosition = cap !== null && total > cap ? (cap / total) * 100 : null;
+  const summary = segments.map((segment) => `${segment.label} ${formatBytes(segment.bytes)}`).join(', ');
   return (
-    <div className="px-3 pb-3">
-      <div
-        className="h-2 overflow-hidden rounded-full bg-surface-sunken"
-        role="progressbar"
-        aria-label="Storage used"
-        aria-valuemin={0}
-        aria-valuemax={cap}
-        aria-valuenow={Math.min(used, cap)}
-      >
-        <div
-          className={`h-full rounded-full transition-[width] duration-slow ${used >= cap ? 'bg-accent' : 'bg-secondary-accent'}`}
-          style={{ width: `${percent}%` }}
-        />
+    <div
+      role="img"
+      aria-label={`Storage used: ${formatBytes(total)}${cap === null ? '' : ` of ${formatBytes(cap)}`}${summary ? `. ${summary}` : ''}`}
+      className="relative"
+    >
+      <div className="flex h-4 gap-0.5 overflow-hidden rounded-md bg-offbase">
+        {segments.filter((segment) => segment.bytes > 0).map((segment) => {
+          const fill = CATEGORY_FILL[segment.category];
+          return (
+            <Tooltip key={segment.category} label={`${segment.label}: ${formatBytes(segment.bytes)}`}>
+              <div
+                className={`h-full min-w-1 transition-[width] duration-slow ${fill.className}`}
+                style={{ ...fill.style, width: `${(segment.bytes / scale) * 100}%` }}
+              />
+            </Tooltip>
+          );
+        })}
       </div>
+      {limitPosition === null ? null : (
+        <div
+          className="absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-foreground ring-2 ring-surface-solid"
+          style={{ left: `${limitPosition}%` }}
+        />
+      )}
     </div>
   );
 }
@@ -68,13 +98,15 @@ function StorageMeter({ used, cap }: { used: number; cap: number }) {
 function StorageSkeleton() {
   return (
     <div className={`animate-pulse ${CARD_CLASS}`} aria-label="Loading storage usage" aria-busy="true">
-      {[false, false, true].map((hasAction, index) => (
-        <div key={index} className="flex min-h-14 items-center gap-3 px-3 py-2.5">
-          <div className="h-7 w-7 shrink-0 rounded-md bg-offbase" />
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="h-4 w-28 rounded bg-offbase" />
-            <div className="h-3 w-20 rounded bg-offbase" />
-          </div>
+      <div className="space-y-3 p-4">
+        <div className="h-3 w-24 rounded bg-offbase" />
+        <div className="h-8 w-40 rounded bg-offbase" />
+        <div className="h-4 rounded-md bg-offbase" />
+      </div>
+      {[false, true, true].map((hasAction, index) => (
+        <div key={index} className="flex min-h-14 items-center gap-3 px-4 py-2.5">
+          <div className="h-3 w-3 shrink-0 rounded-sm bg-offbase" />
+          <div className="h-4 w-28 flex-1 rounded bg-offbase" />
           <div className="h-4 w-14 rounded bg-offbase" />
           <div className="flex w-24 shrink-0 justify-end">
             {hasAction ? <div className="h-6 w-16 rounded-md bg-offbase" /> : null}
@@ -134,6 +166,7 @@ export function StorageSettingsPanel() {
   });
 
   const usage = usageQuery.data;
+  const capBytes = usage?.capBytes ?? null;
   const busyTarget = reclaimMutation.isPending ? reclaimMutation.variables : null;
   const pendingCopy = pendingTarget ? CONFIRM_COPY[pendingTarget] : null;
 
@@ -141,25 +174,43 @@ export function StorageSettingsPanel() {
     <section className="space-y-3" aria-label="Library storage">
       {usageQuery.isPending ? <StorageSkeleton /> : (
         <div className={CARD_CLASS}>
-          <div>
-            <UsageRow
-              label="Total storage"
-              icon={<DatabaseIcon />}
-              bytes={usage?.totalBytes}
-              detail={usage?.capBytes == null ? undefined : `of ${formatBytes(usage.capBytes)}`}
+          <div className="space-y-3 p-4">
+            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+              <div className="min-w-0">
+                <h3 className="text-xs font-medium text-soft">Total storage</h3>
+                <p className="mt-1 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-semibold tabular-nums tracking-tight text-foreground">{usage ? formatBytes(usage.totalBytes) : '—'}</span>
+                  {capBytes === null ? null : <span className="text-sm tabular-nums text-soft">of {formatBytes(capBytes)}</span>}
+                </p>
+              </div>
+              {usage ? (
+                <p className={`text-sm tabular-nums ${capBytes !== null && usage.totalBytes >= capBytes ? 'font-medium text-danger' : 'text-soft'}`}>
+                  {capBytes === null ? 'No limit' : usage.totalBytes > capBytes
+                    ? `${formatBytes(usage.totalBytes - capBytes)} over limit`
+                    : usage.totalBytes === capBytes ? 'Limit reached' : `${formatBytes(capBytes - usage.totalBytes)} available`}
+                </p>
+              ) : null}
+            </div>
+            <StorageBar
+              total={usage?.totalBytes ?? 0}
+              cap={capBytes}
+              segments={usage ? [
+                { category: 'documents', label: 'Documents', bytes: usage.documentBytes },
+                { category: 'audio', label: 'Audio', bytes: usage.audioBytes - usage.orphanedAudioBytes },
+                { category: 'orphaned', label: 'Orphaned audio', bytes: usage.orphanedAudioBytes },
+              ] : []}
             />
-            {usage?.capBytes == null ? null : <StorageMeter used={usage.totalBytes} cap={usage.capBytes} />}
           </div>
           <UsageRow
+            category="documents"
             label="Documents"
-            icon={<DocumentIcon />}
             bytes={usage?.documentBytes}
             detail={usage ? plural(usage.documentCount, 'document') : undefined}
           />
           <UsageRow
+            category="audio"
             label="Audio"
-            icon={<AudioWaveIcon />}
-            bytes={usage?.audioBytes}
+            bytes={usage ? usage.audioBytes - usage.orphanedAudioBytes : undefined}
             action={(
               <Button
                 size="xs"
@@ -173,8 +224,8 @@ export function StorageSettingsPanel() {
             )}
           />
           <UsageRow
+            category="orphaned"
             label="Orphaned audio"
-            icon={<TrashIcon />}
             bytes={usage?.orphanedAudioBytes}
             detail={usage && usage.orphanedDocumentCount > 0 ? plural(usage.orphanedDocumentCount, 'removed document') : undefined}
             action={(
