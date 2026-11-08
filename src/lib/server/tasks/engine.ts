@@ -152,7 +152,9 @@ async function reconcileMaintenanceTasks(): Promise<void> {
       const result = operation?.result;
       await finishTask(row.key, row.leaseOwner, operation?.status === 'succeeded' && result && result.failed === 0
         ? { status: 'ok', startedAt: operation.queuedAt, summary: result.summary, cursor }
-        : { status: 'error', startedAt: operation?.queuedAt ?? Number(row.runningSince ?? row.updatedAt), error: result?.summary ?? operation?.error?.message ?? 'Maintenance operation expired; run the task again', cursor: null },
+        : { status: 'error', startedAt: operation?.queuedAt ?? Number(row.runningSince ?? row.updatedAt), error: result?.summary ?? operation?.error?.message ?? 'Maintenance operation expired; run the task again',
+          // A run that finished with some failed items still covered the rest, so it keeps its cursor.
+          cursor: operation?.status === 'succeeded' ? cursor : null },
       operation?.updatedAt ?? Date.now());
     } catch (error) {
       // An unavailable worker is not evidence that its durable job stopped.

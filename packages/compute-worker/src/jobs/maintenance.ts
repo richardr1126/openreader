@@ -58,20 +58,22 @@ export function createMaintenanceHandler(input: {
         const page: { userIds: string[] } = await database({ action: 'storage-users', after, activeSince: request.activeSince ?? 0 });
         if (!page.userIds.length) break;
         for (const userId of page.userIds) {
-          const documentIds = new Set<string>();
-          for (;;) {
-            const known: { documentIds: string[] } = await database({ action: 'storage-documents', userId, after: [...documentIds].at(-1) ?? null });
-            for (const id of known.documentIds) documentIds.add(id);
-            if (known.documentIds.length < 200) break;
-          }
-          for (const root of userAudioDocumentRoots(userId, s3Prefix)) for await (const objects of storage.listPrefixPages(root)) for (const object of objects) {
-            const id = object.key.slice(root.length).split('/')[0];
-            if (/^[a-f0-9]{64}$/i.test(id)) documentIds.add(id);
-          }
-          for (const documentId of documentIds) {
-            await createDocumentAudioReporter({ storage, s3Prefix, storageUserId: userId, documentId, logger: input.logger }).measure(true, true);
-          }
-          completed++;
+          // One user's failure is counted and logged, and the rest are still repaired.
+          if (await attempt(async () => {
+            const documentIds = new Set<string>();
+            for (;;) {
+              const known: { documentIds: string[] } = await database({ action: 'storage-documents', userId, after: [...documentIds].at(-1) ?? null });
+              for (const id of known.documentIds) documentIds.add(id);
+              if (known.documentIds.length < 200) break;
+            }
+            for (const root of userAudioDocumentRoots(userId, s3Prefix)) for await (const objects of storage.listPrefixPages(root)) for (const object of objects) {
+              const id = object.key.slice(root.length).split('/')[0];
+              if (/^[a-f0-9]{64}$/i.test(id)) documentIds.add(id);
+            }
+            for (const documentId of documentIds) {
+              await createDocumentAudioReporter({ storage, s3Prefix, storageUserId: userId, documentId, logger: input.logger }).measure(true, true);
+            }
+          }, 'Measuring audio')) completed++;
           await report('Measuring audio');
         }
         after = page.userIds.at(-1)!;

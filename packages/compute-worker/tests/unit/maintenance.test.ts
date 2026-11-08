@@ -51,6 +51,21 @@ describe('durable maintenance execution', () => {
     expect(measurements.scopes.sort()).toEqual([documentId, otherDocumentId].sort());
     expect(measurements.measure).toHaveBeenCalledWith(true, true);
   });
+  test('a repair that fails for one user still repairs the others', async () => {
+    measurements.scopes.length = 0;
+    const { run, step } = setup();
+    step.mockImplementation(async (body) => {
+      if (body.action === 'storage-users') return { userIds: body.after ? [] : ['broken', 'healthy'] };
+      if (body.action === 'storage-documents') {
+        if (body.userId === 'broken') throw new Error('broker unavailable');
+        return { documentIds: [documentId] };
+      }
+      throw new Error('Unexpected database step');
+    });
+    expect(await run({ task: 'repair-storage-usage', runId: 'repair', activeSince: 0 }, 0)).toMatchObject({ completed: 1, failed: 1 });
+    expect(measurements.scopes).toEqual([documentId]);
+  });
+
   test('deletes storage before SQL completion and publishes progress for a whole selected batch', async () => {
     const { run, step, cleanup, progress } = setup();
     const result = await run({ task: 'delete-users', runId: 'run', userIds: ['u1', 'u2'] }, 0, { onProgress: progress });

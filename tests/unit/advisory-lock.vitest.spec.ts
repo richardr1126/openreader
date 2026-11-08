@@ -70,3 +70,20 @@ test('other database errors are not disguised as busy', async () => {
   });
   await expect(withPostgresAdvisoryLock('key', vi.fn())).rejects.toThrow('denied');
 });
+
+test('work longer than the idle limit keeps the lock by pinging its connection', async () => {
+  vi.useFakeTimers();
+  try {
+    let finish!: () => void;
+    const held = withPostgresAdvisoryLock('key', () => new Promise<void>((resolve) => { finish = resolve; }));
+    await vi.advanceTimersByTimeAsync(150_000);
+    expect(statements().filter(statement => statement === 'SELECT 1').length).toBeGreaterThanOrEqual(4);
+    finish();
+    await held;
+    const pings = statements().filter(statement => statement === 'SELECT 1').length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(statements().filter(statement => statement === 'SELECT 1')).toHaveLength(pings);
+  } finally {
+    vi.useRealTimers();
+  }
+});

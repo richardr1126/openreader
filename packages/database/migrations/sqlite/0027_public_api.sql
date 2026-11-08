@@ -8,12 +8,13 @@ CREATE TABLE `audiobook_requests` (
 	`chapter_index` integer,
 	`settings_json` text NOT NULL,
 	`plan_object_key` text,
-	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)),
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`document_id`,`user_id`) REFERENCES `documents`(`id`,`user_id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
 CREATE INDEX `idx_audiobook_requests_user_document` ON `audiobook_requests` (`user_id`,`document_id`);--> statement-breakpoint
+CREATE INDEX `idx_audiobook_requests_created_at` ON `audiobook_requests` (`created_at`,`id`);--> statement-breakpoint
 CREATE TABLE `document_audio_usage` (
 	`user_id` text NOT NULL,
 	`document_id` text NOT NULL,
@@ -208,5 +209,5 @@ CREATE UNIQUE INDEX `oauth_resource_identifier_unique` ON `oauth_resource` (`ide
 ALTER TABLE `user_onboarding` ADD `guest_retention_seen_days` integer;--> statement-breakpoint
 ALTER TABLE `compute_limit_admissions` DROP COLUMN `device_scope_key`;--> statement-breakpoint
 ALTER TABLE `compute_limit_admissions` DROP COLUMN `ip_scope_key`;--> statement-breakpoint
-UPDATE session SET ip_address = NULL;--> statement-breakpoint
+UPDATE session SET ip_address = NULL WHERE ip_address IS NOT NULL;--> statement-breakpoint
 DELETE FROM compute_limit_buckets WHERE scope_type IN ('ip', 'anonymous_device');

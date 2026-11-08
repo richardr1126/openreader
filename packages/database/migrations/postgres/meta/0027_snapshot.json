@@ -213,7 +213,7 @@
           "name": "created_at",
           "type": "bigint",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "(extract(epoch from now()) * 1000)::bigint"
         }
       },
@@ -229,6 +229,27 @@
             },
             {
               "expression": "document_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_audiobook_requests_created_at": {
+          "name": "idx_audiobook_requests_created_at",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"

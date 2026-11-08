@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
-import { computeLimitAdmissions } from '@openreader/database/schema';
+import { computeLimitAdmissions, computeLimitEvents } from '@openreader/database/schema';
 import {
   parseTtsSynthesisConsumeRequest,
   type TtsSynthesisConsumeResponse,
@@ -77,7 +77,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ].admission.active.map((limit) => limit.leaseSeconds),
   );
   await touchComputeAdmission({ admissionId: admission.id, leaseSeconds, nowMs });
-  const blockedStorage = await storageLimit({ userId: admission.userId, isAnonymous: Boolean(admission.isAnonymous) }, 0, runtimeConfig);
+  // A retry of a segment already charged keeps its audio; only new synthesis waits on storage.
+  const [charged] = await db.select({ eventKey: computeLimitEvents.eventKey }).from(computeLimitEvents)
+    .where(eq(computeLimitEvents.eventKey, parsed.eventKey)).limit(1);
+  const blockedStorage = charged ? null
+    : await storageLimit({ userId: admission.userId, isAnonymous: Boolean(admission.isAnonymous) }, 0, runtimeConfig);
   if (blockedStorage) return NextResponse.json({ allowed: false, charged: false, idempotent: false, retryAfterMs: 0, usage: null,
     storageLimit: blockedStorage.code } satisfies TtsSynthesisConsumeResponse, { headers: NO_STORE_HEADERS });
   const decision = await consumeComputeUsage({

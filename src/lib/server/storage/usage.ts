@@ -8,6 +8,7 @@ import * as postgres from '@openreader/database/schema-auth-postgres';
 import { getRuntimeConfig, type RuntimeConfig } from '@/lib/server/admin/settings';
 import type { ComputeLimitSubject } from '@/lib/server/compute-limits/policy';
 import { ApiRequestError } from '@/lib/server/api/responses';
+import { WORKER_STORAGE_TIMEOUT_MS } from '@/lib/server/compute-worker/protocol';
 
 const { user } = process.env.POSTGRES_URL ? postgres : sqlite;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -107,13 +108,15 @@ export async function listAudioDocumentIds(userId: string): Promise<string[]> {
 }
 
 /** App-issued revisions fence delayed/out-of-order reports, including across clears. */
+// A clear can run as long as the app waits for it, so a measurement taken mid-clear can't land after it.
+const CLEAR_LEASE_MS = WORKER_STORAGE_TIMEOUT_MS + 60_000;
 export async function beginAudioMeasurement(userId: string, documentId: string, clearing = false): Promise<number | null> {
   return runInDbTransaction(async (conn) => {
     const [owner] = await conn.select({ id: user.id }).from(user).where(and(eq(user.id, userId), isNull(user.deletionRequestedAt))).limit(1);
     if (!owner) return null;
     const now = Date.now();
     await conn.insert(documentAudioUsage).values({ userId, documentId }).onConflictDoNothing();
-    const rows = await conn.update(documentAudioUsage).set({ revision: sql`${documentAudioUsage.revision} + 1`, clearLeaseUntil: clearing ? now + 120_000 : 0 })
+    const rows = await conn.update(documentAudioUsage).set({ revision: sql`${documentAudioUsage.revision} + 1`, clearLeaseUntil: clearing ? now + CLEAR_LEASE_MS : 0 })
       .where(and(eq(documentAudioUsage.userId, userId), eq(documentAudioUsage.documentId, documentId), clearing ? undefined : lte(documentAudioUsage.clearLeaseUntil, now)))
       .returning({ revision: documentAudioUsage.revision });
     return rows[0] ? Number(rows[0].revision) : null;

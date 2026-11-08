@@ -12,6 +12,7 @@ import { ensureInitialAdmin } from '@/lib/server/auth/bootstrap-admin';
 import { configuredDesktopLaunchToken } from '@/lib/server/auth/desktop-launch-token';
 import { desktopOwnerSession } from '@/lib/server/auth/desktop-owner';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
+import { getRuntimeConfig } from '@/lib/server/admin/settings';
 import { assertUserSignupAllowed, initialAccessStatus } from '@/lib/server/auth/signup-policy';
 import * as authSchemaSqlite from "@openreader/database/schema-auth-sqlite";
 import * as authSchemaPostgres from "@openreader/database/schema-auth-postgres";
@@ -369,6 +370,10 @@ export async function getAuthContext(request: Pick<NextRequest, 'headers'>): Pro
   const auth = await getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   const user = (session?.user ?? null) as User | null;
+  // Turning guests off ends existing guest sessions here too, not only in the browser.
+  if (user?.isAnonymous && !(await getRuntimeConfig()).allowAnonymousSessions) {
+    return { session: null, user: null, userId: null };
+  }
   const userId = user?.id ?? null;
 
   return { session, user, userId };

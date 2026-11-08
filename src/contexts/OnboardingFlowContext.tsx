@@ -193,6 +193,11 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const previousUserId = currentUserIdRef.current;
     currentUserIdRef.current = userId;
+    if (previousUserId !== userId) {
+      // Choices made this session belong to the account that made them.
+      guestRetentionHandledRef.current = false;
+      voicesHandledRef.current = false;
+    }
     if (
       previousUserId !== userId
       && activeBlockingModal === 'claim'

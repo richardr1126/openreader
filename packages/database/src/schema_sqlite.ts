@@ -162,7 +162,7 @@ export const audiobookRequests = sqliteTable('audiobook_requests', {
   // Resolved settings and provider references, never provider credentials.
   settingsJson: text('settings_json').notNull(),
   planObjectKey: text('plan_object_key'),
-  createdAt: integer('created_at').default(SQLITE_NOW_MS),
+  createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),
 }, (table) => [
   foreignKey({
     name: 'audiobook_requests_document_fk',
@@ -170,6 +170,8 @@ export const audiobookRequests = sqliteTable('audiobook_requests', {
     foreignColumns: [documents.id, documents.userId],
   }).onDelete('cascade'),
   index('idx_audiobook_requests_user_document').on(table.userId, table.documentId),
+  // Retention pruning reads the oldest requests first.
+  index('idx_audiobook_requests_created_at').on(table.createdAt, table.id),
 ]);
 
 export const userDocumentProgress = sqliteTable('user_document_progress', {

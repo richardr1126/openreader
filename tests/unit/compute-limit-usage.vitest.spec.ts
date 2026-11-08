@@ -44,8 +44,6 @@ beforeAll(async () => {
       action text not null,
       state text not null,
       operation_id text,
-      device_scope_key text,
-      ip_scope_key text,
       active_scopes_json text not null default '[]',
       policy_version integer not null,
       created_at integer not null,

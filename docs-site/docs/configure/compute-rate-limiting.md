@@ -35,6 +35,13 @@ TTS usage is counted in characters sent to a provider, and only for audio that h
 
 Separate per-user limits apply to signed-in users and guests. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**. Optional creation caps under **Instance** limit new accounts per IP over a rolling period and new guests per IP over the guest idle period. IPv6 addresses share a /64 bucket; stored IP values are keyed hashes. Existing accounts keep working when a creation cap is reached.
 
+The creation caps read the client address from request headers, so they only hold when a reverse proxy sets those headers itself. On Vercel nothing is needed. Elsewhere, put OpenReader behind a proxy that overwrites `X-Real-IP` with the connecting address, and don't expose the app port directly: a client that reaches it without the proxy can send any address it likes. OpenReader reads `X-Real-IP`, then `CF-Connecting-IP`, then the last `X-Forwarded-For` hop.
+
+| Proxy | Setting |
+| --- | --- |
+| nginx | `proxy_set_header X-Real-IP $remote_addr;` |
+| Caddy | `header_up X-Real-IP {remote_host}` inside `reverse_proxy` |
+
 The complete policy, with every value, is in [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). An incomplete or unknown policy in a seed stops startup before anything is written.
 
 ### Storage and daily files

@@ -254,7 +254,7 @@ function SignInContent() {
         {canSignUp && (
           <p>
             Don&apos;t have an account?{' '}
-            <Link href={isOAuthSignIn ? `/signup?${searchParams}` : '/signup'} className="underline hover:text-foreground">Sign up</Link>
+            <Link href={isOAuthSignIn ? `/signup?${searchParams}` : returnTo === '/app' ? '/signup' : `/signup?returnTo=${encodeURIComponent(returnTo)}`} className="underline hover:text-foreground">Sign up</Link>
           </p>
         )}
         <p>By signing in, you agree to our <InlineButton onClick={() => showPrivacyModal()}>Privacy Policy</InlineButton></p>

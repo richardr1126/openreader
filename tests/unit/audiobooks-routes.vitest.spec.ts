@@ -608,8 +608,10 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     }));
 
     hoisted.createArtifact.mockClear();
-    await start({ chapter: 1 });
+    const pending = await start({ chapter: 1 });
     expect(hoisted.createArtifact).not.toHaveBeenCalled();
+    // The id of a chapter that is still generating can be read until its file is due.
+    expect((await get(pending.json.id)).status).toBe(200);
   });
 
   test('stopping a chapter cannot cancel the shared whole-book run', async () => {

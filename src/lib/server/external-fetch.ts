@@ -39,8 +39,10 @@ export type ExternalFetchOptions = {
  * the response body or a redirect location to follow. Enforces a size limit and
  * a hard timeout (resource limits, independent of the SSRF policy).
  */
-function requestOnce(url: URL, options: ExternalFetchOptions): Promise<{ body?: Buffer; redirectLocation?: string }> {
-  const { maxBytes, timeoutMs, messages } = options;
+function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number): Promise<{ body?: Buffer; redirectLocation?: string }> {
+  const { maxBytes, messages } = options;
+  const timeoutMs = deadline - Date.now();
+  if (timeoutMs <= 0) return Promise.reject(new Error('Request timed out'));
   const isHttps = url.protocol === 'https:';
   const lib = isHttps ? https : http;
   const agent = isHttps ? httpsAgent : httpAgent;
@@ -119,7 +121,7 @@ function requestOnce(url: URL, options: ExternalFetchOptions): Promise<{ body?: 
       res.on('error', fail);
     });
 
-    // Hard deadline covering the whole request (connect + transfer), in addition
+    // Hard deadline shared by every redirect hop (connect + transfer), in addition
     // to the socket idle timeout, to bound slow-read/slowloris responses.
     const hardTimer = setTimeout(() => {
       req.destroy(new Error('Request timed out'));
@@ -140,6 +142,7 @@ function requestOnce(url: URL, options: ExternalFetchOptions): Promise<{ body?: 
  */
 export async function fetchExternal(urlStr: string, options: ExternalFetchOptions): Promise<{ body: Buffer; finalUrl: string }> {
   let currentUrl = urlStr;
+  const deadline = Date.now() + options.timeoutMs;
 
   for (let redirects = 0; redirects <= options.maxRedirects; redirects++) {
     let url: URL;
@@ -154,7 +157,7 @@ export async function fetchExternal(urlStr: string, options: ExternalFetchOption
     }
     if (options.allowsUrl && !options.allowsUrl(url)) throw new Error('That URL is not allowed');
 
-    const result = await requestOnce(url, options);
+    const result = await requestOnce(url, options, deadline);
 
     if (result.redirectLocation) {
       currentUrl = new URL(result.redirectLocation, url).href;

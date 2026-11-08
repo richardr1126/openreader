@@ -100,3 +100,18 @@ test('Better Auth still throttles incoming IPs after session hashing', async () 
   expect(responses.find((response) => response.status === 429)?.headers.get('x-retry-after')).toBeTruthy();
   expect((await call('/sign-in/email', { email: 'missing@example.test', password: 'AccountTest#2026' }, '192.0.2.100')).status).toBe(401);
 });
+test('a guest session stops working on the server once guests are turned off', async () => {
+  await settings.setRuntimeConfigKey('limitNewGuestsPerIp', false);
+  const response = await call('/sign-in/anonymous', {}, '198.51.100.7');
+  expect(response.status).toBe(200);
+  const cookie = response.headers.getSetCookie().map((value) => value.split(';')[0]).join('; ');
+  const { getAuthContext } = await import('@/lib/server/auth/auth');
+  const request = { headers: new Headers({ cookie }) };
+  expect((await getAuthContext(request)).user?.isAnonymous).toBe(true);
+  await settings.setRuntimeConfigKey('allowAnonymousSessions', false);
+  try {
+    expect(await getAuthContext(request)).toEqual({ session: null, user: null, userId: null });
+  } finally {
+    await settings.setRuntimeConfigKey('allowAnonymousSessions', true);
+  }
+});

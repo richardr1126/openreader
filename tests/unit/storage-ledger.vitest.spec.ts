@@ -147,6 +147,20 @@ test('uncached audio is storage-limited even with daily characters off, then res
   expect(await (await POST(request())).json()).toMatchObject({ allowed: true, charged: false });
 });
 
+test('a retry of audio already charged is kept after storage fills', async () => {
+  const policy = (await settings.getRuntimeConfig()).computeLimitPolicies;
+  policy.actions.tts_synthesis.enabled = true;
+  await settings.setRuntimeConfigKey('computeLimitPolicies', policy);
+  const { reserveComputeAdmission } = await import('@/lib/server/compute-limits/admission');
+  await reserveComputeAdmission({ policy, action: 'tts_playback', requestKey: `tts-session:retry:${Date.now()}`, subject: account });
+  const { POST } = await import('@/app/api/internal/compute/limits/consume/route');
+  const request = () => new NextRequest('http://localhost/api/internal/compute/limits/consume', { method: 'POST', headers: { Authorization: 'Bearer storage-test-broker' }, body: JSON.stringify({ action: 'tts_synthesis', userId: 'account', sessionId: 'retry', eventKey: 'charged-segment', characters: 20 }) });
+  expect(await (await POST(request())).json()).toMatchObject({ allowed: true, charged: true });
+  await settings.setRuntimeConfigKey('limitAccountStorage', true); await settings.setRuntimeConfigKey('accountStorageMb', 1);
+  await audio('account', doc, 1_048_576);
+  expect(await (await POST(request())).json()).toMatchObject({ allowed: true, idempotent: true });
+});
+
 test('storage reporting requires the broker token and validates the scope and size', async () => {
   const { POST } = await import('@/app/api/internal/compute/storage/route');
   const request = (body: unknown, token = 'storage-test-broker') => new NextRequest('http://localhost/api/internal/compute/storage', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });

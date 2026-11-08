@@ -12,6 +12,7 @@ import { toBaseDocument, type StoredDocumentRow } from './document-row';
 import { isValidDocumentId } from './blobstore';
 import { deleteOwnedDocument } from './delete-owned';
 import { verifyUploadFolder } from './finalize-upload';
+import { existingFolderId } from './register-upload';
 import { safeDocumentName } from './utils';
 import type { DocumentCaller } from './request';
 
@@ -96,7 +97,8 @@ export async function updateDocuments(caller: DocumentCaller, ids: string[], pat
     await verifyUploadFolder(updates.folderId, caller.principal.userId);
   }
   if (!Object.keys(updates).length) throw new ApiRequestError(400, 'REQUEST_INVALID', 'Provide name or folderId.');
-  await db.update(documents).set(updates).where(and(eq(documents.userId, caller.principal.userId), inArray(documents.id, ids)));
+  const folder = 'folderId' in updates ? { folderId: existingFolderId(updates.folderId ?? null, caller.principal.userId) } : {};
+  await db.update(documents).set({ ...updates, ...folder }).where(and(eq(documents.userId, caller.principal.userId), inArray(documents.id, ids)));
   return { data: await Promise.all(ids.map(id => requireDocument(caller.principal, id))) };
 }
 

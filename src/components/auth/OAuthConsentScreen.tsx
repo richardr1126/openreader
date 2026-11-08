@@ -129,8 +129,9 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
               </ul>
             </div>
             <p className="text-xs leading-relaxed text-soft">It can’t see your provider keys or administer this instance. Disconnect it anytime in Settings → Account → Connected apps.</p>
-            {installProfile !== 'desktop' && session?.user.name && <div className="flex items-center justify-between gap-3 border-t border-line pt-4 text-sm">
-              <span className="min-w-0 text-soft">Signed in as <span className="break-words font-medium text-foreground">{session.user.name}</span></span>
+            {installProfile !== 'desktop' && session?.user && <div className="flex items-center justify-between gap-3 border-t border-line pt-4 text-sm">
+              <span className="min-w-0 text-soft">Signed in as <span className="break-words font-medium text-foreground">{session.user.name || session.user.email}</span>
+                {session.user.name && session.user.email && <span className="block break-all text-xs">{session.user.email}</span>}</span>
               <InlineButton className="shrink-0 whitespace-nowrap" disabled={busy} onClick={() => void switchAccount()}>Switch account</InlineButton>
             </div>}
             <div className="grid grid-cols-2 gap-2">

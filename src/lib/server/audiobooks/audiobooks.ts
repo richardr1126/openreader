@@ -554,12 +554,11 @@ async function startAudiobookUnlocked(
   const existing = await findRow(id, caller.scope.storageUserId, intent.parsed.documentId);
   const stored = existing ? intentFromRow(existing) : null;
   const effective: AudiobookIntent = stored?.parsed.planObjectKey ? stored : intent;
-  // A chapter never starts generation, so its row waits until a file is due.
+  // A chapter never starts generation. Its row is kept from the start, so the returned
+  // id can be read until the chapter is ready and its file is built.
   if (intent.chapterIndex !== null) {
     const audiobook = await advanceAudiobook({ id, caller, intent: effective, command, includeProgress: true });
-    if (audiobook.artifact.state === 'building' || audiobook.artifact.state === 'waiting') {
-      await insertRow(id, caller, effective);
-    }
+    if (!await insertRow(id, caller, effective)) await renewRow(id, caller.scope.storageUserId);
     return audiobook;
   }
   const inserted = await insertRow(id, caller, effective);
@@ -682,6 +681,23 @@ export function stopAudiobook(caller: AudiobookCaller, id: string, documentId: s
   return withAudiobookLock(caller, documentId, () => stopAudiobookUnlocked(caller, id, documentId));
 }
 
+// A signal is the only thing that moves a closed tab's audiobook on, so it waits out
+// a command that holds the lock instead of being dropped. The holder may have read
+// the worker before this operation finished.
+const SIGNAL_RETRY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000, 30_000];
+
+async function advanceWhenFree<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      const busy = error instanceof ApiRequestError && error.code === 'AUDIOBOOK_BUSY';
+      if (!busy || attempt >= SIGNAL_RETRY_DELAYS_MS.length) throw error;
+      await new Promise((resolve) => setTimeout(resolve, SIGNAL_RETRY_DELAYS_MS[attempt]));
+    }
+  }
+}
+
 /**
  * The worker's completion signal. It has no client request, so no IP or guest
  * device ID: only signed-in users' requests advance here, with limits keyed on
@@ -706,8 +722,9 @@ export async function advanceAudiobooksAfterOperation(operationId: string, userI
     eq(audiobookRequests.userId, userId),
     eq(audiobookRequests.documentId, documentId),
   )) as Array<{ id: string }>;
+  const caller: AudiobookCaller = { scope, subject: { userId, isAnonymous: false }, mayGenerate: true };
   for (const { id } of rows) {
-    await getAudiobook({ scope, subject: { userId, isAnonymous: false }, mayGenerate: true }, id, documentId).catch((error: unknown) => {
+    await advanceWhenFree(() => getAudiobook(caller, id, documentId)).catch((error: unknown) => {
       logDegraded(serverLogger, {
         event: 'audiobooks.advance_signal.failed',
         msg: 'Failed to advance an audiobook after a worker operation finished',

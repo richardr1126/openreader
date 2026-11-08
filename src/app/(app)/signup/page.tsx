@@ -11,6 +11,7 @@ import { CheckIcon, CircleIcon, EyeIcon, XIcon } from '@/components/icons/Icons'
 import { Button, ButtonLink, Field, IconButton, InlineButton, Input } from '@/components/ui';
 import { AuthCard, AuthFallback, AuthFooter } from '@/components/auth/AuthCard';
 import toast from 'react-hot-toast';
+import { signInReturnPath } from '@/lib/shared/sign-in-return';
 
 export default function SignUpPage() {
   return <Suspense fallback={<AuthFallback />}><SignUpContent /></Suspense>;
@@ -20,7 +21,9 @@ function SignUpContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isOAuthSignUp = searchParams.has('sig');
-  const signInHref = isOAuthSignUp ? `/signin?${searchParams}` : '/signin';
+  const returnTo = signInReturnPath(searchParams.get('returnTo'));
+  const returnQuery = returnTo === '/app' ? '' : `?returnTo=${encodeURIComponent(returnTo)}`;
+  const signInHref = isOAuthSignUp ? `/signin?${searchParams}` : `/signin${returnQuery}`;
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -118,7 +121,7 @@ function SignUpContent() {
         } else {
           await refreshRateLimit();
           toast.success('Account created successfully!');
-          router.push('/app');
+          router.push(returnTo);
         }
       }
     } catch (err) {

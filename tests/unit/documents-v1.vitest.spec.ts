@@ -128,6 +128,19 @@ test('prepared upload ownership, bounded transfer and repeated status lead to on
   expect((await uploadStatus(request(`/api/v1/uploads/${prepared.id}`), uploadParams(prepared.id))).status).toBe(503);
 });
 
+test('a repeated upload commit must ask for the same folder', async () => {
+  state.sqlite.prepare('insert into user_folders (id,user_id) values (?,?)').run('shelf', 'owner');
+  const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'upload.txt', size: 5 }))).json();
+  await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
+  const commit = (folderId: string | null) => create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id }, folderId }));
+  expect((await commit('shelf')).status).toBe(201);
+  expect((await commit('shelf')).status).toBe(201);
+  const moved = await commit(null);
+  expect(moved.status).toBe(409);
+  expect(await moved.json()).toMatchObject({ error: { code: 'UPLOAD_ALREADY_SUBMITTED' } });
+  expect(state.sqlite.prepare('select folder_id from documents').get()).toEqual({ folder_id: 'shelf' });
+});
+
 test('document reads and mutations enforce ownership and do not change reader recency', async () => {
   const id = 'a'.repeat(64); insert(id); insert('b'.repeat(64), 'other');
   expect((await read(request(`/api/v1/documents/${'b'.repeat(64)}`), params('b'.repeat(64)))).status).toBe(404);

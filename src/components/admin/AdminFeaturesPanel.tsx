@@ -391,7 +391,7 @@ export function AdminFeaturesPanel({
             key: 'limitNewAccountsPerIp',
             label: 'New accounts per IP',
             icon: <UserPlusIcon />,
-            info: 'Stops sign-ups from one network once it reaches this count in the period. Existing accounts keep working.',
+            info: 'Stops sign-ups from one network once it reaches this count in the period. Existing accounts keep working. Needs a reverse proxy that sets X-Real-IP.',
           })}
           {draft.limitNewAccountsPerIp ? <>
             {numberRow({ key: 'newAccountsPerIp', label: 'Accounts per period', icon: <UserPlusIcon /> })}
@@ -422,7 +422,7 @@ export function AdminFeaturesPanel({
             key: 'limitNewGuestsPerIp',
             label: 'New guests per IP',
             icon: <UserPlusIcon />,
-            info: 'Stops new guests from one network once it reaches this count within the guest idle period. Existing guests keep working.',
+            info: 'Stops new guests from one network once it reaches this count within the guest idle period. Existing guests keep working. Needs a reverse proxy that sets X-Real-IP.',
           })}
           {draft.limitNewGuestsPerIp ? numberRow({
             key: 'newGuestsPerIp',

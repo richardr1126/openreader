@@ -1,5 +1,8 @@
 import type { components, paths } from './generated';
 
+/** Worker storage calls walk a user's stored objects before answering. */
+export const WORKER_STORAGE_TIMEOUT_MS = 10 * 60_000;
+
 export type MaintenanceRequest = paths['/v1/maintenance/jobs']['post']['requestBody']['content']['application/json'];
 export type MaintenanceResult = { summary: string; completed: number; failed: number };
 

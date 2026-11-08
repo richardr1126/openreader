@@ -104,7 +104,7 @@ export function UploadMenuDialog({
       }
 
       await createTextDocument(docContent, filename, { folderId });
-      await refreshDocuments();
+      void refreshDocuments().catch(() => undefined);
       setDocName('');
       setDocContent('');
       onClose();
@@ -135,7 +135,7 @@ export function UploadMenuDialog({
 
     try {
       const stored = await createDocumentFromUrl(cleanUrl, { folderId, name: webTitle.trim() || undefined });
-      await refreshDocuments();
+      void refreshDocuments().catch(() => undefined);
 
       setWebUrl('');
       setWebTitle('');

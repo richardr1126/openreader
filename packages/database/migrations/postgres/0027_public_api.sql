@@ -8,7 +8,7 @@ CREATE TABLE "audiobook_requests" (
 	"chapter_index" integer,
 	"settings_json" jsonb NOT NULL,
 	"plan_object_key" text,
-	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint
+	"created_at" bigint DEFAULT (extract(epoch from now()) * 1000)::bigint NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "document_audio_usage" (
@@ -189,6 +189,7 @@ ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_client_id_
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_session_id_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "oauth_refresh_token" ADD CONSTRAINT "oauth_refresh_token_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_audiobook_requests_user_document" ON "audiobook_requests" USING btree ("user_id","document_id");--> statement-breakpoint
+CREATE INDEX "idx_audiobook_requests_created_at" ON "audiobook_requests" USING btree ("created_at","id");--> statement-breakpoint
 CREATE UNIQUE INDEX "deviceCode_deviceCode_uidx" ON "device_code" USING btree ("device_code");--> statement-breakpoint
 CREATE UNIQUE INDEX "deviceCode_userCode_uidx" ON "device_code" USING btree ("user_code");--> statement-breakpoint
 CREATE INDEX "oauthAccessToken_clientId_idx" ON "oauth_access_token" USING btree ("client_id");--> statement-breakpoint
@@ -208,5 +209,5 @@ CREATE INDEX "oauthRefreshToken_userId_idx" ON "oauth_refresh_token" USING btree
 CREATE INDEX "oauthRefreshToken_authorizationCodeId_idx" ON "oauth_refresh_token" USING btree ("authorization_code_id");--> statement-breakpoint
 ALTER TABLE "compute_limit_admissions" DROP COLUMN "device_scope_key";--> statement-breakpoint
 ALTER TABLE "compute_limit_admissions" DROP COLUMN "ip_scope_key";--> statement-breakpoint
-UPDATE session SET ip_address = NULL;--> statement-breakpoint
+UPDATE session SET ip_address = NULL WHERE ip_address IS NOT NULL;--> statement-breakpoint
 DELETE FROM compute_limit_buckets WHERE scope_type IN ('ip', 'anonymous_device');

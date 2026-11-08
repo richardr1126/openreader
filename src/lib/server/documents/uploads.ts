@@ -133,16 +133,29 @@ export async function readDocumentUpload(caller: DocumentCaller, id: string): Pr
     eventsUrl: operation.opId ? `/api/v1/uploads/${id}/events?opId=${encodeURIComponent(operation.opId)}` : null };
 }
 
+/** A repeated submit is idempotent only when it asks for the same folder. */
+function assertSameFolder(value: UploadReceipt, folder: string | null | undefined) {
+  if (folder === undefined) return;
+  const current = 'stored' in value ? value.stored.folderId ?? null : value.upload.folderId ?? null;
+  if (current !== folder) throw new ApiRequestError(409, 'UPLOAD_ALREADY_SUBMITTED', 'This upload was already submitted to a different folder. Move the document instead.');
+}
+
 export async function submitDocumentUpload(caller: DocumentCaller, id: string, folderId?: unknown) {
+  if (folderId !== undefined && folderId !== null && (typeof folderId !== 'string' || !folderId.trim())) throw new ApiRequestError(400, 'REQUEST_INVALID', 'folderId must be a string or null.');
+  const folder = folderId === undefined ? undefined : folderId === null ? null : (folderId as string).trim();
   const value = await receipt(caller, id);
   if ('upload' in value && !value.requested) {
-    if (folderId !== undefined && folderId !== null && (typeof folderId !== 'string' || !folderId.trim())) throw new ApiRequestError(400, 'REQUEST_INVALID', 'folderId must be a string or null.');
-    value.upload.folderId = folderId === undefined ? undefined : folderId === null ? null : (folderId as string).trim();
-    await verifyUploadFolder(value.upload.folderId ?? null, caller.principal.userId);
+    value.upload.folderId = folder;
+    await verifyUploadFolder(folder ?? null, caller.principal.userId);
     const head = await headTempDocumentBlob(id, caller.principal.userId, null);
     if (head.contentLength !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
     value.requested = true;
-    await saveReceipt(caller, id, value);
+    // A concurrent submit may have finished meanwhile; never write over its receipt.
+    const latest = await receipt(caller, id);
+    if ('upload' in latest && !latest.requested) await saveReceipt(caller, id, value);
+    else assertSameFolder(latest, folder);
+  } else {
+    assertSameFolder(value, folder);
   }
   return readDocumentUpload(caller, id);
 }

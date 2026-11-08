@@ -7,9 +7,10 @@ export class AdvisoryLockBusyError extends Error {
 }
 
 const LOCK_WAIT_MS = 10_000;
-// This connection is idle for all of `fn`, so this limits the whole hold. Past it,
-// Postgres ends the session and the lock while `fn` keeps running.
+// A holder that stops answering (a frozen or killed process) loses the lock after
+// this. A live holder pings well inside it, so slow work in `fn` keeps the lock.
 const LOCK_HOLD_IDLE_MS = 120_000;
+const LOCK_HEARTBEAT_MS = 30_000;
 const LOCK_NOT_AVAILABLE = '55P03';
 
 // A holder waits on other services, and its work uses the shared pool. Holding
@@ -56,7 +57,15 @@ export async function withPostgresAdvisoryLock<T>(key: string, fn: () => Promise
       if ((error as { code?: unknown }).code === LOCK_NOT_AVAILABLE) throw new AdvisoryLockBusyError();
       throw error;
     }
-    return await fn();
+    const heartbeat = setInterval(() => {
+      client.query('SELECT 1').catch(() => { broken = true; });
+    }, LOCK_HEARTBEAT_MS);
+    heartbeat.unref?.();
+    try {
+      return await fn();
+    } finally {
+      clearInterval(heartbeat);
+    }
   } finally {
     // The transaction only holds the lock, so ending it either way releases it
     // and never affects work done by `fn`.

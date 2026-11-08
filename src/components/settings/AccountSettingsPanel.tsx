@@ -31,6 +31,9 @@ function TtsUsageCard() {
     && status.limit !== null,
   );
   const limit = status?.limit ?? null;
+  // A full account blocks generation too, but it does not reset at midnight.
+  const storageFull = status?.storageLimit ?? null;
+  const charsExhausted = isAtLimit && !storageFull;
   const usedPercent = hasLimit && status && limit !== null
     ? Math.min(100, Math.round((status.currentCount / Math.max(1, limit)) * 100))
     : 0;
@@ -81,21 +84,22 @@ function TtsUsageCard() {
                 aria-valuenow={Math.min(status.currentCount, limit)}
               >
                 <div
-                  className={`h-full rounded-full transition-[width] duration-slow ${isAtLimit ? 'bg-accent' : 'bg-secondary-accent'}`}
+                  className={`h-full rounded-full transition-[width] duration-slow ${charsExhausted ? 'bg-accent' : 'bg-secondary-accent'}`}
                   style={{ width: `${usedPercent}%` }}
                 />
               </div>
               <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-soft">
                 <span>
-                  {isAtLimit
+                  {charsExhausted
                     ? 'New generation pauses at the next uncached segment.'
                     : `${formatCharCount(status.remainingChars ?? 0)} characters remaining.`}
                 </span>
                 <span>Resets in {timeUntilReset}</span>
               </div>
+              {storageFull && <p className="text-xs text-danger">{storageFull}</p>}
             </div>
           ) : (
-            <p className="mt-3 text-xs text-soft">No daily character limit.</p>
+            <p className={`mt-3 text-xs ${storageFull ? 'text-danger' : 'text-soft'}`}>{storageFull ?? 'No daily character limit.'}</p>
           )}
         </div>
       </div>

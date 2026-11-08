@@ -34,6 +34,7 @@ import type {
   TtsVoicePreviewRequest,
   ComputeOperation,
 } from './protocol';
+import { WORKER_STORAGE_TIMEOUT_MS } from './protocol';
 
 export type TtsVoicePreviewResult =
   | { ok: true; audio: ArrayBuffer }
@@ -52,8 +53,6 @@ class WorkerHttpError extends Error {
 
 // A hung worker must not hold callers forever, including those holding a lock.
 const WORKER_REQUEST_TIMEOUT_MS = 60_000;
-// These walk a user's stored objects before answering.
-const WORKER_STORAGE_TIMEOUT_MS = 10 * 60_000;
 
 /**
  * The worker could not serve the request at all: unreachable (for example
