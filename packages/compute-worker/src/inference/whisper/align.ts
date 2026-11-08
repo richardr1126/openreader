@@ -116,7 +116,8 @@ const state = (() => {
 const alignmentCache = state.alignmentCache;
 const alignmentInFlight = state.alignmentInFlight;
 // Variants whose files were downloaded and verified in this process, so warm
-// alignments skip rehashing the model. A failed check is not remembered.
+// alignments skip rehashing the model. A failed check or a failed alignment
+// window forgets the variant, so the next alignment verifies and repairs it.
 const verifiedModelVariants = new Set<WhisperModelVariant>();
 const ALIGNMENT_CACHE_MAX_ENTRIES = 256;
 const ALIGNMENT_TIMEOUT_BUFFER_MS = 2_000;
@@ -1032,6 +1033,10 @@ export async function alignAudioWithText(
           textShare: windowSamples.length / Math.max(1, decodedSamples.length),
           deadlineMs,
           timeoutMs,
+        }).catch((error: unknown) => {
+          // The files may have changed since they were verified; check (and repair) them next time.
+          verifiedModelVariants.delete(modelVariant);
+          throw error;
         });
         for (const word of windowWords) {
           words.push({ word: word.word, start: word.start + offsetSec, end: word.end + offsetSec });

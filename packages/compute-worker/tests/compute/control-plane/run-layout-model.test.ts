@@ -115,7 +115,7 @@ describe('runLayoutModel', () => {
     const { pixel_values: pixelValues } = mockState.feeds[0]!;
     expect(pixelValues?.type).toBe('float32');
     expect(pixelValues?.dims).toEqual([1, 3, 2, 2]);
-    expect(pixelValues?.data).toHaveLength(3 * 2 * 2);
+    expect(pixelValues?.data).toEqual(new Float32Array(3 * 2 * 2).fill(1));
     expect(regions).toHaveLength(2);
     expect(regions[0]?.label).toBe('text');
     expect(regions[0]?.confidence).toBeCloseTo(0.9168273, 6);

@@ -22,13 +22,17 @@ vi.mock('../../src/inference/onnx-thread', () => {
       try {
         fake.runs.push({
           ids: Array.from(feeds.input_ids!.data as BigInt64Array, Number),
-          style: feeds.style!.data as Float32Array,
+          style: (feeds.style!.data as Float32Array).slice(),
           speed: (feeds.speed!.data as Float32Array)[0]!,
           meta: Object.fromEntries(Object.entries(feeds).map(([name, feed]) => [name, { type: feed.type, dims: [...feed.dims] }])),
         });
+        const tokens = (feeds.input_ids!.data as BigInt64Array).length;
+        // The real session transfers the feed buffers to its thread, detaching them here.
+        structuredClone(feeds, {
+          transfer: [...new Set(Object.values(feeds).map((feed) => feed.data.buffer as ArrayBuffer))],
+        });
         await fake.onRun?.();
         // Two frames for every token, and the audio those frames make.
-        const tokens = (feeds.input_ids!.data as BigInt64Array).length;
         return {
           waveform: new Float32Array(tokens * 2 * 600).fill(0.5),
           duration: new BigInt64Array(tokens).fill(BigInt(2)),
