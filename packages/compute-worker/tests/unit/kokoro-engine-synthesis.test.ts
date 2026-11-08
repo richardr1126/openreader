@@ -13,12 +13,10 @@ const fake = vi.hoisted(() => ({
   onRun: null as null | (() => Promise<void>),
 }));
 
-vi.mock('onnxruntime-node', () => {
-  class Tensor {
-    constructor(public type: string, public data: unknown, public dims: number[]) {}
-  }
+vi.mock('../../src/inference/onnx-thread', () => {
+  type Feed = { data: Float32Array | BigInt64Array };
   const session = {
-    async run(feeds: Record<string, Tensor>) {
+    async run(feeds: Record<string, Feed>) {
       fake.active += 1;
       fake.maxActive = Math.max(fake.maxActive, fake.active);
       try {
@@ -31,15 +29,16 @@ vi.mock('onnxruntime-node', () => {
         // Two frames for every token, and the audio those frames make.
         const tokens = (feeds.input_ids!.data as BigInt64Array).length;
         return {
-          waveform: { data: new Float32Array(tokens * 2 * 600).fill(0.5) },
-          duration: { data: new BigInt64Array(tokens).fill(BigInt(2)) },
+          waveform: new Float32Array(tokens * 2 * 600).fill(0.5),
+          duration: new BigInt64Array(tokens).fill(BigInt(2)),
         };
       } finally {
         fake.active -= 1;
       }
     },
+    release: async () => undefined,
   };
-  return { Tensor, InferenceSession: { create: vi.fn(async () => session) } };
+  return { openOnnxThreadSession: vi.fn(async () => session) };
 });
 
 vi.mock('../../src/inference/kokoro/model-files', async (importOriginal) => {

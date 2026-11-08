@@ -7,23 +7,14 @@ const mockState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('onnxruntime-node', () => ({
-  InferenceSession: {
-    create: vi.fn(async () => ({
-      run: vi.fn(async () => mockState.runOutput),
+vi.mock('../../../src/inference/onnx-thread', () => ({
+  openOnnxThreadSession: vi.fn(async () => ({
+    run: vi.fn(async () => ({
+      logits: mockState.runOutput.logits.data,
+      pred_boxes: mockState.runOutput.pred_boxes.data,
     })),
-  },
-  Tensor: class Tensor {
-    constructor(
-      public type: string,
-      public data: Float32Array,
-      public dims: number[],
-    ) {}
-  },
-}));
-
-vi.mock('../../../src/inference/pdf/layout-inference', () => ({
-  runLayoutInference: vi.fn(async () => mockState.runOutput),
+    release: vi.fn(async () => undefined),
+  })),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -78,10 +69,6 @@ vi.mock('../../../src/inference/pdf/model', () => ({
   ensureModel: vi.fn(async () => '/tmp/model.onnx'),
   MODEL_CONFIG_PATH: '/tmp/model-config.json',
   MODEL_PREPROCESSOR_PATH: '/tmp/model-preprocessor.json',
-}));
-
-vi.mock('../../../src/infrastructure/config', () => ({
-  getOnnxThreadsPerJob: vi.fn(() => 1),
 }));
 
 describe('runLayoutModel', () => {
