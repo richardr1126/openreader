@@ -4,9 +4,10 @@ import React, { createContext, useContext, useEffect, useCallback, useMemo, Reac
 import { useQuery } from '@tanstack/react-query';
 import { coerceTimestampMs, nextUtcMidnightTimestampMs, nowTimestampMs } from '@/lib/shared/timestamps';
 import { queryKeys } from '@/lib/client/query-keys';
-import { getAuthClient } from '@/lib/client/auth-client';
+import { useAuthSession } from '@/hooks/useAuthSession';
 
 export interface RateLimitStatus {
+  storageLimit?: string;
   allowed: boolean;
   currentCount: number;
   limit: number | null;
@@ -88,6 +89,7 @@ function parseRateLimitStatus(raw: unknown): RateLimitStatus | null {
     resetTimeMs: coerceTimestampMs(data.resetTimeMs ?? data.resetTime, nextUtcMidnightTimestampMs()),
     userType,
     enabled: data.enabled === true,
+    ...(typeof data.storageLimit === 'string' ? { storageLimit: data.storageLimit } : {}),
   };
 }
 
@@ -116,13 +118,7 @@ export function AuthRateLimitProvider({
   githubAuthEnabled,
   oidcAuth,
 }: AuthRateLimitProviderProps) {
-  // Read the session directly from the prop-provided base URL. We can't use
-  // useAuthSession() here: it resolves the base URL via useAuthConfig() ->
-  // useAuthRateLimit(), i.e. this provider's own context, which isn't
-  // established yet during this render — that self-read threw
-  // "useAuthRateLimit must be used within an AuthRateLimitProvider" on every SSR.
-  const authClient = useMemo(() => getAuthClient(authBaseUrl), [authBaseUrl]);
-  const { data: session } = authClient.useSession();
+  const { data: session } = useAuthSession();
   // Scope the rate-limit cache per session so a previous user's quota cannot be
   // read after an account switch and useSessionQueryReset can evict it cleanly.
   const rateLimitQueryKey = useMemo(
@@ -139,18 +135,18 @@ export function AuthRateLimitProvider({
   } = useQuery({
     queryKey: rateLimitQueryKey,
     queryFn: async () => {
-      const response = await fetch('/api/compute-limits/status');
+      const response = await fetch('/api/v1/me');
       if (!response.ok) {
         throw new Error(`Failed to fetch rate limit status: ${response.status}`);
       }
-      return parseRateLimitStatus(await response.json());
+      return parseRateLimitStatus((await response.json()).computeLimits);
     },
-    enabled: true,
+    enabled: Boolean(session?.user),
     retry: 0,
   });
 
   const status = queryStatus ?? null;
-  const loading = isPending || isFetching;
+  const loading = Boolean(session?.user) && (isPending || isFetching);
   const error = queryError instanceof Error ? queryError.message : queryError ? 'Unknown error' : null;
 
   useEffect(() => {
@@ -163,8 +159,8 @@ export function AuthRateLimitProvider({
   }, [refetch]);
 
   const timeUntilReset = status ? calculateTimeUntilReset(status.resetTimeMs) : '';
-  const isAtLimit = status?.enabled === true
-    && ((status.remainingChars !== null && status.remainingChars <= 0) || !status.allowed);
+  const isAtLimit = Boolean(status?.storageLimit) || (status?.enabled === true
+    && ((status.remainingChars !== null && status.remainingChars <= 0) || !status.allowed));
 
   const contextValue: AuthRateLimitContextType = {
     authBaseUrl,

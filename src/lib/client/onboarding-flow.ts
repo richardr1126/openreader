@@ -1,10 +1,11 @@
-export type OnboardingStep = 'privacy' | 'claim' | 'voices' | 'changelog' | 'done';
+export type OnboardingStep = 'privacy' | 'claim' | 'guestRetention' | 'voices' | 'changelog' | 'done';
 
 export type OnboardingStepSnapshot = {
   privacyRequired: boolean;
   privacyAccepted: boolean;
   claimEligible: boolean;
   claimHasData: boolean;
+  guestRetentionPending: boolean;
   /** Desktop with no usable voice yet: Kokoro not downloaded and no voice service. */
   voicesPending: boolean;
   changelogPending: boolean;
@@ -28,6 +29,10 @@ export function resolveNextOnboardingStep(snapshot: OnboardingStepSnapshot): Onb
     return 'claim';
   }
 
+  if (snapshot.guestRetentionPending) {
+    return 'guestRetention';
+  }
+
   if (snapshot.voicesPending) {
     return 'voices';
   }
@@ -37,6 +42,11 @@ export function resolveNextOnboardingStep(snapshot: OnboardingStepSnapshot): Onb
   }
 
   return 'done';
+}
+
+/** Due once per guest, and again if the period gets shorter than the one they saw. */
+export function isGuestRetentionNoticeDue(days: number | null, seenDays: number | null): boolean {
+  return days !== null && (seenDays === null || days < seenDays);
 }
 
 export function createCoalescedAsyncRunner(runOnce: () => Promise<void>): () => Promise<void> {

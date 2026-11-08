@@ -346,7 +346,10 @@ describe('runtime config JSON seeding', () => {
       changelogFeedUrl: 'https://example.com/changelog/manifest.json',
       signupPolicy: 'approval',
       allowAnonymousSessions: true,
+      allowOAuthClientRegistration: true,
       anonymousUserIdleDays: 30,
+      limitNewAccountsPerIp: false, newAccountsPerIp: 5, newAccountsPerIpDays: 30,
+      limitNewGuestsPerIp: false, newGuestsPerIp: 10,
       enableTtsProvidersTab: false,
       enableAudiobookExport: false,
       enableDocxConversion: false,
@@ -357,6 +360,7 @@ describe('runtime config JSON seeding', () => {
       ttsUpstreamTimeoutMs: 120_000,
       computeLimitPolicies: cloneComputeLimitPolicyDocument(),
       maxUploadMb: 150,
+      limitAccountStorage: false, accountStorageMb: 10240, limitGuestStorage: false, guestStorageMb: 1024, limitGuestStoragePool: false, guestStoragePoolMb: 10240,
       ttsPlaybackBackgroundExtent: 'document',
     };
     try {

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import ClaimDataModal from '@/components/auth/ClaimDataModal';
+import { GuestRetentionModal } from '@/components/auth/GuestRetentionModal';
 import { PrivacyModal } from '@/components/PrivacyModal';
 import { ChangelogModal } from '@/components/settings/ChangelogModal';
 import { useLocalVoices } from '@/components/admin/useLocalVoices';
@@ -12,12 +13,19 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { postChangelogVersionCheck } from '@/lib/client/api/user-state';
 import { scheduleChangelogCheck } from '@/lib/client/changelog-check';
-import { createCoalescedAsyncRunner, isPrivacyAcceptedForPolicy, resolveNextOnboardingStep } from '@/lib/client/onboarding-flow';
+import {
+  createCoalescedAsyncRunner,
+  isGuestRetentionNoticeDue,
+  isPrivacyAcceptedForPolicy,
+  resolveNextOnboardingStep,
+} from '@/lib/client/onboarding-flow';
 import { PRIVACY_POLICY_UPDATED_AT_MS } from '@/lib/shared/privacy-policy';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { EMPTY_CLAIM_COUNTS, useClaimData } from '@/hooks/useClaimData';
 import type { ClaimableCounts } from '@/types/client';
 import { isLocalTtsProviderType } from '@openreader/tts/provider-catalog';
+
+type BlockingModal = 'privacy' | 'claim' | 'guestRetention' | 'voices';
 
 type OnboardingFlowContextValue = {
   openChangelog: () => void;
@@ -36,7 +44,8 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const { query: claimCountsQuery } = useClaimData(Boolean(userId && !isAnonymous));
   const refetchClaimCounts = claimCountsQuery.refetch;
 
-  const { query: onboardingQuery } = useOnboardingState();
+  const { query: onboardingQuery, mutation: onboardingMutation } = useOnboardingState();
+  const saveOnboarding = onboardingMutation.mutate;
 
   // Desktop has no usable voice until Kokoro is downloaded or a voice service
   // is added. Derived from that state alone, so the step returns on the next
@@ -49,13 +58,15 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     && !voices.installed && !voices.downloading && !voices.status?.downloading
     && !sharedProviders.some((provider) => !isLocalTtsProviderType(provider.providerType));
   const voicesHandledRef = useRef(false);
-  const [activeBlockingModal, setActiveBlockingModal] = useState<'privacy' | 'claim' | 'voices' | null>(null);
+  const guestRetentionDays = onboardingQuery.data?.guestRetentionDays ?? null;
+  const guestRetentionHandledRef = useRef(false);
+  const [activeBlockingModal, setActiveBlockingModal] = useState<BlockingModal | null>(null);
   const [claimModalOwnerId, setClaimModalOwnerId] = useState<string | null>(null);
   const [claimableCounts, setClaimableCounts] = useState<ClaimableCounts>(EMPTY_CLAIM_COUNTS);
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   const pendingChangelogOpenRef = useRef(false);
-  const leavingBlockingModalRef = useRef<'privacy' | 'claim' | 'voices' | null>(null);
+  const leavingBlockingModalRef = useRef<BlockingModal | null>(null);
   const claimDismissedUsersRef = useRef<Set<string>>(new Set());
   const changelogVersionCheckKeyRef = useRef<string | null>(null);
   const changelogVersionCheckInFlightRef = useRef<string | null>(null);
@@ -132,13 +143,15 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       privacyAccepted,
       claimEligible: isClaimEligible,
       claimHasData,
+      guestRetentionPending: !guestRetentionHandledRef.current
+        && isGuestRetentionNoticeDue(guestRetentionDays, onboardingData.guestRetentionSeenDays),
       // Once open, the step stays until the owner chooses, even as the
       // download it started changes what voicesNeeded reads.
       voicesPending: !voicesHandledRef.current && (activeBlockingModal === 'voices' || voicesNeeded),
       changelogPending: pendingChangelogOpenRef.current,
     });
 
-    const nextBlockingModal = nextStep === 'privacy' || nextStep === 'claim' || nextStep === 'voices'
+    const nextBlockingModal = nextStep === 'privacy' || nextStep === 'claim' || nextStep === 'guestRetention' || nextStep === 'voices'
       ? nextStep
       : null;
     // Blocking dialogs own focus and page inertness. Let the current dialog fully
@@ -161,6 +174,11 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (nextStep === 'guestRetention') {
+      setActiveBlockingModal('guestRetention');
+      return;
+    }
+
     if (nextStep === 'voices') {
       setActiveBlockingModal('voices');
       return;
@@ -170,11 +188,16 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       pendingChangelogOpenRef.current = false;
       setIsChangelogOpen(true);
     }
-  }, [activeBlockingModal, installProfile, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId, voicesLoading, voicesNeeded]);
+  }, [activeBlockingModal, guestRetentionDays, installProfile, isAnonymous, onboardingQuery.data, refetchClaimCounts, userId, voicesLoading, voicesNeeded]);
 
   useEffect(() => {
     const previousUserId = currentUserIdRef.current;
     currentUserIdRef.current = userId;
+    if (previousUserId !== userId) {
+      // Choices made this session belong to the account that made them.
+      guestRetentionHandledRef.current = false;
+      voicesHandledRef.current = false;
+    }
     if (
       previousUserId !== userId
       && activeBlockingModal === 'claim'
@@ -197,10 +220,14 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     setActiveBlockingModal(null);
   }, [claimModalOwnerId]);
 
-  const handlePrivacyAccepted = useCallback(() => {
-    leavingBlockingModalRef.current = 'privacy';
+  const handleGuestRetentionSeen = useCallback((createAccount: boolean) => {
+    // A failed save only means the notice returns on the next load.
+    if (guestRetentionDays !== null) saveOnboarding({ guestRetentionSeenDays: guestRetentionDays });
+    guestRetentionHandledRef.current = true;
+    leavingBlockingModalRef.current = 'guestRetention';
     setActiveBlockingModal(null);
-  }, []);
+    if (createAccount) router.push('/signup');
+  }, [guestRetentionDays, router, saveOnboarding]);
 
   const handleVoicesChosen = useCallback((useService: boolean) => {
     voicesHandledRef.current = true;
@@ -209,7 +236,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     if (useService) router.push('/app/settings?section=providers');
   }, [router]);
 
-  const handleBlockingModalAfterLeave = useCallback((modal: 'privacy' | 'claim' | 'voices') => {
+  const handleBlockingModalAfterLeave = useCallback((modal: BlockingModal) => {
     if (leavingBlockingModalRef.current !== modal) return;
     leavingBlockingModalRef.current = null;
     void runFlow();
@@ -245,7 +272,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       {children}
       <PrivacyModal
         isOpen={activeBlockingModal === 'privacy'}
-        onAccept={handlePrivacyAccepted}
         onDismiss={() => { }}
         onAfterLeave={() => handleBlockingModalAfterLeave('privacy')}
       />
@@ -256,6 +282,15 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
         onClaimed={handleClaimComplete}
         onAfterLeave={() => handleBlockingModalAfterLeave('claim')}
       />
+      {guestRetentionDays !== null ? (
+        <GuestRetentionModal
+          days={guestRetentionDays}
+          isOpen={activeBlockingModal === 'guestRetention'}
+          onContinue={() => handleGuestRetentionSeen(false)}
+          onCreateAccount={() => handleGuestRetentionSeen(true)}
+          onAfterLeave={() => handleBlockingModalAfterLeave('guestRetention')}
+        />
+      ) : null}
       <VoicesSetupModal
         isOpen={activeBlockingModal === 'voices'}
         voices={voices}

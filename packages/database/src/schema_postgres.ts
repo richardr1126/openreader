@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, text, integer, real, bigint, boolean, primaryKey, index, uniqueIndex, jsonb, foreignKey, check } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, real, doublePrecision, bigint, boolean, primaryKey, index, uniqueIndex, jsonb, foreignKey, check } from 'drizzle-orm/pg-core';
 import { user } from './schema_auth_postgres';
 
 const PG_NOW_MS = sql`(extract(epoch from now()) * 1000)::bigint`;
@@ -58,8 +58,8 @@ export const computeLimitAdmissions = pgTable('compute_limit_admissions', {
   action: text('action').notNull(),
   state: text('state').notNull(),
   operationId: text('operation_id'),
-  deviceScopeKey: text('device_scope_key'),
-  ipScopeKey: text('ip_scope_key'),
+
+
   activeScopesJson: text('active_scopes_json').notNull().default('[]'),
   policyVersion: bigint('policy_version', { mode: 'number' }).notNull(),
   createdAt: bigint('created_at', { mode: 'number' }).notNull(),
@@ -112,10 +112,24 @@ export const userPreferences = pgTable('user_preferences', {
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });
 
+// Zero-byte rows retain the revision fence after audio deletion.
+export const documentAudioUsage = pgTable('document_audio_usage', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  audioBytes: bigint('audio_bytes', { mode: 'number' }).notNull().default(0),
+  revision: integer('revision').notNull().default(0),
+  clearLeaseUntil: bigint('clear_lease_until', { mode: 'number' }).notNull().default(0),
+  measuredAt: bigint('measured_at', { mode: 'number' }).notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.documentId] }),
+  check('document_audio_usage_nonnegative', sql`${table.audioBytes} >= 0`),
+]);
+
 export const userOnboarding = pgTable('user_onboarding', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   privacyAcceptedAtMs: bigint('privacy_accepted_at_ms', { mode: 'number' }),
   lastSeenAppVersion: text('last_seen_app_version'),
+  guestRetentionSeenDays: integer('guest_retention_seen_days'),
   createdAt: bigint('created_at', { mode: 'number' }).default(PG_NOW_MS),
   updatedAt: bigint('updated_at', { mode: 'number' }).default(PG_NOW_MS),
 });
@@ -135,6 +149,31 @@ export const documentSettings = pgTable('document_settings', {
     foreignColumns: [documents.id, documents.userId],
   }).onDelete('cascade'),
   index('idx_document_settings_user_id').on(table.userId),
+]);
+
+// What a user asked to have made, so the app can start the next step when the
+// worker reports back. Generation and artifact status stay in worker operations.
+export const audiobookRequests = pgTable('audiobook_requests', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  documentVersion: bigint('document_version', { mode: 'number' }).notNull(),
+  format: text('format').notNull(),
+  speed: doublePrecision('speed').notNull(),
+  chapterIndex: integer('chapter_index'),
+  // Resolved settings and provider references, never provider credentials.
+  settingsJson: jsonb('settings_json').notNull(),
+  planObjectKey: text('plan_object_key'),
+  createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+}, (table) => [
+  foreignKey({
+    name: 'audiobook_requests_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
+  index('idx_audiobook_requests_user_document').on(table.userId, table.documentId),
+  // Retention pruning reads the oldest requests first.
+  index('idx_audiobook_requests_created_at').on(table.createdAt, table.id),
 ]);
 
 export const userDocumentProgress = pgTable('user_document_progress', {

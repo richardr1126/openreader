@@ -31,6 +31,7 @@ describe('admin user directory query', () => {
       CREATE TABLE documents (
         id text NOT NULL, user_id text NOT NULL, size integer NOT NULL
       );
+      CREATE TABLE document_audio_usage (user_id text, document_id text, audio_bytes integer);
       CREATE TABLE compute_limit_events (
         event_key text PRIMARY KEY NOT NULL, user_id text NOT NULL,
         metric text NOT NULL, units integer NOT NULL

@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buildAccountExportArtifactId } from '@openreader/tts/playback-scope';
 import { db } from '@openreader/database';
 import {
+  audiobookRequests,
+  documentAudioUsage,
   documents,
   computeLimitAdmissions,
   computeLimitEvents,
@@ -191,14 +193,13 @@ export async function POST(req: NextRequest) {
     // secrets must never be written into the archive.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const database = db as any;
-    const [authSessions, linkedAccounts] = await Promise.all([
+    const [authSessions, linkedAccounts, connectedApps, audiobooks, audioUsage] = await Promise.all([
       database
         .select({
           id: authSchema.session.id,
           expiresAt: authSchema.session.expiresAt,
           createdAt: authSchema.session.createdAt,
           updatedAt: authSchema.session.updatedAt,
-          ipAddress: authSchema.session.ipAddress,
           userAgent: authSchema.session.userAgent,
         })
         .from(authSchema.session)
@@ -214,6 +215,33 @@ export async function POST(req: NextRequest) {
         })
         .from(authSchema.account)
         .where(eq(authSchema.account.userId, userId)),
+      // The apps this account approved and the access each was granted.
+      database
+        .select({
+          clientId: authSchema.oauthConsent.clientId,
+          clientName: authSchema.oauthClient.name,
+          scopes: authSchema.oauthConsent.scopes,
+          createdAt: authSchema.oauthConsent.createdAt,
+          updatedAt: authSchema.oauthConsent.updatedAt,
+        })
+        .from(authSchema.oauthConsent)
+        .leftJoin(authSchema.oauthClient, eq(authSchema.oauthClient.clientId, authSchema.oauthConsent.clientId))
+        .where(eq(authSchema.oauthConsent.userId, userId)),
+      db.select({
+        id: audiobookRequests.id,
+        documentId: audiobookRequests.documentId,
+        documentVersion: audiobookRequests.documentVersion,
+        format: audiobookRequests.format,
+        speed: audiobookRequests.speed,
+        chapterIndex: audiobookRequests.chapterIndex,
+        settings: audiobookRequests.settingsJson,
+        createdAt: audiobookRequests.createdAt,
+      }).from(audiobookRequests).where(eq(audiobookRequests.userId, userId)),
+      db.select({
+        documentId: documentAudioUsage.documentId,
+        audioBytes: documentAudioUsage.audioBytes,
+        measuredAt: documentAudioUsage.measuredAt,
+      }).from(documentAudioUsage).where(eq(documentAudioUsage.userId, userId)),
     ]);
 
     const manifest = buildUserExportManifest({
@@ -232,6 +260,9 @@ export async function POST(req: NextRequest) {
       documentSettings: perDocumentSettings,
       authSessions,
       linkedAccounts,
+      connectedApps,
+      audiobookRequests: audiobooks,
+      documentAudioUsage: audioUsage,
       documents: userDocs,
       getDocumentObjectKey: (documentId) => documentKey(documentId, namespace),
     });

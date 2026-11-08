@@ -6,8 +6,9 @@ import { useAuthSession } from '@/hooks/useAuthSession';
 import { requestJson } from '@/lib/client/api/http';
 import { deriveQueryState } from '@/lib/client/query/query-state';
 import type { BaseDocument } from '@/types/documents';
+import type { FolderResource } from '@/types/folder-api';
 
-export type ServerFolder = { id: string; name: string; position: number; createdAt?: number; updatedAt?: number };
+export type ServerFolder = FolderResource;
 
 function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
   return requestJson<T>(url, init, 'Folder request failed');
@@ -21,7 +22,18 @@ export function useFolders() {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: foldersKey,
-    queryFn: async ({ signal }) => (await jsonRequest<{ folders: ServerFolder[] }>('/api/folders', { signal })).folders,
+    queryFn: async ({ signal }) => {
+      const folders: ServerFolder[] = [];
+      let cursor: string | null = null;
+      do {
+        const query = new URLSearchParams({ limit: '200' });
+        if (cursor) query.set('cursor', cursor);
+        const page = await jsonRequest<{ data: ServerFolder[]; nextCursor: string | null }>(`/api/v1/folders?${query}`, { signal });
+        folders.push(...page.data);
+        cursor = page.nextCursor;
+      } while (cursor);
+      return folders;
+    },
     enabled: !isPending,
   });
   const queryState = deriveQueryState({
@@ -31,10 +43,17 @@ export function useFolders() {
     error: query.error,
   });
   const create = useMutation({
-    mutationFn: (input: { id?: string; name: string; documentIds?: string[] }) => jsonRequest<{ folder: ServerFolder }>('/api/folders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }),
-    onSuccess: ({ folder }, input) => {
+    mutationFn: async (input: { id?: string; name: string; documentIds?: string[] }) => {
+      const folder = await jsonRequest<ServerFolder>('/api/v1/folders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...input, documentIds: input.documentIds?.slice(0, 200) }),
+      });
+      for (let offset = 200; offset < (input.documentIds?.length ?? 0); offset += 200) {
+        await jsonRequest('/api/v1/documents', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: input.documentIds!.slice(offset, offset + 200), folderId: folder.id }) });
+      }
+      return folder;
+    },
+    onSuccess: (folder, input) => {
       queryClient.setQueryData<ServerFolder[]>(foldersKey, (rows = []) => [...rows, folder]);
       if (input.documentIds?.length) queryClient.setQueryData<BaseDocument[]>(documentsKey, (rows = []) =>
         rows.map((doc) => input.documentIds!.includes(doc.id) ? { ...doc, folderId: folder.id } : doc));
@@ -45,9 +64,14 @@ export function useFolders() {
     ]),
   });
   const move = useMutation({
-    mutationFn: (input: { documentIds: string[]; folderId: string | null }) => jsonRequest('/api/documents/folders', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
-    }),
+    mutationFn: async (input: { documentIds: string[]; folderId: string | null }) => {
+      for (let offset = 0; offset < input.documentIds.length; offset += 200) {
+        await jsonRequest('/api/v1/documents', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: input.documentIds.slice(offset, offset + 200), folderId: input.folderId }),
+        });
+      }
+    },
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: documentsKey });
       const previous = queryClient.getQueryData<BaseDocument[]>(documentsKey);
@@ -59,7 +83,7 @@ export function useFolders() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: documentsKey }),
   });
   const remove = useMutation({
-    mutationFn: (id: string) => jsonRequest(`/api/folders/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => jsonRequest(`/api/v1/folders/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     onMutate: async (id) => {
       await Promise.all([
         queryClient.cancelQueries({ queryKey: foldersKey }),
@@ -81,7 +105,7 @@ export function useFolders() {
     ]),
   });
   const clear = useMutation({
-    mutationFn: () => jsonRequest('/api/folders', { method: 'DELETE' }),
+    mutationFn: () => jsonRequest('/api/v1/folders', { method: 'DELETE' }),
     onMutate: async () => {
       await Promise.all([
         queryClient.cancelQueries({ queryKey: foldersKey }),

@@ -54,6 +54,7 @@ export async function deleteUserDatabaseData(userId: string): Promise<void> {
   // auth verification tokens, which cannot carry a user FK.
   for (const { table, userColumn, step } of [
     { table: authSchema.verification, userColumn: authSchema.verification.value, step: 'delete_user_verification_rows' },
+    { table: authSchema.deviceCode, userColumn: authSchema.deviceCode.userId, step: 'delete_user_device_codes' },
   ]) {
     await database.delete(table).where(eq(userColumn, userId)).catch((error: unknown) => {
       failures.push(error);

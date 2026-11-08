@@ -1,12 +1,12 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { resolveReaderPlayback } from '@/lib/server/reader/playback';
+import { createAdmittedPlaybackPlanOperation, resolveDefaultPlaybackRequest, resolveReaderPlayback } from '@/lib/server/reader/playback';
 import { buildTtsPlaybackPlanningInput } from '@/lib/server/tts/playback-request';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 
 const mocks = vi.hoisted(() => ({
-  providers: vi.fn(), voices: vi.fn(), credentials: vi.fn(), completed: vi.fn(), enqueue: vi.fn(), readPlan: vi.fn(),
+  providers: vi.fn(), voices: vi.fn(), credentials: vi.fn(), completed: vi.fn(), enqueue: vi.fn(), readPlan: vi.fn(), resolvePlan: vi.fn(),
 }));
 vi.mock('@openreader/tts/voice-resolution', () => ({ resolveVoices: mocks.voices }));
 vi.mock('@/lib/server/admin/resolve-credentials', () => ({ resolveTtsCredentials: mocks.credentials }));
@@ -22,7 +22,7 @@ vi.mock('@/lib/server/compute-limits/run-admitted', () => ({
 }));
 vi.mock('@/lib/server/compute-worker/client', () => ({
   isComputeWorkerAvailable: () => true,
-  ComputeWorkerClient: class { createTtsPlaybackPlanOperation = mocks.enqueue; },
+  ComputeWorkerClient: class { createTtsPlaybackPlanOperation = mocks.enqueue; resolveTtsPlaybackPlanOperation = mocks.resolvePlan; },
   getComputeWorkerClient: () => ({ listTtsPlaybackScopeCompletedSegments: mocks.completed }),
 }));
 vi.mock('@/lib/server/tts/playback-plans', async (importOriginal) => ({
@@ -49,6 +49,7 @@ function plan(segments = [0, 1], readerType = 'html') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.resolvePlan.mockResolvedValue(null);
   mocks.providers.mockResolvedValue([{ slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true }]);
   mocks.voices.mockResolvedValue(['Bella', 'Jasper']);
   mocks.credentials.mockResolvedValue({ provider: 'custom-openai', apiKey: 'credential-sentinel', baseUrl: 'http://provider.invalid/v1' });
@@ -60,6 +61,46 @@ beforeEach(() => {
 });
 
 describe('bootstrap playback preparation', () => {
+  test('reads a failed plan without re-enqueueing it during audiobook advancement', async () => {
+    const parsed = await resolveDefaultPlaybackRequest(documentId, scope, DEFAULT_DOCUMENT_SETTINGS, preferences);
+    if ('error' in parsed) throw new Error(parsed.error);
+    const failed = { opId: 'failed-plan', status: 'failed', error: { message: 'bad document' } };
+    mocks.resolvePlan.mockResolvedValue(failed);
+    const operation = await createAdmittedPlaybackPlanOperation({ parsed, scope,
+      planningInput: await buildTtsPlaybackPlanningInput(parsed, scope), policy: {} as never, retryFailed: false });
+    expect(operation).toBe(failed);
+    expect(mocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  test('resolves the requested voice before deriving an automatic language', async () => {
+    const parsed = await resolveDefaultPlaybackRequest(documentId, scope, DEFAULT_DOCUMENT_SETTINGS,
+      { ...preferences, voice: 'af_heart' }, 'tr', { voice: 'jf_alpha' });
+    expect(parsed).toMatchObject({ settings: { voice: 'jf_alpha', language: 'ja' }, language: 'ja' });
+  });
+
+  test('a named provider starts from its own defaults, not the saved provider\'s speech', async () => {
+    mocks.providers.mockResolvedValue([
+      { slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true },
+      { slug: 'fish', providerType: 'fish-audio', defaultModel: 's2.1-pro-free', enabled: true },
+      { slug: 'off', providerType: 'openai', defaultModel: 'tts-1', enabled: false },
+    ]);
+    const saved = { ...preferences, voice: 'expr-voice-2-f', voiceSpeed: 1.5, ttsInstructions: 'Whisper' };
+    const select = (selection: { provider?: string; model?: string; voice?: string }) =>
+      resolveDefaultPlaybackRequest(documentId, scope, DEFAULT_DOCUMENT_SETTINGS, saved, 'en', selection);
+
+    const fish = await select({ provider: 'fish' });
+    expect(fish).toMatchObject({ settings: { providerRef: 'fish', providerType: 'fish-audio', ttsModel: 's2.1-pro-free',
+      voice: '933563129e564b19a115bedd57b7406a', nativeSpeed: 1 } });
+    expect(fish).not.toHaveProperty('settings.ttsInstructions');
+    expect(await select({ provider: 'fish', voice: 'bf322df2096a46f18c579d0baa36f41d' }))
+      .toMatchObject({ settings: { voice: 'bf322df2096a46f18c579d0baa36f41d' } });
+    expect(await select({ voice: 'expr-voice-3-m' })).toMatchObject({ settings: { providerRef: 'kitten', ttsModel: 'KittenTTS', voice: 'expr-voice-3-m' } });
+
+    expect(await select({ provider: 'off' })).toMatchObject({ invalid: true });
+    expect(await select({ provider: 'missing' })).toMatchObject({ invalid: true });
+    expect(await select({ provider: 'fish', voice: 'Sarah' })).toMatchObject({ invalid: true });
+  });
+
   test('uses global PDF skip and segment defaults, then applies independent book overrides', async () => {
     mocks.readPlan.mockResolvedValue(plan([0, 1], 'pdf'));
     const prepare = (settings = DEFAULT_DOCUMENT_SETTINGS) => resolveReaderPlayback(request, documentId,

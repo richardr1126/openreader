@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { db } from '@openreader/database';
-import { computeLimitAdmissions } from '@openreader/database/schema';
+import { computeLimitAdmissions, computeLimitEvents } from '@openreader/database/schema';
 import {
   parseTtsSynthesisConsumeRequest,
   type TtsSynthesisConsumeResponse,
@@ -13,6 +13,7 @@ import {
   touchComputeAdmission,
 } from '@/lib/server/compute-limits/admission';
 import { consumeComputeUsage } from '@/lib/server/compute-limits/usage';
+import { storageLimit } from '@/lib/server/storage/usage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -52,8 +53,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     id: computeLimitAdmissions.id,
     userId: computeLimitAdmissions.userId,
     isAnonymous: computeLimitAdmissions.isAnonymous,
-    deviceScopeKey: computeLimitAdmissions.deviceScopeKey,
-    ipScopeKey: computeLimitAdmissions.ipScopeKey,
     requestKey: computeLimitAdmissions.requestKey,
     action: computeLimitAdmissions.action,
   }).from(computeLimitAdmissions).where(and(
@@ -78,6 +77,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ].admission.active.map((limit) => limit.leaseSeconds),
   );
   await touchComputeAdmission({ admissionId: admission.id, leaseSeconds, nowMs });
+  // A retry of a segment already charged keeps its audio; only new synthesis waits on storage.
+  const [charged] = await db.select({ eventKey: computeLimitEvents.eventKey }).from(computeLimitEvents)
+    .where(eq(computeLimitEvents.eventKey, parsed.eventKey)).limit(1);
+  const blockedStorage = charged ? null
+    : await storageLimit({ userId: admission.userId, isAnonymous: Boolean(admission.isAnonymous) }, 0, runtimeConfig);
+  if (blockedStorage) return NextResponse.json({ allowed: false, charged: false, idempotent: false, retryAfterMs: 0, usage: null,
+    storageLimit: blockedStorage.code } satisfies TtsSynthesisConsumeResponse, { headers: NO_STORE_HEADERS });
   const decision = await consumeComputeUsage({
     policy: runtimeConfig.computeLimitPolicies,
     action: 'tts_synthesis',
@@ -88,8 +94,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     subject: {
       userId: admission.userId,
       isAnonymous: Boolean(admission.isAnonymous),
-      deviceScopeKey: admission.deviceScopeKey,
-      ipScopeKey: admission.ipScopeKey,
     },
     nowMs,
   });

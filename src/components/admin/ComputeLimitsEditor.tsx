@@ -17,7 +17,7 @@ import {
   ListIcon, PlayIcon, RefreshIcon, ServerStackIcon, UserIcon,
 } from '@/components/icons/Icons';
 import { Button, Input, RowIcon, Select, ToggleRow } from '@/components/ui';
-import { formatScope, usageLabel } from './compute-limit-labels';
+import { usageLabel } from './compute-limit-labels';
 
 const ACTION_DETAILS: Record<ComputeAction, { label: string; icon: ComponentType<SVGProps<SVGSVGElement>>; description: string }> = {
   pdf_layout: {
@@ -65,6 +65,17 @@ const ACTION_DETAILS: Record<ComputeAction, { label: string; icon: ComponentType
     label: 'New TTS generation',
     description: 'Counts only uncached segments immediately before a provider call.',
   },
+  document_intake: {
+    icon: DocumentIcon,
+    label: 'New documents',
+    description: 'Each prepared file or URL import counts once, including failed imports. Resets at midnight UTC.',
+  },
+};
+
+/** Actions limited by a daily allowance instead of worker admission. */
+const DAILY_QUOTA_UNITS: Partial<Record<ComputeAction, string>> = {
+  tts_synthesis: 'characters',
+  document_intake: 'files',
 };
 
 const RESOURCE_LABELS: Record<WorkerResource, string> = {
@@ -210,6 +221,7 @@ export function ComputeLimitsEditor({
           const actionPolicy = policy.actions[action];
           const detail = ACTION_DETAILS[action];
           const Icon = detail.icon;
+          const dailyUnit = DAILY_QUOTA_UNITS[action];
           return (
             <details key={action} className="group">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
@@ -223,7 +235,7 @@ export function ComputeLimitsEditor({
                       ? 'bg-accent-wash text-accent'
                       : 'bg-surface-sunken text-muted'
                   }`}>
-                    {action === 'tts_synthesis'
+                    {dailyUnit
                       ? (actionPolicy.enabled ? 'Limited' : 'Unlimited')
                       : (actionPolicy.enabled ? 'On' : 'Off')}
                   </span>
@@ -233,28 +245,29 @@ export function ComputeLimitsEditor({
               <div className="space-y-3 px-3 pb-3 pt-1">
                 <p className="text-xs text-faint">{detail.description}</p>
                 <ToggleRow
-                  label={action === 'tts_synthesis' ? 'Limit new generation' : 'Enforce request limits'}
+                  label={action === 'tts_synthesis' ? 'Limit new generation' : dailyUnit ? `Limit daily ${dailyUnit}` : 'Enforce request limits'}
                   info={action === 'tts_synthesis'
                     ? 'The segment that crosses a daily threshold finishes; the next uncached segment stops.'
-                    : 'Rejects new work once any start-window or active-work limit is reached. Worker queues and provider capacity apply either way.'}
+                    : dailyUnit ? undefined : 'Rejects new work once any start-window or active-work limit is reached. Worker queues and provider capacity apply either way.'}
                   checked={actionPolicy.enabled}
                   onChange={(enabled) => update((draft) => { draft.actions[action].enabled = enabled; })}
                   variant="flat"
                 />
 
-                {action === 'tts_synthesis' ? (
+                {dailyUnit ? (actionPolicy.enabled ? (
                   <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {actionPolicy.usage.map((limit, index) => (
                       <LimitNumber
                         key={`${limit.scope}:${limit.audience}`}
-                        label={`${usageLabel(limit.scope, limit.audience)} daily characters`}
+                        label={`${usageLabel(limit.scope, limit.audience)} daily ${dailyUnit}`}
                         value={limit.limit}
                         onChange={(next) => update((draft) => {
-                          draft.actions.tts_synthesis.usage[index].limit = next;
+                          draft.actions[action].usage[index].limit = next;
                         })}
                       />
                     ))}
                   </div>
+                ) : null
                 ) : (
                   <>
                     <div>
@@ -263,7 +276,7 @@ export function ComputeLimitsEditor({
                         {actionPolicy.admission.windows.map((window, index) => (
                           <div key={`${window.scope}:${index}`} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
                             <LimitNumber
-                              label={`${formatScope(window.scope)} starts`}
+                              label={`${window.scope} starts`}
                               value={window.limit}
                               onChange={(next) => update((draft) => {
                                 draft.actions[action].admission.windows[index].limit = next;
@@ -287,7 +300,7 @@ export function ComputeLimitsEditor({
                         {actionPolicy.admission.active.map((active, index) => (
                           <div key={active.scope} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
                             <LimitNumber
-                              label={`${formatScope(active.scope)} concurrent`}
+                              label={`${active.scope} concurrent`}
                               value={active.limit}
                               onChange={(next) => update((draft) => {
                                 draft.actions[action].admission.active[index].limit = next;

@@ -1,8 +1,9 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { PrivateEmail } from '@/components/auth/PrivateEmail';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LoadingSpinner } from '@/components/Spinner';
 import {
@@ -39,7 +40,13 @@ interface ManagedUser {
   sessionCount: number;
   documentCount: number;
   documentBytes: number;
+  audioBytes: number;
+  storageBytes: number;
   usage: { ttsCharacters: number; inputBytes: number; files: number };
+}
+
+function accountName(user: ManagedUser): string {
+  return user.name || 'Unnamed account';
 }
 
 interface UsersResponse {
@@ -362,7 +369,7 @@ export function AdminUsersPanel() {
                 />
                 User
               </span>
-              <span className="text-right">Documents</span>
+              <span className="text-right">Storage</span>
               <span className="text-right">TTS usage</span>
               <span className="text-right">Manage</span>
             </div>
@@ -379,31 +386,31 @@ export function AdminUsersPanel() {
                         checked={selectedIds.has(user.id)}
                         disabled={isSelf}
                         onChange={(event) => toggleOne(user.id, event.target.checked)}
-                        aria-label={`Select ${user.isAnonymous ? user.id : user.email}`}
+                        aria-label={`Select ${user.isAnonymous ? user.id : accountName(user)}`}
                         className="shrink-0"
                       />
                       <button type="button" onClick={() => setExpandedId(expanded ? null : user.id)} className="min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full font-mono text-xs font-bold ${user.isAnonymous ? 'bg-surface-sunken text-soft' : 'bg-accent-wash text-accent'}`}>
-                            {user.isAnonymous ? 'AN' : (user.name || user.email).slice(0, 2).toUpperCase()}
+                            {user.isAnonymous ? 'AN' : accountName(user).slice(0, 2).toUpperCase()}
                           </span>
                           <span className="min-w-0">
                             <span className="flex flex-wrap items-center gap-1.5">
-                              <span className="block truncate text-sm font-medium text-foreground">{user.isAnonymous ? 'Anonymous session' : user.name || 'Unnamed account'}</span>
+                              <span className="block truncate text-sm font-medium text-foreground">{user.isAnonymous ? 'Anonymous session' : accountName(user)}</span>
                               {isSelf ? <Badge tone="foreground">You</Badge> : null}
                               {user.isAdmin ? <Badge tone="accent">Admin</Badge> : null}
                               <Badge tone={user.deletionRequestedAt ? 'muted' : statusTone(user.accessStatus)}>{user.deletionRequestedAt ? 'Deletion pending' : user.accessStatus}</Badge>
                             </span>
-                            <span className="mt-0.5 block truncate font-mono text-[11px] text-soft">{user.isAnonymous ? user.id : user.email}</span>
+                            {user.isAnonymous ? <span className="mt-0.5 block truncate font-mono text-[11px] text-soft">{user.id}</span> : null}
                             <span className="mt-0.5 block truncate font-mono text-[11px] tabular-nums text-faint lg:hidden">
-                              {formatCount(user.documentCount)} docs · {formatBytes(user.documentBytes)} · {formatCount(user.usage.ttsCharacters)} chars
+                              {formatCount(user.documentCount)} docs · {formatBytes(user.storageBytes)} · {formatCount(user.usage.ttsCharacters)} chars
                             </span>
                           </span>
                         </div>
                       </button>
                     </div>
 
-                    <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatCount(user.documentCount)} · {formatBytes(user.documentBytes)}</span>
+                    <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatBytes(user.storageBytes)}</span>
                     <span className="hidden text-right font-mono text-xs font-medium tabular-nums text-foreground lg:block">{formatCount(user.usage.ttsCharacters)} chars</span>
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 pl-16 empty:hidden lg:mt-0 lg:justify-end lg:pl-0">
@@ -415,7 +422,7 @@ export function AdminUsersPanel() {
                             checked={user.isAdmin}
                             disabled={busy || isSelf || (!user.isAdmin && user.accessStatus !== 'active')}
                             onChange={(isAdmin) => setRoleTarget({ user, grant: isAdmin })}
-                            ariaLabel={`Administrator access for ${user.email}`}
+                            ariaLabel={`Administrator access for ${accountName(user)}`}
                           />
                         </label>
                       ) : null}
@@ -437,7 +444,10 @@ export function AdminUsersPanel() {
                       <Detail label="Updated" value={formatDate(user.updatedAt)} />
                       <Detail label="Last session activity" value={formatDate(user.lastActiveAt)} />
                       <Detail label="Sessions" value={formatCount(user.sessionCount)} />
-                      <Detail label="Email" value={user.isAnonymous ? 'Not applicable' : user.emailVerified ? 'Verified' : 'Not verified'} />
+                      <Detail label="Documents" value={`${formatCount(user.documentCount)} · ${formatBytes(user.documentBytes)}`} />
+                      <Detail label="Audio" value={formatBytes(user.audioBytes)} />
+                      {user.isAnonymous ? null : <Detail label="Email" value={<PrivateEmail email={user.email} />} />}
+                      <Detail label="Email status" value={user.isAnonymous ? 'Not applicable' : user.emailVerified ? 'Verified' : 'Not verified'} />
                       <Detail label="Processed input" value={formatBytes(user.usage.inputBytes)} />
                       <Detail label="Processed files" value={formatCount(user.usage.files)} />
                       <Detail label="User ID" value={user.id} mono />
@@ -472,8 +482,8 @@ export function AdminUsersPanel() {
         }}
         title={roleTarget?.grant ? 'Grant administrator access?' : 'Remove administrator access?'}
         message={roleTarget?.grant
-          ? `Administrators can manage users, credentials, and site settings. Grant this access to ${roleTarget?.user.email}?`
-          : `Remove administrator access from ${roleTarget?.user.email}? Their active sessions will be revoked.`}
+          ? `Administrators can manage users, credentials, and site settings. Grant this access to ${roleTarget && accountName(roleTarget.user)}?`
+          : `Remove administrator access from ${roleTarget && accountName(roleTarget.user)}? Their active sessions will be revoked.`}
         confirmText={roleTarget?.grant ? 'Grant admin' : 'Remove admin'}
         isDangerous
       />
@@ -493,7 +503,7 @@ export function AdminUsersPanel() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { if (deleteTarget && !deleteMutation.isPending) deleteMutation.mutate(deleteTarget.id); }}
         title={deleteTarget?.isAnonymous ? 'Delete anonymous session?' : 'Delete user account?'}
-        message={`Permanently delete ${deleteTarget?.isAnonymous ? 'this anonymous session' : deleteTarget?.email ?? 'this user'} and all owned data? Their sessions end immediately. Cleanup continues in the background.`}
+        message={`Permanently delete ${deleteTarget?.isAnonymous ? 'this anonymous session' : deleteTarget ? accountName(deleteTarget) : 'this user'} and all owned data? Their sessions end immediately. Cleanup continues in the background.`}
         confirmText={deleteMutation.isPending ? 'Deleting…' : 'Delete user'}
         isDangerous
       />
@@ -501,7 +511,7 @@ export function AdminUsersPanel() {
   );
 }
 
-function Detail({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function Detail({ label, value, mono = false }: { label: string; value: ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">
       <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-faint">{label}</p>

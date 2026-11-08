@@ -39,7 +39,7 @@ import {
   type EpubPlanLocatorResult,
 } from '@/hooks/audio/useTtsDocumentNavigation';
 import { useTtsDocumentExport, type TtsDocumentAudioExportRequest } from '@/hooks/audio/useTtsDocumentExport';
-import type { TtsExportResolveSnapshot } from '@/types/tts-export';
+import type { Audiobook } from '@/types/tts-export';
 import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
 import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
@@ -93,7 +93,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   playbackPhase: TtsPlaybackPhase;
   audioSpeed: number;
   playbackPlanSegmentCount: number | null;
-  resolveDocumentAudioExport: (options: TtsDocumentAudioExportRequest, signal?: AbortSignal) => Promise<TtsExportResolveSnapshot>;
+  resolveDocumentAudioExport: (options: TtsDocumentAudioExportRequest, signal?: AbortSignal) => Promise<Audiobook>;
 
   // Control functions
   followingNarration: boolean;

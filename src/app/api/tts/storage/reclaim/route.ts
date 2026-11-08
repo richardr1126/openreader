@@ -4,7 +4,8 @@ import { getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/c
 import { createRequestLogger } from '@/lib/server/logger';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { filterOwnedDocumentIds, listOwnedDocumentIds } from '@/lib/server/tts/storage-scope';
-import { LIBRARY_RECLAIM_DOCUMENT_BATCH, orphanedAudioDocumentIds } from '@/lib/server/tts/storage-usage';
+import { LIBRARY_RECLAIM_DOCUMENT_BATCH } from '@/lib/server/tts/storage-usage';
+import { listAudioDocumentIds } from '@/lib/server/storage/usage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,15 +39,9 @@ export async function POST(request: NextRequest) {
     }
     const client = getComputeWorkerClient();
     const signal = AbortSignal.timeout(50_000);
-    const report = await client.getUserStorageUsage({
-      storageUserId: userId,
-      includePlayback: true,
-      derivedDocumentIds: [],
-      namespace: null,
-    }, { signal });
-    const candidates = target === 'orphaned'
-      ? orphanedAudioDocumentIds(report, await listOwnedDocumentIds(userId))
-      : report.documents.map((row) => row.documentId);
+    const measured = await listAudioDocumentIds(userId);
+    const owned = target === 'orphaned' ? await listOwnedDocumentIds(userId) : new Set<string>();
+    const candidates = target === 'orphaned' ? measured.filter((id) => !owned.has(id)) : measured;
     let batch = candidates.slice(0, LIBRARY_RECLAIM_DOCUMENT_BATCH);
     if (target === 'orphaned') {
       const restored = await filterOwnedDocumentIds(userId, batch);

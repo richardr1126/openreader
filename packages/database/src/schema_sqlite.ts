@@ -56,8 +56,8 @@ export const computeLimitAdmissions = sqliteTable('compute_limit_admissions', {
   action: text('action').notNull(),
   state: text('state').notNull(),
   operationId: text('operation_id'),
-  deviceScopeKey: text('device_scope_key'),
-  ipScopeKey: text('ip_scope_key'),
+
+
   activeScopesJson: text('active_scopes_json').notNull().default('[]'),
   policyVersion: integer('policy_version').notNull(),
   createdAt: integer('created_at').notNull(),
@@ -110,10 +110,24 @@ export const userPreferences = sqliteTable('user_preferences', {
   updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 });
 
+// Zero-byte rows retain the revision fence after audio deletion.
+export const documentAudioUsage = sqliteTable('document_audio_usage', {
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  audioBytes: integer('audio_bytes').notNull().default(0),
+  revision: integer('revision').notNull().default(0),
+  clearLeaseUntil: integer('clear_lease_until').notNull().default(0),
+  measuredAt: integer('measured_at').notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.userId, table.documentId] }),
+  check('document_audio_usage_nonnegative', sql`${table.audioBytes} >= 0`),
+]);
+
 export const userOnboarding = sqliteTable('user_onboarding', {
   userId: text('user_id').primaryKey().references(() => user.id, { onDelete: 'cascade' }),
   privacyAcceptedAtMs: integer('privacy_accepted_at_ms'),
   lastSeenAppVersion: text('last_seen_app_version'),
+  guestRetentionSeenDays: integer('guest_retention_seen_days'),
   createdAt: integer('created_at').default(SQLITE_NOW_MS),
   updatedAt: integer('updated_at').default(SQLITE_NOW_MS),
 });
@@ -133,6 +147,31 @@ export const documentSettings = sqliteTable('document_settings', {
     foreignColumns: [documents.id, documents.userId],
   }).onDelete('cascade'),
   index('idx_document_settings_user_id').on(table.userId),
+]);
+
+// What a user asked to have made, so the app can start the next step when the
+// worker reports back. Generation and artifact status stay in worker operations.
+export const audiobookRequests = sqliteTable('audiobook_requests', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  documentId: text('document_id').notNull(),
+  documentVersion: integer('document_version').notNull(),
+  format: text('format').notNull(),
+  speed: real('speed').notNull(),
+  chapterIndex: integer('chapter_index'),
+  // Resolved settings and provider references, never provider credentials.
+  settingsJson: text('settings_json').notNull(),
+  planObjectKey: text('plan_object_key'),
+  createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),
+}, (table) => [
+  foreignKey({
+    name: 'audiobook_requests_document_fk',
+    columns: [table.documentId, table.userId],
+    foreignColumns: [documents.id, documents.userId],
+  }).onDelete('cascade'),
+  index('idx_audiobook_requests_user_document').on(table.userId, table.documentId),
+  // Retention pruning reads the oldest requests first.
+  index('idx_audiobook_requests_created_at').on(table.createdAt, table.id),
 ]);
 
 export const userDocumentProgress = sqliteTable('user_document_progress', {

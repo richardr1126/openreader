@@ -1,9 +1,9 @@
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { createComputeWorkerApp, type ComputeWorkerApp } from '../../packages/compute-worker/src/api/app';
 import { FakeControlPlane } from '../../packages/compute-worker/tests/fixtures/fake-control-plane';
-import { ComputeWorkerClient } from '../../src/lib/server/compute-worker/client';
+import { ComputeWorkerClient, isComputeWorkerUnavailableError } from '../../src/lib/server/compute-worker/client';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workerSrcRoot = path.join(root, 'packages/compute-worker/src');
@@ -73,6 +73,30 @@ describe('ComputeWorkerClient contract', () => {
       artifact: null,
       operation: { opId: created.opId },
     });
+  });
+
+  test('every JSON call is bounded, so a hung worker cannot hold a request or lock', async () => {
+    const fetchMock = vi.fn(async () => Response.json({ status: 'ok' }));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = new ComputeWorkerClient({ baseUrl: 'http://worker.test', token: 'token' });
+      await client.getOperation('op-1').catch(() => undefined);
+      const init = (fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1];
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+
+      const caller = new AbortController();
+      fetchMock.mockClear();
+      await client.prepareTtsPlaybackSession({} as never, { signal: caller.signal }).catch(() => undefined);
+      expect((fetchMock.mock.calls as unknown as Array<[string, RequestInit]>)[0][1].signal).toBe(caller.signal);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test('a timed out worker call counts as the worker being unavailable', () => {
+    expect(isComputeWorkerUnavailableError(new DOMException('timed out', 'TimeoutError'))).toBe(true);
+    expect(isComputeWorkerUnavailableError(new DOMException('aborted', 'AbortError'))).toBe(false);
+    expect(isComputeWorkerUnavailableError(new Error('corrupt'))).toBe(false);
   });
 
   test('keeps compute-worker source independent from app server modules', () => {

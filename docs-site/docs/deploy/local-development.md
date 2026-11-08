@@ -119,6 +119,20 @@ S3_BROWSER_TRANSPORT=proxy
 
 After signing in as an admin, **Settings → Admin → Maintenance** confirms the worker, storage and providers are healthy.
 
+## Run the tests
+
+```bash
+pnpm test
+```
+
+Vitest uses a migrated temporary SQLite database, never `docstore/` or `POSTGRES_URL`.
+
+```bash
+pnpm test:e2e
+```
+
+Playwright starts and stops its own stack, so port 3003 must be free first. Stop any stack you started yourself.
+
 ## Generate migrations
 
 After changing the database schema, generate migration files for both SQLite and Postgres:

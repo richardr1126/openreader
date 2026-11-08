@@ -28,7 +28,7 @@ import {
   DELETE as deleteBookmark,
   PATCH as renameBookmark,
 } from '@/app/api/documents/[id]/bookmarks/[bookmarkId]/route';
-import { GET as listDocuments } from '@/app/api/documents/route';
+import { listDocumentResources } from '@/lib/server/documents/resources';
 
 const PDF_ID = 'a'.repeat(64);
 const EPUB_ID = 'b'.repeat(64);
@@ -194,9 +194,8 @@ describe('document bookmarks API', () => {
       INSERT INTO user_document_progress (user_id, document_id, segment_key, segment_ordinal, progress, updated_at)
       VALUES ('reader', ?, 'k', 2, 0.42, 1234)
     `).run(PDF_ID);
-    const response = await listDocuments(jsonRequest('/api/documents', 'GET'));
-    const { documents } = await response.json();
-    const byId = Object.fromEntries(documents.map((doc: { id: string }) => [doc.id, doc]));
+    const { data: documents } = await listDocumentResources({ userId: 'reader', isAnonymous: false, scopes: ['documents:read'] }, new URLSearchParams());
+    const byId = Object.fromEntries(documents.map(doc => [doc.id, doc]));
     expect(byId[PDF_ID]).toMatchObject({
       author: 'Ada Lovelace',
       language: 'en',

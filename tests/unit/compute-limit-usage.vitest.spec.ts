@@ -44,8 +44,6 @@ beforeAll(async () => {
       action text not null,
       state text not null,
       operation_id text,
-      device_scope_key text,
-      ip_scope_key text,
       active_scopes_json text not null default '[]',
       policy_version integer not null,
       created_at integer not null,
@@ -196,6 +194,29 @@ describe('compute admission limits', () => {
     expect(reused.admissionId).not.toBe(first.admissionId);
     expect(blocked).toMatchObject({ allowed: false });
     await finishComputeAdmission({ admissionId: reused.admissionId!, state: 'finished' });
+  });
+
+  test('an admission from before the upgrade can finish with its retired scopes ignored', async () => {
+    const enforced = cloneComputeLimitPolicyDocument();
+    enforced.actions.account_export.enabled = true;
+    enforced.actions.account_export.admission.windows = [];
+    enforced.actions.account_export.admission.active = [{ scope: 'user', limit: 1, leaseSeconds: 60 }];
+    const subject = { userId: 'user-1', isAnonymous: false };
+    const reserve = (requestKey: string) => reserveComputeAdmission({ policy: enforced, action: 'account_export', requestKey, subject });
+    const older = await reserve('export-before-upgrade');
+    const sqlite = new Database(databasePath);
+    const { active_scopes_json: stored } = sqlite.prepare('select active_scopes_json from compute_limit_admissions where id = ?').get(older.admissionId!) as { active_scopes_json: string };
+    sqlite.prepare('update compute_limit_admissions set active_scopes_json = ? where id = ?').run(
+      JSON.stringify([...JSON.parse(stored), { scope: 'ip', scopeKey: 'old-ip' }, { scope: 'anonymous_device', scopeKey: 'old-device' }]),
+      older.admissionId!,
+    );
+    sqlite.close();
+
+    await finishComputeAdmission({ admissionId: older.admissionId!, state: 'finished' });
+
+    const next = await reserve('export-after-upgrade');
+    expect(next.allowed).toBe(true);
+    await finishComputeAdmission({ admissionId: next.admissionId!, state: 'finished' });
   });
 
   test('completion decrements only the active scopes charged at admission time', async () => {

@@ -67,7 +67,7 @@ of this document as each phase lands.
 
 ## Authentication Boundaries
 
-V5 has five explicit request boundaries. A credential valid at one boundary
+V5 has six explicit request boundaries. A credential valid at one boundary
 must not be reused by a browser at another boundary. The fifth exists only in
 the desktop app (`v5/DESKTOP_SINGLE_OWNER.md`).
 
@@ -78,6 +78,7 @@ the desktop app (`v5/DESKTOP_SINGLE_OWNER.md`).
 | Browser to worker audio | Short-lived `TTS_PLAYBACK_TOKEN_SECRET` HMAC token | Read one playback session scoped to one user and document |
 | Compute worker to Next.js broker | `COMPUTE_CREDENTIAL_BROKER_TOKEN` bearer token | Resolve one enabled TTS provider for execution |
 | Desktop shell to Next.js | Per-launch `DESKTOP_LAUNCH_TOKEN` bearer token | Obtain one boundary-1 session for the single desktop owner |
+| External app to Next.js v1 | Scoped OAuth access token with the instance's `/api/v1` audience | User-approved library and audiobook operations only; no private/admin or worker access |
 
 The compute-worker bearer token and credential-broker bearer token are
 deliberately separate. The direction, receiving service, and permitted actions
@@ -890,3 +891,31 @@ True v4.4.0-to-v5 full-Compose upgrade checkpoint on 2026-09-02:
   nothing is ever queued for the owner's placeholder address.
 - Coverage: `tests/unit/desktop-owner-session.vitest.spec.ts` drives the real
   Better Auth handler against a migrated SQLite database.
+
+## Delegated public API access — 2026-11-01
+
+- OAuth is boundary six, implemented entirely in Next.js with Better Auth and
+  `@better-auth/oauth-provider` 1.7.15. Authorization code with S256 PKCE and
+  device authorization issue scoped JWT access tokens for exactly
+  `BASE_URL/api/v1`. Refresh tokens rotate. No OAuth token becomes a browser
+  session or reaches private/admin, broker or worker routes. MCP is a separate
+  resource, `BASE_URL/api/mcp`, added in phase 5 of `v5/API_REFACTOR.md`.
+- JWT signature, type, issuer, audience and expiry are verified locally. Current
+  consent ID, approved scopes, account eligibility and client state are checked
+  on every API request. Disconnect deletes consent, refresh/access rows and
+  approved unexchanged device codes for that user/client. Token issuance binds
+  refresh credentials to the same consent ID; reconnect cannot revive old grants.
+  Device approval persists consent before the code becomes redeemable. Exchange
+  binds that consent ID before code consumption, preventing a racing disconnect
+  from recreating consent during token issuance.
+- Offline grants outlive the approving browser session. Browser sign-out or
+  expiry is not app revocation. Users revoke the grant through Connected apps;
+  account suspension/deletion and client disabling also cut off bearer access.
+- Consent uses a signed authorization query and shows the destination, requested
+  scopes, shared quota and Unverified app warning. Guests cannot approve apps.
+  Open client registration is controlled by the existing runtime settings system.
+- Migration 0027 creates the OAuth/device/JWKS tables in both dialects. It does
+  not replace users, sessions or existing encrypted provider configuration.
+  Signing keys use the existing auth secret's encryption; no new environment
+  secret or worker database access is introduced. Production migration remains
+  an owner-coordinated deployment step.

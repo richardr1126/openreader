@@ -4,7 +4,7 @@ import { useState, useCallback } from 'react';
 import toast from 'react-hot-toast';
 import { useDocuments } from '@/contexts/DocumentContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
-import { DocumentImportFile, importUrl } from '@/lib/client/api/documents';
+import { createTextDocument, createDocumentFromUrl } from '@/lib/client/api/documents';
 import {
   SidebarDialog,
   SegmentedControl,
@@ -25,6 +25,7 @@ import { DocumentSelectionModal } from './DocumentSelectionModal';
 import { DocumentUploader } from './DocumentUploader';
 import { GutenbergCatalogPanel } from './GutenbergCatalogPanel';
 import { useLibraryImport } from './useLibraryImport';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 interface UploadMenuDialogProps {
   isOpen: boolean;
@@ -57,7 +58,7 @@ export function UploadMenuDialog({
   onClose,
   folderId,
 }: UploadMenuDialogProps) {
-  const { uploadDocuments } = useDocuments();
+  const { refreshDocuments } = useDocuments();
   const { gutenbergCatalogEnabled, installProfile } = useRuntimeConfig();
   // On desktop the mounted library is a folder in OpenReader's data folder.
   const onDevice = installProfile === 'desktop';
@@ -102,18 +103,16 @@ export function UploadMenuDialog({
         filename += ext;
       }
 
-      const mimeType = ext === '.md' ? 'text/markdown' : 'text/plain';
-      const file = new File([docContent], filename, { type: mimeType });
-
+      await createTextDocument(docContent, filename, { folderId });
+      void refreshDocuments().catch(() => undefined);
       setDocName('');
       setDocContent('');
       onClose();
-      await uploadDocuments([file], { folderId });
       toast.success(`"${filename}" created successfully!`);
     } catch (err) {
       if (isAbortError(err)) return;
       console.error('Failed to create document:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to create document');
+      toast.error(<StorageLimitMessage message={err instanceof Error ? err.message : 'Failed to create document'} />);
     } finally {
       setIsCreatingDoc(false);
     }
@@ -135,27 +134,14 @@ export function UploadMenuDialog({
     setImportStep('fetching');
 
     try {
-      // Step 1: Connect and scrape content on the server
-      const scrapeResult = await importUrl(cleanUrl);
-      
-      // Create virtual file from markdown content
-      const displayTitle = webTitle.trim() || scrapeResult.title || 'Imported Web Page';
-      const safeTitle = displayTitle
-        .replace(/[/\\?%*:|"<>\s]+/g, '_') // collapse runs of disallowed chars
-        .replace(/^_+|_+$/g, '') // trim leading/trailing underscores
-        .substring(0, 80);
-      const filename = `${safeTitle}.md`;
-      const file = new DocumentImportFile([scrapeResult.content], filename, {
-        type: 'text/markdown',
-        metadata: { author: scrapeResult.author, language: scrapeResult.language },
-      });
+      const stored = await createDocumentFromUrl(cleanUrl, { folderId, name: webTitle.trim() || undefined });
+      void refreshDocuments().catch(() => undefined);
 
       setWebUrl('');
       setWebTitle('');
       setImportStep('idle');
       onClose();
-      await uploadDocuments([file], { folderId });
-      toast.success(`Successfully imported "${displayTitle}"!`);
+      toast.success(`Successfully imported "${stored.name}"!`);
     } catch (err) {
       if (isAbortError(err)) return;
       console.error('Failed to import URL:', err);
@@ -163,7 +149,7 @@ export function UploadMenuDialog({
         err instanceof Error ? err.message : 'An error occurred during import';
       setImportError(message);
       setImportStep('error');
-      toast.error(message);
+      toast.error(<StorageLimitMessage message={message} />);
     }
   };
 
@@ -345,7 +331,7 @@ export function UploadMenuDialog({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold">Import Failed</p>
                       <p className="text-xs mt-1 text-danger-strong overflow-hidden text-ellipsis leading-relaxed">
-                        {importError || 'An unknown error occurred.'}
+                        <StorageLimitMessage message={importError || 'An unknown error occurred.'} />
                       </p>
                       <button
                         onClick={() => setImportStep('idle')}

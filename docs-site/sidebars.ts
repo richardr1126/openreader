@@ -19,6 +19,7 @@ const sidebars: SidebarsConfig = {
         'guide/library',
         'guide/reading-and-listening',
         'guide/audiobook-export',
+        'guide/connected-apps',
         'guide/keyboard-shortcuts',
       ],
     },
@@ -64,6 +65,9 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: '🧰 Infrastructure Reference',
       items: [
+        'reference/public-api',
+        'reference/oauth',
+        'reference/mcp',
         'reference/environment-variables',
         'configure/database',
         'configure/object-blob-storage',

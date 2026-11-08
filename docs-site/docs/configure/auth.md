@@ -40,6 +40,8 @@ OIDC_PROVIDER_NAME=Pocket ID
 
 ## Sign-ups and guests
 
+Sign-up asks for a display name, and the app identifies accounts by it. Email addresses stay hidden until revealed in **Settings → Account** and **Settings → Admin → Users**.
+
 Both settings are in **Settings → Admin → Instance → Site features**.
 
 - **New account sign-ups**:
@@ -48,7 +50,7 @@ Both settings are in **Settings → Admin → Instance → Site features**.
   - **Closed** refuses new accounts.
 
   None of these block the [first-admin](./admin-panel#create-the-first-administrator) account.
-- **Guest sessions** (off by default) let visitors use the app without an account. A guest who later signs up can keep their documents and progress. Turning it off refuses new guest sessions and signs existing guests out on their next page load.
+- **Guest sessions** (off by default) add a **Continue as guest** button to the sign-in page, so visitors can use the app without an account. A guest who later signs up can keep their documents and progress. Turning it off refuses new guest sessions and signs existing guests out on their next page load.
 
 ## Managing users
 
@@ -57,6 +59,23 @@ Both settings are in **Settings → Admin → Instance → Site features**.
 Admins can approve pending accounts, suspend or restore them, grant or remove admin access, and delete accounts. Deleting an account first removes its documents and audio; if that cleanup fails, the account is kept so you can try again. Role and access changes sign the affected user out.
 
 You cannot remove the last administrator, and you cannot demote, suspend or delete yourself.
+
+## Connected apps
+
+Third-party clients can request scoped access to a signed-in user's library and
+audiobooks through [OAuth](../reference/oauth), including assistants that use
+[MCP](../reference/mcp). Consent shows the app's
+self-reported name, actual destination, requested permissions, the account being
+used, and either the domain that controls the client ID or an **Unverified app**
+warning. See [Connected Apps](../guide/connected-apps) for what users see. Guests cannot approve access. Apps share the user's existing compute
+limits and cannot change provider credentials or administer the instance.
+
+Users disconnect apps in **Settings → Account → Connected apps**. Disconnect takes
+effect immediately, including for already-issued access tokens. Signing out of
+the browser does not disconnect apps with offline access.
+
+**Settings → Admin → Instance → Open OAuth client registration** is on by default.
+Turning it off stops new registrations while keeping existing connections usable.
 
 ## Account email
 

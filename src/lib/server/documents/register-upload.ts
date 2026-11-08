@@ -1,12 +1,13 @@
 import { db } from '@openreader/database';
-import { documents } from '@openreader/database/schema';
-import { and, eq } from 'drizzle-orm';
+import { documents, userFolders } from '@openreader/database/schema';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import {
   enqueueDocumentPreview,
 } from '@/lib/server/documents/previews';
 import { errorToLog, serverLogger } from '@/lib/server/logger';
 import { deleteDocumentTtsSegmentCache } from '@/lib/server/tts/segments-cache';
 import type { BaseDocument, DocumentType } from '@/types/documents';
+import { withStorageRegistration } from '@/lib/server/storage/usage';
 
 type RegisterUploadedDocumentInput = {
   documentId: string;
@@ -22,6 +23,15 @@ type RegisterUploadedDocumentInput = {
   language?: string | null;
   schedulePreview?: (task: () => Promise<void>) => void;
 };
+
+/**
+ * The folder ID as it stands when the row is written: a folder deleted after
+ * verifyUploadFolder unfiles the document instead of failing the foreign key.
+ */
+export function existingFolderId(folderId: string | null, userId: string): SQL | null {
+  if (!folderId) return null;
+  return sql`(select ${userFolders.id} from ${userFolders} where ${userFolders.id} = ${folderId} and ${userFolders.userId} = ${userId})`;
+}
 
 export async function registerUploadedDocument(input: RegisterUploadedDocumentInput): Promise<BaseDocument> {
   const [existing] = await db
@@ -41,7 +51,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
     });
   }
 
-  const [storedDocument] = await db
+  const [storedDocument] = await withStorageRegistration(input, async (connection) => connection
     .insert(documents)
     .values({
       id: input.documentId,
@@ -51,7 +61,7 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
       size: input.size,
       lastModified: input.lastModified,
       filePath: input.documentId,
-      folderId: input.folderId ?? null,
+      folderId: existingFolderId(input.folderId ?? null, input.userId),
       author: input.author ?? null,
       language: input.language ?? null,
     })
@@ -63,12 +73,12 @@ export async function registerUploadedDocument(input: RegisterUploadedDocumentIn
         size: input.size,
         lastModified: input.lastModified,
         filePath: input.documentId,
-        ...(input.folderId !== undefined ? { folderId: input.folderId } : {}),
+        ...(input.folderId !== undefined ? { folderId: existingFolderId(input.folderId, input.userId) } : {}),
         ...(input.author ? { author: input.author } : {}),
         ...(input.language ? { language: input.language } : {}),
       },
     })
-    .returning({ folderId: documents.folderId, author: documents.author, language: documents.language });
+    .returning({ folderId: documents.folderId, author: documents.author, language: documents.language }));
 
   const enqueuePreview = async () => {
     await enqueueDocumentPreview(

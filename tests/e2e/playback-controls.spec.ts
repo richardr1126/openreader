@@ -565,4 +565,20 @@ test('anonymous user controls playback across every accepted document journey', 
   await openDocument(page, pdfLinks.and(page.locator(`:not([href="${sourcePdfHref}"])`)), 'sample.pdf', 60_000);
   await startAndCancelPlayback(page);
   await returnToLibrary(page);
+
+  const usageResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tts/storage');
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('button', { name: 'Storage', exact: true }).first().click();
+  const usage = await (await usageResponse).json();
+  expect(usage.audioBytes).toBeGreaterThan(0);
+  expect(usage.totalBytes).toBe(usage.documentBytes + usage.audioBytes);
+  await expect(page.getByText('Total storage', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete all audio', exact: true }).click();
+  const refreshedQuota = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/v1/me');
+  await page.getByRole('dialog', { name: 'Delete all audio?', exact: true }).getByRole('button', { name: 'Delete all audio', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Deleted audio for' })).toBeVisible();
+  expect((await (await refreshedQuota).json()).computeLimits.allowed).toBe(true);
+  const cleared = await (await page.request.get('/api/tts/storage')).json();
+  expect(cleared.audioBytes).toBe(0);
+  expect(cleared.documentBytes).toBe(usage.documentBytes);
 });

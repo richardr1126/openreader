@@ -94,9 +94,15 @@ export const RUNTIME_CONFIG_SCHEMA = {
   signupPolicy: enumValue(['open', 'approval', 'closed'] as const, 'open'),
   // Guest (anonymous) sessions. Off by default; independent of signupPolicy.
   allowAnonymousSessions: runtimeBoolean(false),
+  allowOAuthClientRegistration: runtimeBoolean(true),
   // Days without activity before the `expire-anonymous-users` task (off by
   // default) deletes a guest account and its data.
   anonymousUserIdleDays: positiveIntValue(90),
+  limitNewAccountsPerIp: runtimeBoolean(false),
+  newAccountsPerIp: positiveIntValue(5),
+  newAccountsPerIpDays: positiveIntValue(30),
+  limitNewGuestsPerIp: runtimeBoolean(false),
+  newGuestsPerIp: positiveIntValue(10),
   // Historically the env semantics were "true unless explicitly 'false'",
   // i.e. the feature defaults to ON.
   enableTtsProvidersTab: booleanFlag(true),
@@ -110,6 +116,12 @@ export const RUNTIME_CONFIG_SCHEMA = {
   computeLimitPolicies: computeLimitPoliciesValue(),
   // Maximum size (MB) accepted for a single document upload.
   maxUploadMb: positiveIntValue(200),
+  limitAccountStorage: runtimeBoolean(false),
+  accountStorageMb: positiveIntValue(10_240),
+  limitGuestStorage: runtimeBoolean(false),
+  guestStorageMb: positiveIntValue(1_024),
+  limitGuestStoragePool: runtimeBoolean(false),
+  guestStoragePoolMb: positiveIntValue(10_240),
   // How far ahead the worker generates a background ("disconnected") TTS playback
   // session. 'section' = just the current PDF page / EPUB chapter; 'document' =
   // the whole document from the current position onward, so background playback

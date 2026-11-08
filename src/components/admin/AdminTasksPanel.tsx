@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { Button, InfoTip, Input, RowIcon, SaveBar, Section, Switch } from '@/components/ui';
 import {
-  ClockIcon, DatabaseIcon, RefreshIcon, SlidersIcon, TrashIcon, UploadIcon, UserIcon,
+  ClockIcon, DatabaseIcon, RefreshIcon, SlidersIcon, SpeedometerIcon, TrashIcon, UploadIcon, UserIcon,
   WrenchIcon,
 } from '@/components/icons/Icons';
 import { queryKeys } from '@/lib/client/query-keys';
@@ -36,7 +36,7 @@ interface TaskSchedulerInfo {
   minimumIntervalMs: number;
 }
 
-async function fetchTasks(): Promise<{ tasks: TaskView[]; scheduler: TaskSchedulerInfo }> {
+export async function fetchTasks(): Promise<{ tasks: TaskView[]; scheduler: TaskSchedulerInfo }> {
   const res = await fetch('/api/admin/tasks');
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.json()) as { tasks: TaskView[]; scheduler: TaskSchedulerInfo };
@@ -47,6 +47,7 @@ const TASK_ICONS: Record<string, ReactNode> = {
   'cleanup-temp-uploads': <UploadIcon />,
   'prune-compute-limits': <SlidersIcon />,
   'retry-storage-cleanups': <DatabaseIcon />,
+  'repair-storage-usage': <SpeedometerIcon />,
   'expire-anonymous-users': <UserIcon />,
 };
 

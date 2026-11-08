@@ -5,7 +5,7 @@ type TransferSource = {
 };
 
 type PreparedUpload = {
-  token: string;
+  id: string;
   url: string;
   headers?: Record<string, string>;
 };
@@ -132,7 +132,7 @@ export async function transferPreparedDocumentUploads(input: {
         nextIndex += 1;
         const source = input.sources[sourceIndex];
         const upload = input.uploads[sourceIndex];
-        if (!source || !upload?.url || !upload.token) {
+        if (!source || !upload?.url || !upload.id) {
           throw new Error(`Missing prepared upload for document ${source?.name ?? sourceIndex + 1}`);
         }
 

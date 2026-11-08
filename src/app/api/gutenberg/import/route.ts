@@ -1,20 +1,22 @@
-import { randomUUID } from 'node:crypto';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { requireAuthContext } from '@/lib/server/auth/auth';
-import { putTempDocumentBlob } from '@/lib/server/documents/blobstore';
+import { stageDocumentUpload } from '@/lib/server/documents/uploads';
+import { API_SCOPES } from '@/lib/shared/api-scopes';
 import { downloadGutenbergEpub } from '@/lib/server/documents/gutenberg';
 import { errorResponse } from '@/lib/server/errors/next-response';
 import { serverLogger } from '@/lib/server/logger';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
 import { isS3Configured } from '@/lib/server/storage/s3';
+import { consumeDocumentIntake } from '@/lib/server/documents/intake';
+import { ApiRequestError } from '@/lib/server/api/responses';
 
 export const dynamic = 'force-dynamic';
 // A large illustrated EPUB from gutenberg.org can take most of a minute.
 export const maxDuration = 300;
 
 /**
- * Downloads one book into the caller's temp upload area and returns the token.
- * The client finalizes it through `/api/documents/blob/upload/finalize`, so a
+ * Downloads one book into the caller's temp upload area and returns its upload ID.
+ * The client submits it through `POST /api/v1/documents`, so a
  * catalog import becomes a document exactly the way a file upload does. Only
  * the catalog ID is accepted; the download URL comes from the catalog, never
  * from the request.
@@ -36,22 +38,28 @@ export async function POST(req: NextRequest) {
     }
 
     const { maxUploadMb } = await getResolvedRuntimeConfig();
+    await consumeDocumentIntake({ userId, isAnonymous: Boolean(auth.user?.isAnonymous) });
     const { book, name, bytes } = await downloadGutenbergEpub(id, maxUploadMb * 1024 * 1024);
-    const token = randomUUID();
-    await putTempDocumentBlob(token, userId, bytes, 'application/epub+zip', null);
+    const uploadId = await stageDocumentUpload({
+      principal: { userId, isAnonymous: Boolean(auth.user?.isAnonymous), scopes: API_SCOPES },
+      subject: { userId, isAnonymous: Boolean(auth.user?.isAnonymous) }, schedule: after,
+    }, bytes, { name, author: book.authors.slice(0, 3).join(', ') || null, language: book.languages[0] ?? null });
 
     return NextResponse.json({
-      token,
+      uploadId,
       name,
       type: 'epub',
       lastModified: Date.now(),
       title: book.title,
-      // Import hints the client forwards to finalize; the catalog is more
-      // reliable than whatever the EPUB package declares.
+      // Catalog metadata is already stored with the upload receipt.
       author: book.authors.slice(0, 3).join(', ') || null,
       language: book.languages[0] ?? null,
     }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
+    if (error instanceof ApiRequestError) return NextResponse.json({ error: error.message }, {
+      status: error.status,
+      ...(error.retryAfterMs === undefined ? {} : { headers: { 'Retry-After': String(Math.max(1, Math.ceil(error.retryAfterMs / 1000))) } }),
+    });
     return errorResponse(error, {
       logger: serverLogger,
       event: 'gutenberg.import.failed',

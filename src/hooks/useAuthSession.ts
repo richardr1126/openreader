@@ -1,21 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
-import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
-import { getAuthClient } from '@/lib/client/auth-client';
+import { useContext } from 'react';
+import { AuthSessionContext } from '@/contexts/AuthSessionContext';
 
-/**
- * Hook for session that uses the correct baseUrl from context.
- */
 export function useAuthSession() {
-  const { baseUrl } = useAuthConfig();
-
-  const client = useMemo(() => {
-    if (!baseUrl) {
-      throw new Error('Auth base URL is required');
-    }
-    return getAuthClient(baseUrl);
-  }, [baseUrl]);
-
-  return client.useSession();
+  const value = useContext(AuthSessionContext);
+  if (!value) {
+    throw new Error('useAuthSession must be used within an AuthSessionProvider');
+  }
+  return value;
 }

@@ -42,8 +42,11 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1158.0",
     "@aws-sdk/s3-request-presigner": "^3.1158.0",
+    "@better-auth/cimd": "1.7.15",
+    "@better-auth/oauth-provider": "^1.7.15",
     "@headlessui/react": "^2.2.10",
     "@microsoft/antissrf": "^1.0.0",
+    "@modelcontextprotocol/server": "2.4.0",
     "@mozilla/readability": "^0.6.0",
     "@napi-rs/canvas": "^1.0.13",
     "@openreader/database": "workspace:*",
@@ -51,7 +54,7 @@
     "@openreader/tts": "workspace:*",
     "@tanstack/react-query": "^5.105.0",
     "@vercel/analytics": "^2.0.1",
-    "better-auth": "^1.7.14",
+    "better-auth": "^1.7.15",
     "cmpstr": "^3.4.0",
     "core-js": "^3.51.0",
     "dotenv": "^18.0.9",
@@ -71,7 +74,8 @@
     "react-markdown": "^10.1.0",
     "react-pdf": "^9.2.1",
     "remark-gfm": "^4.0.1",
-    "turndown": "^7.2.4"
+    "turndown": "^7.2.4",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",

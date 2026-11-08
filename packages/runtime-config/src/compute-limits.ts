@@ -8,13 +8,14 @@ export const COMPUTE_ACTIONS = [
   'document_conversion',
   'account_export',
   'tts_synthesis',
+  'document_intake',
 ] as const;
 
 export type ComputeAction = typeof COMPUTE_ACTIONS[number];
 /** Actions introduced after policy schema 2 shipped; saved policies may omit them. */
-const ADDITIVE_COMPUTE_ACTIONS: readonly ComputeAction[] = ['tts_playback_document'];
-export type WorkerOperationAction = Exclude<ComputeAction, 'tts_synthesis'>;
-export type ComputeLimitScope = 'user' | 'anonymous_device' | 'ip' | 'site';
+const ADDITIVE_COMPUTE_ACTIONS: readonly ComputeAction[] = ['tts_playback_document', 'document_intake'];
+export type WorkerOperationAction = Exclude<ComputeAction, 'tts_synthesis' | 'document_intake'>;
+export type ComputeLimitScope = 'user' | 'site';
 export type ComputeLimitAudience = 'anonymous' | 'authenticated' | 'all';
 export type ComputeUsageMetric = 'starts' | 'characters' | 'input_bytes' | 'files';
 export type ComputePriority = 'interactive' | 'foreground' | 'background';
@@ -189,9 +190,14 @@ export const DEFAULT_COMPUTE_LIMIT_POLICIES: ComputeLimitPolicyDocument = {
       usage: [
         { scope: 'user', audience: 'anonymous', metric: 'characters', window: 'utc_day', limit: 50_000, boundary: 'soft_unit' },
         { scope: 'user', audience: 'authenticated', metric: 'characters', window: 'utc_day', limit: 500_000, boundary: 'soft_unit' },
-        { scope: 'anonymous_device', audience: 'anonymous', metric: 'characters', window: 'utc_day', limit: 50_000, boundary: 'soft_unit' },
-        { scope: 'ip', audience: 'anonymous', metric: 'characters', window: 'utc_day', limit: 100_000, boundary: 'soft_unit' },
-        { scope: 'ip', audience: 'authenticated', metric: 'characters', window: 'utc_day', limit: 1_000_000, boundary: 'soft_unit' },
+      ],
+    },
+    document_intake: {
+      enabled: false,
+      admission: { windows: [], active: [] },
+      usage: [
+        { scope: 'user', audience: 'anonymous', metric: 'files', window: 'utc_day', limit: 10, boundary: 'strict' },
+        { scope: 'user', audience: 'authenticated', metric: 'files', window: 'utc_day', limit: 100, boundary: 'strict' },
       ],
     },
   },
@@ -225,7 +231,7 @@ const hasExactKeys = (record: Record<string, unknown>, allowed: readonly string[
 };
 
 const isScope = (value: unknown): value is ComputeLimitScope =>
-  value === 'user' || value === 'anonymous_device' || value === 'ip' || value === 'site';
+  value === 'user' || value === 'site';
 
 const isPriority = (value: unknown): value is ComputePriority =>
   value === 'interactive' || value === 'foreground' || value === 'background';
@@ -287,7 +293,7 @@ function parseExecution(value: unknown): ComputeExecutionPolicy | null {
 }
 
 function parseActionPolicy(action: ComputeAction, value: unknown): ComputeActionPolicy | null {
-  if (!isRecord(value) || !hasExactKeys(value, action === 'tts_synthesis'
+  if (!isRecord(value) || !hasExactKeys(value, action === 'tts_synthesis' || action === 'document_intake'
     ? ['enabled', 'admission', 'usage']
     : ['enabled', 'admission', 'usage', 'execution'])) return null;
   if (typeof value.enabled !== 'boolean' || !isRecord(value.admission)
@@ -295,13 +301,18 @@ function parseActionPolicy(action: ComputeAction, value: unknown): ComputeAction
     || !Array.isArray(value.admission.windows)
     || !Array.isArray(value.admission.active)
     || !Array.isArray(value.usage)) return null;
-  const windows = value.admission.windows.map(parseAdmissionWindow);
+  // Released policies can still contain retired IP/device rows. Remove only
+  // those rows, preserving every user/site value and the enabled state.
+  const retained = (entry: unknown) => !isRecord(entry) || (entry.scope !== 'ip' && entry.scope !== 'anonymous_device');
+  const windows = value.admission.windows.filter(retained).map(parseAdmissionWindow);
   const active = value.admission.active.map(parseActiveLimit);
-  const usage = value.usage.map(parseUsageLimit);
+  const usage = value.usage.filter(retained).map(parseUsageLimit);
   if (windows.some((entry) => !entry) || active.some((entry) => !entry) || usage.some((entry) => !entry)) return null;
-  if (action === 'tts_synthesis') {
-    if (windows.length > 0 || active.length > 0 || usage.length === 0
-      || usage.some((entry) => entry?.metric !== 'characters' || entry.boundary !== 'soft_unit')) return null;
+  if (action === 'tts_synthesis' || action === 'document_intake') {
+    if (windows.length > 0 || active.length > 0
+      || usage.some((entry) => action === 'tts_synthesis'
+        ? entry?.metric !== 'characters' || entry.boundary !== 'soft_unit'
+        : entry?.metric !== 'files' || entry.boundary !== 'strict')) return null;
     return {
       enabled: value.enabled,
       admission: { windows: [], active: [] },

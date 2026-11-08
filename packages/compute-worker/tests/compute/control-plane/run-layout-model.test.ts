@@ -22,6 +22,10 @@ vi.mock('onnxruntime-node', () => ({
   },
 }));
 
+vi.mock('../../../src/inference/pdf/layout-inference', () => ({
+  runLayoutInference: vi.fn(async () => mockState.runOutput),
+}));
+
 vi.mock('fs/promises', () => ({
   readFile: vi.fn(async (path: string) => {
     if (path === '/tmp/model-config.json') {

@@ -3,10 +3,19 @@ import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   usage: vi.fn(),
+  totals: vi.fn(),
+  audioDocumentIds: [] as string[],
   reclaim: vi.fn(),
   owned: new Set<string>(),
   workerAvailable: true,
   authorized: true,
+}));
+
+vi.mock('@/lib/server/admin/settings', () => ({ getRuntimeConfig: async () => ({}) }));
+vi.mock('@/lib/server/storage/usage', () => ({
+  getStorageUsage: mocks.totals,
+  storageCapBytes: () => null,
+  listAudioDocumentIds: async () => mocks.audioDocumentIds,
 }));
 
 vi.mock('@/lib/server/compute-worker/client', async (importOriginal) => ({
@@ -132,30 +141,15 @@ describe('storage routes', () => {
     }, expect.anything());
   });
 
-  test('totals library storage scoped to the session user', async () => {
-    mocks.owned = new Set(['kept']);
-    mocks.usage.mockResolvedValueOnce({
-      documents: [
-        { documentId: 'kept', variants: [variant(1, 'a', 100)], exports: [], derivedBytes: 10, derivedObjects: 1 },
-        { documentId: 'gone', variants: [variant(1, 'a', 40)], exports: [], derivedBytes: 0, derivedObjects: 0 },
-      ],
-      scannedObjects: 3,
-      truncated: false,
-    });
+  test('reads the SQL total without measuring storage, including while the worker is down', async () => {
+    mocks.workerAvailable = false;
+    const total = { documentBytes: 20, audioBytes: 140, totalBytes: 160, documentCount: 1, orphanedAudioBytes: 40, orphanedDocumentCount: 1 };
+    mocks.totals.mockResolvedValue(new Map([['user-1', total]]));
     const response = await libraryUsage(new NextRequest('http://localhost/api/tts/storage'));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({
-      audioBytes: 140,
-      orphanedAudioBytes: 40,
-      orphanedDocumentCount: 1,
-      documentDataBytes: 10,
-      documentCount: 1,
-      truncated: false,
-    });
-    expect(mocks.usage).toHaveBeenCalledOnce();
-    expect(mocks.usage.mock.calls[0][0]).toMatchObject({
-      storageUserId: 'user-1', includePlayback: true, derivedDocumentIds: ['kept'],
-    });
+    expect(await response.json()).toEqual({ ...total, capBytes: null });
+    expect(mocks.totals).toHaveBeenCalledWith(['user-1']);
+    expect(mocks.usage).not.toHaveBeenCalled();
   });
 
   test('requires a session for library storage', async () => {
@@ -167,10 +161,7 @@ describe('storage routes', () => {
 
   test('reclaims only orphaned documents in bounded batches', async () => {
     mocks.owned = new Set(['kept']);
-    const documents = ['kept', 'a', 'b', 'c', 'd', 'e', 'f'].map((documentId) => ({
-      documentId, variants: [variant(1, 'h', 10)], exports: [], derivedBytes: 0, derivedObjects: 0,
-    }));
-    mocks.usage.mockResolvedValueOnce({ documents, scannedObjects: 7, truncated: false });
+    mocks.audioDocumentIds = ['kept', 'a', 'b', 'c', 'd', 'e', 'f'];
     const response = await libraryReclaim(post('/api/tts/storage/reclaim', { target: 'orphaned' }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ reclaimedDocuments: 5, remainingDocuments: 1, deletedObjects: 15 });

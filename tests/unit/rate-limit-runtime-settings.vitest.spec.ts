@@ -15,6 +15,7 @@ describe('compute limit runtime config seed', () => {
       'document_conversion',
       'account_export',
       'tts_synthesis',
+      'document_intake',
     ]);
     expect(policy.actions.tts_synthesis.enabled).toBe(false);
     expect(policy.actions.tts_synthesis.usage).toContainEqual(expect.objectContaining({

@@ -34,7 +34,7 @@ version or tag a release unless asked.
   execution configuration from the authenticated app-owned credential broker.
 - Provider credentials must never appear in NATS jobs, operation state, events,
   logs, browser responses, or artifacts.
-- Keep the five authentication boundaries distinct:
+- Keep the six authentication boundaries distinct:
   1. browser to Next.js: Better Auth session/cookie;
   2. Next.js to worker: `COMPUTE_WORKER_TOKEN`;
   3. browser to worker audio: short-lived HMAC playback token;
@@ -43,6 +43,11 @@ version or tag a release unless asked.
      at `POST /api/auth/desktop/session` for a boundary-1 session for the single
      owner. Unset everywhere except the desktop app; the route is then absent.
      Embedded services never receive it (`packages/bootstrap` filters it).
+  6. external clients to Next.js v1: OAuth access token, bound to this instance's
+     `/api/v1` resource and approved scopes. Cookie session behavior is unchanged;
+     OAuth tokens cannot authenticate private/admin routes or worker services.
+     MCP has its own `/api/mcp` audience and never accepts a cookie. Disconnecting an app revokes
+     its consent and refresh access; JWT verification checks the current grant.
 - `installProfile` (`server` | `desktop`, see `v5/DESKTOP_SINGLE_OWNER.md`) is a
   derived, presentation-only fact. It must never take part in authorization;
   `pnpm check:install-profile` keeps it out of `src/app/api/**`,
@@ -61,6 +66,7 @@ Normative architecture and history:
 - `v5/USER_MANAGEMENT_AND_BOOTSTRAP.md`
 - `v5/DESKTOP_SINGLE_OWNER.md`
 - `v5/DESKTOP_SHELL.md`
+- `v5/API_REFACTOR.md`
 
 ## Playback Invariants
 
@@ -97,7 +103,8 @@ flags, independent seek polling, duplicate cursor writers, or scattered teardown
 
 Commands:
 
-- `pnpm test` runs all Vitest projects.
+- `pnpm test` runs all Vitest projects on a migrated temporary SQLite database,
+  never `docstore/` or `POSTGRES_URL`.
 - `pnpm test:e2e` runs Playwright.
 - `pnpm exec tsc --noEmit` checks the application.
 - `pnpm --dir packages/compute-worker exec tsc --noEmit` checks the worker.
@@ -127,7 +134,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-10-28 the expected clean result is 1545 Vitest tests and 75 local
+- As of 2026-11-03 the expected clean result is 1789 Vitest tests and 103 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.
@@ -229,12 +236,13 @@ caused conflicts, high CPU, misleading failures, and overheating.
 - Example Compose files ship local-only defaults for some secrets. Do not add new
   known-default secrets; the slim files generate the broker token at startup.
 
-## Current State — 2026-09-29
+## Current State
 
-- v5.0.0 is released and the package version is `5.0.0`.
-- Work on `feat/upgrade-experience` adds the startup preflight, embedded playback
-  secret derivation, the System check admin section, and the restructured upgrade,
-  environment-variable, and local-development docs.
+- Public API progress on `refactor/public-api` is tracked in `v5/API_REFACTOR.md`.
+- Phases 1 to 5.2 are done (MCP at `/api/mcp`, download links and access pages, no automatic guests). The owner's final verification before
+  release is outstanding, including hosted connectors over public HTTPS.
+- Migration 0027 combines this branch's unshipped migrations (phase 4.9). A local
+  database that ran an earlier version of them must be reset.
 - Open follow-ups for the owner: whether the full Compose files should require
   worker/broker/playback secrets instead of shipping known defaults, and whether
   to bump the pinned `kokoro-fastapi-cpu:v0.2.4` image in the Compose examples.

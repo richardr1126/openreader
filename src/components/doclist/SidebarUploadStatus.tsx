@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui';
 import { formatDocumentSize } from '@/components/doclist/formatSize';
 import type { DocumentUploadSummary } from '@/lib/client/uploads/state';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 export function SidebarUploadStatus({
   summary,
@@ -61,7 +62,7 @@ export function SidebarUploadStatus({
 
       {summary.error && !summary.isActive && (
         <p className="mt-1.5 line-clamp-2 text-[10px] leading-snug text-danger">
-          {summary.error}
+          <StorageLimitMessage message={summary.error} />
         </p>
       )}
 

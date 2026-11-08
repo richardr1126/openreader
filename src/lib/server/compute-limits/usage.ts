@@ -67,16 +67,16 @@ function resolveLimits(input: {
   const window = utcDayWindow(input.nowMs);
   return applicableUsageLimits(input.policy, input.action, input.subject)
     .filter((limit) => limit.metric === input.metric)
-    .flatMap((limit) => {
+    .map((limit) => {
       const scope = resolveComputeScope(limit.scope, input.subject);
-      return scope ? [{
+      return {
         scope: scope.scope,
         scopeKey: scope.key,
         limit: limit.limit,
         boundary: limit.boundary,
         windowStart: window.startMs,
         windowEnd: window.endMs,
-      }] : [];
+      };
     });
 }
 

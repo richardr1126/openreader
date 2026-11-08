@@ -20,6 +20,8 @@ test('anonymous visitor completes first-run entry and reaches the library', asyn
   await expect(declineOptionalCookies).toBeHidden();
 
   await page.getByRole('link', { name: 'Open the reader', exact: true }).click();
+  await expect(page).toHaveURL(/\/signin$/);
+  await page.getByRole('button', { name: 'Continue as guest', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/, { timeout: 30_000 });
 
   const privacyDialog = page.getByRole('dialog', {

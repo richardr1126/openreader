@@ -13,6 +13,18 @@ import {
 } from '@openreader/runtime-config/compute-limit-broker';
 
 describe('compute limit policy', () => {
+  it('loads a saved policy from before IP/device removal without losing user limits', () => {
+    const saved = JSON.parse(readFileSync(path.resolve(import.meta.dirname, '../fixtures/compute-policy-before-ip-removal.json'), 'utf8'));
+    const parsed = parseComputeLimitPolicyDocument(saved)!;
+    expect(parsed).toBeDefined();
+    expect(parsed.actions.tts_synthesis.enabled).toBe(true);
+    expect(parsed.actions.tts_synthesis.usage).toEqual(saved.actions.tts_synthesis.usage.filter((row: { scope: string }) => row.scope === 'user'));
+    expect(parsed.actions.tts_synthesis.usage[0].limit).toBe(1234);
+    expect(parsed.actions.pdf_layout.enabled).toBe(true);
+    expect(parsed.actions.pdf_layout.admission.windows).toEqual(saved.actions.pdf_layout.admission.windows.filter((row: { scope: string }) => row.scope === 'user'));
+    saved.actions.tts_synthesis.usage = saved.actions.tts_synthesis.usage.filter((row: { scope: string }) => row.scope === 'ip');
+    expect(parseComputeLimitPolicyDocument(saved)?.actions.tts_synthesis).toMatchObject({ enabled: true, usage: [] });
+  });
   it('accepts the complete default policy', () => {
     expect(parseComputeLimitPolicyDocument(DEFAULT_COMPUTE_LIMIT_POLICIES))
       .toEqual(DEFAULT_COMPUTE_LIMIT_POLICIES);

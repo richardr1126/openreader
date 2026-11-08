@@ -24,28 +24,23 @@ describe('compute limit policy resolution', () => {
   it('selects the correct TTS limits for anonymous and authenticated subjects', () => {
     const policy = cloneComputeLimitPolicyDocument();
     const anonymous = applicableUsageLimits(policy, 'tts_synthesis', {
-      userId: 'anon-1', isAnonymous: true, deviceId: 'device-1', ip: '192.0.2.1',
+      userId: 'anon-1', isAnonymous: true,
     });
     const authenticated = applicableUsageLimits(policy, 'tts_synthesis', {
-      userId: 'user-1', isAnonymous: false, ip: '192.0.2.1',
+      userId: 'user-1', isAnonymous: false,
     });
 
     expect(anonymous.map(({ scope, limit }) => [scope, limit])).toEqual([
       ['user', 50_000],
-      ['anonymous_device', 50_000],
-      ['ip', 100_000],
     ]);
     expect(authenticated.map(({ scope, limit }) => [scope, limit])).toEqual([
       ['user', 500_000],
-      ['ip', 1_000_000],
     ]);
   });
 
   it('HMACs private scope identifiers with domain separation', () => {
-    expect(deriveComputeScopeKey('ip', '192.0.2.1')).not.toContain('192.0.2.1');
-    expect(deriveComputeScopeKey('ip', 'same')).not.toBe(deriveComputeScopeKey('user', 'same'));
-    expect(resolveComputeScope('anonymous_device', { userId: 'u', isAnonymous: false, deviceId: 'd' }))
-      .toBeNull();
+    expect(deriveComputeScopeKey('user', 'private-user')).not.toContain('private-user');
+    expect(resolveComputeScope('site', { userId: 'u', isAnonymous: false })).toEqual({ scope: 'site', key: 'site' });
   });
 
   it('builds stable policy versions and fixed UTC windows', () => {

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { NextRequest } from 'next/server';
 import { createServerAppError } from '@/lib/server/errors/contract';
 
 const hoisted = vi.hoisted(() => ({
@@ -66,14 +65,9 @@ function mismatchError() {
   });
 }
 
-function request() {
-  return new NextRequest('http://localhost/api/documents/blob/upload/finalize', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      uploads: [{ token, name: 'Book.pdf', type: 'pdf', lastModified: Date.now() }],
-    }),
-  });
+function input() {
+  return { upload: { token, name: 'Book.pdf', type: 'pdf' as const, lastModified: Date.now(), folderId: undefined, hints: {} },
+    userId: 'test-user', namespace: null, subject: { userId: 'test-user', isAnonymous: false }, schedulePreview: () => undefined, expectedSize: source.length };
 }
 
 describe('document upload finalization integrity boundary', () => {
@@ -105,10 +99,17 @@ describe('document upload finalization integrity boundary', () => {
     hoisted.deleteTempDocumentUpload.mockResolvedValue(undefined);
   });
 
+  test('rejects stored bytes that differ from the declared size before registering them', async () => {
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument({ ...input(), expectedSize: source.length + 1 })).rejects.toMatchObject({ code: 'UPLOAD_INCOMPLETE', status: 400 });
+    expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
+    expect(hoisted.copyTempDocumentBlobToDocument).not.toHaveBeenCalled();
+  });
+
   test('registers verified canonical bytes and writes a success receipt', async () => {
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(200);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const res = await finalizeUploadedDocument(input());
+    expect(res.kind).toBe('stored');
     expect(hoisted.verifyDocumentBlobIntegrity).toHaveBeenCalledWith(documentId, null, source.length);
     expect(hoisted.registerUploadedDocument).toHaveBeenCalledOnce();
     expect(hoisted.putTempDocumentFinalizeReceipt).toHaveBeenCalledOnce();
@@ -118,9 +119,9 @@ describe('document upload finalization integrity boundary', () => {
 
   test('copies a missing canonical object conditionally before verifying it', async () => {
     hoisted.headDocumentBlob.mockRejectedValueOnce({ code: 'NoSuchKey' });
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(200);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const res = await finalizeUploadedDocument(input());
+    expect(res.kind).toBe('stored');
     expect(hoisted.copyTempDocumentBlobToDocument).toHaveBeenCalledWith(
       token, 'test-user', documentId, null, 'application/pdf', { ifNoneMatch: true },
     );
@@ -129,9 +130,9 @@ describe('document upload finalization integrity boundary', () => {
   test('recovers corrupt existing object with one replacement then re-verifies', async () => {
     hoisted.verifyDocumentBlobIntegrity.mockRejectedValueOnce(mismatchError())
       .mockResolvedValueOnce(source.length);
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(200);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const res = await finalizeUploadedDocument(input());
+    expect(res.kind).toBe('stored');
     expect(hoisted.copyTempDocumentBlobToDocument).toHaveBeenCalledTimes(1);
     expect(hoisted.copyTempDocumentBlobToDocument).toHaveBeenCalledWith(
       token, 'test-user', documentId, null, 'application/pdf', undefined,
@@ -141,12 +142,8 @@ describe('document upload finalization integrity boundary', () => {
 
   test('rejects persistent corruption without registration or success receipt', async () => {
     hoisted.verifyDocumentBlobIntegrity.mockRejectedValue(mismatchError());
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(503);
-    await expect(res.json()).resolves.toMatchObject({
-      errorCode: 'DOCUMENT_BLOB_INTEGRITY_MISMATCH',
-    });
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument(input())).rejects.toMatchObject({ code: 'DOCUMENT_BLOB_INTEGRITY_MISMATCH' });
     expect(hoisted.copyTempDocumentBlobToDocument).toHaveBeenCalledTimes(1);
     expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
     expect(hoisted.putTempDocumentFinalizeReceipt).not.toHaveBeenCalled();
@@ -155,9 +152,8 @@ describe('document upload finalization integrity boundary', () => {
 
   test('does not copy again when the verification read fails for another reason', async () => {
     hoisted.verifyDocumentBlobIntegrity.mockRejectedValueOnce(new Error('S3 connection interrupted'));
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBeGreaterThanOrEqual(500);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument(input())).rejects.toThrow('S3 connection interrupted');
     expect(hoisted.copyTempDocumentBlobToDocument).not.toHaveBeenCalled();
     expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
     expect(hoisted.putTempDocumentFinalizeReceipt).not.toHaveBeenCalled();
@@ -167,9 +163,9 @@ describe('document upload finalization integrity boundary', () => {
     hoisted.getTempDocumentFinalizeReceipt.mockResolvedValue({
       stored: { id: documentId, name: 'Book.pdf', type: 'pdf', size: source.length },
     });
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(200);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const res = await finalizeUploadedDocument(input());
+    expect(res.kind).toBe('stored');
     expect(hoisted.verifyDocumentBlobIntegrity).toHaveBeenCalledWith(documentId, null);
     expect(hoisted.getTempDocumentBlob).not.toHaveBeenCalled();
     expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
@@ -179,12 +175,10 @@ describe('document upload finalization integrity boundary', () => {
     hoisted.getTempDocumentFinalizeReceipt.mockResolvedValue({
       stored: { id: documentId, name: 'Book.pdf', type: 'pdf', size: 10 },
     });
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toMatchObject({
-      stored: [{ id: documentId, size: source.length }],
-    });
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const res = await finalizeUploadedDocument(input());
+    expect(res.kind).toBe('stored');
+    expect(res).toMatchObject({ stored: { id: documentId, size: source.length } });
     expect(hoisted.verifyDocumentBlobIntegrity).toHaveBeenCalledWith(documentId, null);
   });
 
@@ -193,9 +187,8 @@ describe('document upload finalization integrity boundary', () => {
       stored: { id: documentId, name: 'Book.pdf', type: 'pdf', size: source.length },
     });
     hoisted.verifyDocumentBlobIntegrity.mockRejectedValue(mismatchError());
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(503);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument(input())).rejects.toMatchObject({ code: 'DOCUMENT_BLOB_INTEGRITY_MISMATCH' });
     expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
     expect(hoisted.getTempDocumentBlob).not.toHaveBeenCalled();
   });
@@ -203,9 +196,9 @@ describe('document upload finalization integrity boundary', () => {
   test('handles concurrent conditional-create races by verifying the winner', async () => {
     hoisted.headDocumentBlob.mockRejectedValueOnce({ code: 'NoSuchKey' });
     hoisted.copyTempDocumentBlobToDocument.mockRejectedValueOnce({ status: 412 });
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const res = await POST(request());
-    expect(res.status).toBe(200);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const res = await finalizeUploadedDocument(input());
+    expect(res.kind).toBe('stored');
     expect(hoisted.verifyDocumentBlobIntegrity).toHaveBeenCalledOnce();
   });
 });

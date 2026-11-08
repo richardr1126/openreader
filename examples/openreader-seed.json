@@ -5,7 +5,13 @@
     "changelogFeedUrl": "https://docs.openreader.richardr.dev/changelog/manifest.json",
     "signupPolicy": "open",
     "allowAnonymousSessions": false,
+    "allowOAuthClientRegistration": true,
     "anonymousUserIdleDays": 90,
+    "limitNewAccountsPerIp": false,
+    "newAccountsPerIp": 5,
+    "newAccountsPerIpDays": 30,
+    "limitNewGuestsPerIp": false,
+    "newGuestsPerIp": 10,
     "enableTtsProvidersTab": true,
     "enableAudiobookExport": true,
     "enableDocxConversion": true,
@@ -185,15 +191,20 @@
             "resources": { "archive_io": 1 }
           }
         },
+        "document_intake": {
+          "enabled": false,
+          "admission": { "windows": [], "active": [] },
+          "usage": [
+            { "scope": "user", "audience": "anonymous", "metric": "files", "window": "utc_day", "limit": 10, "boundary": "strict" },
+            { "scope": "user", "audience": "authenticated", "metric": "files", "window": "utc_day", "limit": 100, "boundary": "strict" }
+          ]
+        },
         "tts_synthesis": {
           "enabled": false,
           "admission": { "windows": [], "active": [] },
           "usage": [
             { "scope": "user", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 50000, "boundary": "soft_unit" },
-            { "scope": "user", "audience": "authenticated", "metric": "characters", "window": "utc_day", "limit": 500000, "boundary": "soft_unit" },
-            { "scope": "anonymous_device", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 50000, "boundary": "soft_unit" },
-            { "scope": "ip", "audience": "anonymous", "metric": "characters", "window": "utc_day", "limit": 100000, "boundary": "soft_unit" },
-            { "scope": "ip", "audience": "authenticated", "metric": "characters", "window": "utc_day", "limit": 1000000, "boundary": "soft_unit" }
+            { "scope": "user", "audience": "authenticated", "metric": "characters", "window": "utc_day", "limit": 500000, "boundary": "soft_unit" }
           ]
         }
       },
@@ -221,6 +232,12 @@
       }
     },
     "maxUploadMb": 200,
+    "limitAccountStorage": false,
+    "accountStorageMb": 10240,
+    "limitGuestStorage": false,
+    "guestStorageMb": 1024,
+    "limitGuestStoragePool": false,
+    "guestStoragePoolMb": 10240,
     "ttsPlaybackBackgroundExtent": "section"
   },
   "providers": [

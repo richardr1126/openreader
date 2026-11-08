@@ -11,6 +11,7 @@ test('downloads account data and an already-completed audiobook export', async (
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Storage', exact: true }).first().click();
   await expect(page.getByRole('region', { name: 'Library storage', exact: true })).toBeVisible();
+  await expect(page.getByRole('img', { name: /^Storage used:/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Reclaim orphaned audio', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Delete all audio', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Account', exact: true }).first().click();
@@ -77,30 +78,47 @@ test('downloads account data and an already-completed audiobook export', async (
     { index: 0, title: 'Chapter 1', spineHref: null, page: null, plannedSegments: 20, completedSegments: 20, skippedSegments: 0, generatingSegments: 0, durationMs: 65_000 },
     { index: 1, title: 'Chapter 2', spineHref: null, page: null, plannedSegments: 15, completedSegments: 14, skippedSegments: 1, generatingSegments: 0, durationMs: 48_000 },
   ];
-  await page.route('**/api/tts/export/resolve', async (route) => {
-    const body = route.request().postDataJSON() as { action: string; format: string; chapterIndex?: number; includeProgress?: boolean };
-    resolveActions.push(body.chapterIndex === undefined ? body.action : `${body.action}:${body.chapterIndex}`);
+  let m4bActive = false;
+  await page.route('**/api/v1/documents/*/audiobooks{,/**}', async (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname.endsWith('/events') || url.pathname.includes('/files/')) {
+      await route.fallback();
+      return;
+    }
+    const method = route.request().method();
+    const action = method === 'DELETE' ? 'stop' : url.pathname.endsWith('/lookup') ? 'resolve' : 'start';
+    const body = (method === 'DELETE'
+      ? { format: m4bActive ? 'm4b' : 'mp3' }
+      : route.request().postDataJSON()) as { format: string; chapter?: number; includeProgress?: boolean };
+    resolveActions.push(body.chapter === undefined ? action : `${action}:${body.chapter}`);
     if (resolveActions.length === 1) await lookupGate;
     if (body.includeProgress === true) await chapterGate;
     if (body.format === 'm4b') {
-      if (body.action === 'start') { await startGate; m4bGenerationState = 'queued'; }
-      if (body.action === 'stop') { await stopGate; m4bGenerationState = 'stopped'; }
+      if (action === 'start') { await startGate; m4bGenerationState = 'queued'; m4bActive = true; }
+      if (action === 'stop') { await stopGate; m4bGenerationState = 'stopped'; m4bActive = false; }
       await route.fulfill({ json: {
-        sessionId: 'm4b-session', artifactId: 'm4b-artifact', chapterIndex: null,
+        id: 'm4b-audiobook', documentId: 'test-document', status: m4bGenerationState, progress: null,
+        format: 'm4b', speed: 1, chapter: null, downloadUrl: null, filename: null, webUrl: 'http://localhost/html/test-document', retryAfterMs: null,
         generation: { state: m4bGenerationState, operationId: m4bGenerationState === 'queued' ? 'm4b-generation' : null, issue: null },
-        progress: null, artifact: { state: 'none', operationId: null, issue: null }, download: null,
+        segments: null, artifact: { state: 'none', operationId: null, issue: null },
       } });
       return;
     }
-    const chapterDownload = body.chapterIndex !== undefined;
+    const chapterDownload = body.chapter !== undefined;
     const artifactReady = chapterDownload || bookArtifactReady;
     await route.fulfill({
       json: {
-        sessionId: 'completed-session',
-        artifactId: chapterDownload ? 'chapter-artifact' : 'completed-artifact',
-        chapterIndex: body.chapterIndex ?? null,
+        id: chapterDownload ? 'chapter-audiobook' : 'completed-audiobook',
+        documentId: 'test-document',
+        status: artifactReady ? 'ready' : 'building',
+        progress: 1,
+        format: 'mp3',
+        speed: 1,
+        chapter: body.chapter ?? null,
+        webUrl: 'http://localhost/html/test-document',
+        retryAfterMs: null,
         generation: { state: 'complete', operationId: 'generation-operation', issue: null },
-        progress: body.includeProgress === false ? null : {
+        segments: body.includeProgress === false ? null : {
           plannedSegments: 35,
           completedSegments: 34,
           skippedSegments: 1,
@@ -112,16 +130,14 @@ test('downloads account data and an already-completed audiobook export', async (
           operationId: artifactReady ? null : 'book-artifact-operation',
           issue: null,
         },
-        download: artifactReady
-          ? {
-            url: `/api/tts/export/download?artifactId=${chapterDownload ? 'chapter-artifact' : 'completed-artifact'}&documentId=test-document`,
-            filename: chapterDownload ? 'completed-chapter-001.mp3' : 'completed.mp3',
-          }
+        downloadUrl: artifactReady
+          ? `/api/v1/documents/test-document/audiobooks/files/${chapterDownload ? 'chapter-artifact' : 'completed-artifact'}`
           : null,
+        filename: artifactReady ? (chapterDownload ? 'completed-chapter-001.mp3' : 'completed.mp3') : null,
       },
     });
   });
-  await page.route('**/api/tts/export/events?**', async (route) => {
+  await page.route('**/api/v1/documents/*/audiobooks/events?**', async (route) => {
     const operationId = new URL(route.request().url()).searchParams.get('opId') ?? '';
     if (operationId === 'm4b-generation') {
       await route.fulfill({ contentType: 'text/event-stream', body: `event: snapshot\ndata: ${JSON.stringify({
@@ -144,8 +160,8 @@ test('downloads account data and an already-completed audiobook export', async (
       contentType: 'text/event-stream',
     });
   });
-  await page.route('**/api/tts/export/download?**', async (route) => {
-    const chapter = new URL(route.request().url()).searchParams.get('artifactId') === 'chapter-artifact';
+  await page.route('**/api/v1/documents/*/audiobooks/files/**', async (route) => {
+    const chapter = new URL(route.request().url()).pathname.endsWith('/chapter-artifact');
     await route.fulfill({
       body: 'fake audio',
       contentType: 'audio/mpeg',

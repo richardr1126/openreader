@@ -12,6 +12,7 @@ import { ensureInitialAdmin } from '@/lib/server/auth/bootstrap-admin';
 import { configuredDesktopLaunchToken } from '@/lib/server/auth/desktop-launch-token';
 import { desktopOwnerSession } from '@/lib/server/auth/desktop-owner';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
+import { getRuntimeConfig } from '@/lib/server/admin/settings';
 import { assertUserSignupAllowed, initialAccessStatus } from '@/lib/server/auth/signup-policy';
 import * as authSchemaSqlite from "@openreader/database/schema-auth-sqlite";
 import * as authSchemaPostgres from "@openreader/database/schema-auth-postgres";
@@ -19,6 +20,10 @@ import { hashForLog, serverLogger } from '@/lib/server/logger';
 import { logDegraded, logServerError } from '@/lib/server/errors/logging';
 import { tryGetOrigin } from "@/lib/shared/urls";
 import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
+import { oauthPlugins } from '@/lib/server/auth/oauth';
+import { getClientIp } from '@/lib/server/rate-limit/request-ip';
+import { enforceCreationLimit } from './creation-limits';
+import { hashIp } from './ip-privacy';
 
 // Heavy modules (claim-data, user management, compute client) are loaded
 // lazily via dynamic import() inside the onLinkAccount callback to avoid inflating every serverless function that touches auth.
@@ -26,7 +31,7 @@ import { isAccountEmailEnabled } from '@/lib/server/admin/email-settings';
 // ...
 
 
-function getTrustedOrigins(): string[] {
+export function getTrustedOrigins(): string[] {
   const origins = new Set<string>();
   const baseOrigin = tryGetOrigin(process.env.BASE_URL);
   if (baseOrigin) origins.add(baseOrigin);
@@ -61,7 +66,7 @@ const oidcAuthConfig = getOidcAuthConfig();
 // Desktop shell only. Unset everywhere else, so the exchange route is absent.
 const desktopLaunchToken = configuredDesktopLaunchToken();
 
-const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) => betterAuth({
+const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean, allowOAuthRegistration: boolean) => betterAuth({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   database: drizzleAdapter(db as any, {
     provider: process.env.POSTGRES_URL ? "pg" : "sqlite",
@@ -70,6 +75,10 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
   secret: requiredAuthEnv.authSecret,
   baseURL: requiredAuthEnv.baseUrl,
   trustedOrigins: getTrustedOrigins(),
+  // Connected apps own consent, and /oauth2/register is the only way to add a
+  // client, so the registration switch cannot be bypassed through client management.
+  disabledPaths: ['/token', '/device/token', '/oauth2/delete-consent', '/oauth2/update-consent', '/oauth2/get-consent', '/oauth2/get-consents',
+    '/oauth2/create-client', '/oauth2/get-client', '/oauth2/get-clients', '/oauth2/update-client', '/oauth2/delete-client', '/oauth2/client/rotate-secret'],
   emailAndPassword: {
     enabled: true,
     autoSignIn: !approvalRequired,
@@ -136,7 +145,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
   databaseHooks: {
     user: {
       create: {
-        before: async (user) => {
+        before: async (user, context) => {
           const runtimeConfig = await getResolvedRuntimeConfig();
           const isAnonymous = Boolean((user as { isAnonymous?: boolean }).isAnonymous);
           assertUserSignupAllowed({
@@ -144,6 +153,8 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
             allowAnonymousSessions: runtimeConfig.allowAnonymousSessions,
             isAnonymous,
           });
+          await enforceCreationLimit({ config: runtimeConfig, isAnonymous,
+            ip: context?.headers ? getClientIp({ headers: context.headers }) : null });
           return {
             data: {
               ...user,
@@ -191,7 +202,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
               message: 'Your account has been suspended by an administrator.',
             });
           }
-          return { data: session };
+          return { data: { ...session, ipAddress: hashIp(session.ipAddress, 'session') } };
         },
       },
     },
@@ -217,6 +228,7 @@ const createAuth = (accountEmailsEnabled: boolean, approvalRequired: boolean) =>
     },
   },
   plugins: [
+    ...oauthPlugins(requiredAuthEnv.baseUrl, allowOAuthRegistration, accountEmailsEnabled),
     // Always registered so guest access follows the runtime
     // `allowAnonymousSessions` setting without a restart; the user-create hook
     // above refuses new anonymous users while it is off.
@@ -327,12 +339,14 @@ export async function getAuth(): Promise<ReturnType<typeof createAuth>> {
   }
   // Better Auth captures autoSignIn at construction time, while the admin may
   // change signup policy without restarting the app.
-  const approvalRequired = (await getResolvedRuntimeConfig()).signupPolicy === 'approval';
+  const runtime = await getResolvedRuntimeConfig();
+  const approvalRequired = runtime.signupPolicy === 'approval';
+  const allowOAuthRegistration = runtime.allowOAuthClientRegistration;
   await ensureInitialAdmin();
-  const cacheKey = `${enabled}:${approvalRequired}`;
+  const cacheKey = `${enabled}:${approvalRequired}:${allowOAuthRegistration}`;
   let instance = authInstances.get(cacheKey);
   if (!instance) {
-    instance = createAuth(enabled, approvalRequired);
+    instance = createAuth(enabled, approvalRequired, allowOAuthRegistration);
     authInstances.set(cacheKey, instance);
   }
   return instance;
@@ -356,6 +370,10 @@ export async function getAuthContext(request: Pick<NextRequest, 'headers'>): Pro
   const auth = await getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   const user = (session?.user ?? null) as User | null;
+  // Turning guests off ends existing guest sessions here too, not only in the browser.
+  if (user?.isAnonymous && !(await getRuntimeConfig()).allowAnonymousSessions) {
+    return { session: null, user: null, userId: null };
+  }
   const userId = user?.id ?? null;
 
   return { session, user, userId };

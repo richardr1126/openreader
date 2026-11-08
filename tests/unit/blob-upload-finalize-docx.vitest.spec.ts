@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { NextRequest } from 'next/server';
 
 const hoisted = vi.hoisted(() => ({
   requireAuthContext: vi.fn(),
@@ -85,24 +84,12 @@ vi.mock('@/lib/server/logger', () => ({
 const token = '123e4567-e89b-12d3-a456-426614174000';
 const lastModified = Date.now();
 
-function finalizeRequest() {
-  return new NextRequest('http://localhost/api/documents/blob/upload/finalize', {
-    method: 'POST',
-    body: JSON.stringify({
-      uploads: [{
-        token,
-        name: 'Report.docx',
-        type: 'docx',
-        lastModified,
-      }],
-    }),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+function input() {
+  return { upload: { token, name: 'Report.docx', type: 'docx' as const, lastModified, folderId: undefined, hints: {} },
+    userId: 'user-1', namespace: null, subject: { userId: 'user-1', isAnonymous: false }, schedulePreview: () => undefined, expectedSize: 12 };
 }
 
-describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
+describe('DOCX upload finalization', () => {
   beforeEach(() => {
     hoisted.requireAuthContext.mockReset();
     hoisted.registerUploadedDocument.mockReset();
@@ -164,23 +151,34 @@ describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
       updatedAt: 1,
     });
 
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const response = await POST(finalizeRequest());
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const response = await finalizeUploadedDocument(input());
 
-    expect(response.status).toBe(202);
-    await expect(response.json()).resolves.toMatchObject({
-      stored: [],
-      conversions: [{
+    expect(response).toMatchObject({
+      kind: 'pending',
+      pending: {
         token,
         name: 'Report.docx',
         opId: 'op-docx-1',
         status: 'queued',
-      }],
+      },
     });
     expect(hoisted.getTempDocumentBlob).not.toHaveBeenCalled();
     expect(hoisted.copyTempDocumentBlobToDocument).not.toHaveBeenCalled();
     expect(hoisted.copyObjectKeyToDocument).not.toHaveBeenCalled();
     expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
+  });
+
+  test('reads an existing conversion without spending admission again', async () => {
+    hoisted.resolveDocumentConversion.mockResolvedValue({ artifact: null, operation: {
+      opId: 'existing-conversion', status: 'running',
+    } });
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    expect(await finalizeUploadedDocument(input())).toMatchObject({ kind: 'pending', pending: {
+      opId: 'existing-conversion', status: 'running',
+    } });
+    expect(hoisted.createAdmittedComputeOperation).not.toHaveBeenCalled();
+    expect(hoisted.createDocumentConversionOperation).not.toHaveBeenCalled();
   });
 
   test('registers a completed worker PDF artifact with a short finalize call', async () => {
@@ -211,16 +209,16 @@ describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
       },
     });
 
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const response = await POST(finalizeRequest());
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    const response = await finalizeUploadedDocument(input());
 
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({
-      stored: [{
+    expect(response).toMatchObject({
+      kind: 'stored',
+      stored: {
         id: 'a'.repeat(64),
         name: 'Report.pdf',
         type: 'pdf',
-      }],
+      },
     });
     expect(hoisted.createDocumentConversionOperation).not.toHaveBeenCalled();
     expect(hoisted.getTempDocumentBlob).not.toHaveBeenCalled();
@@ -266,14 +264,24 @@ describe('POST /api/documents/blob/upload/finalize DOCX flow', () => {
     });
     hoisted.verifyDocumentBlobIntegrity.mockRejectedValue(integrityError);
 
-    const { POST } = await import('../../src/app/api/documents/blob/upload/finalize/route');
-    const response = await POST(finalizeRequest());
-
-    expect(response.status).toBe(503);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument(input())).rejects.toThrow('Stored document failed integrity check');
     expect(hoisted.verifyDocumentBlobIntegrity).toHaveBeenCalledTimes(2);
     expect(hoisted.registerUploadedDocument).not.toHaveBeenCalled();
     expect(hoisted.putTempDocumentFinalizeReceipt).not.toHaveBeenCalled();
     expect(hoisted.deleteTempDocumentUpload).not.toHaveBeenCalled();
+  });
+
+  test('never converts bytes that differ from the declared size', async () => {
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument({ ...input(), expectedSize: 11 })).rejects.toMatchObject({ code: 'UPLOAD_INCOMPLETE', status: 400 });
+    expect(hoisted.createDocumentConversionOperation).not.toHaveBeenCalled();
+  });
+
+  test('reports a missing worker as a retryable service error', async () => {
+    hoisted.isComputeWorkerAvailable.mockReturnValue(false);
+    const { finalizeUploadedDocument } = await import('@/lib/server/documents/finalize-upload');
+    await expect(finalizeUploadedDocument(input())).rejects.toMatchObject({ code: 'COMPUTE_WORKER_REQUIRED', status: 503 });
   });
 
 });

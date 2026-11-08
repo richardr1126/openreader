@@ -6,13 +6,10 @@ import type {
   TtsPlaybackSessionResolution,
 } from '@/lib/server/compute-worker/protocol';
 import type {
-  TtsExportAction,
   TtsExportArtifactState,
   TtsExportGenerationState,
   TtsExportIssue,
 } from '@/types/tts-export';
-
-const EXPORT_ACTIONS: readonly TtsExportAction[] = ['resolve', 'start', 'retry-skipped', 'stop'];
 
 /**
  * Run id for a document export start, derived from the session state the
@@ -22,7 +19,7 @@ const EXPORT_ACTIONS: readonly TtsExportAction[] = ['resolve', 'start', 'retry-s
  */
 export function exportGenerationRunId(input: {
   sessionId: string;
-  action: TtsExportAction;
+  action: 'start' | 'retry-skipped';
   session: unknown;
 }): string {
   const observed = input.session && typeof input.session === 'object'
@@ -38,10 +35,6 @@ export function exportGenerationRunId(input: {
     ]))
     .digest('hex')
     .slice(0, 32);
-}
-
-export function parseTtsExportAction(value: unknown): TtsExportAction {
-  return EXPORT_ACTIONS.find((candidate) => candidate === value) ?? 'resolve';
 }
 
 function isInflight(status: string | null | undefined): boolean {
@@ -83,7 +76,7 @@ export function classifyExportGeneration(
   switch (session.status) {
     case 'succeeded':
       return session.stopReason === 'usage_limit'
-        ? { state: 'usage_limited', issue: { code: 'COMPUTE_USAGE_LIMIT_REACHED', message: null } }
+        ? { state: 'usage_limited', issue: { code: lastError ?? 'COMPUTE_USAGE_LIMIT_REACHED', message: null } }
         : { state: 'complete', issue: null };
     case 'canceled':
       return { state: 'stopped', issue: null };
@@ -121,6 +114,7 @@ export function classifyExportArtifact(input: {
   }
   const status = input.artifact.operation?.status;
   if (isInflight(status)) return 'building';
+  if (status === 'failed') return 'failed';
   if (ready) return 'stale';
-  return status === 'failed' ? 'failed' : 'none';
+  return 'none';
 }

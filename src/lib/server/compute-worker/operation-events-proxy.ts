@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { apiErrorResponse } from '@/lib/server/api/responses';
 import { getComputeWorkerClient } from '@/lib/server/compute-worker/client';
 
 /**
@@ -22,11 +23,8 @@ export async function proxyOperationEvents(input: {
   });
 
   if (!upstream.ok || !upstream.body) {
-    const detail = await upstream.text().catch(() => '');
-    return NextResponse.json(
-      { error: detail || streamErrorMessage },
-      { status: upstream.status || 502 },
-    );
+    await upstream.body?.cancel().catch(() => undefined);
+    return apiErrorResponse(upstream.status || 502, 'OPERATION_EVENTS_UNAVAILABLE', streamErrorMessage);
   }
 
   return new NextResponse(upstream.body, {

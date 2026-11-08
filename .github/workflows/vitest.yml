@@ -21,8 +21,6 @@ jobs:
       - uses: pnpm/action-setup@v6
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Apply drizzle migrations (SQLite)
-        run: pnpm migrate
       - name: Run Vitest suites
         run: pnpm test:unit
       - name: Verify compute worker contract and boundary

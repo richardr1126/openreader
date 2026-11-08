@@ -1,6 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, asc, eq, exists, gt, gte, isNull, or } from 'drizzle-orm';
 import { db } from '@openreader/database';
-import { documents } from '@openreader/database/schema';
+import { documents, documentAudioUsage } from '@openreader/database/schema';
+import * as authSqlite from '@openreader/database/schema-auth-sqlite';
+import * as authPostgres from '@openreader/database/schema-auth-postgres';
 import { claimUserDeletionBatch, finalizeUserDeletion } from '@/lib/server/admin/users';
 import { deleteDocumentPreviewRows } from '@/lib/server/documents/previews';
 import { releaseDocumentBlobLease, renewDocumentBlobLease, tryAcquireDocumentBlobLease } from '@/lib/server/documents/blob-lease';
@@ -10,6 +12,9 @@ import {
 } from '@/lib/server/storage/cleanups';
 
 export class InvalidMaintenanceStep extends Error {}
+const { user, session } = process.env.POSTGRES_URL ? authPostgres : authSqlite;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const database = db as any;
 
 function string(value: unknown, max = 256): string {
   if (typeof value !== 'string' || !value.length || value.length > max) throw new InvalidMaintenanceStep('Invalid identifier');
@@ -27,6 +32,25 @@ export async function executeMaintenanceStep(raw: unknown): Promise<unknown> {
   const body = raw as Record<string, unknown>;
   const after = body.after == null ? null : string(body.after, 600);
   switch (body.action) {
+    case 'storage-users': {
+      const activeSince = number(body.activeSince ?? 0);
+      const rows = await database.select({ id: user.id }).from(user).where(and(
+        isNull(user.deletionRequestedAt), after ? gt(user.id, after) : undefined,
+        activeSince ? or(
+          gte(user.updatedAt, new Date(activeSince)),
+          exists(database.select({ id: session.id }).from(session).where(and(eq(session.userId, user.id), gte(session.updatedAt, new Date(activeSince))))),
+          exists(database.select({ id: documents.id }).from(documents).where(and(eq(documents.userId, user.id), gte(documents.createdAt, activeSince)))),
+          exists(database.select({ id: documentAudioUsage.documentId }).from(documentAudioUsage).where(and(eq(documentAudioUsage.userId, user.id), gte(documentAudioUsage.measuredAt, activeSince)))),
+        ) : undefined,
+      )).orderBy(asc(user.id)).limit(50);
+      return { userIds: rows.map((row: { id: string }) => row.id) };
+    }
+    case 'storage-documents': {
+      const rows = await database.select({ id: documentAudioUsage.documentId }).from(documentAudioUsage)
+        .where(and(eq(documentAudioUsage.userId, string(body.userId)), gt(documentAudioUsage.audioBytes, 0), after ? gt(documentAudioUsage.documentId, after) : undefined))
+        .orderBy(asc(documentAudioUsage.documentId)).limit(200);
+      return { documentIds: rows.map((row: { id: string }) => row.id) };
+    }
     case 'claim-users':
       return { userIds: await claimUserDeletionBatch({
         after, idleBefore: body.idleBefore == null ? undefined : number(body.idleBefore),

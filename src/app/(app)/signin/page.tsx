@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getAuthClient } from '@/lib/client/auth-client';
@@ -9,7 +9,9 @@ import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { showPrivacyModal } from '@/components/PrivacyModal';
 import { GithubIcon, KeyIcon } from '@/components/icons/Icons';
 import { LoadingSpinner } from '@/components/Spinner';
-import { Button, Checkbox, Field, InlineButton, Input, Surface } from '@/components/ui';
+import { Button, Checkbox, Field, InlineButton, Input } from '@/components/ui';
+import { AuthCard, AuthFallback, AuthFooter } from '@/components/auth/AuthCard';
+import { signInReturnPath } from '@/lib/shared/sign-in-return';
 
 function describeOAuthError(code: string): string {
   switch (code) {
@@ -26,25 +28,11 @@ function describeOAuthError(code: string): string {
   }
 }
 
-function SearchParamsLoader({
-  setSessionExpired,
-  setError,
-}: {
-  setSessionExpired: (v: boolean) => void;
-  setError: (v: string | null) => void;
-}) {
-  const searchParams = useSearchParams();
-  useEffect(() => {
-    const reason = searchParams.get('reason');
-    setSessionExpired(reason === 'expired');
-    const oauthError = searchParams.get('error');
-    if (oauthError) setError(describeOAuthError(oauthError));
-  }, [searchParams, setSessionExpired, setError]);
-  return null;
-}
-
 function SignInContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isOAuthSignIn = searchParams.has('sig');
+  const returnTo = signInReturnPath(searchParams.get('returnTo'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loadingEmail, setLoadingEmail] = useState(false);
@@ -52,8 +40,11 @@ function SignInContent() {
   const [loadingOidc, setLoadingOidc] = useState(false);
   const [loadingAnonymous, setLoadingAnonymous] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
-  const [sessionExpired, setSessionExpired] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const sessionExpired = searchParams.get('reason') === 'expired';
+  const [error, setError] = useState<string | null>(() => {
+    const oauthError = searchParams.get('error');
+    return oauthError ? describeOAuthError(oauthError) : null;
+  });
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null);
   const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
   const { baseUrl, githubAuthEnabled, oidcAuth } = useAuthConfig();
@@ -106,7 +97,7 @@ function SignInContent() {
         // Immediately refresh rate-limit status so the banner clears without a full reload.
         // This is especially important when an anonymous user upgrades to an account.
         await refreshRateLimit();
-        router.push('/app');
+        if (!isOAuthSignIn) router.push(returnTo);
       }
     } catch (err) {
       console.error('Sign in error:', err);
@@ -141,7 +132,7 @@ function SignInContent() {
       const client = getAuthClient(baseUrl);
       await client.signIn.social({
         provider: 'github',
-        callbackURL: '/app'
+        callbackURL: returnTo
       });
     } finally {
       setLoadingGithub(false);
@@ -156,7 +147,7 @@ function SignInContent() {
       const client = getAuthClient(baseUrl);
       const result = await client.signIn.social({
         provider: oidcAuth.providerId,
-        callbackURL: '/app',
+        callbackURL: returnTo,
         errorCallbackURL: '/signin',
       });
       if (result.error) {
@@ -177,196 +168,101 @@ function SignInContent() {
       const client = getAuthClient(baseUrl);
       const result = await client.signIn.anonymous();
       if (result.error) {
-        setError(result.error.message || 'Unable to continue anonymously. Please try again.');
+        setError(result.error.message || 'Unable to continue as a guest. Please try again.');
         return;
       }
       await refreshRateLimit();
-      router.push('/app');
+      router.push(returnTo);
     } catch (e) {
       console.error('Anonymous sign-in failed:', e);
-      setError('Unable to continue anonymously. Please try again.');
+      setError('Unable to continue as a guest. Please try again.');
     } finally {
       setLoadingAnonymous(false);
     }
   };
 
+  const hasAlternatives = githubAuthEnabled || !!oidcAuth || (allowAnonymousSessions && !isOAuthSignIn);
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <Suspense fallback={null}>
-        <SearchParamsLoader setSessionExpired={setSessionExpired} setError={setError} />
-      </Suspense>
-
-        <Surface elevation="3" className="w-full max-w-md p-6">
-          <h1 className="text-xl font-semibold text-foreground">
-            {sessionExpired ? 'Session Expired' : 'Sign in'}
-          </h1>
-          <p className="text-sm text-soft mt-1">
-            {sessionExpired
-              ? 'Please sign in again to continue'
-              : 'Sign in to sync your data across devices'}
-          </p>
-
-        {/* Alerts */}
-        {sessionExpired && (
-          <div className="mt-4 p-3 bg-accent-wash border border-accent-line rounded-lg">
-            <p className="text-sm text-accent ">
-              Your session has expired. Please sign in again.
-            </p>
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-4 p-3 bg-danger-wash border border-danger rounded-lg">
-            <p className="text-sm text-danger">{error}</p>
-          </div>
-        )}
-        {verificationNotice && (
-          <div className="mt-4 p-3 bg-accent-wash border border-accent-line rounded-lg">
-            <p className="text-sm text-accent">{verificationNotice}</p>
-          </div>
-        )}
+    <AuthCard title={sessionExpired ? 'Session expired' : 'Sign in'} description={sessionExpired ? 'Sign in again to continue.' : undefined}>
+      <form className="space-y-4" noValidate onSubmit={(event) => { event.preventDefault(); void handleSignIn(); }}>
+        <Field label="Email">
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(null); }}
+            placeholder="me@example.com"
+            controlSize="lg"
+            autoComplete="email"
+          />
+        </Field>
+        <Field label="Password">
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(null); }}
+            placeholder="Password"
+            controlSize="lg"
+            autoComplete="current-password"
+          />
+        </Field>
+        <div className="flex items-center justify-between gap-3">
+          <label className="flex cursor-pointer items-center gap-2">
+            <Checkbox checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+            <span className="text-sm text-foreground">Remember me</span>
+          </label>
+          {accountEmailsEnabled && (
+            <Link href="/forgot-password" className="text-xs text-soft underline hover:text-foreground">Forgot password?</Link>
+          )}
+        </div>
+        {error && <p role="alert" className="text-sm text-danger">{error}</p>}
+        {verificationNotice && <p role="status" className="text-sm text-soft">{verificationNotice}</p>}
         {verificationEmail && (
-          <Button type="button" variant="outline" size="sm" className="mt-3" disabled={loadingEmail} onClick={resendVerification}>
+          <Button type="button" variant="secondary" className="w-full" disabled={loadingEmail} onClick={resendVerification}>
             Resend verification email
           </Button>
         )}
+        <Button type="submit" disabled={isAnyLoading} variant="primary" className="w-full">
+          {loadingEmail ? 'Signing in…' : 'Sign in'}
+        </Button>
+      </form>
 
-        <div className="mt-6 space-y-4">
-          {/* Email */}
-          <Field label="Email">
-            <Input
-              type="email"
-              value={email}
-              onChange={(e) => { setEmail(e.target.value); setError(null); }}
-              placeholder="me@example.com"
-              controlSize="lg"
-            />
-          </Field>
-
-          {/* Password */}
-          <Field label="Password">
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(null); }}
-              placeholder="Password"
-              controlSize="lg"
-            />
-          </Field>
-          {accountEmailsEnabled && (
-            <div className="-mt-2 text-right">
-              <Link href="/forgot-password" className="text-xs text-soft underline hover:text-foreground">Forgot password?</Link>
-            </div>
-          )}
-
-          {/* Remember Me */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <Checkbox
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-            />
-            <span className="text-sm text-foreground">Remember me</span>
-          </label>
-
-          {/* Sign in button */}
-          <Button
-            type="submit"
-            disabled={isAnyLoading}
-            onClick={handleSignIn}
-            variant="primary"
-            size="md"
-            className="w-full"
-          >
-            {loadingEmail ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Sign in'}
-          </Button>
-
-          {/* GitHub */}
+      {hasAlternatives && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 text-xs text-soft" aria-hidden="true">
+            <span className="flex-1 border-t border-line" />or<span className="flex-1 border-t border-line" />
+          </div>
           {githubAuthEnabled && (
-          <Button
-            type="button"
-            disabled={isAnyLoading}
-            onClick={handleGithubSignIn}
-            variant="outline"
-            size="md"
-            className="w-full gap-2"
-          >
-            {loadingGithub ? (
-              <LoadingSpinner className="w-4 h-4" />
-            ) : (
-              <>
-                <GithubIcon className="w-4 h-4" />
-                Sign in with GitHub
-              </>
-            )}
-          </Button>
+            <Button type="button" disabled={isAnyLoading} onClick={handleGithubSignIn} variant="secondary" className="w-full gap-2">
+              {loadingGithub ? <LoadingSpinner className="h-4 w-4" /> : <><GithubIcon className="h-4 w-4" />Sign in with GitHub</>}
+            </Button>
           )}
-
-          {/* Generic OIDC */}
           {oidcAuth && (
-          <Button
-            type="button"
-            disabled={isAnyLoading}
-            onClick={handleOidcSignIn}
-            variant="outline"
-            size="md"
-            className="w-full gap-2"
-          >
-            {loadingOidc ? (
-              <LoadingSpinner className="w-4 h-4" />
-            ) : (
-              <>
-                <KeyIcon className="w-4 h-4" />
-                Sign in with {oidcAuth.providerName}
-              </>
-            )}
-          </Button>
+            <Button type="button" disabled={isAnyLoading} onClick={handleOidcSignIn} variant="secondary" className="w-full gap-2">
+              {loadingOidc ? <LoadingSpinner className="h-4 w-4" /> : <><KeyIcon className="h-4 w-4" />Sign in with {oidcAuth.providerName}</>}
+            </Button>
           )}
-
-          {/* Anonymous */}
-          {allowAnonymousSessions && (
-            <Button
-              type="button"
-              disabled={isAnyLoading}
-              onClick={handleAnonymousContinue}
-              variant="outline"
-              size="md"
-              className="w-full"
-            >
-              {loadingAnonymous ? <LoadingSpinner className="w-4 h-4 mx-auto" /> : 'Continue anonymously'}
+          {allowAnonymousSessions && !isOAuthSignIn && (
+            <Button type="button" disabled={isAnyLoading} onClick={handleAnonymousContinue} variant="secondary" className="w-full">
+              {loadingAnonymous ? <LoadingSpinner className="h-4 w-4" /> : 'Continue as guest'}
             </Button>
           )}
         </div>
+      )}
 
-        {/* Footer */}
-        <div className="mt-6 pt-4 border-t border-line-soft text-center space-y-2">
-          {canSignUp && (
-            <p className="text-xs text-soft">
-              Don&apos;t have an account?{' '}
-              <Link href="/signup" className="underline hover:text-foreground">
-                Sign up
-              </Link>
-            </p>
-          )}
-          <p className="text-xs text-soft">
-            By signing in, you agree to our{' '}
-            <InlineButton onClick={() => showPrivacyModal()}>
-              Privacy Policy
-            </InlineButton>
+      <AuthFooter>
+        {canSignUp && (
+          <p>
+            Don&apos;t have an account?{' '}
+            <Link href={isOAuthSignIn ? `/signup?${searchParams}` : returnTo === '/app' ? '/signup' : `/signup?returnTo=${encodeURIComponent(returnTo)}`} className="underline hover:text-foreground">Sign up</Link>
           </p>
-        </div>
-      </Surface>
-    </div>
+        )}
+        <p>By signing in, you agree to our <InlineButton onClick={() => showPrivacyModal()}>Privacy Policy</InlineButton></p>
+      </AuthFooter>
+    </AuthCard>
   );
 }
 
 export default function SignInPage() {
-  return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <LoadingSpinner className="w-8 h-8" />
-      </div>
-    }>
-      <SignInContent />
-    </Suspense>
-  );
+  return <Suspense fallback={<AuthFallback />}><SignInContent /></Suspense>;
 }

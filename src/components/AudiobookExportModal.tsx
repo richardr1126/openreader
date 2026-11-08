@@ -25,6 +25,7 @@ import {
   describeSkippedSegments,
 } from '@/lib/client/audiobook-export-issues';
 import type { TtsExportChapterProgress, TtsExportGenerationState } from '@/types/tts-export';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 interface AudiobookExportModalProps {
   isOpen: boolean;
@@ -219,8 +220,8 @@ export function AudiobookExportModal({
   const isGenerating = generationState === 'generating' || isQueued;
   const isBuilding = artifactState === 'building';
   const isActive = isGenerating || isBuilding;
-  const canDownload = Boolean(snapshot?.download);
-  const progress = snapshot?.progress ?? null;
+  const canDownload = Boolean(snapshot?.downloadUrl);
+  const progress = snapshot?.segments ?? null;
   const planned = liveCounts?.planned ?? progress?.plannedSegments ?? 0;
   const skipped = liveCounts?.skipped ?? progress?.skippedSegments ?? 0;
   const settledCount = Math.min(planned, (liveCounts?.completed ?? progress?.completedSegments ?? 0) + skipped);
@@ -259,7 +260,9 @@ export function AudiobookExportModal({
   const skippedNotice = describeSkippedSegments(snapshot);
   const artifactNotice = artifactState === 'failed'
     ? `Building the ${exportFormat.toUpperCase()} file failed.${describeExportIssue(snapshot?.artifact.issue ?? null) ? ` ${describeExportIssue(snapshot?.artifact.issue ?? null)}` : ''} Select Build file to try again.`
-    : null;
+    : artifactState === 'waiting'
+      ? `The ${exportFormat.toUpperCase()} file will build when a compute limit resets.`
+      : null;
 
   const commitAudioPlayerSpeed = useCallback(() => {
     if (localAudioPlayerSpeed !== audioPlayerSpeed) {
@@ -268,7 +271,7 @@ export function AudiobookExportModal({
   }, [audioPlayerSpeed, localAudioPlayerSpeed, setAudioPlayerSpeedAndRestart]);
 
   const handleDownload = useCallback(() => {
-    if (snapshot?.download) triggerDownload(snapshot.download);
+    if (snapshot?.downloadUrl) triggerDownload({ url: snapshot.downloadUrl, filename: snapshot.filename ?? '' });
   }, [snapshot]);
 
   const primaryAction = (() => {
@@ -402,7 +405,7 @@ export function AudiobookExportModal({
                 />
               )}
 
-              {generationNotice && <p role="status" className="text-xs text-warning">{generationNotice}</p>}
+              {generationNotice && <p role="status" className="text-xs text-warning"><StorageLimitMessage message={generationNotice} /></p>}
               {refreshError && <div role="status" className="space-y-2 text-xs text-warning">
                 <p>{refreshError}</p>
                 <Button size="sm" variant="ghost" onClick={() => void refresh()}>Retry lookup</Button>

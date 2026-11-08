@@ -23,12 +23,12 @@ export function RateLimitBanner({ className = '' }: RateLimitBannerProps) {
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="text-xs sm:text-sm">
           <span className="font-medium text-accent ">
-            Daily TTS limit reached.
+            {status.storageLimit ?? 'Daily TTS limit reached.'}
           </span>
-          <span className="text-accent  ml-1.5">
+          {status.storageLimit ? <Link className="ml-1.5 text-accent underline" href="/app/settings?section=storage">Free space in Storage</Link> : <span className="text-accent  ml-1.5">
             {`Used ${formatCharCount(status.currentCount)} / ${formatCharCount(status.limit ?? 0)} characters.`}
             {' Cached audio remains available; new generation resumes in '}{timeUntilReset}.
-          </span>
+          </span>}
         </div>
 
         {isAnonymous && canSignUp && (
@@ -38,7 +38,7 @@ export function RateLimitBanner({ className = '' }: RateLimitBannerProps) {
                      bg-accent text-background hover:bg-secondary-accent
                      transform transition-transform duration-base"
           >
-            Sign up for a higher limit
+            {status.storageLimit ? 'Create an account' : 'Sign up for a higher limit'}
           </Link>
         )}
       </div>

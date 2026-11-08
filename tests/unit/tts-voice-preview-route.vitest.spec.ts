@@ -38,10 +38,6 @@ vi.mock('@/lib/server/compute-limits/usage', () => ({ consumeComputeUsage: hoist
 
 vi.mock('@/lib/server/rate-limit/request-ip', () => ({ getClientIp: vi.fn(() => '127.0.0.1') }));
 
-vi.mock('@/lib/server/rate-limit/device-id', () => ({
-  getOrCreateDeviceId: vi.fn(() => ({ deviceId: 'device-1', didCreate: false })),
-  setDeviceIdCookie: vi.fn(),
-}));
 
 const { POST } = await import('@/app/api/tts/voice-preview/route');
 

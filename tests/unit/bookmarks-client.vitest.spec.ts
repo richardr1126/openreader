@@ -58,11 +58,11 @@ describe('import metadata hints', () => {
     vi.unstubAllGlobals();
   });
 
-  test('a Gutenberg import forwards catalog author and language to finalize', async () => {
+  test('a Gutenberg import submits its server-staged upload to document creation', async () => {
     const fetchMock = stubFetch((url) => {
       if (url === '/api/gutenberg/import') {
         return Response.json({
-          token: '123e4567-e89b-12d3-a456-426614174000',
+          uploadId: '123e4567-e89b-12d3-a456-426614174000',
           name: 'Pride and Prejudice.epub',
           type: 'epub',
           lastModified: 5,
@@ -70,14 +70,13 @@ describe('import metadata hints', () => {
           language: 'en',
         });
       }
-      return Response.json({ stored: [] });
+      return Response.json({ id: DOC, name: 'Pride and Prejudice.epub', type: 'epub' }, { status: 201 });
     });
 
     await importGutenbergBook(1342);
-    const finalize = fetchMock.mock.calls.find(([url]) => String(url) === '/api/documents/blob/upload/finalize');
-    expect(JSON.parse(String(finalize?.[1]?.body)).uploads[0]).toMatchObject({
-      author: 'Jane Austen',
-      language: 'en',
+    const finalize = fetchMock.mock.calls.find(([url]) => String(url) === '/api/v1/documents');
+    expect(JSON.parse(String(finalize?.[1]?.body))).toMatchObject({
+      source: { type: 'upload', uploadId: '123e4567-e89b-12d3-a456-426614174000' },
     });
   });
 });

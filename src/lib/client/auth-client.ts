@@ -1,11 +1,12 @@
 import { createAuthClient } from "better-auth/react";
 import { anonymousClient } from "better-auth/client/plugins";
+import { oauthProviderClient, oauthDeviceAuthorizationClient } from '@better-auth/oauth-provider/client';
 
 // Factory function to create auth client with specific baseUrl
 function createAuthClientWithUrl(baseUrl: string) {
   return createAuthClient({
     baseURL: baseUrl,
-    plugins: [anonymousClient()],
+    plugins: [anonymousClient(), oauthProviderClient(), oauthDeviceAuthorizationClient()],
   });
 }
 

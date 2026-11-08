@@ -10,9 +10,11 @@ import { Button, ChoiceTile } from '@/components/ui';
 import { formatCharCount, useAuthConfig, useAuthRateLimit } from '@/contexts/AuthRateLimitContext';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useAuthSession } from '@/hooks/useAuthSession';
+import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { getAuthClient } from '@/lib/client/auth-client';
 import { useAccountExport } from './useAccountExport';
 import { AccountSecurityPanel } from './AccountSecurityPanel';
+import { ConnectedAppsPanel } from './ConnectedAppsPanel';
 
 function TtsUsageCard() {
   const {
@@ -29,6 +31,9 @@ function TtsUsageCard() {
     && status.limit !== null,
   );
   const limit = status?.limit ?? null;
+  // A full account blocks generation too, but it does not reset at midnight.
+  const storageFull = status?.storageLimit ?? null;
+  const charsExhausted = isAtLimit && !storageFull;
   const usedPercent = hasLimit && status && limit !== null
     ? Math.min(100, Math.round((status.currentCount / Math.max(1, limit)) * 100))
     : 0;
@@ -79,21 +84,22 @@ function TtsUsageCard() {
                 aria-valuenow={Math.min(status.currentCount, limit)}
               >
                 <div
-                  className={`h-full rounded-full transition-[width] duration-slow ${isAtLimit ? 'bg-accent' : 'bg-secondary-accent'}`}
+                  className={`h-full rounded-full transition-[width] duration-slow ${charsExhausted ? 'bg-accent' : 'bg-secondary-accent'}`}
                   style={{ width: `${usedPercent}%` }}
                 />
               </div>
               <div className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-xs text-soft">
                 <span>
-                  {isAtLimit
+                  {charsExhausted
                     ? 'New generation pauses at the next uncached segment.'
                     : `${formatCharCount(status.remainingChars ?? 0)} characters remaining.`}
                 </span>
                 <span>Resets in {timeUntilReset}</span>
               </div>
+              {storageFull && <p className="text-xs text-danger">{storageFull}</p>}
             </div>
           ) : (
-            <p className="mt-3 text-xs text-soft">No generation limit.</p>
+            <p className={`mt-3 text-xs ${storageFull ? 'text-danger' : 'text-soft'}`}>{storageFull ?? 'No daily character limit.'}</p>
           )}
         </div>
       </div>
@@ -124,6 +130,7 @@ function ExportDataTile() {
 
 export function AccountSettingsPanel() {
   const runtimeConfig = useRuntimeConfig();
+  const guestRetentionDays = useOnboardingState().query.data?.guestRetentionDays ?? null;
   const { baseUrl: authBaseUrl } = useAuthConfig();
   const { data: session } = useAuthSession();
   const router = useRouter();
@@ -160,6 +167,7 @@ export function AccountSettingsPanel() {
     return (
       <div className="space-y-2">
         <AccountSecurityPanel nameOnly />
+        <ConnectedAppsPanel />
         <ExportDataTile />
       </div>
     );
@@ -177,6 +185,7 @@ export function AccountSettingsPanel() {
         )}
 
         {session?.user && <TtsUsageCard />}
+        <ConnectedAppsPanel />
 
         {session?.user && <ExportDataTile />}
 
@@ -206,9 +215,12 @@ export function AccountSettingsPanel() {
               <p className="text-sm text-soft mb-3">
                 {session?.user?.isAnonymous
                   ? (runtimeConfig.signupPolicy !== 'closed'
-                    ? 'Sign up to keep your progress. Your current data transfers automatically.'
+                    ? 'Sign up to keep your documents, reading progress and settings. Generated audio isn\'t transferred.'
                     : 'Sign-ups are currently disabled.')
                   : 'Sign in to continue.'}
+                {guestRetentionDays !== null
+                  ? ` Guest data is deleted after ${guestRetentionDays} ${guestRetentionDays === 1 ? 'day' : 'days'} without use.`
+                  : null}
               </p>
               <div className="flex flex-wrap gap-2">
                 <Link href="/signin">

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getRequiredAuthEnv } from '@/lib/server/auth/config';
+import { signInPathFor } from '@/lib/shared/sign-in-return';
 
 /**
  * Better Auth session cookie name (default prefix + session_token).
@@ -48,6 +49,9 @@ const SERVICE_AUTHENTICATED_PATHS = new Set([
   '/api/internal/compute/limits/consume',
   '/api/internal/compute/limits/complete',
 ]);
+
+/** Pages that need a session. Everything else, static files included, passes through. */
+const SESSION_REQUIRED_PATH = /^\/(?:app|pdf|epub|html)(?:\/|$)/;
 
 function isPublicPath(pathname: string): boolean {
   // Root landing page
@@ -105,8 +109,9 @@ export function middleware(request: NextRequest) {
     // Strict region gate for the official production instance.
     if (!isUnitedStatesRequest) {
       if (pathname.startsWith('/api/')) {
+        const message = 'OpenReader is only available in the United States.';
         return NextResponse.json(
-          { error: 'OpenReader is only available in the United States.' },
+          { error: pathname.startsWith('/api/v1/') ? { code: 'REGION_UNAVAILABLE', message } : message },
           { status: 451, headers: { 'Cache-Control': 'no-store' } },
         );
       }
@@ -123,10 +128,11 @@ export function middleware(request: NextRequest) {
 
   getRequiredAuthEnv();
 
+  const hasSession = SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
+
   // Fast-path redirect for signed-in users hitting the public landing page.
   // This avoids extra server work in the landing page render path.
   if (pathname === '/' && request.nextUrl.searchParams.get('redirect') !== 'false') {
-    const hasSession = SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
     if (hasSession) {
       const appUrl = request.nextUrl.clone();
       appUrl.pathname = '/app';
@@ -140,21 +146,23 @@ export function middleware(request: NextRequest) {
     return publicRouteResponse(pathname);
   }
 
-  // Guest sessions are the admin-editable `allowAnonymousSessions` runtime
-  // setting, which lives in SQL and cannot be read here. Signed-out visitors
-  // therefore reach the page: AuthLoader.tsx either bootstraps an anonymous
-  // session or redirects to /signin, and every API route authenticates itself.
+  // Only the cookie's presence is checked here. A stale cookie reaches the page,
+  // where AuthLoader.tsx redirects, and every API route authenticates itself.
+  if (!hasSession && SESSION_REQUIRED_PATH.test(pathname)) {
+    return NextResponse.redirect(new URL(signInPathFor(pathname), request.url));
+  }
+
   return NextResponse.next();
 }
 
 /**
  * Match all routes except static assets, Next.js internals, and the raw
- * same-origin blob transfer. The upload route authenticates both methods
+ * same-origin blob transfer. The upload file route authenticates requests
  * itself; excluding it here also prevents Next middleware from buffering and
  * truncating request bodies at its independent 10 MB default.
  */
 export const config = {
   matcher: [
-    '/((?!api/documents/blob/upload$|_next/static|_next/image|favicon\\.ico|icon\\.png|icon\\.svg|apple-icon\\.png|manifest\\.json).*)',
+    '/((?!api/v1/uploads/[^/]+/file$|_next/static|_next/image|favicon\\.ico|icon\\.png|icon\\.svg|apple-icon\\.png|manifest\\.json).*)',
   ],
 };

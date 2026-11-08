@@ -9,7 +9,7 @@ test('anonymous user converts a DOCX file and reads the resulting PDF', async ({
   await enterAnonymousLibrary(page);
 
   const conversionEventsRequest = page.waitForRequest((request) => (
-    new URL(request.url()).pathname === '/api/documents/blob/upload/events'
+    /^\/api\/v1\/uploads\/[^/]+\/events$/.test(new URL(request.url()).pathname)
   ));
   await uploadLibraryFiles(page, resolve('tests/files/sample.docx'), {
     waitForLibraryEntries: false,
@@ -22,7 +22,7 @@ test('anonymous user converts a DOCX file and reads the resulting PDF', async ({
   const eventsUrl = new URL(eventsRequest.url());
   expect(eventsRequest.method()).toBe('GET');
   expect(eventsUrl.searchParams.get('opId')).toBeTruthy();
-  expect(eventsUrl.searchParams.get('token')).toBeTruthy();
+  expect(eventsUrl.pathname).toMatch(/^\/api\/v1\/uploads\/[0-9a-f-]+\/events$/);
 
   const convertedPdfLink = page.getByRole('link', { name: 'sample.pdf', exact: true });
   await expect(convertedPdfLink).toBeVisible({ timeout: 60_000 });

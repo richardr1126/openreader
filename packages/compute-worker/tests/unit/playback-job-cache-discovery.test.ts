@@ -3,6 +3,8 @@ import { createTtsPlaybackHandler } from '../../src/jobs/playback/playback-job';
 import { resolveAndPersistTtsPlaybackPlan } from '../../src/jobs/playback/plan';
 import { generateExplicitTtsPlaybackSegments } from '../../src/jobs/playback/segment-generation';
 
+vi.mock('../../src/storage/audio-usage', () => ({ createDocumentAudioReporter: () => ({ measure: async () => undefined }) }));
+
 vi.mock('../../src/jobs/playback/plan', () => ({ resolveAndPersistTtsPlaybackPlan: vi.fn() }));
 vi.mock('../../src/jobs/playback/segment-generation', () => ({ generateExplicitTtsPlaybackSegments: vi.fn() }));
 

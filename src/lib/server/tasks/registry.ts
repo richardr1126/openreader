@@ -1,5 +1,6 @@
 import type { TaskRegistry } from './types';
 import { pruneComputeLimits } from './handlers/prune-compute-limits';
+import { pruneApiRecords } from './handlers/prune-api-records';
 import { enqueueMaintenanceTask } from './enqueue-maintenance';
 
 /**
@@ -29,12 +30,30 @@ export const TASK_REGISTRY: TaskRegistry = {
     maxRunMs: 30_000,
     run: pruneComputeLimits,
   },
+  'prune-api-records': {
+    name: 'Clean up API records',
+    description: 'Remove expired app sign-in records and audiobook requests that finished over seven days ago. Audiobook files are not affected.',
+    defaultIntervalMs: 24 * 60 * 60 * 1000,
+    maxRunMs: 45_000,
+    run: pruneApiRecords,
+  },
   'retry-storage-cleanups': {
     name: 'Finish pending deletions',
     description: 'Finish account deletions interrupted by a restart or failed cleanup, then delete audio and exports left by deleted documents and accounts, including the delayed second pass.',
     defaultIntervalMs: 15 * 60 * 1000,
     maxRunMs: 45_000,
     run: (context) => enqueueMaintenanceTask('retry-storage-cleanups', context),
+  },
+  'repair-storage-usage': {
+    name: 'Repair storage usage',
+    description: 'Backfill existing audio totals, then remeasure recently active accounts. Runs on the compute worker.',
+    defaultIntervalMs: 24 * 60 * 60 * 1000,
+    maxRunMs: 45_000,
+    // The cursor marks the backfill as started, so a skipped run must not set it.
+    run: async (context) => {
+      const result = await enqueueMaintenanceTask('repair-storage-usage', context);
+      return result.operationId ? { ...result, cursor: String(Date.now()) } : result;
+    },
   },
   'expire-anonymous-users': {
     name: 'Delete idle guest accounts',

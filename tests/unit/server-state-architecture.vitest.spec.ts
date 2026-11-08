@@ -183,13 +183,14 @@ describe('server-state architecture', () => {
 
   test('keeps DOCX conversion completion on authenticated operation SSE instead of polling', () => {
     const documentsApi = source('src/lib/client/api/documents.ts');
-    const uploadEventsRoute = source('src/app/api/documents/blob/upload/events/route.ts');
-    expect(documentsApi).toContain('new EventSource(documentConversionEventsUrl(conversion))');
-    expect(documentsApi).toContain('/api/documents/blob/upload/events');
+    const uploadEventsRoute = source('src/app/api/v1/uploads/[uploadId]/events/route.ts');
+    const uploadOwner = source('src/lib/server/documents/uploads.ts');
+    expect(documentsApi).toContain('new EventSource(upload.eventsUrl!)');
+    expect(uploadOwner).toContain('/api/v1/uploads/');
     expect(documentsApi).not.toContain('Retry-After');
     expect(documentsApi).not.toContain('conversionRetryDelayMs');
-    expect(uploadEventsRoute).toContain("operation.subject.kind !== 'document_conversion'");
-    expect(uploadEventsRoute).toContain('buildDocxConversionRequest');
+    expect(uploadOwner).toContain("operation?.subject.kind === 'document_conversion'");
+    expect(uploadOwner).toContain('buildDocxConversionRequest');
     expect(uploadEventsRoute).toContain('proxyOperationEvents');
   });
 
@@ -237,6 +238,7 @@ describe('server-state architecture', () => {
       'POST /v1/tts-playback/exports/progress',
       'POST /v1/tts-playback/exports/resolve',
       'POST /v1/tts-playback/plans/jobs',
+      'POST /v1/tts-playback/plans/resolve',
       'POST /v1/tts-playback/sessions/jobs',
       'POST /v1/tts-playback/sessions/prepare',
       'POST /v1/tts-playback/segments/completed',
@@ -286,8 +288,6 @@ describe('server-state architecture', () => {
       '/api/admin/users/[id]',
       '/api/admin/users/delete',
       '/api/auth/[...all]',
-      '/api/compute-limits/status',
-      '/api/documents',
       '/api/documents/[id]/bookmarks',
       '/api/documents/[id]/bookmarks/[bookmarkId]',
       '/api/documents/[id]/opened',
@@ -295,19 +295,10 @@ describe('server-state architecture', () => {
       '/api/documents/[id]/reader-bootstrap',
       '/api/documents/[id]/reader-bootstrap/events',
       '/api/documents/[id]/settings',
-      '/api/documents/blob/get',
       '/api/documents/blob/preview',
       '/api/documents/blob/preview/ensure',
       '/api/documents/blob/preview/events',
       '/api/documents/blob/preview/presign',
-      '/api/documents/blob/upload',
-      '/api/documents/blob/upload/events',
-      '/api/documents/blob/upload/finalize',
-      '/api/documents/blob/upload/presign',
-      '/api/documents/folders',
-      '/api/documents/import-url',
-      '/api/folders',
-      '/api/folders/[id]',
       '/api/gutenberg/books',
       '/api/gutenberg/import',
       '/api/internal/compute/email-execution',
@@ -315,13 +306,14 @@ describe('server-state architecture', () => {
       '/api/internal/compute/limits/consume',
       '/api/internal/compute/limits/policy',
       '/api/internal/compute/maintenance',
+      '/api/internal/compute/storage',
       '/api/internal/compute/tts-credentials',
       '/api/local-library',
       '/api/local-library/content',
+      '/api/mcp',
+      '/api/oauth/client-logo',
+      '/api/oauth/request',
       '/api/tts/cloned-voices',
-      '/api/tts/export/download',
-      '/api/tts/export/events',
-      '/api/tts/export/resolve',
       '/api/tts/models',
       '/api/tts/playback/plans/[planId]/seek-layout',
       '/api/tts/segments/clear',
@@ -335,8 +327,9 @@ describe('server-state architecture', () => {
       '/api/tts/stream/[sessionId]/timeline',
       '/api/tts/stream/sessions',
       '/api/tts/voice-preview',
-      '/api/tts/voices',
       '/api/user/claim',
+      '/api/user/connected-apps',
+      '/api/user/connected-apps/[clientId]',
       '/api/user/export',
       '/api/user/export/download',
       '/api/user/export/events',
@@ -344,6 +337,24 @@ describe('server-state architecture', () => {
       '/api/user/state/onboarding',
       '/api/user/state/preferences',
       '/api/user/state/progress',
+      '/api/v1/documents',
+      '/api/v1/documents/[id]',
+      '/api/v1/documents/[id]/audiobooks',
+      '/api/v1/documents/[id]/audiobooks/[audiobookId]',
+      '/api/v1/documents/[id]/audiobooks/events',
+      '/api/v1/documents/[id]/audiobooks/files/[artifactId]',
+      '/api/v1/documents/[id]/audiobooks/lookup',
+      '/api/v1/documents/[id]/file',
+      '/api/v1/folders',
+      '/api/v1/folders/[id]',
+      '/api/v1/me',
+      '/api/v1/openapi.json',
+      '/api/v1/providers',
+      '/api/v1/uploads',
+      '/api/v1/uploads/[uploadId]',
+      '/api/v1/uploads/[uploadId]/events',
+      '/api/v1/uploads/[uploadId]/file',
+      '/api/v1/voices',
     ]);
     expect(existsSync(path.join(root, 'src/app/api/documents/library/route.ts'))).toBe(false);
     expect(existsSync(path.join(root, 'src/app/api/documents/library/content/route.ts'))).toBe(false);
@@ -427,9 +438,9 @@ describe('server-state architecture', () => {
     const streamSessionRoute = source('src/app/api/tts/stream/sessions/route.ts');
     const streamSessions = source('src/lib/server/tts/playback-sessions.ts');
     const streamTimelineRoute = source('src/app/api/tts/stream/[sessionId]/timeline/route.ts');
-    const exportResolveRoute = source('src/app/api/tts/export/resolve/route.ts');
-    const exportDownloadRoute = source('src/app/api/tts/export/download/route.ts');
-    const exportEventsRoute = source('src/app/api/tts/export/events/route.ts');
+    const audiobooks = source('src/lib/server/audiobooks/audiobooks.ts');
+    const audiobookFileRoute = source('src/app/api/v1/documents/[id]/audiobooks/files/[artifactId]/route.ts');
+    const audiobookEventsRoute = source('src/app/api/v1/documents/[id]/audiobooks/events/route.ts');
     const seekLayoutRoute = source('src/app/api/tts/playback/plans/[planId]/seek-layout/route.ts');
     const workerRoutes = computeWorkerRouteSource();
     const workerHandlers = computeWorkerJobSource();
@@ -529,13 +540,12 @@ describe('server-state architecture', () => {
       expect(slimCompose, composePath).toContain('COMPUTE_WORKER_PUBLIC_URL: ${COMPUTE_WORKER_PUBLIC_URL:-http://localhost:8081}');
       expect(slimCompose, composePath).toContain('- "8081:8081"');
     }
-    expect(clientTts).toContain("fetch('/api/tts/export/resolve'");
-    expect(exportResolveRoute).toContain('buildTtsPlaybackExportArtifactId');
-    expect(exportResolveRoute).toContain('createTtsPlaybackExportArtifactOperation');
-    expect(exportResolveRoute).toContain('/api/tts/export/download?artifactId=');
-    expect(exportDownloadRoute).toContain('getTtsPlaybackExportArtifact');
-    expect(exportDownloadRoute).toContain('sendStorageArtifact');
-    expect(exportEventsRoute).toContain('proxyOperationEvents');
+    expect(clientTts).toContain('/api/v1/documents/');
+    expect(audiobooks).toContain('buildTtsPlaybackExportArtifactId');
+    expect(audiobooks).toContain('createTtsPlaybackExportArtifactOperation');
+    expect(audiobookFileRoute).toContain('findAudiobookFile');
+    expect(audiobookFileRoute).toContain('sendStorageArtifact');
+    expect(audiobookEventsRoute).toContain('proxyOperationEvents');
     expect(workerHandlers).toContain('runTtsPlaybackExportArtifact');
     expect(workerHandlers).toContain('buildAtempoFilter');
     expect(workerHandlers).toContain("'aac'");
@@ -779,13 +789,13 @@ describe('server-state architecture', () => {
     const playbackScope = source('packages/tts/src/playback-scope.ts');
     const playbackStorage = source('packages/compute-worker/src/playback/storage.ts');
     const context = source('src/contexts/TTSContext.tsx');
-    const documentExport = source('src/hooks/audio/useTtsDocumentExport.ts');
+    const audiobooks = source('src/lib/server/audiobooks/audiobooks.ts');
 
     expect(streamSessionRoute).toContain('buildTtsPlaybackCanonicalSessionId');
     expect(streamSessionRoute).toContain("purpose: parsed.generationExtent === 'document' ? 'export-document' : 'live'");
     expect(streamSessionRoute).toContain("return NextResponse.json({ error: 'TTS playback session requires a canonical planObjectKey' }");
     expect(streamSessionRoute).not.toContain('randomUUID()');
-    expect(documentExport).toContain('startIntent: { selectedOrdinal: 0 }');
+    expect(audiobooks).toContain('planning: { ...planning, selectedOrdinal: 0 }');
     expect(context).not.toContain('setSelectedOrdinal(selectedExists ? selected : 0)');
 
     expect(playbackScope).toContain("export type TtsPlaybackSessionPurpose = 'live' | 'export-document'");

@@ -10,6 +10,7 @@ import {
 } from '@/lib/client/api/documents';
 import { Button, SearchField, Select, type SelectOption } from '@/components/ui';
 import { EPUBIcon, RefreshIcon } from '@/components/icons/Icons';
+import { StorageLimitMessage } from '@/components/StorageLimitMessage';
 
 type ImportState = 'importing' | 'added';
 
@@ -108,7 +109,7 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
         delete next[book.id];
         return next;
       });
-      toast.error(err instanceof Error ? err.message : 'Failed to import the book');
+      toast.error(<StorageLimitMessage message={err instanceof Error ? err.message : 'Failed to import the book'} />);
     }
   };
 

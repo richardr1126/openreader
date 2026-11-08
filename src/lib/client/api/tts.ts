@@ -7,16 +7,20 @@ import type {
 } from '@/types/client';
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
-import type { TtsExportAction, TtsExportResolveSnapshot } from '@/types/tts-export';
+import type { Audiobook } from '@/types/tts-export';
+import type { VoiceListResource } from '@/types/voice-api';
+import { parseApiError } from './http';
 
-export const getVoices = async (headers: HeadersInit, signal?: AbortSignal): Promise<VoicesResponse> => {
-  const response = await fetch('/api/tts/voices', {
-    headers,
-    signal,
-  });
+export const getVoices = async (selection: { provider: string; model: string }, signal?: AbortSignal): Promise<VoicesResponse> => {
+  const query = new URLSearchParams();
+  query.set('provider', selection.provider);
+  query.set('model', selection.model);
+  const response = await fetch(`/api/v1/voices?${query}`, { signal });
 
-  if (!response.ok) throw new Error('Failed to fetch voices');
-  return await response.json();
+  if (!response.ok) throw await parseApiError(response, 'Failed to fetch voices');
+  const resource = await response.json() as VoiceListResource;
+  // Personal voices have their own library in the picker.
+  return { voices: resource.data.map(voice => voice.id).filter(id => !id.startsWith('clone:')) };
 };
 
 export const createTtsPlaybackSession = async (
@@ -62,13 +66,13 @@ export const createTtsPlaybackSession = async (
   return await response.json();
 };
 
-export type TtsExportResolvePayload = TtsPlaybackSessionPayload & {
+export type AudiobookRequestPayload = Pick<TtsPlaybackSessionPayload, 'settings' | 'planning' | 'planObjectKey'> & {
   format: 'mp3' | 'm4b';
   speed: number;
-  action: TtsExportAction;
   /** Resolve or build one chapter's download instead of the whole book. */
-  chapterIndex?: number;
+  chapter?: number;
   includeProgress?: boolean;
+  retrySkipped?: boolean;
 };
 
 /** A failed export request, keeping the server's code and retry hint. */
@@ -84,32 +88,57 @@ export class TtsExportRequestError extends Error {
   }
 }
 
-export const resolveTtsExport = async (
-  payload: TtsExportResolvePayload,
-  headers: TTSRequestHeaders,
-  signal?: AbortSignal,
-): Promise<TtsExportResolveSnapshot> => {
-  const response = await fetch('/api/tts/export/resolve', {
-    method: 'POST',
-    headers: headers as HeadersInit,
-    body: JSON.stringify(payload),
-    signal,
-  });
+const audiobooksUrl = (documentId: string) => `/api/v1/documents/${encodeURIComponent(documentId)}/audiobooks`;
 
+async function audiobookResponse(response: Response): Promise<Audiobook> {
   if (!response.ok) {
-    const problem = await response.json().catch(() => null) as Record<string, unknown> | null;
-    const text = (key: string) => (typeof problem?.[key] === 'string' && problem[key] ? problem[key] as string : null);
+    const body = await response.json().catch(() => null) as { error?: { code?: unknown; message?: unknown; retryAfterMs?: unknown } } | null;
+    const problem = body?.error;
     const retryAfterMs = Number(problem?.retryAfterMs);
     throw new TtsExportRequestError(
-      text('detail') ?? text('error') ?? `Audiobook export request failed with status ${response.status}`,
+      typeof problem?.message === 'string' && problem.message
+        ? problem.message
+        : `Audiobook request failed with status ${response.status}`,
       response.status,
-      text('code'),
+      typeof problem?.code === 'string' ? problem.code : null,
       Number.isFinite(retryAfterMs) ? retryAfterMs : null,
     );
   }
-
   return await response.json();
-};
+}
+
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+
+export const startAudiobook = async (
+  documentId: string,
+  payload: AudiobookRequestPayload,
+  signal?: AbortSignal,
+): Promise<Audiobook> => audiobookResponse(await fetch(audiobooksUrl(documentId), {
+  method: 'POST',
+  headers: JSON_HEADERS,
+  body: JSON.stringify(payload),
+  signal,
+}));
+
+export const lookupAudiobook = async (
+  documentId: string,
+  payload: AudiobookRequestPayload,
+  signal?: AbortSignal,
+): Promise<Audiobook> => audiobookResponse(await fetch(`${audiobooksUrl(documentId)}/lookup`, {
+  method: 'POST',
+  headers: JSON_HEADERS,
+  body: JSON.stringify(payload),
+  signal,
+}));
+
+export const stopAudiobook = async (
+  documentId: string,
+  audiobookId: string,
+  signal?: AbortSignal,
+): Promise<Audiobook> => audiobookResponse(await fetch(`${audiobooksUrl(documentId)}/${encodeURIComponent(audiobookId)}`, {
+  method: 'DELETE',
+  signal,
+}));
 
 export type TtsPlaybackPlanPayload = {
   documentId: string;
@@ -266,7 +295,7 @@ export const subscribeTtsExportGenerationEvents = (
   },
 ): (() => void) => {
   const source = new EventSource(
-    `/api/tts/export/events?opId=${encodeURIComponent(input.opId)}&documentId=${encodeURIComponent(input.documentId)}`,
+    `${audiobooksUrl(input.documentId)}/events?opId=${encodeURIComponent(input.opId)}`,
   );
   source.addEventListener('snapshot', (event) => {
     if (!(event instanceof MessageEvent)) return;
@@ -299,7 +328,7 @@ export const subscribeTtsExportArtifactEvents = (
   },
 ): (() => void) => {
   const source = new EventSource(
-    `/api/tts/export/events?opId=${encodeURIComponent(input.opId)}&documentId=${encodeURIComponent(input.documentId)}`,
+    `${audiobooksUrl(input.documentId)}/events?opId=${encodeURIComponent(input.opId)}`,
   );
   source.addEventListener('snapshot', (event) => {
     if (!(event instanceof MessageEvent)) return;

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { NextRequest } from 'next/server';
 import { db } from '@openreader/database';
 import { documents } from '@openreader/database/schema';
@@ -28,9 +28,17 @@ export async function resolveSegmentDocumentScope(
   if (ctxOrRes instanceof Response) return ctxOrRes;
   if (!ctxOrRes.userId) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const storageUserId = ctxOrRes.userId;
-  const allowedUserIds = [storageUserId];
+  const scope = await resolveUserDocumentScope({
+    userId: ctxOrRes.userId,
+    isAnonymous: Boolean(ctxOrRes.user?.isAnonymous),
+  }, documentId);
+  return scope ?? Response.json({ error: 'Document not found' }, { status: 404 });
+}
 
+export async function resolveUserDocumentScope(
+  owner: { userId: string; isAnonymous: boolean },
+  documentId: string,
+): Promise<ResolvedSegmentDocumentScope | null> {
   const rows = (await db
     .select({
       userId: documents.userId,
@@ -39,22 +47,20 @@ export async function resolveSegmentDocumentScope(
       name: documents.name,
     })
     .from(documents)
-    .where(and(eq(documents.id, documentId), inArray(documents.userId, allowedUserIds)))) as Array<{
+    .where(and(eq(documents.id, documentId), eq(documents.userId, owner.userId)))) as Array<{
       userId: string;
       lastModified: number;
       type: string;
       name: string;
     }>;
 
-  const doc = rows.find((row) => row.userId === storageUserId) ?? rows[0];
-  if (!doc) {
-    return Response.json({ error: 'Document not found' }, { status: 404 });
-  }
+  const doc = rows[0];
+  if (!doc) return null;
 
   return {
     storageUserId: doc.userId,
-    userId: ctxOrRes.userId,
-    isAnonymousUser: Boolean(ctxOrRes.user?.isAnonymous),
+    userId: owner.userId,
+    isAnonymousUser: owner.isAnonymous,
     documentVersion: Number(doc.lastModified),
     readerType: toReaderType(doc.type),
     documentName: doc.name,

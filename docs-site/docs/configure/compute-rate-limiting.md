@@ -10,6 +10,9 @@ description: Upload size, per-user limits, and TTS generation tuning in Settings
 | Setting | Key | What it does |
 | --- | --- | --- |
 | **Max upload size** | `maxUploadMb` | The largest document one upload may be, in MB. |
+| **Storage per account** | `limitAccountStorage`, `accountStorageMb` | Optional total for documents and audio. Off by default; enabling reveals 10,240 MB. |
+| **Storage per guest** | `limitGuestStorage`, `guestStorageMb` | Separate guest total. Off by default; enabling reveals 1,024 MB. |
+| **Total guest storage** | `limitGuestStoragePool`, `guestStoragePoolMb` | Shared pool for all guests. Off by default; enabling reveals 10,240 MB. Accounts are unaffected. |
 | Compute limits | `computeLimitPolicies` | Per-user, site, worker and provider limits for every kind of compute work. Not shown in the desktop app. |
 
 Every limit is off by default on a self-hosted install. Turn them on when you run a public or shared instance.
@@ -30,9 +33,45 @@ TTS usage is counted in characters sent to a provider, and only for audio that h
 - Playback can continue through audio that is already generated, and seeking still works.
 - Retries never count twice.
 
-Separate limits apply to signed-in users, guests, and each IP address, plus a backstop per guest device. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**.
+Separate per-user limits apply to signed-in users and guests. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**. Optional creation caps under **Instance** limit new accounts per IP over a rolling period and new guests per IP over the guest idle period. IPv6 addresses share a /64 bucket; stored IP values are keyed hashes. Existing accounts keep working when a creation cap is reached.
+
+The creation caps read the client address from request headers, so they only hold when a reverse proxy sets those headers itself. On Vercel nothing is needed. Elsewhere, put OpenReader behind a proxy that overwrites `X-Real-IP` with the connecting address, and don't expose the app port directly: a client that reaches it without the proxy can send any address it likes. OpenReader reads `X-Real-IP`, then `CF-Connecting-IP`, then the last `X-Forwarded-For` hop.
+
+| Proxy | Setting |
+| --- | --- |
+| nginx | `proxy_set_header X-Real-IP $remote_addr;` |
+| Caddy | `header_up X-Real-IP {remote_host}` inside `reverse_proxy` |
 
 The complete policy, with every value, is in [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). An incomplete or unknown policy in a seed stops startup before anything is written.
+
+### Storage and daily files
+
+**New documents** uses the `document_intake` policy. It is off by default;
+enabling it reveals 10 daily files per guest and 100 per account. Each upload
+preparation, text import or URL import counts once, including failed imports.
+URL imports check the allowance before fetching. The allowance resets at midnight
+UTC and has no worker execution block. Saved policies gain this action's defaults.
+
+**Settings → Storage**, the admin user list and storage caps share one SQL total:
+source document sizes plus generated segment audio, timing sidecars and exports.
+Shared parsed layouts, previews and plans do not count. The worker measures the
+affected document during generation, when a run finishes and after audio deletion;
+opening settings never scans storage. The document settings panel still measures
+one document to separate audio by voice/settings and show shared derived data.
+
+Upload preparation checks the projected total, and registration checks again
+under a transaction so concurrent uploads cannot bypass a cap. New audio checks
+the latest measured total before each uncached segment, even with character
+limits off. Measurements are periodic and in-flight segments can finish, so an
+audio run can cross the byte threshold before stopping. Cached audio remains
+playable. Blocked actions link to Storage to free space; guests can create an
+account when sign-ups are open.
+
+Run **Repair storage usage** in Maintenance after upgrading to backfill existing
+audio before enabling caps. Its first run covers all users; later runs repair
+users active in the last seven days. Failed reports leave the previous total
+until a later run repairs it. Audio left by a removed document still counts until
+its queued cleanup or Reclaim orphaned audio removes it.
 
 ## TTS generation
 

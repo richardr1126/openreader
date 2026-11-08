@@ -53,7 +53,10 @@ export function DocumentStorageSection({ documentId }: { documentId: string }) {
     retry: false,
   });
 
-  const refreshUsage = () => queryClient.invalidateQueries({ queryKey: queryKeys.storageUsage(sessionKey) });
+  const refreshUsage = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: queryKeys.storageUsage(sessionKey) }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.computeLimits(sessionKey) }),
+  ]);
 
   const reclaimMutation = useMutation({
     mutationFn: () => reclaimUnusedDocumentAudio(payload!),

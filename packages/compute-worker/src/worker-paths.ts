@@ -10,3 +10,7 @@ const WORKER_MODULE_ROOT = path.dirname(fileURLToPath(import.meta.url));
 export function resolveWorkerPath(...segments: string[]): string {
   return path.join(WORKER_MODULE_ROOT, ...segments);
 }
+
+export function resolveWorkerEntry(name: string): string {
+  return resolveWorkerPath(`${name}${import.meta.url.endsWith('.ts') ? '.mjs' : '.js'}`);
+}

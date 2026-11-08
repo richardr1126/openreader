@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { createCoalescedAsyncRunner, isPrivacyAcceptedForPolicy, resolveNextOnboardingStep } from '../../src/lib/client/onboarding-flow';
+import { createCoalescedAsyncRunner, isGuestRetentionNoticeDue, isPrivacyAcceptedForPolicy, resolveNextOnboardingStep } from '../../src/lib/client/onboarding-flow';
 
 describe('privacy policy acceptance', () => {
   const updatedAt = 1_000;
@@ -12,13 +12,38 @@ describe('privacy policy acceptance', () => {
   });
 });
 
+describe('guest retention notice', () => {
+  test('is due once and again only when the period shrinks', () => {
+    expect(isGuestRetentionNoticeDue(null, null)).toBe(false);
+    expect(isGuestRetentionNoticeDue(30, null)).toBe(true);
+    expect(isGuestRetentionNoticeDue(30, 30)).toBe(false);
+    expect(isGuestRetentionNoticeDue(90, 30)).toBe(false);
+    expect(isGuestRetentionNoticeDue(14, 30)).toBe(true);
+  });
+});
+
 describe('onboarding flow resolver', () => {
+  test('shows the guest retention notice after privacy and before later steps', () => {
+    const snapshot = {
+      privacyRequired: true,
+      privacyAccepted: false,
+      claimEligible: false,
+      claimHasData: false,
+      guestRetentionPending: true,
+      voicesPending: true,
+      changelogPending: true,
+    };
+    expect(resolveNextOnboardingStep(snapshot)).toBe('privacy');
+    expect(resolveNextOnboardingStep({ ...snapshot, privacyAccepted: true })).toBe('guestRetention');
+  });
+
   test('resolves deterministic order with privacy first', () => {
     const step = resolveNextOnboardingStep({
       privacyRequired: true,
       privacyAccepted: false,
       claimEligible: true,
       claimHasData: true,
+      guestRetentionPending: false,
       voicesPending: false,
       changelogPending: true,
     });
@@ -32,6 +57,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: true,
+      guestRetentionPending: false,
       voicesPending: false,
       changelogPending: true,
     });
@@ -45,6 +71,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: false,
+      guestRetentionPending: false,
       voicesPending: true,
       changelogPending: true,
     });
@@ -58,6 +85,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: false,
+      guestRetentionPending: false,
       voicesPending: false,
       changelogPending: true,
     });
@@ -71,6 +99,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: true,
       claimEligible: true,
       claimHasData: false,
+      guestRetentionPending: false,
       voicesPending: false,
       changelogPending: false,
     });
@@ -79,6 +108,7 @@ describe('onboarding flow resolver', () => {
       privacyAccepted: false,
       claimEligible: false,
       claimHasData: false,
+      guestRetentionPending: false,
       voicesPending: false,
       changelogPending: false,
     });

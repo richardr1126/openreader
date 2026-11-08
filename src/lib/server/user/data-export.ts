@@ -32,6 +32,9 @@ export type UserExportManifest = {
     documentSettings: unknown[];
     authSessions: unknown[];
     linkedAccounts: unknown[];
+    connectedApps: unknown[];
+    audiobookRequests: unknown[];
+    documentAudioUsage: unknown[];
     documents: ExportDocument[];
   };
   includes: {
@@ -61,6 +64,9 @@ export type BuildUserExportManifestInput = {
   documentSettings: unknown[];
   authSessions: unknown[];
   linkedAccounts: unknown[];
+  connectedApps?: unknown[];
+  audiobookRequests?: unknown[];
+  documentAudioUsage?: unknown[];
   documents: ExportDocument[];
   getDocumentObjectKey: (documentId: string) => string;
 };
@@ -94,6 +100,9 @@ export function buildUserExportManifest(input: BuildUserExportManifestInput): Us
     documentSettings,
     authSessions,
     linkedAccounts,
+    connectedApps = [],
+    audiobookRequests = [],
+    documentAudioUsage = [],
     documents,
     getDocumentObjectKey,
   } = input;
@@ -126,8 +135,17 @@ export function buildUserExportManifest(input: BuildUserExportManifestInput): Us
       computeLimitAdmissions,
       computeLimitEvents,
       documentSettings,
-      authSessions,
+      authSessions: authSessions.map((session) => {
+        if (!session || typeof session !== 'object') return session;
+        const safe = { ...session } as Record<string, unknown>;
+        delete safe.ipAddress;
+        delete safe.ip_address;
+        return safe;
+      }),
       linkedAccounts,
+      connectedApps,
+      audiobookRequests,
+      documentAudioUsage,
       documents,
     },
     includes: {

@@ -712,8 +712,9 @@ Observed with computer use on 2026-08-04 against the production build at
   the durable converted `sample.pdf` link, then proves the eight-page PDF reader
   exposes converted Word content and playback controls.
 - `uploadDocumentSources` now follows the returned worker operation through the
-  authenticated `/api/documents/blob/upload/events` SSE proxy, then makes one
-  idempotent finalize call after success. `document-upload-client.vitest.spec.ts`
+  authenticated `/api/v1/uploads/{uploadId}/events` SSE proxy, then makes one
+  idempotent upload-status read after success to register the canonical PDF
+  (moved during public API phase 2). `document-upload-client.vitest.spec.ts`
   proves the event-driven client lifecycle, and
   `document-upload-events-route-worker-proxy.vitest.spec.ts` proves that the
   proxy re-derives conversion ownership before exposing the worker stream.

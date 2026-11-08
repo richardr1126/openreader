@@ -7,10 +7,10 @@ import type {
   ComputeAction,
   ComputeLimitPolicyDocument,
   ComputeLimitScope,
+  WorkerOperationAction,
 } from '@openreader/runtime-config/compute-limits';
 import {
   computePolicyVersion,
-  deriveComputeScopeKey,
   fixedWindow,
   resolveComputeScope,
   type ComputeLimitSubject,
@@ -57,18 +57,22 @@ function rowsAffected(value: unknown): number {
   return 0;
 }
 
+// Admissions active during an upgrade can still name these. Migration 0027 removed
+// their counters, so there is nothing left to decrement.
+const RETIRED_ACTIVE_SCOPES: readonly string[] = ['ip', 'anonymous_device'];
+
 function parseChargedActiveScopes(value: string): ChargedActiveScope[] {
   const parsed = JSON.parse(value) as unknown;
   if (!Array.isArray(parsed) || !parsed.every((entry) => (
     entry && typeof entry === 'object'
-      && ['user', 'anonymous_device', 'ip', 'site'].includes(
+      && ['user', 'site', ...RETIRED_ACTIVE_SCOPES].includes(
         String((entry as Record<string, unknown>).scope),
       )
       && typeof (entry as Record<string, unknown>).scopeKey === 'string'
   ))) {
     throw new Error('Compute admission active scopes are invalid');
   }
-  return parsed as ChargedActiveScope[];
+  return (parsed as ChargedActiveScope[]).filter((entry) => !RETIRED_ACTIVE_SCOPES.includes(entry.scope));
 }
 
 async function decrementActiveGauge(conn: DbTransactionConnection, input: {
@@ -138,7 +142,7 @@ async function reconcileExpiredAdmissions(
 }
 
 export async function reconcileExpiredComputeAdmissions(
-  action: Exclude<ComputeAction, 'tts_synthesis'>,
+  action: WorkerOperationAction,
   nowMs = Date.now(),
 ): Promise<void> {
   await runInDbTransaction((conn) => reconcileExpiredAdmissions(conn, action, nowMs));
@@ -168,7 +172,7 @@ async function existingAdmission(
 
 export async function reserveComputeAdmission(input: {
   policy: ComputeLimitPolicyDocument;
-  action: Exclude<ComputeAction, 'tts_synthesis'>;
+  action: WorkerOperationAction;
   requestKey: string;
   subject: ComputeLimitSubject;
   nowMs?: number;
@@ -201,7 +205,6 @@ export async function reserveComputeAdmission(input: {
   }> = [];
   for (const windowPolicy of actionPolicy.admission.windows) {
     const scope = resolveComputeScope(windowPolicy.scope, input.subject);
-    if (!scope) continue;
     const window = fixedWindow(nowMs, windowPolicy.windowSeconds);
     counters.push({
       scope: scope.scope,
@@ -214,7 +217,6 @@ export async function reserveComputeAdmission(input: {
   }
   for (const activePolicy of actionPolicy.admission.active) {
     const scope = resolveComputeScope(activePolicy.scope, input.subject);
-    if (!scope) continue;
     counters.push({
       scope: scope.scope,
       scopeKey: scope.key,
@@ -272,12 +274,6 @@ export async function reserveComputeAdmission(input: {
         action: input.action,
         state: 'reserved',
         operationId: null,
-        deviceScopeKey: input.subject.isAnonymous && input.subject.deviceId
-          ? deriveComputeScopeKey('anonymous_device', input.subject.deviceId)
-          : input.subject.deviceScopeKey ?? null,
-        ipScopeKey: input.subject.ip
-          ? deriveComputeScopeKey('ip', input.subject.ip)
-          : input.subject.ipScopeKey ?? null,
         activeScopesJson,
         policyVersion: computePolicyVersion(input.policy),
         createdAt: nowMs,

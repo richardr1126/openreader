@@ -303,7 +303,7 @@ export interface ModelDownloadJobResult {
 
 export const MAINTENANCE_TASKS = [
   'delete-users', 'expire-anonymous-users', 'reap-orphaned-blobs',
-  'cleanup-temp-uploads', 'retry-storage-cleanups',
+  'cleanup-temp-uploads', 'retry-storage-cleanups', 'repair-storage-usage',
 ] as const;
 export type MaintenanceTask = typeof MAINTENANCE_TASKS[number];
 
@@ -312,6 +312,7 @@ export interface MaintenanceJobRequest {
   task: MaintenanceTask;
   userIds?: string[];
   idleBefore?: number;
+  activeSince?: number;
 }
 
 export interface MaintenanceProgress {

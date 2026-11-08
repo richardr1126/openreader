@@ -40,13 +40,15 @@ It supports multiple TTS providers, including Kokoro running locally in OpenRead
   - Available languages depend on the configured provider, model, and voice
 - 🎧 **Audiobook Export** in M4B or MP3, assembled by the worker from the same playback cache
 - 🗂️ **Flexible Backend** — embedded SeaweedFS or S3-compatible storage, SQLite or Postgres, server library import, and device sync
+- 🤖 **AI Assistants and Apps** — a built-in [MCP server](./reference/mcp) and [public API](./reference/public-api) with [scoped OAuth sign-in](./reference/oauth)
 - 💻 **Desktop App** for macOS, Windows, and Linux, with local voices and automatic updates
-- 🔐 **Auth and User Isolation** — auth is required, with optional anonymous auth sessions for guest flows
+- 🔐 **Auth and User Isolation** — auth is required, with optional guest sessions
 - 🎨 **Customizable** — 12 built-in light and dark themes plus a custom theme, typography and highlight colors, voice favorites, skipped citations and brackets, and added pauses, as app defaults with per-book overrides
 
 ## 🧭 Key Docs
 
 - **Use it**: [Library](./guide/library), [Reading and Listening](./guide/reading-and-listening), [Audiobook Export](./guide/audiobook-export), [Keyboard Shortcuts](./guide/keyboard-shortcuts)
+- **Connect it**: [Connected Apps](./guide/connected-apps), [MCP](./reference/mcp), [Public API](./reference/public-api), [OAuth clients](./reference/oauth)
 - **Install it**: [Desktop App](./desktop-app), [Docker Quick Start](./docker-quick-start), [Docker Compose](./deploy/docker-compose), [Vercel + External Worker](./deploy/vercel-deployment), [Upgrade from v4](./deploy/upgrade-from-v4)
 - **Run it**: [Administration](./configure/admin-panel), [TTS Providers](./configure/tts-providers), [Environment Variables](./reference/environment-variables)
 

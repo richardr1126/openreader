@@ -13,6 +13,7 @@ export async function enqueueMaintenanceTask(task: MaintenanceRequest['task'], c
     : undefined;
   const operation = await getComputeWorkerClient().createMaintenanceOperation({
     task, runId: context.runId, ...(idleBefore === undefined ? {} : { idleBefore }),
+    ...(task === 'repair-storage-usage' ? { activeSince: context.cursor ? Date.now() - 7 * 86_400_000 : 0 } : {}),
   });
   return { operationId: operation.opId, summary: 'Queued for cleanup' };
 }

@@ -31,8 +31,13 @@ export async function declineOptionalCookies(page: Page) {
   await expect(decline).toBeHidden();
 }
 
-export async function enterAnonymousLibrary(page: Page) {
+export async function startGuestSession(page: Page) {
   await page.goto('/app');
+  await page.getByRole('button', { name: 'Continue as guest', exact: true }).click();
+}
+
+export async function enterAnonymousLibrary(page: Page) {
+  await startGuestSession(page);
 
   const privacyDialog = page.getByRole('dialog', {
     name: 'Privacy & Data Usage',

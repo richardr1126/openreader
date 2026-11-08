@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
+import { PrivateEmail } from '@/components/auth/PrivateEmail';
 import { LockIcon, MailIcon, PencilIcon, UserIcon, XIcon } from '@/components/icons/Icons';
 import { Badge, Button, Field, Input } from '@/components/ui';
 import { useAuthConfig } from '@/contexts/AuthRateLimitContext';
@@ -200,7 +201,7 @@ export function AccountSecurityPanel({ nameOnly = false }: { nameOnly?: boolean 
           icon={MailIcon}
           title="Email address"
           value={<>
-            <span className="min-w-0 break-all font-mono text-foreground">{user.email}</span>
+            <PrivateEmail email={user.email} />
             <Badge tone={user.emailVerified ? 'accent' : 'danger'}>{user.emailVerified ? 'Verified' : 'Not verified'}</Badge>
             {accountEmailsEnabled && !user.emailVerified ? (
               <button type="button" onClick={() => void resendVerification()} disabled={busy !== null} className="font-medium text-accent underline-offset-2 hover:underline disabled:opacity-60">

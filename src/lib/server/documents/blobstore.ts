@@ -310,7 +310,7 @@ export async function putTempDocumentFinalizeReceipt(
 export async function presignGet(
   id: string,
   namespace: string | null,
-  options?: { expiresInSeconds?: number },
+  options?: { expiresInSeconds?: number; contentType?: string; disposition?: string },
 ): Promise<string> {
   const cfg = getS3Config();
   const client = getS3Client();
@@ -320,6 +320,8 @@ export async function presignGet(
     new GetObjectCommand({
       Bucket: cfg.bucket,
       Key: key,
+      ResponseContentType: options?.contentType,
+      ResponseContentDisposition: options?.disposition,
     }),
     { expiresIn: Math.max(30, Math.min(options?.expiresInSeconds ?? 300, 3600)) },
   );

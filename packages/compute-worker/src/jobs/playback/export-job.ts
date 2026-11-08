@@ -1,4 +1,5 @@
 import { getCbrSilenceSecond } from '@openreader/tts/audio-format';
+import { createDocumentAudioReporter } from '../../storage/audio-usage';
 import { mkdtemp, open, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -305,6 +306,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
     } finally {
       if (!committed) await input.storage.deleteObject(objectKey).catch(() => undefined);
       await rm(workDir, { recursive: true, force: true });
+      await createDocumentAudioReporter({ ...input, storageUserId: parsed.storageUserId, documentId: parsed.documentId }).measure(true);
     }
   };
 }

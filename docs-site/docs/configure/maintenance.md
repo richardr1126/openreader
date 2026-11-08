@@ -29,6 +29,7 @@ The desktop app adds **Open logs folder** here.
 | Clean up unowned documents | 6 hours | Removes document files and generated artifacts that no longer have an owner. |
 | Clean up expired files | 1 hour | Removes uploads that were never finished and DOCX conversions after a day, and account export ZIPs after seven days. Audiobooks are kept until their audio is cleared. |
 | Clean up compute history | 1 day | Releases expired compute leases and removes old limit counters and events. |
+| Repair storage usage | 1 day | Backfills audio usage for existing users, then repairs users active in the last seven days. The worker scans audio; pages read the stored SQL totals. |
 | Finish pending deletions | 15 minutes | Finishes account deletions interrupted by a restart or failed cleanup, then deletes audio and exports left by deleted documents and accounts, including the second pass after an account is deleted. On Vercel it runs with the daily cron. |
 | Delete idle guest accounts | 1 day | Off by default. Deletes guests whose account and sessions have been idle for the **Guest idle period** (90 days by default, under Guest sessions), and resumes previously requested deletions. |
 

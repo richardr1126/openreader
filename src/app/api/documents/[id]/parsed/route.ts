@@ -15,7 +15,6 @@ import {
   ComputeAdmissionLimitedError,
   createAdmittedComputeOperation,
 } from '@/lib/server/compute-limits/run-admitted';
-import { getClientIp } from '@/lib/server/rate-limit/request-ip';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,7 +87,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       subject: {
         userId: authCtxOrRes.userId,
         isAnonymous: Boolean(authCtxOrRes.user?.isAnonymous),
-        ip: getClientIp(req),
       },
       create: () => createOrReuseCurrentPdfParseOperation({
         documentId: id,

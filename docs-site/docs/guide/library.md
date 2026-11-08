@@ -43,7 +43,7 @@ PDF and EPUB documents show a thumbnail of their first page or cover. Previews a
 
 ## Storage and your data
 
-**Settings → Storage** (**Library and storage** in the desktop app) shows how much space your documents and audio use. From there you can:
+**Settings → Storage** (**Library and storage** in the desktop app) shows how much space your documents, audio and orphaned audio use. From there you can:
 
 - delete all generated audio,
 - reclaim audio left behind by deleted documents.
