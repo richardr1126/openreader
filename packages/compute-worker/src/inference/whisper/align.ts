@@ -115,6 +115,9 @@ const state = (() => {
 })();
 const alignmentCache = state.alignmentCache;
 const alignmentInFlight = state.alignmentInFlight;
+// Variants whose files were downloaded and verified in this process, so warm
+// alignments skip rehashing the model. A failed check is not remembered.
+const verifiedModelVariants = new Set<WhisperModelVariant>();
 const ALIGNMENT_CACHE_MAX_ENTRIES = 256;
 const ALIGNMENT_TIMEOUT_BUFFER_MS = 2_000;
 const MIN_ALIGNMENT_TIMEOUT_MS = 5_000;
@@ -1000,7 +1003,10 @@ export async function alignAudioWithText(
       await writeFile(inputPath, Buffer.from(new Uint8Array(audioBuffer)));
       await decodeToPcm16(inputPath, pcmPath);
 
-      await ensureWhisperModel({ variant: modelVariant, onProgress: opts.onModelDownloadProgress });
+      if (!verifiedModelVariants.has(modelVariant)) {
+        await ensureWhisperModel({ variant: modelVariant, onProgress: opts.onModelDownloadProgress });
+        verifiedModelVariants.add(modelVariant);
+      }
       const pcmBytes = await readFile(pcmPath);
       const decodedSamples = pcm16ToFloat32(pcmBytes);
       const words: WhisperWord[] = [];

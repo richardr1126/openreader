@@ -9,12 +9,12 @@ const fake = vi.hoisted(() => ({
   modelDir: '',
   active: 0,
   maxActive: 0,
-  runs: [] as Array<{ ids: number[]; style: Float32Array; speed: number }>,
+  runs: [] as Array<{ ids: number[]; style: Float32Array; speed: number; meta: Record<string, unknown> }>,
   onRun: null as null | (() => Promise<void>),
 }));
 
 vi.mock('../../src/inference/onnx-thread', () => {
-  type Feed = { data: Float32Array | BigInt64Array };
+  type Feed = { type: string; data: Float32Array | BigInt64Array; dims: readonly number[] };
   const session = {
     async run(feeds: Record<string, Feed>) {
       fake.active += 1;
@@ -24,6 +24,7 @@ vi.mock('../../src/inference/onnx-thread', () => {
           ids: Array.from(feeds.input_ids!.data as BigInt64Array, Number),
           style: feeds.style!.data as Float32Array,
           speed: (feeds.speed!.data as Float32Array)[0]!,
+          meta: Object.fromEntries(Object.entries(feeds).map(([name, feed]) => [name, { type: feed.type, dims: [...feed.dims] }])),
         });
         await fake.onRun?.();
         // Two frames for every token, and the audio those frames make.
@@ -104,6 +105,11 @@ describe('local Kokoro synthesis', () => {
     expect(run!.style).toHaveLength(STYLE_DIM);
     expect(run!.style[0]).toBe(phonemeCount - 1);
     expect(run!.speed).toBe(1.25);
+    expect(run!.meta).toEqual({
+      input_ids: { type: 'int64', dims: [1, run!.ids.length] },
+      style: { type: 'float32', dims: [1, STYLE_DIM] },
+      speed: { type: 'float32', dims: [1] },
+    });
 
     expect(wav.toString('ascii', 0, 4)).toBe('RIFF');
     expect(wav.readUInt32LE(40)).toBe(run!.ids.length * 2 * 600 * 2);
