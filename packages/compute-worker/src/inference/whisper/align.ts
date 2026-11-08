@@ -116,8 +116,9 @@ const state = (() => {
 const alignmentCache = state.alignmentCache;
 const alignmentInFlight = state.alignmentInFlight;
 // Variants whose files were downloaded and verified in this process, so warm
-// alignments skip rehashing the model. A failed check or a failed alignment
-// window forgets the variant, so the next alignment verifies and repairs it.
+// alignments skip rehashing the model. A failed check or an alignment window
+// that fails for any reason but a timeout forgets the variant, so the next
+// alignment verifies and repairs it.
 const verifiedModelVariants = new Set<WhisperModelVariant>();
 const ALIGNMENT_CACHE_MAX_ENTRIES = 256;
 const ALIGNMENT_TIMEOUT_BUFFER_MS = 2_000;
@@ -501,9 +502,11 @@ export function findSpeechEndSample(window: { start: number; end: number }, samp
   return window.end;
 }
 
+const ALIGNMENT_TIMEOUT_MESSAGE = 'Whisper alignment timed out';
+
 function assertWithinDeadline(deadlineMs: number, timeoutMs: number): void {
   if (Date.now() > deadlineMs) {
-    throw new Error(`Whisper alignment timed out after ${timeoutMs}ms`);
+    throw new Error(`${ALIGNMENT_TIMEOUT_MESSAGE} after ${timeoutMs}ms`);
   }
 }
 
@@ -1034,8 +1037,11 @@ export async function alignAudioWithText(
           deadlineMs,
           timeoutMs,
         }).catch((error: unknown) => {
-          // The files may have changed since they were verified; check (and repair) them next time.
-          verifiedModelVariants.delete(modelVariant);
+          // Any failure but a slow run may mean the files changed since they were
+          // verified; check (and repair) them next time.
+          if (!(error instanceof Error && error.message.startsWith(ALIGNMENT_TIMEOUT_MESSAGE))) {
+            verifiedModelVariants.delete(modelVariant);
+          }
           throw error;
         });
         for (const word of windowWords) {
