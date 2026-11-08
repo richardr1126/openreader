@@ -152,6 +152,10 @@ export function configureComputeJobConcurrency(value: number): void {
   computeJobConcurrency = Number.isFinite(value) && value >= 1 ? Math.floor(value) : 1;
 }
 
+export function getComputeJobConcurrency(): number {
+  return computeJobConcurrency;
+}
+
 export function getAvailableCpuCores(): number {
   if (typeof os.availableParallelism === 'function') {
     const value = os.availableParallelism();

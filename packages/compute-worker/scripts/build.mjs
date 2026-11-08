@@ -47,6 +47,7 @@ const result = await build({
   entryPoints: {
     server: path.join(srcDir, 'server.ts'),
     'inference/onnx-thread-worker': path.join(srcDir, 'inference/onnx-thread-worker.mjs'),
+    'inference/whisper/whisper-thread-worker': path.join(srcDir, 'inference/whisper/whisper-thread-worker.mjs'),
   },
   outdir: distDir,
   // Chunks must sit beside server.js: worker-paths.ts derives the asset root
