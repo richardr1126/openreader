@@ -10,6 +10,7 @@ import { detectParsedPdfLanguage, ensurePdfReady, storedRecord } from '@/lib/ser
 import { resolveDefaultPlaybackRequest } from '@/lib/server/reader/playback';
 import { parseTtsPlaybackRequestBody } from '@/lib/server/tts/playback-request';
 import { readTtsPlaybackPlanArtifact } from '@/lib/server/tts/playback-plans';
+import { getS3Config } from '@/lib/server/storage/s3';
 import { resolveUserDocumentScope } from '@/lib/server/tts/segments-auth';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
@@ -106,6 +107,12 @@ export async function resolveAudiobookIntent(
     });
     if (!parsed) return apiErrorResponse(400, 'REQUEST_INVALID', 'settings or planning is invalid.');
     if (parsed.planObjectKey) {
+      // The key comes from the caller, so only this document's plans are ever read.
+      const planPrefix = `${getS3Config().prefix}/tts_playback_plan_v1/${documentId}/${caller.scope.documentVersion}/${caller.scope.readerType}/`;
+      const signature = parsed.planObjectKey.startsWith(planPrefix) ? parsed.planObjectKey.slice(planPrefix.length) : '';
+      if (!/^[a-f0-9]{8,64}\.json$/i.test(signature)) {
+        return apiErrorResponse(403, 'PLAN_FORBIDDEN', 'The reading plan does not belong to this document.');
+      }
       const { artifact } = await readTtsPlaybackPlanArtifact(parsed.planObjectKey);
       if (artifact.documentId !== documentId || artifact.documentVersion !== caller.scope.documentVersion
         || artifact.readerType !== caller.scope.readerType

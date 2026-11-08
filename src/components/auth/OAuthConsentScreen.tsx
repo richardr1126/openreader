@@ -59,10 +59,15 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
       } else {
         const result = await client.oauth2.consent({ accept, scope: info.scopes.join(' ') });
         if (result.error) throw new Error(result.error.message || 'Unable to complete this request.');
-        // The auth client's redirect hook follows the provider-validated destination.
+        // The auth client's redirect hook follows the provider-validated destination, and the
+        // page can stay open after an app link, so the buttons stay disabled.
+        return;
       }
-    } catch (error) { setError(error instanceof Error ? error.message : 'Unable to complete this request.'); }
-    finally { setDecision(null); }
+      setDecision(null);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Unable to complete this request.');
+      setDecision(null);
+    }
   }
 
   function clearCode() {

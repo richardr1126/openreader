@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import type { NextRequest } from 'next/server';
 
 /**
@@ -17,40 +18,26 @@ import type { NextRequest } from 'next/server';
  *      trusted proxy), as a best-effort fallback for single-proxy self-hosts.
  *   4. NextRequest.ip — runtime-provided connecting address.
  *
+ * A value that isn't an IP address is skipped in favor of the next source.
  * Callers hash this value before persistence. Compute limits key on the user.
  */
-function firstIp(value: string | null): string | null {
-  if (!value) return null;
-  const first = value.split(',')[0]?.trim();
-  return first || null;
+/** A source wins only with a real address, so a junk header can't blank out the cap. */
+function validIp(value: string | null | undefined): string | null {
+  const ip = value?.trim();
+  return ip && isIP(ip.split('%')[0]) ? ip : null;
 }
 
 export function getClientIp(req: Pick<NextRequest, 'headers'>): string | null {
   // 1. Vercel-internal header (clients cannot set x-vercel-* — Vercel strips them).
-  if (process.env.VERCEL) {
-    const vercelIp = firstIp(req.headers.get('x-vercel-forwarded-for'));
-    if (vercelIp) return vercelIp;
-  }
-
+  const vercelIp = process.env.VERCEL ? validIp(req.headers.get('x-vercel-forwarded-for')?.split(',')[0]) : null;
   // 2. Single-value proxy headers set (and overwritten) by the edge.
-  const realIp = req.headers.get('x-real-ip')?.trim();
-  if (realIp) return realIp;
-
-  const cfConnectingIp = req.headers.get('cf-connecting-ip')?.trim();
-  if (cfConnectingIp) return cfConnectingIp;
-
-  // 3. Fall back to the RIGHT-most X-Forwarded-For hop (closest trusted proxy's
-  //    view). Never the left-most, which the client controls.
-  const forwardedFor = req.headers.get('x-forwarded-for');
-  if (forwardedFor) {
-    const parts = forwardedFor.split(',').map((part) => part.trim()).filter(Boolean);
-    const rightmost = parts[parts.length - 1];
-    if (rightmost) return rightmost;
-  }
-
+  // 3. The RIGHT-most X-Forwarded-For hop (closest trusted proxy's view), never the client-controlled left-most.
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',').map((part) => part.trim()).filter(Boolean);
   // 4. Runtime-provided connecting address, when available.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const reqAny = req as any;
-  const ip = typeof reqAny.ip === 'string' ? (reqAny.ip as string) : null;
-  return ip?.trim() || null;
+  const runtimeIp = (req as { ip?: unknown }).ip;
+  return vercelIp
+    ?? validIp(req.headers.get('x-real-ip'))
+    ?? validIp(req.headers.get('cf-connecting-ip'))
+    ?? validIp(forwarded?.at(-1))
+    ?? validIp(typeof runtimeIp === 'string' ? runtimeIp : null);
 }

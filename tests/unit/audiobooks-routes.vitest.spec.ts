@@ -14,6 +14,7 @@ const hoisted = vi.hoisted(() => ({
   getOperation: vi.fn(),
   plan: vi.fn(),
   readPlan: vi.fn(),
+  storageLimit: vi.fn(),
   findPlan: vi.fn(),
   ensurePdf: vi.fn(),
   settingsHash: vi.fn(),
@@ -60,7 +61,7 @@ vi.mock('@openreader/database', () => {
               : hoisted.rows.filter(matches(filters));
             return Object.assign(Promise.resolve(rows), {
               limit: async () => rows,
-              orderBy: () => ({ limit: async () => rows }),
+              orderBy: () => ({ limit: () => ({ offset: async (skip: number) => rows.slice(skip) }) }),
             });
           },
         }),
@@ -106,6 +107,9 @@ vi.mock('@/lib/server/reader/playback', () => ({
 }));
 
 vi.mock('@/lib/server/tts/playback-plans', () => ({ readTtsPlaybackPlanArtifact: hoisted.readPlan }));
+vi.mock('@/lib/server/storage/usage', () => ({ storageLimit: hoisted.storageLimit }));
+vi.mock('@/lib/server/storage/s3', () => ({ getS3Config: () => ({ prefix: 'openreader' }) }));
+const planKey = () => `openreader/tts_playback_plan_v1/doc-1/1/${hoisted.readerType.value}/abcdef12.json`;
 
 vi.mock('@/lib/server/api/principal', () => ({
   resolveApiPrincipal: vi.fn(async () => ({
@@ -227,7 +231,7 @@ function jsonRequest(url: string, body: Record<string, unknown>) {
       format: 'mp3',
       speed: 1,
       settings: { providerRef: 'provider', providerType: 'openai', ttsModel: 'tts-1', voice: 'alloy', nativeSpeed: 1 },
-      planObjectKey: 'plans/doc-1.json',
+      planObjectKey: planKey(),
       ...body,
     }),
   });
@@ -267,8 +271,9 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       hoisted.resolveSession, hoisted.resolveArtifact, hoisted.createPlayback, hoisted.createArtifact,
       hoisted.createAdmitted, hoisted.exportProgress, hoisted.cancelSession, hoisted.artifactId,
       hoisted.getOperation, hoisted.plan,
-      hoisted.readPlan, hoisted.findPlan, hoisted.ensurePdf, hoisted.settingsHash,
+      hoisted.readPlan, hoisted.findPlan, hoisted.ensurePdf, hoisted.settingsHash, hoisted.storageLimit,
     ]) mock.mockReset();
+    hoisted.storageLimit.mockResolvedValue(null);
     // Vite sets BASE_URL to its own base path under test.
     vi.stubEnv('BASE_URL', 'http://localhost:3003');
     hoisted.rows.length = 0;
@@ -330,7 +335,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       documentId: 'doc-1',
       documentVersion: 1,
       settingsHash: 'settings-1',
-      planObjectKey: 'plans/doc-1.json',
+      planObjectKey: planKey(),
     });
 
     await start();
@@ -387,6 +392,17 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(json.artifact.state).toBe('stale');
     expect(json.downloadUrl).toBeNull();
     expect(json.webDownloadUrl).toBeNull();
+  });
+
+  test('a full account gets a storage issue instead of a new file', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 0), chapter(1, 0)]));
+    hoisted.storageLimit.mockResolvedValue({ code: 'ACCOUNT_STORAGE_LIMIT_REACHED', message: 'Storage is full.' });
+
+    const { json } = await start();
+
+    expect(hoisted.createArtifact).not.toHaveBeenCalled();
+    expect(json.artifact).toMatchObject({ state: 'failed', issue: { code: 'ACCOUNT_STORAGE_LIMIT_REACHED' } });
   });
 
   test('rechecks generation status before creating the artifact in the same request', async () => {
@@ -632,6 +648,15 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(hoisted.rows).toHaveLength(0);
   });
 
+  test('refuses a plan key outside this document before reading it', async () => {
+    for (const planObjectKey of ['openreader/documents_v1/doc-1', 'openreader/tts_playback_plan_v1/doc-2/1/html/abcdef12.json',
+      'openreader/tts_playback_plan_v1/doc-1/1/html/../../doc-2/1/html/abcdef12.json']) {
+      expect((await start({ planObjectKey })).status).toBe(403);
+    }
+    expect(hoisted.readPlan).not.toHaveBeenCalled();
+    expect(hoisted.rows).toHaveLength(0);
+  });
+
   test('serializes a signal and GET so they build and admit the file only once', async () => {
     hoisted.resolveSession.mockResolvedValue({ session: { status: 'running' },
       operation: { opId: 'generation-op-1', status: 'running' } });
@@ -828,14 +853,14 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       hoisted.plan.mockResolvedValueOnce({
         opId: 'plan-op',
         status: 'succeeded',
-        result: { planObjectKey: 'plans/doc-1.json' },
+        result: { planObjectKey: planKey() },
       });
       const { advanceAudiobooksAfterOperation } = await import('@/lib/server/audiobooks/audiobooks');
       hoisted.getOperation.mockResolvedValue({ opId: 'plan-op', subject: { kind: 'tts_playback_plan', documentId: 'doc-1' } });
       await advanceAudiobooksAfterOperation('plan-op', 'user-1');
 
       expect(hoisted.createPlayback).toHaveBeenCalledOnce();
-      expect(hoisted.rows[0]?.planObjectKey).toBe('plans/doc-1.json');
+      expect(hoisted.rows[0]?.planObjectKey).toBe(planKey());
     });
   });
 

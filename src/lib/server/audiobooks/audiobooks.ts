@@ -38,6 +38,7 @@ import {
   type ParsedTtsPlaybackRequestBody,
 } from '@/lib/server/tts/playback-request';
 import { TTS_PLAYBACK_SESSION_TTL_MS } from '@/lib/server/tts/playback-sessions';
+import { storageLimit } from '@/lib/server/storage/usage';
 import { resolveUserDocumentScope, type ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import type { Audiobook, AudiobookStatus, TtsExportArtifactState, TtsExportGenerationState, TtsExportIssue } from '@/types/tts-export';
 import { TTS_PLAYBACK_AHEAD_WINDOW } from '@/types/tts';
@@ -473,7 +474,13 @@ async function advanceAudiobook(input: {
     ((command === 'start' || command === 'retry-skipped') && artifactState !== 'ready' && artifactState !== 'building')
     || (command === 'advance' && (artifactState === 'none' || artifactState === 'stale' || failedBeforeLatestRun))
   );
-  if (shouldBuild) {
+  // A file counts toward storage like the audio it is built from, so a full account can't add more.
+  const blockedStorage = shouldBuild ? await storageLimit(subject, 0, runtimeConfig) : null;
+  let artifactIssue: TtsExportIssue | null = null;
+  if (blockedStorage) {
+    artifactState = 'failed';
+    artifactIssue = { code: blockedStorage.code, message: blockedStorage.message };
+  } else if (shouldBuild) {
     try {
       await createAdmittedComputeOperation({
         policy: runtimeConfig.computeLimitPolicies,
@@ -522,7 +529,7 @@ async function advanceAudiobook(input: {
     artifact: {
       state: artifactState,
       operationId: artifact.operation?.opId ?? null,
-      issue: artifactState === 'failed' ? exportOperationIssue(artifact.operation) : null,
+      issue: artifactIssue ?? (artifactState === 'failed' ? exportOperationIssue(artifact.operation) : null),
     },
     downloadUrl: ready ? `/api/v1/documents/${documentId}/audiobooks/files/${artifactId}` : null,
     webDownloadUrl: ready ? webUrl(`/audiobooks/${documentId}/${artifactId}`) : null,
@@ -723,44 +730,58 @@ const UNSETTLED: ReadonlySet<AudiobookStatus> = new Set(['preparing', 'queued', 
  */
 export async function pruneSettledAudiobookRequests(now: number, deadlineAt: number): Promise<number> {
   if (!isComputeWorkerAvailable()) return 0;
-  const rows = await db.select({
-    id: audiobookRequests.id,
-    userId: audiobookRequests.userId,
-    documentId: audiobookRequests.documentId,
-  }).from(audiobookRequests)
-    .where(lt(audiobookRequests.createdAt, now - SETTLED_REQUEST_RETENTION_MS))
-    .orderBy(asc(audiobookRequests.createdAt))
-    .limit(PRUNE_BATCH) as Array<{ id: string; userId: string; documentId: string }>;
   let removed = 0;
-  for (const { id, userId, documentId } of rows) {
-    if (Date.now() >= deadlineAt) break;
-    const scope = await resolveUserDocumentScope({ userId, isAnonymous: false }, documentId);
-    if (!scope) {
-      // The document is gone, and these rows would otherwise fill every batch.
-      await deleteRow(id, userId);
-      removed += 1;
-      continue;
+  // Rows still in use stay put, so later batches skip past them instead of rereading them forever.
+  let kept = 0;
+  while (Date.now() < deadlineAt) {
+    const rows = await db.select({
+      id: audiobookRequests.id,
+      userId: audiobookRequests.userId,
+      documentId: audiobookRequests.documentId,
+    }).from(audiobookRequests)
+      .where(lt(audiobookRequests.createdAt, now - SETTLED_REQUEST_RETENTION_MS))
+      .orderBy(asc(audiobookRequests.createdAt), asc(audiobookRequests.id))
+      .limit(PRUNE_BATCH)
+      .offset(kept) as Array<{ id: string; userId: string; documentId: string }>;
+    for (const { id, userId, documentId } of rows) {
+      if (Date.now() >= deadlineAt) return removed;
+      const outcome = await pruneRequest(id, userId, documentId);
+      // A worker outage only postpones the rest until the next run.
+      if (outcome === 'stop') return removed;
+      if (outcome === 'removed') removed += 1;
+      else kept += 1;
     }
-    const caller: AudiobookCaller = { scope, subject: { userId, isAnonymous: false }, mayGenerate: false };
-    try {
-      await withAudiobookLock(caller, documentId, async () => {
-        // A chapter that no longer exists has nothing left to do.
-        const settled = await getAudiobookUnlocked(caller, id, documentId).then(
-          // A ready file says nothing about a run that is still changing the audio.
-          audiobook => audiobook !== null && !UNSETTLED.has(audiobook.status) && !UNSETTLED.has(audiobook.generation.state),
-          (error: unknown) => {
-            if (error instanceof ChapterNotFoundError) return true;
-            throw error;
-          },
-        );
-        if (!settled) return;
-        await deleteRow(id, userId);
-        removed += 1;
-      });
-    } catch (error) {
-      // A worker outage only postpones this until the next run.
-      if (isComputeWorkerUnavailableError(error)) break;
-      if (error instanceof ApiRequestError) continue;
+    if (rows.length < PRUNE_BATCH) break;
+  }
+  return removed;
+}
+
+async function pruneRequest(id: string, userId: string, documentId: string): Promise<'removed' | 'kept' | 'stop'> {
+  const scope = await resolveUserDocumentScope({ userId, isAnonymous: false }, documentId);
+  if (!scope) {
+    // The document is gone, and these rows would otherwise fill every batch.
+    await deleteRow(id, userId);
+    return 'removed';
+  }
+  const caller: AudiobookCaller = { scope, subject: { userId, isAnonymous: false }, mayGenerate: false };
+  try {
+    return await withAudiobookLock(caller, documentId, async () => {
+      // A chapter that no longer exists has nothing left to do.
+      const settled = await getAudiobookUnlocked(caller, id, documentId).then(
+        // A ready file says nothing about a run that is still changing the audio.
+        audiobook => audiobook !== null && !UNSETTLED.has(audiobook.status) && !UNSETTLED.has(audiobook.generation.state),
+        (error: unknown) => {
+          if (error instanceof ChapterNotFoundError) return true;
+          throw error;
+        },
+      );
+      if (!settled) return 'kept';
+      await deleteRow(id, userId);
+      return 'removed';
+    });
+  } catch (error) {
+    if (isComputeWorkerUnavailableError(error)) return 'stop';
+    if (!(error instanceof ApiRequestError)) {
       logDegraded(serverLogger, {
         event: 'audiobooks.prune.failed',
         msg: 'Failed to check an old audiobook request',
@@ -769,6 +790,6 @@ export async function pruneSettledAudiobookRequests(now: number, deadlineAt: num
         error,
       });
     }
+    return 'kept';
   }
-  return removed;
 }

@@ -13,11 +13,11 @@ test('a download link asks for sign-in, then offers another account when this on
     await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');
     await page.getByPlaceholder('Password', { exact: true }).fill('TestAccount#2026');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'You need access', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Can’t open this audiobook', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/\/audiobooks\/0123456789abcdef\/abcdef12$/);
   };
   await signIn();
-  await expect(page.getByText('First Administrator can’t open this audiobook.', { exact: true })).toBeVisible();
+  await expect(page.getByText('It was deleted, or First Administrator doesn’t have access.', { exact: true })).toBeVisible();
 
   await page.getByRole('button', { name: 'Switch account', exact: true }).click();
   await signIn();
@@ -36,8 +36,9 @@ test('a reader link keeps its place through sign-in, a guest session and a switc
   await page.getByPlaceholder('me@example.com').fill('admin-e2e@example.test');
   await page.getByPlaceholder('Password', { exact: true }).fill('TestAccount#2026');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'You need access', exact: true })).toBeVisible();
-  await expect(page.getByText('First Administrator can’t open this document.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Can’t open this document', exact: true })).toBeVisible();
+  await expect(page.getByText('It was deleted, or First Administrator doesn’t have access.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Back to library', exact: true })).toHaveAttribute('href', '/app');
   await expect(page).toHaveURL(new RegExp(`/pdf/${missingDocument}$`));
 
   await page.getByRole('button', { name: 'Switch account', exact: true }).click();

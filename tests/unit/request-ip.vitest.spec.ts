@@ -50,4 +50,10 @@ describe('getClientIp', () => {
       expect(getClientIp(req)).toBe('10.0.0.1');
     });
   });
+  test('skips a header that is not an IP address', async () => {
+    await withEnv({ VERCEL: undefined }, () => {
+      const req = makeReq({ 'x-real-ip': 'not-an-ip', 'cf-connecting-ip': 'junk', 'x-forwarded-for': '1.2.3.4, 9.9.9.9' });
+      expect(getClientIp(req)).toBe('9.9.9.9');
+    });
+  });
 });
