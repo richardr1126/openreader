@@ -116,7 +116,7 @@ describe('Fish Audio', () => {
     const results = await runProviderCheck({ providerType: 'fish-audio', apiKey: 'test-secret', baseUrl: '',
       defaultModel: 's2.1-pro-free', defaultInstructions: '',
     }, { slug: 'my-fish', enabled: true, matchesDraft: true }, {
-      fetch: fetchMock as typeof fetch, resolveVoices: async () => FISH_AUDIO_VOICES.map(({ id }) => id), workerAvailable: () => true,
+      fetch: fetchMock as typeof fetch, resolveVoices: async () => ({ voices: FISH_AUDIO_VOICES.map(({ id }) => id), status: 'listed' as const }), workerAvailable: () => true,
       synthesizePreview: preview,
     }, new AbortController().signal);
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.fish.audio/model?page_size=1');

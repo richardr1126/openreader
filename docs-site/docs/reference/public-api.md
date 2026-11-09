@@ -160,6 +160,16 @@ caller's saved speech provider/model, then the instance default. Optional
 `provider` (a configured shared-provider slug) and `model` query parameters select
 a different catalogue, subject to the administrator's model policy. The list includes
 the caller's cloned voices for that provider and model; their IDs start with `clone:`.
+`status` is `listed` when the provider named the voices, `defaults` when it has no
+voice list and these are its standard voices, and `unreachable` when it did not answer,
+so the voices are unconfirmed.
+
+`GET /api/v1/documents/{id}/cached-voices` lists the voices the document already has
+audio for, newest first: `provider`, `model`, `voice`, `name`, the `modelSpeed` the
+audio was made at, its `segments` and its `durationMs` at 1x. An audiobook request
+naming that provider, model, voice and `modelSpeed` reuses the audio. Voices whose
+audio no longer matches the document's reading settings, or whose provider is
+disabled, are left out.
 
 Voice IDs are the existing **provider-native strings**, stable within that
 provider and model. They are not global voice names. Use a voice from the same
@@ -177,11 +187,13 @@ curl --cookie cookies.txt \
 ```
 
 The request uses the document's saved settings. Optional `provider` and `model` select
-any enabled provider and a model the instance allows. Saved voices, speeds and options
-apply only to the saved provider and model; any other choice starts from that provider's
-defaults. Optional `voice` selects a
-voice from that provider and model, including a `clone:` voice. A disabled or unknown
-provider, or a voice that is not available there, returns `400`. `speed` ranges from 0.5 to 3 and is rounded to two decimals,
+any enabled provider and a model the instance allows. Saved voices and options apply
+only to the saved provider and model; any other choice starts from that provider's
+defaults. The saved voice speed applies to any model that has one, and `modelSpeed`
+(0.5 to 3) replaces it. Unlike `speed`, it changes the generated audio. Optional `voice`
+selects a voice from that provider and model, including a `clone:` voice. A disabled or
+unknown provider, or a voice the provider does not list, returns `400`; a provider that
+cannot be reached to check the voice returns `503`. `speed` ranges from 0.5 to 3 and is rounded to two decimals,
 and `format` is `mp3` (default) or `m4b`. Other values return `400`. Advanced explicit `settings` and planning references used by
 the web app are described in the specification; ordinary clients can omit them.
 
@@ -205,13 +217,17 @@ Only a caller with `audio:generate` advances a request when reading it. With
 `documents:read` alone, GET and lookup observe and never start work.
 
 A request stays addressable for **seven days** after its last POST and until it
-has finished, then GET returns `404`. The audio and any finished file are not
+has finished or been cancelled, then GET returns `404`. The audio and any finished file are not
 affected: a new POST with the same settings finds them again.
 
 Stop with `DELETE /api/v1/documents/{id}/audiobooks/{audiobookId}`. Generated
-audio remains cached. The request is removed, so a later GET returns `404`. Formats
-and speeds of the same settings share one generation run, so stopping that run also
-ends the other whole-book requests on it. POST again to resume any of them.
+audio remains cached, and the request reports `status: "cancelled"`. Formats and
+speeds of the same settings share one generation run, so stopping that run also
+cancels the other whole-book requests on it. POST again to resume any of them.
+
+If the speech provider fails several segments in a row, generation stops with
+`PROVIDER_UNAVAILABLE` or `PROVIDER_REJECTED` in `generation.issue` rather than
+skipping the rest of the book. POST again once the provider is back.
 `retrySkipped: true` retries skipped whole-book segments. `chapter` is a
 zero-based chapter index for assembling already-settled audio; it does not start
 generation, and chapter Stop is rejected.

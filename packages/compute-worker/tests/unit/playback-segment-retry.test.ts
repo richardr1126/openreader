@@ -59,13 +59,18 @@ async function generate(input: {
   sourceTexts?: string[];
   ordinal?: number;
   speechText?: { citations: boolean; brackets: 'off' | 'both' };
+  count?: number;
 }) {
   let sidecar = input.sidecar;
+  // Later segments of a multi-segment run keep their own records.
+  const others = new Map<number, TtsPlaybackSegmentMetadata>();
+  const first = input.ordinal ?? 0;
   const playbackStorage = {
     artifacts: {
-      readSegmentMetadata: vi.fn(async () => sidecar),
+      readSegmentMetadata: vi.fn(async ({ ordinal }: { ordinal: number }) => (ordinal === first ? sidecar : others.get(ordinal) ?? null)),
       putSegmentMetadata: vi.fn(async (metadata: TtsPlaybackSegmentMetadata) => {
-        sidecar = metadata;
+        if (metadata.ordinal === first) sidecar = metadata;
+        else others.set(metadata.ordinal, metadata);
         return 'sidecar-key';
       }),
       getScopeEpoch: vi.fn(async () => 0),
@@ -99,12 +104,12 @@ async function generate(input: {
     },
     sessionInstanceId: 'instance-1',
     s3Prefix: 'openreader',
-    segments: [{
-      ordinal: input.ordinal ?? 0,
-      segmentKey: 'segment-0',
+    segments: Array.from({ length: input.count ?? 1 }, (_, index) => ({
+      ordinal: (input.ordinal ?? 0) + index,
+      segmentKey: `segment-${index}`,
       text: input.text ?? 'Retry this.',
       locator: { readerType: 'html', location: '1' },
-    }],
+    })),
     sourceSegments: input.sourceTexts?.map((text, ordinal) => ({ ordinal, segmentKey: `source-${ordinal}`, text,
       locator: { readerType: 'html', location: '1' } })),
     putAudioObject: vi.fn(async () => undefined),
@@ -183,5 +188,23 @@ describe('playback segment retries', () => {
       sourceTexts: ['A [note.', 'More note.', 'End] B.'], speechText: { citations: false, brackets: 'both' } });
     expect(mocks.generateTTSBuffer).not.toHaveBeenCalled();
     expect(result.sidecar()).toMatchObject({ ordinal: 1, status: 'completed', alignment: { words: [] } });
+  });
+
+  test('a provider that rejects several segments in a row ends the run instead of skipping the book', async () => {
+    const { TtsProviderFailedError } = await import('../../src/jobs/playback/provider-failure');
+    mocks.generateTTSBuffer.mockReset().mockRejectedValue(Object.assign(new Error('voice not found'), { status: 400 }));
+    const run = generate({ sidecar: null, count: 6 });
+    await expect(run).rejects.toBeInstanceOf(TtsProviderFailedError);
+    await expect(run).rejects.toMatchObject({ code: 'PROVIDER_REJECTED', retryable: false });
+    expect(mocks.generateTTSBuffer.mock.calls.length).toBeLessThan(6);
+  });
+
+  test('a single failed segment is skipped and the run goes on', async () => {
+    mocks.generateTTSBuffer.mockReset()
+      .mockRejectedValueOnce(Object.assign(new Error('bad text'), { status: 400 }))
+      .mockResolvedValue(Buffer.from('mp3'));
+    const result = await generate({ sidecar: null, count: 4 });
+    expect(result.onSegmentErrored).toHaveBeenCalledOnce();
+    expect(result.onSegmentCompleted).toHaveBeenCalledTimes(3);
   });
 });

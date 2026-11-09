@@ -604,6 +604,23 @@ export const ttsPlaybackCompletedSegmentsSchema = z.object({
   })),
 });
 
+/** One document version, whose cached speech settings are listed. */
+export const ttsPlaybackCachedVariantsRequestSchema = z.object({
+  storageUserId: z.string().trim().min(1).max(256),
+  documentId: documentIdSchema,
+  documentVersion: z.number().int().nonnegative(),
+}).strict();
+
+export const ttsPlaybackCachedVariantsSchema = z.object({
+  variants: z.array(z.object({
+    settingsHash: z.string(),
+    settingsJson: z.unknown(),
+    segments: z.number().int().nonnegative(),
+    durationMs: z.number().int().nonnegative(),
+    updatedAt: z.number().int().nonnegative(),
+  })),
+});
+
 export const ttsPlaybackExportProgressSummarySchema = z.object({
   plannedSegments: z.number(),
   completedSegments: z.number(),

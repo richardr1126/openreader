@@ -45,5 +45,7 @@ export function useVoiceManagement(
     if (query.error) console.error('Error fetching voices:', query.error);
   }, [query.error]);
 
-  return { availableVoices, voicesPending: query.isPending, query };
+  /** The provider did not answer, so the voices shown are its defaults, unconfirmed. */
+  const voicesUnreachable = query.data?.status === 'unreachable';
+  return { availableVoices, voicesPending: query.isPending, voicesUnreachable, query };
 }

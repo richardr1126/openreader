@@ -1,3 +1,4 @@
+import type { VoiceListResource } from '@/types/voice-api';
 export type {
   TTSSegmentLocator,
   TTSSegmentSettings,
@@ -33,4 +34,5 @@ export type ClaimableCounts = {
 
 export interface VoicesResponse {
   voices: string[];
+  status: VoiceListResource['status'];
 }

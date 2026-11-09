@@ -227,12 +227,12 @@ export async function runProviderCheck(
 
   let voices: string[] = [];
   try {
-    voices = await deps.resolveVoices({
+    ({ voices } = await deps.resolveVoices({
       provider: draft.providerType,
       model,
       apiKey: draft.apiKey,
       baseUrl: draft.baseUrl || defaultBaseUrlForProviderType(draft.providerType),
-    });
+    }));
   } catch {
     voices = [];
   }

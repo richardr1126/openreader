@@ -32,7 +32,11 @@ describe('shared Select consumers', () => {
   test('audiobook export delegates voice changes to the voice panel', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/AudiobookExportModal.tsx'), 'utf8');
     expect(source).toContain('onClick={onChangeVoice}');
-    expect(source).not.toContain('setBookVoiceAndRestart');
+    // Voice and model-speed edits belong to the voice panel; the export only
+    // reuses a voice the book already has audio for.
+    expect(source).not.toContain('<VoicePicker');
+    expect(source).not.toContain('label="Model speed"');
+    expect(source).toContain('setBookVoiceAndRestart(cachedVoiceChange(');
     expect(source).not.toContain('<Listbox');
     expect(source).not.toContain('<SharedListboxButton');
     expect(source).not.toContain('<SharedListboxOptions');

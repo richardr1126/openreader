@@ -163,6 +163,8 @@ export const audiobookRequests = sqliteTable('audiobook_requests', {
   settingsJson: text('settings_json').notNull(),
   planObjectKey: text('plan_object_key'),
   createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),
+  // A stopped request stays readable as cancelled until retention removes it.
+  cancelledAt: integer('cancelled_at'),
 }, (table) => [
   foreignKey({
     name: 'audiobook_requests_document_fk',

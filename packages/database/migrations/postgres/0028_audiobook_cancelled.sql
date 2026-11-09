@@ -1,0 +1,1 @@
+ALTER TABLE "audiobook_requests" ADD COLUMN "cancelled_at" bigint;

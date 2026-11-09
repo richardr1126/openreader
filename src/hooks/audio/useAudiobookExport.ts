@@ -92,7 +92,6 @@ export function useAudiobookExport(input: {
   const requestControllerRef = useRef<AbortController | null>(null);
   const lastRefreshAtRef = useRef(0);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const autoBuildAttemptRef = useRef<string | null>(null);
   const chapterSubscriptionsRef = useRef(new Map<number, () => void>());
   const chapterRetryTimersRef = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   // Bumped when this export's lifecycle ends (settings change or unmount), so
@@ -229,7 +228,6 @@ export function useAudiobookExport(input: {
     setRequestError(null);
     setRefreshError(null);
     setChapterDownloads({});
-    autoBuildAttemptRef.current = null;
     const chapterSubscriptions = chapterSubscriptionsRef.current;
     const chapterRetryTimers = chapterRetryTimersRef.current;
     return () => {
@@ -300,19 +298,6 @@ export function useAudiobookExport(input: {
     const timer = setTimeout(() => void refresh(), Math.max(STREAM_RECONNECT_DELAY_MS, waitMs));
     return () => clearTimeout(timer);
   }, [isOpen, refresh, snapshot, waitMs]);
-
-  // The server finishes what was asked for without a client. This builds what
-  // was not asked for yet, such as a finished book in another format, or
-  // rebuilds after retried skips. One attempt per artifact/count state avoids
-  // retry loops when the build fails; Generate retries explicitly.
-  useEffect(() => {
-    if (!snapshot || snapshot.generation.state !== 'complete') return;
-    if (snapshot.artifact.state !== 'none' && snapshot.artifact.state !== 'stale') return;
-    const attemptKey = `${snapshot.id}:${snapshot.segments?.completedSegments ?? 0}:${snapshot.segments?.skippedSegments ?? 0}`;
-    if (autoBuildAttemptRef.current === attemptKey) return;
-    autoBuildAttemptRef.current = attemptKey;
-    void run('start');
-  }, [run, snapshot]);
 
   const downloadChapter = useCallback(async (chapterIndex: number) => {
     const key = exportKeyRef.current;

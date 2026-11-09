@@ -18,6 +18,7 @@ export const queryKeys = {
   folders: (sessionId: string) => ['folders', sessionId] as const,
   sharedProviders: (sessionId: string) => ['tts-shared-providers', sessionId] as const,
   ttsVoices: (sessionId: string, providerRef: string, model: string) => ['tts-voices', sessionId, providerRef, model] as const,
+  cachedVoices: (sessionId: string, documentId: string) => ['cached-voices', sessionId, documentId] as const,
   claimCounts: (sessionId: string) => ['claim-counts', sessionId] as const,
   computeLimits: (sessionId: string) => ['compute-limits', sessionId] as const,
   storageUsage: (sessionId: string) => ['storage-usage', sessionId] as const,

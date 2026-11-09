@@ -60,6 +60,8 @@ export type TtsPlaybackExportProgressRequest =
   paths['/v1/tts-playback/exports/progress']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackExportProgressSummary =
   paths['/v1/tts-playback/exports/progress']['post']['responses'][200]['content']['application/json'];
+export type TtsPlaybackCachedVariants =
+  paths['/v1/tts-playback/cached-variants']['post']['responses'][200]['content']['application/json']['variants'];
 export type TtsPlaybackCompletedSegments =
   paths['/v1/tts-playback/segments/completed']['post']['responses'][200]['content']['application/json'];
 export type DocumentPreviewRequest =

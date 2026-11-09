@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { AppConfigValues } from '@/types/config';
+import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings, type BookSpeechSettings } from '@/types/document-settings';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
@@ -30,7 +31,15 @@ type UseTtsPlaybackSettingsInput = {
   defaultVoice: string;
   defaultVoiceSpeed: number;
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
+  updateConfig: (patch: Partial<AppConfigValues>) => Promise<void>;
   reacquirePlaybackPlan: () => Promise<void>;
+};
+
+export type BookVoiceChange = {
+  voice?: string | null;
+  nativeSpeed?: number | null;
+  /** The provider and model the voice belongs to, when it is not the current one. */
+  target?: { providerRef: string; providerType: TtsProviderType; ttsModel: string };
 };
 
 export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
@@ -54,6 +63,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     defaultVoice,
     defaultVoiceSpeed,
     updateConfigKey,
+    updateConfig,
     reacquirePlaybackPlan,
   } = input;
 
@@ -117,21 +127,31 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
    * Changes this book's own voice and/or model speed as one restart: a single
    * plan reset and reacquire. `null` returns that field to the user's default,
    * and a value equal to the default is not stored as an override.
+   *
+   * A `target` on another provider or model first switches the saved provider
+   * and model (for every book, as Settings does), then binds this book's voice
+   * to it. Its values are stored as given, since the defaults belong to the
+   * provider being left.
    */
-  const setBookVoiceAndRestart = useCallback((change: { voice?: string | null; nativeSpeed?: number | null }) => {
+  const setBookVoiceAndRestart = useCallback((change: BookVoiceChange) => {
     if (!documentId || !readerSettings) return;
     if (change.voice === undefined && change.nativeSpeed === undefined) return;
+    const switching = change.target
+      && (change.target.providerRef !== providerRef || change.target.ttsModel !== ttsModel)
+      ? change.target : null;
+    const boundRef = switching?.providerRef ?? providerRef;
+    const boundModel = switching?.ttsModel ?? ttsModel;
     const current = readerSettings.voiceOverride;
-    const matching = current?.providerRef === providerRef && current.ttsModel === ttsModel ? current : undefined;
+    const matching = current?.providerRef === boundRef && current.ttsModel === boundModel ? current : undefined;
     const pick = <T,>(next: T | null | undefined, existing: T | undefined, fallback: T): T | undefined => {
       const value = next === undefined ? existing : next ?? undefined;
-      return value === fallback ? undefined : value;
+      return !switching && value === fallback ? undefined : value;
     };
     const next = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, {
       ...readerSettings,
       voiceOverride: {
-        providerRef,
-        ttsModel,
+        providerRef: boundRef,
+        ttsModel: boundModel,
         voice: pick(change.voice, matching?.voice, defaultVoice),
         voiceSpeed: pick(change.nativeSpeed, matching?.voiceSpeed, defaultVoiceSpeed),
       },
@@ -143,6 +163,9 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         // A failed save rolls back here instead of throwing, so the restart
         // still reacquires the plan and clears processing.
         try {
+          if (switching) {
+            await updateConfig({ providerRef: switching.providerRef, providerType: switching.providerType, ttsModel: switching.ttsModel });
+          }
           // The audio controller's snapshot does not own live font/color edits.
           // Omit those fields so the server preserves their latest values.
           const saved = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
@@ -165,6 +188,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     restartAfterConfigUpdate,
     setReaderSettings,
     ttsModel,
+    updateConfig,
   ]);
 
   const setAudioPlayerSpeedAndRestart = useCallback((speed: number) => {

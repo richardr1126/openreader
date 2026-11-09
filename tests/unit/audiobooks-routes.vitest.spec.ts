@@ -376,9 +376,9 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     hoisted.exportProgress.mockImplementation(() => new Promise(() => undefined));
     const { json } = await stop(started.id);
     expect(hoisted.cancelSession).toHaveBeenCalledWith('session-1', 'observed-run');
-    expect(json.generation.state).toBe('stopped');
+    expect(json).toMatchObject({ status: 'cancelled', generation: { state: 'stopped' } });
     expect(hoisted.exportProgress).not.toHaveBeenCalled();
-    expect(hoisted.rows).toHaveLength(0);
+    expect(hoisted.rows).toEqual([expect.objectContaining({ id: started.id, cancelledAt: expect.any(Number) })]);
   });
 
   test('detects a stale file using durable operation counts during fast discovery', async () => {
@@ -505,7 +505,14 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(hoisted.createPlayback).not.toHaveBeenCalled();
 
     await stop(started.id);
-    expect((await get(started.id)).status).toBe(404);
+    const cancelled = await get(started.id);
+    expect(cancelled).toMatchObject({ status: 200, json: { status: 'cancelled' } });
+    expect(hoisted.createPlayback).not.toHaveBeenCalled();
+
+    // Asking again resumes it.
+    await start();
+    expect(hoisted.rows[0].cancelledAt).toBeNull();
+    expect(hoisted.createPlayback).toHaveBeenCalledOnce();
   });
 
   test('session expiry does not turn a failed run into a new synthesis request', async () => {
@@ -677,7 +684,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(hoisted.createAdmitted).toHaveBeenCalledOnce();
   });
 
-  test('a GET waiting behind Stop observes the deleted intent and cannot start work', async () => {
+  test('a GET waiting behind Stop observes the cancelled request and cannot start work', async () => {
     hoisted.resolveSession.mockResolvedValue({ session: { status: 'running', generationRunId: 'run-1' },
       operation: { opId: 'generation-op-1', status: 'running' } });
     const { json } = await start();
@@ -695,7 +702,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     const reading = get(json.id);
     release();
     await stopping;
-    expect((await reading).status).toBe(404);
+    expect(await reading).toMatchObject({ status: 200, json: { status: 'cancelled' } });
     expect(hoisted.createPlayback).not.toHaveBeenCalled();
   });
 
@@ -997,7 +1004,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       ));
     });
 
-    test('cancelling a run ends the formats sharing it and leaves other settings', async () => {
+    test('cancelling a run cancels the formats sharing it and leaves other settings', async () => {
       hoisted.resolveSession.mockResolvedValue(running);
       const mp3 = (await start({ includeProgress: false })).json;
       const m4b = (await start({ includeProgress: false, format: 'm4b' })).json;
@@ -1010,11 +1017,11 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       expect((await stop(mp3.id)).json.generation.state).toBe('stopped');
 
       expect(hoisted.cancelSession).toHaveBeenCalledOnce();
-      expect((await get(m4b.id)).status).toBe(404);
-      expect(hoisted.rows.map((row) => row.id)).toEqual([other.id]);
+      expect((await get(m4b.id)).json.status).toBe('cancelled');
+      expect(hoisted.rows.filter((row) => !row.cancelledAt).map((row) => row.id)).toEqual([other.id]);
     });
 
-    test('with nothing to cancel, only the named request ends', async () => {
+    test('with nothing to cancel, only the named request is cancelled', async () => {
       hoisted.resolveSession.mockResolvedValue(completeSession);
       const mp3 = (await start()).json;
       const m4b = (await start({ format: 'm4b' })).json;
@@ -1022,7 +1029,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       await stop(mp3.id);
 
       expect(hoisted.cancelSession).not.toHaveBeenCalled();
-      expect(hoisted.rows.map((row) => row.id)).toEqual([m4b.id]);
+      expect(hoisted.rows.filter((row) => !row.cancelledAt).map((row) => row.id)).toEqual([m4b.id]);
     });
 
     test('a chapter request keeps going when the whole-book run is stopped', async () => {
@@ -1034,7 +1041,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
         .mockResolvedValue({ session: { status: 'canceled' }, operation: null });
 
       await stop(mp3.id);
-      expect(hoisted.rows.map((row) => row.id)).toEqual(['chapter-row']);
+      expect(hoisted.rows.filter((row) => !row.cancelledAt).map((row) => row.id)).toEqual(['chapter-row']);
     });
   });
 

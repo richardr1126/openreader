@@ -1,0 +1,1 @@
+ALTER TABLE `audiobook_requests` ADD `cancelled_at` integer;

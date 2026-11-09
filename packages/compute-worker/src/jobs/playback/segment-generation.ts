@@ -24,12 +24,16 @@ import { resolveClonedVoice } from './cloned-voice';
 import type { TtsPlaybackRequest } from './schemas';
 import type { ModelDownloadProgressHandler } from '../../inference/model-download';
 import { ProviderCapacityWaitTimeoutError } from '../provider-capacity';
+import { TtsProviderFailedError } from './provider-failure';
 
 const SEGMENT_MAX_ATTEMPTS = 3;
 // A 429 already cools down shared provider capacity, so later attempts wait
 // for the provider window instead of hammering it.
 const SEGMENT_RATE_LIMIT_MAX_ATTEMPTS = 6;
 const SEGMENT_RETRY_BACKOFF_MS = 1_000;
+// Each failed segment has already been retried, so this many in a row means the
+// provider itself is failing: the run stops instead of failing every segment.
+const PROVIDER_FAILURE_SEGMENT_LIMIT = 3;
 // Keep a small ordered pipeline full so a provider configured for parallel
 // requests can build playback runway. Provider capacity remains the actual,
 // admin-controlled concurrency limit; this is only bounded local look-ahead.
@@ -266,6 +270,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     }
   }
   let stopScheduling = false;
+  let consecutiveFailedSegments = 0;
 
   const readSidecar = (segment: (typeof normalized)[number]) =>
     playbackStorage.artifacts.readSegmentMetadata({
@@ -713,6 +718,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }
 
       if (completed) {
+        consecutiveFailedSegments = 0;
         await input.onSegmentCompleted?.(planOrdinal);
         return completedAlignment;
       }
@@ -727,6 +733,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }).catch(() => undefined);
       leaseSettled = true;
       await input.onSegmentErrored?.(planOrdinal);
+      consecutiveFailedSegments += 1;
+      if (consecutiveFailedSegments >= PROVIDER_FAILURE_SEGMENT_LIMIT) {
+        const status = lastErrorInfo?.upstreamStatus;
+        throw new TtsProviderFailedError(
+          status !== undefined && status < 500 ? 'PROVIDER_REJECTED' : 'PROVIDER_UNAVAILABLE',
+          lastErrorInfo?.message ?? (lastError instanceof Error ? lastError.message : String(lastError)),
+        );
+      }
       return null;
     } finally {
       if (!leaseSettled) await releaseOwnLease(segment, audioKey).catch(() => undefined);
