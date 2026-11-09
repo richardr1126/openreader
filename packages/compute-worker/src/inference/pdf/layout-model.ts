@@ -1,8 +1,7 @@
-import * as ort from 'onnxruntime-node';
 import { readFile } from 'fs/promises';
 import type { LayoutRegion, PdfTextItem } from './document-layout';
 import { ensureModel, MODEL_CONFIG_PATH, MODEL_PREPROCESSOR_PATH } from './model';
-import { runLayoutInference } from './layout-inference';
+import { openOnnxThreadSession, type OnnxFeed, type OnnxThreadSession } from '../onnx-thread';
 
 interface RunLayoutInput {
   pageWidth: number;
@@ -76,6 +75,7 @@ interface ModelPreprocessor {
   std: [number, number, number];
 }
 
+let sessionPromise: Promise<OnnxThreadSession> | null = null;
 let idToLabelPromise: Promise<Record<number, string>> | null = null;
 let preprocessorPromise: Promise<ModelPreprocessor> | null = null;
 let canvasFnsPromise: Promise<{
@@ -109,6 +109,14 @@ async function getCanvasFns(): Promise<{
     })();
   }
   return canvasFnsPromise;
+}
+
+function getSession(modelPath: string): Promise<OnnxThreadSession> {
+  sessionPromise ??= openOnnxThreadSession(modelPath).catch((error: unknown) => {
+    sessionPromise = null;
+    throw error;
+  });
+  return sessionPromise;
 }
 
 async function getIdToLabel(): Promise<Record<number, string>> {
@@ -170,7 +178,7 @@ function preprocessResized(
   image: CanvasImageSource,
   preprocessor: ModelPreprocessor,
   createCanvasFn: (width: number, height: number) => { getContext: (kind: '2d') => CanvasRenderingContext2D },
-): ort.Tensor {
+): OnnxFeed {
   const canvas = createCanvasFn(preprocessor.inputWidth, preprocessor.inputHeight);
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#ffffff';
@@ -197,7 +205,7 @@ function preprocessResized(
       chw[channelSize * 2 + idx] = (b - preprocessor.mean[2]) / Math.max(1e-8, preprocessor.std[2]);
     }
   }
-  return new ort.Tensor('float32', chw, [1, 3, preprocessor.inputHeight, preprocessor.inputWidth]);
+  return { type: 'float32', data: chw, dims: [1, 3, preprocessor.inputHeight, preprocessor.inputWidth] };
 }
 
 function clampBox(
@@ -260,10 +268,12 @@ export async function runLayoutModel(input: RunLayoutInput): Promise<LayoutRegio
 
     const decodedPageImage = await canvasFns.loadImageFn(pageImage);
     const pixelValues = preprocessResized(decodedPageImage, preprocessor, canvasFns.createCanvasFn);
-    const output = await runLayoutInference(modelPath, pixelValues.data as Float32Array, pixelValues.dims);
+    // Preprocessing owns this dedicated float buffer; the run takes it rather
+    // than retaining a second 800x800x3 copy while native inference runs.
+    const output = await (await getSession(modelPath)).run({ pixel_values: pixelValues });
 
-    const logits = output.logits?.data as Float32Array | undefined;
-    const predBoxes = output.pred_boxes?.data as Float32Array | undefined;
+    const logits = output.logits as Float32Array | undefined;
+    const predBoxes = output.pred_boxes as Float32Array | undefined;
     if (!logits || !predBoxes) return [];
     if (predBoxes.length === 0 && logits.length === 0) return [];
     if (predBoxes.length === 0 || logits.length === 0) {

@@ -1,29 +1,24 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockState = vi.hoisted(() => ({
+  feeds: [] as Array<Record<string, { type: string; data: Float32Array | BigInt64Array; dims: readonly number[] }>>,
   runOutput: {
     logits: { data: new Float32Array() },
     pred_boxes: { data: new Float32Array() },
   },
 }));
 
-vi.mock('onnxruntime-node', () => ({
-  InferenceSession: {
-    create: vi.fn(async () => ({
-      run: vi.fn(async () => mockState.runOutput),
-    })),
-  },
-  Tensor: class Tensor {
-    constructor(
-      public type: string,
-      public data: Float32Array,
-      public dims: number[],
-    ) {}
-  },
-}));
-
-vi.mock('../../../src/inference/pdf/layout-inference', () => ({
-  runLayoutInference: vi.fn(async () => mockState.runOutput),
+vi.mock('../../../src/inference/onnx-thread', () => ({
+  openOnnxThreadSession: vi.fn(async () => ({
+    run: vi.fn(async (feeds: (typeof mockState.feeds)[number]) => {
+      mockState.feeds.push(feeds);
+      return {
+      logits: mockState.runOutput.logits.data,
+      pred_boxes: mockState.runOutput.pred_boxes.data,
+      };
+    }),
+    release: vi.fn(async () => undefined),
+  })),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -80,13 +75,10 @@ vi.mock('../../../src/inference/pdf/model', () => ({
   MODEL_PREPROCESSOR_PATH: '/tmp/model-preprocessor.json',
 }));
 
-vi.mock('../../../src/infrastructure/config', () => ({
-  getOnnxThreadsPerJob: vi.fn(() => 1),
-}));
-
 describe('runLayoutModel', () => {
   beforeEach(() => {
     vi.resetModules();
+    mockState.feeds = [];
     mockState.runOutput = {
       logits: { data: new Float32Array() },
       pred_boxes: { data: new Float32Array() },
@@ -119,6 +111,11 @@ describe('runLayoutModel', () => {
       pageImage: Buffer.from([1]),
     });
 
+    expect(mockState.feeds).toHaveLength(1);
+    const { pixel_values: pixelValues } = mockState.feeds[0]!;
+    expect(pixelValues?.type).toBe('float32');
+    expect(pixelValues?.dims).toEqual([1, 3, 2, 2]);
+    expect(pixelValues?.data).toEqual(new Float32Array(3 * 2 * 2).fill(1));
     expect(regions).toHaveLength(2);
     expect(regions[0]?.label).toBe('text');
     expect(regions[0]?.confidence).toBeCloseTo(0.9168273, 6);

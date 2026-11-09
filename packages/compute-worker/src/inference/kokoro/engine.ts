@@ -1,5 +1,6 @@
 /**
- * Kokoro-82M on onnxruntime-node, in the worker process.
+ * Kokoro-82M on onnxruntime-node, on its own thread of the worker process so a
+ * run never stalls audio streaming, events or job handling.
  *
  * Text goes through the Misaki port for English and the learned tables for
  * Spanish, Hindi, Italian and Portuguese (no espeak, no GPL phonemizer), is split
@@ -14,8 +15,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { normalizeVoiceCustomization, type VoiceCustomization } from '@openreader/tts/voice-customization';
-import * as ort from 'onnxruntime-node';
-import { getOnnxThreadsPerJob } from '../../infrastructure/config';
+import { openOnnxThreadSession, type OnnxThreadSession } from '../onnx-thread';
 import type { ModelDownloadProgressHandler } from '../model-download';
 import {
   ensureKokoroAssets,
@@ -342,7 +342,7 @@ interface Phonemizer {
 }
 
 interface KokoroRuntime {
-  session: ort.InferenceSession;
+  session: OnnxThreadSession;
   g2p(language: KokoroLanguage): Promise<Phonemizer>;
   voice(name: string): Promise<Float32Array>;
 }
@@ -351,13 +351,7 @@ let runtime: Promise<KokoroRuntime> | null = null;
 
 async function loadRuntime(modelDir?: string): Promise<KokoroRuntime> {
   const at = (relative: string) => kokoroAssetPath(relative, modelDir);
-  const session = await ort.InferenceSession.create(at(KOKORO_MODEL_FILE), {
-    executionProviders: ['cpu'],
-    graphOptimizationLevel: 'all',
-    intraOpNumThreads: getOnnxThreadsPerJob(),
-    interOpNumThreads: 1,
-    executionMode: 'sequential',
-  });
+  const session = await openOnnxThreadSession(at(KOKORO_MODEL_FILE));
 
   const languages = new Map<KokoroLanguage, Promise<Phonemizer>>();
   const voices = new Map<string, Promise<Float32Array>>();
@@ -506,17 +500,17 @@ export async function synthesizeKokoro(
     const row = Math.min(VOICE_ROWS - 1, Math.max(0, length(chunk.phonemes) - 1));
     const style = voicePack.slice(row * STYLE_DIM, (row + 1) * STYLE_DIM);
     const output = await runExclusive(() => kokoro.session.run({
-      input_ids: new ort.Tensor('int64', ids, [1, ids.length]),
-      style: new ort.Tensor('float32', style, [1, STYLE_DIM]),
-      speed: new ort.Tensor('float32', new Float32Array([speed]), [1]),
+      input_ids: { type: 'int64', data: ids, dims: [1, ids.length] },
+      style: { type: 'float32', data: style, dims: [1, STYLE_DIM] },
+      speed: { type: 'float32', data: new Float32Array([speed]), dims: [1] },
     }), signal);
-    const waveform = output.waveform!.data as Float32Array;
+    const waveform = output.waveform as Float32Array;
     if (waveform.length === 0) throw new Error('Kokoro returned empty audio');
     if (sampleCount && customization.piecePauseMilliseconds) {
       const silence = new Float32Array(Math.round(KOKORO_SAMPLE_RATE * customization.piecePauseMilliseconds / 1000));
       audio.push(silence); sampleCount += silence.length;
     }
-    tokenSpans(chunk, offsets, output.duration!.data as BigInt64Array, sampleCount, spans);
+    tokenSpans(chunk, offsets, output.duration as BigInt64Array, sampleCount, spans);
     audio.push(waveform);
     sampleCount += waveform.length;
   }
