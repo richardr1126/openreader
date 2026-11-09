@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   access: vi.fn(), create: vi.fn(), voices: vi.fn(), providers: vi.fn(), start: vi.fn(), get: vi.fn(), stop: vi.fn(), caller: vi.fn(), intent: vi.fn(),
   worker: vi.fn(() => true), cached: vi.fn(), owner: vi.fn(), requests: vi.fn(), list: vi.fn(),
   update: vi.fn(), remove: vi.fn(), require: vi.fn(), prepare: vi.fn(), submit: vi.fn(),
-  folders: vi.fn(), createFolder: vi.fn(), updateFolder: vi.fn(), deleteFolder: vi.fn(),
+  folders: vi.fn(), requireFolder: vi.fn(), createFolder: vi.fn(), updateFolder: vi.fn(), deleteFolder: vi.fn(),
 }));
 vi.mock('@/lib/server/auth/auth', () => ({ getTrustedOrigins: () => ['http://localhost:3003'] }));
 vi.mock('@/lib/server/auth/config', () => ({ getRequiredAuthEnv: () => ({ baseUrl: 'http://localhost:3003' }) }));
@@ -22,7 +22,7 @@ vi.mock('@/lib/server/documents/resources', () => ({
   listDocumentResources: mocks.list, requireDocument: mocks.require, describeDocument: vi.fn(), updateDocuments: mocks.update, removeDocuments: mocks.remove,
 }));
 vi.mock('@/lib/server/documents/uploads', () => ({ prepareDocumentUpload: mocks.prepare, submitDocumentUpload: mocks.submit, uploadId: (value: string) => value.toLowerCase() }));
-vi.mock('@/lib/server/folders', () => ({ listFolders: mocks.folders, createFolder: mocks.createFolder, updateFolder: mocks.updateFolder, deleteFolder: mocks.deleteFolder,
+vi.mock('@/lib/server/folders', () => ({ listFolders: mocks.folders, requireFolder: mocks.requireFolder, createFolder: mocks.createFolder, updateFolder: mocks.updateFolder, deleteFolder: mocks.deleteFolder,
   folderId: (value: string) => { if (!/^[a-zA-Z0-9-]{1,100}$/.test(value)) throw new Error('Invalid folder ID.'); return value; } }));
 vi.mock('@/lib/server/tts/voices', () => ({ listVoices: mocks.voices, listSpeechProviders: mocks.providers }));
 vi.mock('@/lib/server/tts/cached-voices', () => ({ listCachedVoices: mocks.cached }));
@@ -142,7 +142,10 @@ test('documents rename keeping their extension and move between folders, and fol
   await run('openreader', 'docs list --folder -');
   expect(mocks.list.mock.calls[0][1].toString()).toBe('limit=50&folderId=');
   mocks.folders.mockResolvedValue({ data: [{ id: 'f1', name: 'Papers', position: 1, createdAt: 1, updatedAt: 1 }], nextCursor: null });
-  expect((await run('openreader', 'folders list')).structuredContent).toEqual({ folders: [{ id: 'f1', name: 'Papers' }] });
+  mocks.folders.mockResolvedValueOnce({ data: [{ id: 'f1', name: 'Papers', position: 1, createdAt: 1, updatedAt: 1 }], nextCursor: 'next' });
+  expect((await run('openreader', 'folders list')).structuredContent).toEqual({ folders: [{ id: 'f1', name: 'Papers' }], nextCursor: 'next' });
+  await run('openreader', 'folders list --cursor next');
+  expect(mocks.folders.mock.calls[1][1].toString()).toBe('limit=200&cursor=next');
   mocks.createFolder.mockResolvedValue({ id: 'f3', name: 'Novels' });
   expect((await run('openreader_docs', 'folders create Novels')).structuredContent).toEqual({ folder: { id: 'f3', name: 'Novels' } });
   mocks.updateFolder.mockResolvedValue({ id: 'f1', name: 'Research' });
@@ -157,9 +160,11 @@ test('deleting is its own tool: a document goes with its audio, and a folder kee
   expect((await run('openreader_docs_delete', `docs delete ${doc.id}`)).structuredContent).toEqual({ deleted: true, document: { id: doc.id, name: 'Paper.pdf' } });
   expect(mocks.remove.mock.calls[0][1]).toEqual([doc.id]);
 
-  mocks.folders.mockResolvedValue({ data: [{ id: 'f1', name: 'Papers' }], nextCursor: null });
+  mocks.requireFolder.mockResolvedValueOnce({ id: 'f1', name: 'Papers' });
   expect((await run('openreader_docs_delete', 'folders delete f1')).structuredContent).toEqual({ deleted: true, folder: { id: 'f1', name: 'Papers' } });
   expect(mocks.deleteFolder.mock.calls[0][1]).toBe('f1');
+  const { ApiRequestError } = await import('@/lib/server/api/responses');
+  mocks.requireFolder.mockRejectedValueOnce(new ApiRequestError(404, 'FOLDER_NOT_FOUND', 'Folder not found.'));
   expect((await run('openreader_docs_delete', 'folders delete f9')).structuredContent.error.code).toBe('FOLDER_NOT_FOUND');
   expect(mocks.deleteFolder).toHaveBeenCalledTimes(1);
 });

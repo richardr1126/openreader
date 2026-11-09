@@ -18,7 +18,7 @@ import { documentCaller, documentRequestFailure } from '@/lib/server/documents/r
 import { describeDocument, documentId, documentWebUrl, listDocumentResources, removeDocuments, requireDocument, updateDocuments } from '@/lib/server/documents/resources';
 import { signUploadLink } from '@/lib/server/documents/upload-links';
 import { prepareDocumentUpload, submitDocumentUpload, uploadId } from '@/lib/server/documents/uploads';
-import { createFolder, deleteFolder, folderId, listFolders, updateFolder } from '@/lib/server/folders';
+import { createFolder, deleteFolder, folderId, listFolders, requireFolder, updateFolder } from '@/lib/server/folders';
 import { serverLogger } from '@/lib/server/logger';
 import { listCachedVoices } from '@/lib/server/tts/cached-voices';
 import { listSpeechProviders, listVoices } from '@/lib/server/tts/voices';
@@ -146,9 +146,10 @@ const readCommands: CliCommand<Context>[] = [
   {
     name: ['folders', 'list'],
     summary: 'List the folders in the library, in their sidebar order.',
-    run: async (_input, { principal }) => {
-      const folders = await listFolders(principal, new URLSearchParams({ limit: '200' }));
-      return { folders: folders.data.map(({ id, name }) => ({ id, name })) };
+    flags: { cursor: { type: 'string', description: 'nextCursor from an earlier page.' } },
+    run: async ({ flags }, { principal }) => {
+      const folders = await listFolders(principal, new URLSearchParams({ limit: '200', ...(flags.cursor ? { cursor: String(flags.cursor) } : {}) }));
+      return { folders: folders.data.map(({ id, name }) => ({ id, name })), nextCursor: folders.nextCursor };
     },
   },
   {
@@ -342,12 +343,9 @@ const deleteCommands: CliCommand<Context>[] = [
     args: ['folder'],
     summary: 'Delete a folder. Its documents are kept and move to the top of the library.',
     run: async ({ args }, { principal }) => {
-      const id = folderId(args.folder);
-      const folders = await listFolders(principal, new URLSearchParams({ limit: '200' }));
-      const folder = folders.data.find(candidate => candidate.id === id);
-      if (!folder) throw new ApiRequestError(404, 'FOLDER_NOT_FOUND', 'Folder not found. "folders list" shows the folders.');
+      const { id, name } = await requireFolder(principal, args.folder);
       await deleteFolder(principal, id);
-      return { deleted: true, folder: { id, name: folder.name } };
+      return { deleted: true, folder: { id, name } };
     },
   },
 ];
