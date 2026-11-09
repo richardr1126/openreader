@@ -31,6 +31,7 @@ import {
   argmax,
 } from './decoder';
 import type { ModelDownloadProgressHandler } from '../model-download';
+import { alignWhisperWindow } from './whisper-thread';
 
 export function buildGoertzelCoefficients(freqBins: number, fftSize: number): Float64Array {
   const coeffs = new Float64Array(freqBins);
@@ -54,7 +55,6 @@ export function goertzelPower(samples: Float32Array, coeff: number): number {
 
 interface WhisperAlignmentOptions {
   lang?: string;
-  textHint?: string;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
   shouldStart?: () => boolean | Promise<boolean>;
 }
@@ -89,8 +89,6 @@ type WhisperAlignmentState = {
   alignmentCache: Map<string, TTSSentenceAlignment[]>;
   alignmentInFlight: Map<string, Promise<TTSSentenceAlignment[]>>;
   runtimePromises: Map<WhisperModelVariant, Promise<WhisperRuntime>>;
-  /** Every caller waiting on a variant's download hears its progress, not only the first. */
-  downloadListeners: Map<WhisperModelVariant, Set<ModelDownloadProgressHandler>>;
   alignmentLaneTail: Promise<void>;
   officialMelFilters: Float32Array[] | null;
   emptyPastFeedsTemplates: Map<WhisperModelVariant, Record<string, ort.Tensor>>;
@@ -102,14 +100,12 @@ const state = (() => {
   const existing = g[WHISPER_ALIGNMENT_STATE_KEY] as WhisperAlignmentState | undefined;
   if (existing) {
     existing.alignmentLaneTail ??= Promise.resolve();
-    existing.downloadListeners ??= new Map();
     return existing;
   }
   const created: WhisperAlignmentState = {
     alignmentCache: new Map<string, TTSSentenceAlignment[]>(),
     alignmentInFlight: new Map<string, Promise<TTSSentenceAlignment[]>>(),
     runtimePromises: new Map(),
-    downloadListeners: new Map(),
     alignmentLaneTail: Promise.resolve(),
     officialMelFilters: null,
     emptyPastFeedsTemplates: new Map(),
@@ -119,6 +115,11 @@ const state = (() => {
 })();
 const alignmentCache = state.alignmentCache;
 const alignmentInFlight = state.alignmentInFlight;
+// Variants whose files were downloaded and verified in this process, so warm
+// alignments skip rehashing the model. A failed check or an alignment window
+// that fails for any reason but a timeout forgets the variant, so the next
+// alignment verifies and repairs it.
+const verifiedModelVariants = new Set<WhisperModelVariant>();
 const ALIGNMENT_CACHE_MAX_ENTRIES = 256;
 const ALIGNMENT_TIMEOUT_BUFFER_MS = 2_000;
 const MIN_ALIGNMENT_TIMEOUT_MS = 5_000;
@@ -228,8 +229,9 @@ function pcm16ToFloat32(buffer: Buffer): Float32Array {
 }
 
 function padOrTrimAudio(samples: Float32Array): Float32Array {
-  if (samples.length === N_SAMPLES) return samples;
-  if (samples.length > N_SAMPLES) return samples.subarray(0, N_SAMPLES);
+  // Always a new buffer: the window is handed to the Whisper thread, which
+  // must not detach the whole decoded segment it was cut from.
+  if (samples.length >= N_SAMPLES) return samples.slice(0, N_SAMPLES);
 
   const padded = new Float32Array(N_SAMPLES);
   padded.set(samples, 0);
@@ -500,9 +502,11 @@ export function findSpeechEndSample(window: { start: number; end: number }, samp
   return window.end;
 }
 
+const ALIGNMENT_TIMEOUT_MESSAGE = 'Whisper alignment timed out';
+
 function assertWithinDeadline(deadlineMs: number, timeoutMs: number): void {
   if (Date.now() > deadlineMs) {
-    throw new Error(`Whisper alignment timed out after ${timeoutMs}ms`);
+    throw new Error(`${ALIGNMENT_TIMEOUT_MESSAGE} after ${timeoutMs}ms`);
   }
 }
 
@@ -558,35 +562,14 @@ function buildEmptyPastFeeds(runtime: WhisperRuntime) {
   return feeds;
 }
 
-async function getRuntime(
-  language?: string,
-  onModelDownloadProgress?: ModelDownloadProgressHandler,
-): Promise<WhisperRuntime> {
+/** Loads on the Whisper thread from files alignAudioWithText already downloaded. */
+function getRuntime(language?: string): Promise<WhisperRuntime> {
   const variant = resolveWhisperModelVariant(language);
-  let listeners = state.downloadListeners.get(variant);
-  if (!listeners) {
-    listeners = new Set();
-    state.downloadListeners.set(variant, listeners);
-  }
-  if (onModelDownloadProgress) listeners.add(onModelDownloadProgress);
-  try {
-    return await (state.runtimePromises.get(variant) ?? loadRuntime(variant, listeners));
-  } finally {
-    if (onModelDownloadProgress) listeners.delete(onModelDownloadProgress);
-  }
+  return state.runtimePromises.get(variant) ?? loadRuntime(variant);
 }
 
-function loadRuntime(
-  variant: WhisperModelVariant,
-  listeners: Set<ModelDownloadProgressHandler>,
-): Promise<WhisperRuntime> {
+function loadRuntime(variant: WhisperModelVariant): Promise<WhisperRuntime> {
   const runtimePromise = (async () => {
-    await ensureWhisperModel({
-      variant,
-      onProgress: async (progress) => {
-        await Promise.all([...listeners].map((listener) => listener(progress)));
-      },
-    });
     await loadOfficialMelFilters();
     const paths = getWhisperModelPaths(variant);
 
@@ -733,16 +716,17 @@ function resolveLanguageToken(runtime: WhisperRuntime, lang?: string): number {
   return typeof candidate === 'number' ? candidate : runtime.defaultLanguageToken;
 }
 
-async function runWhisperOnnx(
+/** One window's words. Runs on the Whisper thread (whisper-thread-worker.mjs). */
+export async function runWhisperOnnx(
   audioSamples: Float32Array,
-  opts: WhisperAlignmentOptions,
+  opts: { lang?: string; textHint?: string },
   numFrames: number,
   textShare: number,
   deadlineMs: number,
   timeoutMs: number,
 ): Promise<WhisperWord[]> {
   assertWithinDeadline(deadlineMs, timeoutMs);
-  const runtime = await getRuntime(opts.lang, opts.onModelDownloadProgress);
+  const runtime = await getRuntime(opts.lang);
   const decodeStepLimit = computeAdaptiveDecodeStepLimit(runtime.maxDecodeSteps, opts.textHint, textShare);
   const mel = computeLogMelSpectrogram(audioSamples);
   const encoderPast: Record<string, ort.Tensor> = {};
@@ -1023,6 +1007,10 @@ export async function alignAudioWithText(
       await writeFile(inputPath, Buffer.from(new Uint8Array(audioBuffer)));
       await decodeToPcm16(inputPath, pcmPath);
 
+      if (!verifiedModelVariants.has(modelVariant)) {
+        await ensureWhisperModel({ variant: modelVariant, onProgress: opts.onModelDownloadProgress });
+        verifiedModelVariants.add(modelVariant);
+      }
       const pcmBytes = await readFile(pcmPath);
       const decodedSamples = pcm16ToFloat32(pcmBytes);
       const words: WhisperWord[] = [];
@@ -1040,14 +1028,22 @@ export async function alignAudioWithText(
         const alignedSamples = findSpeechEndSample(window, decodedSamples) - window.start;
         const frameCount = Math.max(1, Math.floor((alignedSamples / HOP_LENGTH) / 2));
         const offsetSec = window.start / SAMPLE_RATE;
-        const windowWords = await runWhisperOnnx(
-          padOrTrimAudio(windowSamples),
-          { ...opts, textHint: text },
-          frameCount,
-          windowSamples.length / Math.max(1, decodedSamples.length),
+        const windowWords = await alignWhisperWindow({
+          samples: padOrTrimAudio(windowSamples),
+          lang: opts.lang,
+          textHint: text,
+          numFrames: frameCount,
+          textShare: windowSamples.length / Math.max(1, decodedSamples.length),
           deadlineMs,
           timeoutMs,
-        );
+        }).catch((error: unknown) => {
+          // Any failure but a slow run may mean the files changed since they were
+          // verified; check (and repair) them next time.
+          if (!(error instanceof Error && error.message.startsWith(ALIGNMENT_TIMEOUT_MESSAGE))) {
+            verifiedModelVariants.delete(modelVariant);
+          }
+          throw error;
+        });
         for (const word of windowWords) {
           words.push({ word: word.word, start: word.start + offsetSec, end: word.end + offsetSec });
         }

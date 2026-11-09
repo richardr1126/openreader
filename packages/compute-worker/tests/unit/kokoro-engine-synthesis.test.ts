@@ -9,37 +9,41 @@ const fake = vi.hoisted(() => ({
   modelDir: '',
   active: 0,
   maxActive: 0,
-  runs: [] as Array<{ ids: number[]; style: Float32Array; speed: number }>,
+  runs: [] as Array<{ ids: number[]; style: Float32Array; speed: number; meta: Record<string, unknown> }>,
   onRun: null as null | (() => Promise<void>),
 }));
 
-vi.mock('onnxruntime-node', () => {
-  class Tensor {
-    constructor(public type: string, public data: unknown, public dims: number[]) {}
-  }
+vi.mock('../../src/inference/onnx-thread', () => {
+  type Feed = { type: string; data: Float32Array | BigInt64Array; dims: readonly number[] };
   const session = {
-    async run(feeds: Record<string, Tensor>) {
+    async run(feeds: Record<string, Feed>) {
       fake.active += 1;
       fake.maxActive = Math.max(fake.maxActive, fake.active);
       try {
         fake.runs.push({
           ids: Array.from(feeds.input_ids!.data as BigInt64Array, Number),
-          style: feeds.style!.data as Float32Array,
+          style: (feeds.style!.data as Float32Array).slice(),
           speed: (feeds.speed!.data as Float32Array)[0]!,
+          meta: Object.fromEntries(Object.entries(feeds).map(([name, feed]) => [name, { type: feed.type, dims: [...feed.dims] }])),
+        });
+        const tokens = (feeds.input_ids!.data as BigInt64Array).length;
+        // The real session transfers the feed buffers to its thread, detaching them here.
+        structuredClone(feeds, {
+          transfer: [...new Set(Object.values(feeds).map((feed) => feed.data.buffer as ArrayBuffer))],
         });
         await fake.onRun?.();
         // Two frames for every token, and the audio those frames make.
-        const tokens = (feeds.input_ids!.data as BigInt64Array).length;
         return {
-          waveform: { data: new Float32Array(tokens * 2 * 600).fill(0.5) },
-          duration: { data: new BigInt64Array(tokens).fill(BigInt(2)) },
+          waveform: new Float32Array(tokens * 2 * 600).fill(0.5),
+          duration: new BigInt64Array(tokens).fill(BigInt(2)),
         };
       } finally {
         fake.active -= 1;
       }
     },
+    release: async () => undefined,
   };
-  return { Tensor, InferenceSession: { create: vi.fn(async () => session) } };
+  return { openOnnxThreadSession: vi.fn(async () => session) };
 });
 
 vi.mock('../../src/inference/kokoro/model-files', async (importOriginal) => {
@@ -105,6 +109,11 @@ describe('local Kokoro synthesis', () => {
     expect(run!.style).toHaveLength(STYLE_DIM);
     expect(run!.style[0]).toBe(phonemeCount - 1);
     expect(run!.speed).toBe(1.25);
+    expect(run!.meta).toEqual({
+      input_ids: { type: 'int64', dims: [1, run!.ids.length] },
+      style: { type: 'float32', dims: [1, STYLE_DIM] },
+      speed: { type: 'float32', dims: [1] },
+    });
 
     expect(wav.toString('ascii', 0, 4)).toBe('RIFF');
     expect(wav.readUInt32LE(40)).toBe(run!.ids.length * 2 * 600 * 2);
