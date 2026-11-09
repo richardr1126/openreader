@@ -27,6 +27,7 @@ type UseTtsPlaybackSettingsInput = {
   /** Reports the settings the server acknowledged, so later reader writes build on them. */
   onSettingsSaved: (settings: DocumentSettings) => void;
   providerRef: string;
+  providerType: TtsProviderType;
   ttsModel: string;
   defaultVoice: string;
   defaultVoiceSpeed: number;
@@ -59,6 +60,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     setReaderSettings,
     onSettingsSaved,
     providerRef,
+    providerType,
     ttsModel,
     defaultVoice,
     defaultVoiceSpeed,
@@ -162,9 +164,11 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
       async () => {
         // A failed save rolls back here instead of throwing, so the restart
         // still reacquires the plan and clears processing.
+        let switched = false;
         try {
           if (switching) {
             await updateConfig({ providerRef: switching.providerRef, providerType: switching.providerType, ttsModel: switching.ttsModel });
+            switched = true;
           }
           // The audio controller's snapshot does not own live font/color edits.
           // Omit those fields so the server preserves their latest values.
@@ -173,6 +177,13 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         } catch (error) {
           console.error('Could not save book voice:', error);
           setReaderSettings(previous);
+          // Other books follow the saved provider, so a switch made for this
+          // book must not outlive the save it was made for.
+          if (switched) {
+            await updateConfig({ providerRef, providerType, ttsModel }).catch((restoreError: unknown) => {
+              console.error('Could not restore the previous provider:', restoreError);
+            });
+          }
           toast.error('Could not save this book\'s voice');
         }
       },
@@ -184,6 +195,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     documentId,
     onSettingsSaved,
     providerRef,
+    providerType,
     readerSettings,
     restartAfterConfigUpdate,
     setReaderSettings,

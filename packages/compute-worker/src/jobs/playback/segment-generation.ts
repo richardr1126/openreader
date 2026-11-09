@@ -270,7 +270,19 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     }
   }
   let stopScheduling = false;
-  let consecutiveFailedSegments = 0;
+  // Failures are judged by their position in this run, not by when they
+  // settle: segments synthesize concurrently, and a cached or generated
+  // segment between two failures breaks the streak.
+  const runPosition = new Map(normalized.map((segment, index) => [segment, index]));
+  const failedPositions = new Set<number>();
+  const failureStreakReached = (position: number) => {
+    for (let start = position - PROVIDER_FAILURE_SEGMENT_LIMIT + 1; start <= position; start += 1) {
+      let failed = 0;
+      while (failed < PROVIDER_FAILURE_SEGMENT_LIMIT && failedPositions.has(start + failed)) failed += 1;
+      if (failed === PROVIDER_FAILURE_SEGMENT_LIMIT) return true;
+    }
+    return false;
+  };
 
   const readSidecar = (segment: (typeof normalized)[number]) =>
     playbackStorage.artifacts.readSegmentMetadata({
@@ -718,7 +730,6 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }
 
       if (completed) {
-        consecutiveFailedSegments = 0;
         await input.onSegmentCompleted?.(planOrdinal);
         return completedAlignment;
       }
@@ -733,8 +744,9 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }).catch(() => undefined);
       leaseSettled = true;
       await input.onSegmentErrored?.(planOrdinal);
-      consecutiveFailedSegments += 1;
-      if (consecutiveFailedSegments >= PROVIDER_FAILURE_SEGMENT_LIMIT) {
+      const position = runPosition.get(segment)!;
+      failedPositions.add(position);
+      if (failureStreakReached(position)) {
         const status = lastErrorInfo?.upstreamStatus;
         throw new TtsProviderFailedError(
           status !== undefined && status < 500 ? 'PROVIDER_REJECTED' : 'PROVIDER_UNAVAILABLE',

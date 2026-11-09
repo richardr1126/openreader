@@ -60,6 +60,7 @@ async function generate(input: {
   ordinal?: number;
   speechText?: { citations: boolean; brackets: 'off' | 'both' };
   count?: number;
+  texts?: string[];
 }) {
   let sidecar = input.sidecar;
   // Later segments of a multi-segment run keep their own records.
@@ -107,7 +108,7 @@ async function generate(input: {
     segments: Array.from({ length: input.count ?? 1 }, (_, index) => ({
       ordinal: (input.ordinal ?? 0) + index,
       segmentKey: `segment-${index}`,
-      text: input.text ?? 'Retry this.',
+      text: input.texts?.[index] ?? input.text ?? 'Retry this.',
       locator: { readerType: 'html', location: '1' },
     })),
     sourceSegments: input.sourceTexts?.map((text, ordinal) => ({ ordinal, segmentKey: `source-${ordinal}`, text,
@@ -197,6 +198,18 @@ describe('playback segment retries', () => {
     await expect(run).rejects.toBeInstanceOf(TtsProviderFailedError);
     await expect(run).rejects.toMatchObject({ code: 'PROVIDER_REJECTED', retryable: false });
     expect(mocks.generateTTSBuffer.mock.calls.length).toBeLessThan(6);
+  });
+
+  test('failures separated by spoken segments are not a failing provider', async () => {
+    mocks.generateTTSBuffer.mockReset().mockImplementation(async (request?: unknown) => {
+      const { text } = request as { text: string };
+      if (text.startsWith('Bad')) throw Object.assign(new Error('bad text'), { status: 400 });
+      return Buffer.from('mp3');
+    });
+    const texts = ['Bad one.', 'Good one.', 'Bad two.', 'Good two.', 'Bad three.', 'Good three.'];
+    const result = await generate({ sidecar: null, count: texts.length, texts });
+    expect(result.onSegmentErrored).toHaveBeenCalledTimes(3);
+    expect(result.onSegmentCompleted).toHaveBeenCalledTimes(3);
   });
 
   test('a single failed segment is skipped and the run goes on', async () => {

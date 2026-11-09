@@ -591,6 +591,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setReaderSettings,
     onSettingsSaved,
     providerRef: configProviderRef,
+    providerType: configProviderType,
     ttsModel,
     defaultVoice: voice,
     defaultVoiceSpeed: speed,
