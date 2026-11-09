@@ -92,7 +92,7 @@ export const publicApiSpec = {
       get: operation('getUpload', 'Read conversion status and finalize the canonical document', 'documents:write', { '200': response('Upload resource. A successful conversion needs this read to register its document.', ref('Upload')) }) },
     '/uploads/{uploadId}/file': { parameters: [parameter('uploadId', 'path', { type: 'string', format: 'uuid' })],
       put: operation('putUploadFile', 'Transfer bytes in proxy mode', 'documents:write', { '204': noContent },
-        { requestBody: { required: true, content: { '*/*': { schema: { type: 'string', format: 'binary' } } } }, description: 'Use the prepared descriptor instead of constructing this URL. The body must match its declared byte length. Presigned mode rejects proxy transfers.' }) },
+        { requestBody: { required: true, content: { '*/*': { schema: { type: 'string', format: 'binary' } } } }, description: 'Use the prepared descriptor instead of constructing this URL. The body must match its declared byte length. Presigned mode rejects proxy transfers. A URL prepared by the MCP docs upload command carries owner, expires and signature query parameters in place of a token, valid for that upload only.' }) },
     '/uploads/{uploadId}/events': { parameters: [parameter('uploadId', 'path', { type: 'string', format: 'uuid' }), parameter('opId', 'query', string, true)],
       get: operation('getUploadEvents', 'Observe an operation belonging to the caller\'s upload', 'documents:read', { '200': eventsResponse }) },
     '/folders': {
@@ -149,7 +149,7 @@ export const publicApiSpec = {
         webUrl: { type: 'string', format: 'uri' }, fileUrl: string })] },
       DocumentList: object({ data: array(ref('DocumentMetadata')), nextCursor: nullableString }),
       CreateDocument: object({ source: { oneOf: [object({ type: { const: 'text' }, text: { ...string, minLength: 1 } }),
-        object({ type: { const: 'url' }, url: { type: 'string', format: 'uri' } }), object({ type: { const: 'upload' }, uploadId: { type: 'string', format: 'uuid' } })] },
+        object({ type: { const: 'url' }, url: { type: 'string', format: 'uri', description: 'A public link. A PDF, EPUB, DOCX, Markdown or text file is kept as that file, up to the upload limit; a web page becomes Markdown.' } }), object({ type: { const: 'upload' }, uploadId: { type: 'string', format: 'uuid' } })] },
         name: string, folderId: nullableString, author: string, language: string,
       }, ['source']),
       PreparedUpload: object({ id: { type: 'string', format: 'uuid' }, url: string, headers: { type: 'object', additionalProperties: string }, expiresAt: number }),

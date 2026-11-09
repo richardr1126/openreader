@@ -4,7 +4,8 @@ description: Connect AI assistants to an OpenReader instance with the Model Cont
 ---
 
 OpenReader is a remote MCP server at **`BASE_URL/api/mcp`**. It lets an assistant
-search a user's library, add documents and make audiobooks, as that user. Clients
+search and organize a user's library, add and delete documents and make audiobooks,
+as that user. Clients
 sign in with [OAuth](./oauth), so there is no package to install and no API key to
 copy.
 
@@ -46,15 +47,41 @@ already connected keep working.
 ## Tools
 
 The tools take command lines in the style of `gh`, such as `docs list --search dune`,
-and return JSON. There are three, one for each [scope](./oauth), so a client that asks
-before each call still shows what the call can do. `help` lists a tool's commands, and
-`--help` after a command describes its flags.
+and return JSON. There is one tool for each [scope](./oauth), and deleting has a tool of
+its own, so a client that asks before each call still shows what the call can do.
+Only `openreader_docs_delete` is marked destructive. `help` lists a tool's commands,
+and `--help` after a command describes its flags.
 
 | Tool | Scope | Commands |
 | --- | --- | --- |
-| `openreader` | `documents:read` | `docs list`, `docs view <doc>`, `voices list`, `voices cached <doc>`, `audiobook list <doc>`, `audiobook view <id>` |
-| `openreader_docs` | `documents:write` | `docs add <url>`, or `docs add -` with the text in `input` (up to 2 MB) |
+| `openreader` | `documents:read` | `docs list`, `docs view <doc>`, `folders list`, `voices list`, `voices cached <doc>`, `audiobook list <doc>`, `audiobook view <id>` |
+| `openreader_docs` | `documents:write` | `docs add <source>`, `docs upload`, `docs rename <doc> <name>`, `docs move <doc> <folder>`, `folders create <name>`, `folders rename <folder> <name>` |
+| `openreader_docs_delete` | `documents:write` | `docs delete <doc>`, `folders delete <folder>` |
 | `openreader_audio` | `audio:generate` | `audiobook create <doc>`, `audiobook cancel <id>` |
+
+### Documents and folders
+
+`docs add <url>` imports a link. A PDF, EPUB, DOCX, Markdown or text file is kept as
+it is, up to the instance's upload limit, and a web page becomes Markdown. `docs add -`
+saves the text in `input`, up to 2 MB. `--folder` adds the document to a folder.
+
+To add a file from the user's device, run `docs upload`. It returns `uploadPageUrl`, a
+link to the user's library that opens the file picker, into a folder with `--folder`.
+An assistant that can run commands can send the file itself instead:
+`docs upload --name paper.pdf --size <bytes>` also prepares a one-time upload URL and
+returns it with its headers and a `curl` command. Once the file is sent,
+`docs add <uploadId>` adds it. A DOCX is converted first; while it is, `docs add`
+reports `processing`, and running it again finishes. The upload URL needs no other
+credentials, works for 30 minutes and accepts only that one file, so treat it like a
+password.
+
+`docs rename` keeps the document's file extension. `docs move <doc> <folder>` files a
+document, and `-` in place of a folder takes it out of its folder; `docs list --folder`
+filters the same way. `docs delete` removes a document with its generated audio and
+audiobooks, and cannot be undone. `folders delete` removes only the folder: its
+documents move to the top of the library.
+
+### Voices and audiobooks
 
 A voice ID names its provider and model as well as the voice, as
 `provider/model/voice`, so a voice from `voices list` or `voices cached` means one
@@ -76,13 +103,14 @@ a status and the voice ID it used, and sending the same command again returns th
 audiobook. `reusedCachedAudio` says whether audio was already there. Use
 `audiobook view <id>` to check on it, and `audiobook cancel <id>` to stop it; generated
 audio stays cached and the audiobook reports `cancelled` until it is created again.
+Because cancelling loses nothing, `openreader_audio` is not marked destructive.
 
 Results include a `webUrl` that opens the document in OpenReader. Once an audiobook is
 ready, `audiobook view` also returns a `webDownloadUrl`, a page that starts the download.
-Both links need the user to be signed in to the account that owns the document, in the
+These links and `uploadPageUrl` need the user to be signed in to the account that owns the document, in the
 browser that opens them. Without access, the page offers to sign in or switch account
 and then returns to the link. Tools do not return audio files, API file addresses or
-storage links. A command that fails returns an error result with a `code`, a `message` and,
+storage links, apart from the one-time upload URL that `docs upload` prepares. A command that fails returns an error result with a `code`, a `message` and,
 when it applies, `retryAfterMs`; a command line it cannot read returns its usage. A call without the scope it needs gets an HTTP 403
 `insufficient_scope` challenge, so the client can ask for more access.
 

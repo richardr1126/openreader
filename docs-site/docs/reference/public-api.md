@@ -58,15 +58,19 @@ curl --cookie cookies.txt \
   https://reader.example/api/v1/documents
 ```
 
-For a web page, use `{"source":{"type":"url","url":"https://example.com/article"}}`.
-The server fetches public HTTP(S) pages, checks redirect destinations and extracts
-readable Markdown. It cannot see pages available only in your logged-in browser.
-Private-network destinations are blocked. HTML downloads and inline text imports
-are limited to 2 MB; JSON document control messages are limited to 3 MB.
+For a link, use `{"source":{"type":"url","url":"https://example.com/article"}}`.
+The server fetches public HTTP(S) addresses and checks redirect destinations. A
+link to a PDF, EPUB, DOCX, Markdown or text file keeps that file, up to the
+instance's upload limit; the type comes from the response's `Content-Type`, or
+from the file name when the server sends a generic type. A web page becomes
+readable Markdown. The server cannot see pages available only in your logged-in
+browser, and private-network destinations are blocked. HTML pages and inline text
+imports are limited to 2 MB; JSON document control messages are limited to 3 MB.
 
-Creation accepts an optional `folderId`. Text imports can also supply `author`
-and `language`. A supplied `name` must include a text or Markdown extension for
-text sources; web imports produce Markdown. The resulting ID is the SHA-256 of
+Creation accepts an optional `folderId`. Text and linked-file imports can also
+supply `author` and `language`. A supplied `name` must include a text or Markdown
+extension for text sources; a linked file keeps its own extension, and web pages
+produce Markdown. The resulting ID is the SHA-256 of
 the canonical file. Reimporting the same bytes reuses that identity.
 
 Successful registration returns `201`, a `Location` header and the document.

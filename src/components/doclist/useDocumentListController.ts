@@ -28,7 +28,10 @@ type PendingMerge = {
   target: DocumentListDocument;
 };
 
-export function useDocumentListController() {
+/** Opens the upload dialog once, into this folder when it exists, as the /app/upload link asks. */
+export type UploadRequest = { folderId: string | null };
+
+export function useDocumentListController({ uploadTo }: { uploadTo?: UploadRequest } = {}) {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [query, setQuery] = useState('');
   // Like the search query, the status filter is session-only (see ReadingStatusFilter).
@@ -269,6 +272,21 @@ export function useDocumentListController() {
       preferencesQuery.refetch(),
     ]);
   }, [folderState.query, preferencesQuery, refreshDocuments]);
+
+  // Waits for saved list state, which would otherwise replace the folder chosen here.
+  const uploadRequest = useRef(uploadTo);
+  const folders = folderState.query.data;
+  const preferencesReady = preferencesQuery.data !== undefined;
+  useEffect(() => {
+    const request = uploadRequest.current;
+    if (!request || !preferencesReady || !folders) return;
+    uploadRequest.current = undefined;
+    if (request.folderId && folders.some((folder) => folder.id === request.folderId)) {
+      updateListState({ sidebarFilter: `folder:${request.folderId}` });
+    }
+    setIsUploadDialogOpen(true);
+    window.history.replaceState(null, '', '/app');
+  }, [folders, preferencesReady, updateListState]);
 
   const activeFolderId = listState.sidebarFilter.startsWith('folder:')
     ? listState.sidebarFilter.slice('folder:'.length)

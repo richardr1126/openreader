@@ -14,7 +14,7 @@ vi.mock('@openreader/database', () => ({ get db() { return state.db; } }));
 vi.mock('@/lib/server/auth/auth', () => ({ getAuthContext: async () => ({ userId: state.userId, user: { isAnonymous: false } }), getTrustedOrigins: () => ['http://localhost'] }));
 vi.mock('@/lib/server/storage/s3', () => ({ isS3Configured: () => true, getBrowserStorageTransport: () => 'proxy' }));
 vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ maxUploadMb: 10, computeLimitPolicies: { actions: { document_intake: { enabled: false } } } }) }));
-vi.mock('@/lib/server/documents/web-loader', () => ({ fetchAndParseUrl: state.article }));
+vi.mock('@/lib/server/documents/web-loader', () => ({ fetchUrlSource: state.article }));
 vi.mock('@/lib/server/documents/previews', () => ({ enqueueDocumentPreview: async () => undefined }));
 vi.mock('@/lib/server/tts/segments-cache', () => ({ deleteDocumentTtsSegmentCache: async () => undefined }));
 vi.mock('@/lib/server/documents/blob-lease', () => ({ withDocumentBlobLease: async (_id: string, run: () => Promise<unknown>) => run() }));
@@ -60,6 +60,7 @@ import { GET as read, PATCH as update } from '@/app/api/v1/documents/[id]/route'
 import { POST as prepare } from '@/app/api/v1/uploads/route';
 import { GET as uploadStatus } from '@/app/api/v1/uploads/[uploadId]/route';
 import { PUT as transfer } from '@/app/api/v1/uploads/[uploadId]/file/route';
+import { signUploadLink } from '@/lib/server/documents/upload-links';
 
 function request(path: string, method = 'GET', body?: unknown) {
   return new NextRequest(`http://localhost${path}`, { method,
@@ -75,7 +76,7 @@ beforeEach(() => {
   vi.stubEnv('BASE_URL', 'http://localhost:3003');
   state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.workerAvailable = false;
   state.admit.mockReset().mockImplementation(async (input: { create: () => Promise<unknown> }) => input.create());
-  state.article.mockReset().mockResolvedValue({ title: 'An article', content: '# Imported article', author: 'Article Author', language: 'de' });
+  state.article.mockReset().mockResolvedValue({ kind: 'page', title: 'An article', content: '# Imported article', author: 'Article Author', language: 'de' });
   state.parse.mockReset().mockResolvedValue({ artifact: { objectKey: 'parsed' }, operation: null });
   state.sqlite = new Database(':memory:');
   state.sqlite.exec(`
@@ -108,7 +109,26 @@ test('creates text and URL documents directly on the server with canonical ident
   expect(document.status).toBe('ready'); expect(document.fileUrl).toContain(document.id);
   const imported = await (await create(request('/api/v1/documents', 'POST', { source: { type: 'url', url: 'https://example.test/article' } }))).json();
   expect(imported).toMatchObject({ name: 'An_article.md', author: 'Article Author', language: 'de' });
-  expect(state.article).toHaveBeenCalledWith('https://example.test/article');
+  expect(state.article).toHaveBeenCalledWith('https://example.test/article', expect.any(Number));
+  // A linked file keeps its format, and a requested name keeps the file's extension.
+  state.article.mockResolvedValueOnce({ kind: 'file', bytes: Buffer.from('Plain linked text.'), name: 'notes.txt' });
+  const linked = await (await create(request('/api/v1/documents', 'POST', { source: { type: 'url', url: 'https://example.test/notes.txt' }, name: 'Reading list' }))).json();
+  expect(linked).toMatchObject({ name: 'Reading list.txt', status: 'ready' });
+});
+
+test('a signed upload link sends one upload\'s bytes without a session, for its owner only', async () => {
+  const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'linked.txt', size: 5 }))).json();
+  const { query } = signUploadLink('owner', prepared.id);
+  state.userId = null;
+  const put = (search: string, id = prepared.id) => transfer(new NextRequest(`http://localhost/api/v1/uploads/${id}/file?${search}`, { method: 'PUT', body: 'hello' }), uploadParams(id));
+  expect((await put(query.replace(/signature=[^&]+/, 'signature=AAAA'))).status).toBe(403);
+  expect((await put(signUploadLink('other', prepared.id).query)).status).toBe(404);
+  expect((await put(query.replace(/owner=[^&]+/, `owner=${Buffer.from('other').toString('base64url')}`))).status).toBe(403);
+  expect((await put(signUploadLink('owner', prepared.id, Date.now() - 31 * 60 * 1000).query)).status).toBe(403);
+  expect((await put(query)).status).toBe(204);
+  state.userId = 'owner';
+  const created = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
+  expect(created.status).toBe(201);
 });
 
 test('prepared upload ownership, bounded transfer and repeated status lead to one verified document', async () => {

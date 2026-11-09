@@ -7,7 +7,7 @@ import { beforeAll, beforeEach, afterAll, expect, test, vi } from 'vitest';
 import { runMigrations } from '@openreader/database/migrate';
 
 const mocks = vi.hoisted(() => ({ fetchUrl: vi.fn(), receipt: vi.fn(), presign: vi.fn() }));
-vi.mock('@/lib/server/documents/web-loader', () => ({ fetchAndParseUrl: mocks.fetchUrl }));
+vi.mock('@/lib/server/documents/web-loader', () => ({ fetchUrlSource: mocks.fetchUrl }));
 vi.mock('@/lib/server/storage/s3', () => ({ getBrowserStorageTransport: () => 'presigned', isS3Configured: () => true }));
 vi.mock('@/lib/server/documents/blobstore', () => ({ putTempDocumentFinalizeReceipt: mocks.receipt, presignTempPut: mocks.presign }));
 

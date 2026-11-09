@@ -241,10 +241,13 @@ caused conflicts, high CPU, misleading failures, and overheating.
 - Public API progress is tracked in `v5/API_REFACTOR.md`. Phases 1 to 5.2 merged
   in #210 (MCP at `/api/mcp`, download links and access pages, no automatic
   guests); production has migration 0027.
-- Phase 5.3 on `refactor/mcp-cli`: the MCP is three `gh`-style command tools, one
-  per scope; cached voices are listable and offered in the reader and export
-  panels; a stopped audiobook stays as `cancelled`. Migration 0028 (`cancelled_at`)
-  is unshipped and needs the owner's production migration before deploy.
+- Phases 5.3 and 5.4 on `refactor/mcp-cli`: the MCP is four `gh`-style command
+  tools (one per scope, plus `openreader_docs_delete`, the only destructive one);
+  links keep PDF/EPUB/DOCX/TXT/MD files; `docs upload` gives an `/app/upload`
+  page link or a signed one-time transfer URL; documents rename, move and delete,
+  and folders are managed. Cached voices are listable and offered in the reader
+  and export panels; a stopped audiobook stays as `cancelled`. Migration 0028
+  (`cancelled_at`) is unshipped and needs the owner's production migration before deploy.
 - Open follow-ups for the owner: whether the full Compose files should require
   worker/broker/playback secrets instead of shipping known defaults, and whether
   to bump the pinned `kokoro-fastapi-cpu:v0.2.4` image in the Compose examples.

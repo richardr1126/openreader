@@ -19,15 +19,16 @@ import { ListView } from './views/ListView';
 import { FinderSidebar } from './window/FinderSidebar';
 import { FinderToolbar } from './window/FinderToolbar';
 import { FinderWindow } from './window/FinderWindow';
-import { useDocumentListController } from './useDocumentListController';
+import { useDocumentListController, type UploadRequest } from './useDocumentListController';
 
 interface DocumentListInnerProps {
   brand?: ReactNode;
   appActions?: ReactNode;
+  uploadTo?: UploadRequest;
 }
 
-function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
-  const controller = useDocumentListController();
+function DocumentListInner({ brand, appActions, uploadTo }: DocumentListInnerProps) {
+  const controller = useDocumentListController({ uploadTo });
   const {
     listState,
     model,
@@ -262,14 +263,12 @@ function DocumentListInner({ brand, appActions }: DocumentListInnerProps) {
 export function DocumentList({
   brand,
   appActions,
-}: {
-  brand?: ReactNode;
-  appActions?: ReactNode;
-} = {}) {
+  uploadTo,
+}: DocumentListInnerProps = {}) {
   return (
     <DocumentDndProvider>
       <DocumentSelectionProvider>
-        <DocumentListInner brand={brand} appActions={appActions} />
+        <DocumentListInner brand={brand} appActions={appActions} uploadTo={uploadTo} />
       </DocumentSelectionProvider>
     </DocumentDndProvider>
   );

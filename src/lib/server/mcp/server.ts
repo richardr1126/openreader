@@ -15,12 +15,16 @@ import { audiobookCaller, parseAudiobookBody, resolveAudiobookIntent } from '@/l
 import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { createDocument } from '@/lib/server/documents/create';
 import { documentCaller, documentRequestFailure } from '@/lib/server/documents/request';
-import { describeDocument, documentId, documentWebUrl, listDocumentResources, requireDocument } from '@/lib/server/documents/resources';
+import { describeDocument, documentId, documentWebUrl, listDocumentResources, removeDocuments, requireDocument, updateDocuments } from '@/lib/server/documents/resources';
+import { signUploadLink } from '@/lib/server/documents/upload-links';
+import { prepareDocumentUpload, submitDocumentUpload, uploadId } from '@/lib/server/documents/uploads';
+import { createFolder, deleteFolder, folderId, listFolders, updateFolder } from '@/lib/server/folders';
 import { serverLogger } from '@/lib/server/logger';
 import { listCachedVoices } from '@/lib/server/tts/cached-voices';
 import { listSpeechProviders, listVoices } from '@/lib/server/tts/voices';
 import { API_SCOPES } from '@/lib/shared/api-scopes';
 import type { BaseDocument } from '@/types/documents';
+import type { DocumentUploadResource } from '@/types/document-api';
 import type { Audiobook } from '@/types/tts-export';
 import { CliUsageError, helpText, parseCommand, type CliCommand } from './cli';
 
@@ -61,8 +65,28 @@ function parseVoiceId(value: string): { provider?: string; model?: string; voice
 /** Links here must work when clicked, so resource URLs that need a v1 token stay out. */
 function documentSummary(document: BaseDocument) {
   return { id: document.id, name: document.name, type: document.type, size: document.size, author: document.author ?? null,
-    language: document.language ?? null, webUrl: documentWebUrl(document) };
+    language: document.language ?? null, folderId: document.folderId ?? null, webUrl: documentWebUrl(document) };
 }
+
+const appUrl = (path: string) => new URL(path, (process.env.BASE_URL ?? '').trim() || 'http://localhost').toString();
+
+/** The signed-in library page that opens the file picker, into a folder when one is named. */
+const uploadPageUrl = (folder?: string) => appUrl(folder ? `/app/upload/${encodeURIComponent(folder)}` : '/app/upload');
+
+/** `-` names the top of the library; anything else is a folder ID. */
+const folderArg = (value: string) => (value === '-' ? null : folderId(value));
+
+const UPLOAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DOCUMENT_EXTENSION = /\.(pdf|epub|docx|txt|md|markdown|mdown|mkd|html?)$/i;
+
+function uploadResult(upload: DocumentUploadResource) {
+  if (upload.document) return { status: upload.status, document: documentSummary(upload.document) };
+  return { status: upload.status, uploadId: upload.id, error: upload.error,
+    ...(upload.status === 'processing' ? { next: `The document is still being converted. Run "docs add ${upload.id}" again to finish adding it.` } : {}),
+    ...(upload.status === 'pending' ? { next: `Nothing has been sent to this upload yet. Send the file, then run "docs add ${upload.id}".` } : {}) };
+}
+
+const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
 function audiobookSummary(audiobook: Audiobook) {
   const { id, documentId: bookDocumentId, status, progress, format, speed, chapter, filename, webUrl, webDownloadUrl, retryAfterMs } = audiobook;
@@ -99,10 +123,13 @@ const readCommands: CliCommand<Context>[] = [
       search: { type: 'string', description: 'Text to find in document names.' },
       limit: { type: 'integer', description: 'How many to list, 1 to 200. Default 50.' },
       cursor: { type: 'string', description: 'nextCursor from an earlier page.' },
+      folder: { type: 'string', description: 'Only documents in this folder, or "-" for those in no folder.' },
     },
     run: async ({ flags }, { principal }) => {
+      const folder = flags.folder === undefined ? undefined : folderArg(String(flags.folder));
       const search = new URLSearchParams({ limit: String(flags.limit ?? 50),
-        ...(flags.search ? { q: String(flags.search) } : {}), ...(flags.cursor ? { cursor: String(flags.cursor) } : {}) });
+        ...(flags.search ? { q: String(flags.search) } : {}), ...(flags.cursor ? { cursor: String(flags.cursor) } : {}),
+        ...(folder !== undefined ? { folderId: folder ?? '' } : {}) });
       const page = await listDocumentResources(principal, search);
       return { documents: page.data.map(documentSummary), nextCursor: page.nextCursor };
     },
@@ -114,6 +141,14 @@ const readCommands: CliCommand<Context>[] = [
     run: async ({ args }, { principal }) => {
       const document = await describeDocument(await requireDocument(principal, args.doc));
       return { ...documentSummary(document), status: document.status, error: document.error };
+    },
+  },
+  {
+    name: ['folders', 'list'],
+    summary: 'List the folders in the library, in their sidebar order.',
+    run: async (_input, { principal }) => {
+      const folders = await listFolders(principal, new URLSearchParams({ limit: '200' }));
+      return { folders: folders.data.map(({ id, name }) => ({ id, name })) };
     },
   },
   {
@@ -190,12 +225,18 @@ const docsCommands: CliCommand<Context>[] = [
   {
     name: ['docs', 'add'],
     args: ['source'],
-    summary: 'Add a public web page by its URL, or "-" to save the text sent in input. Text is limited to 2 MB.',
+    summary: 'Add a document from a public URL, "-" to save the text sent in input, or an upload ID from "docs upload" once its file is sent. A link to a PDF, EPUB, DOCX, Markdown or text file keeps that file, up to this instance\'s upload limit; a web page becomes Markdown, and text is limited to 2 MB.',
     flags: {
-      name: { type: 'string', description: 'Document name. Text documents need a .txt or .md extension.' },
+      name: { type: 'string', description: 'Document name. Text documents need a .txt or .md extension; a linked file keeps its own.' },
       folder: { type: 'string', description: 'ID of the folder to add it to.' },
     },
     run: async ({ args, flags }, { principal, input }) => {
+      const caller = documentCaller(principal);
+      const folder = flags.folder ? { folderId: folderId(String(flags.folder)) } : {};
+      if (UPLOAD_ID.test(args.source)) {
+        if (flags.name) throw new CliUsageError('An upload keeps the name it was prepared with. Rename the document once it is added.');
+        return uploadResult(await submitDocumentUpload(caller, uploadId(args.source), folder.folderId));
+      }
       let source: Record<string, string>;
       if (args.source === '-') {
         if (!input) throw new CliUsageError('"docs add -" saves the text in input, and input is empty.');
@@ -203,14 +244,110 @@ const docsCommands: CliCommand<Context>[] = [
       } else if (/^https?:\/\//i.test(args.source)) {
         source = { type: 'url', url: args.source };
       } else {
-        throw new CliUsageError('<source> must be an http(s) URL, or "-" with the text in input.');
+        throw new CliUsageError('<source> must be an http(s) URL, "-" with the text in input, or an upload ID from "docs upload".');
       }
-      const upload = await createDocument(documentCaller(principal), {
-        source, ...(flags.name ? { name: String(flags.name) } : {}), ...(flags.folder ? { folderId: String(flags.folder) } : {}),
-      });
-      return upload.document
-        ? { status: upload.status, document: documentSummary(upload.document) }
-        : { status: upload.status, error: upload.error };
+      return uploadResult(await createDocument(caller, { source, ...(flags.name ? { name: String(flags.name) } : {}), ...folder }));
+    },
+  },
+  {
+    name: ['docs', 'upload'],
+    summary: 'Get a link where the user can upload a file from their device. With --name and --size, also prepare a one-time upload URL that a shell can send the file to; then run "docs add <uploadId>".',
+    flags: {
+      name: { type: 'string', description: 'File name with its extension: .pdf, .epub, .docx, .txt or .md.' },
+      size: { type: 'integer', description: 'File size in bytes.' },
+      folder: { type: 'string', description: 'ID of the folder to add it to.' },
+    },
+    run: async ({ flags }, { principal }) => {
+      const folder = flags.folder ? folderId(String(flags.folder)) : undefined;
+      const page = { uploadPageUrl: uploadPageUrl(folder) };
+      if (flags.name === undefined && flags.size === undefined) {
+        return { ...page, next: 'Give the user uploadPageUrl. It opens their OpenReader library with the file picker.' };
+      }
+      if (flags.name === undefined || flags.size === undefined) throw new CliUsageError('A one-time upload URL needs both --name and --size.');
+      const prepared = await prepareDocumentUpload(documentCaller(principal), { name: String(flags.name), size: flags.size });
+      // A storage URL is presigned already. The app's own upload route needs a v1
+      // token, which an MCP client does not have, so its URL carries a signature.
+      let url = appUrl(prepared.url);
+      let expiresAt = prepared.expiresAt;
+      if (url.startsWith(appUrl('/api/v1/uploads/'))) {
+        const link = signUploadLink(principal.userId, prepared.id);
+        url = `${url}?${link.query}`;
+        expiresAt = Math.min(expiresAt, link.expiresAt);
+      }
+      const headers = Object.entries(prepared.headers).map(([key, value]) => `-H ${shellQuote(`${key}: ${value}`)}`).join(' ');
+      return {
+        ...page,
+        uploadId: prepared.id,
+        upload: { method: 'PUT', url, headers: prepared.headers, expiresAt: new Date(expiresAt).toISOString() },
+        curl: `curl -fsS -X PUT ${headers} --data-binary @${shellQuote(String(flags.name))} ${shellQuote(url)}`,
+        next: `Send the file's bytes exactly as they are, then run "docs add ${prepared.id}"${folder ? ` --folder ${folder}` : ''}. Without a shell, give the user uploadPageUrl instead.`,
+      };
+    },
+  },
+  {
+    name: ['docs', 'rename'],
+    args: ['doc', 'name'],
+    summary: 'Rename a document. It keeps its file extension.',
+    run: async ({ args }, { principal }) => {
+      const current = await requireDocument(principal, args.doc);
+      const base = args.name.trim().replace(DOCUMENT_EXTENSION, '').trim();
+      if (!base) throw new CliUsageError('<name> must not be empty.');
+      const name = `${base}${current.name.match(DOCUMENT_EXTENSION)?.[0] ?? ''}`;
+      const { data } = await updateDocuments(documentCaller(principal), [current.id], { name });
+      return { document: documentSummary(data[0]) };
+    },
+  },
+  {
+    name: ['docs', 'move'],
+    args: ['doc', 'folder'],
+    summary: 'Move a document into a folder, or "-" to take it out of its folder.',
+    run: async ({ args }, { principal }) => {
+      const { data } = await updateDocuments(documentCaller(principal), [args.doc], { folderId: folderArg(args.folder) });
+      return { document: documentSummary(data[0]) };
+    },
+  },
+  {
+    name: ['folders', 'create'],
+    args: ['name'],
+    summary: 'Create a folder.',
+    run: async ({ args }, { principal }) => {
+      const { id, name } = await createFolder(principal, { name: args.name });
+      return { folder: { id, name } };
+    },
+  },
+  {
+    name: ['folders', 'rename'],
+    args: ['folder', 'name'],
+    summary: 'Rename a folder.',
+    run: async ({ args }, { principal }) => {
+      const { id, name } = await updateFolder(principal, folderId(args.folder), { name: args.name });
+      return { folder: { id, name } };
+    },
+  },
+];
+
+const deleteCommands: CliCommand<Context>[] = [
+  {
+    name: ['docs', 'delete'],
+    args: ['doc'],
+    summary: 'Delete a document for good, with its generated audio and audiobooks. It cannot be undone.',
+    run: async ({ args }, { principal }) => {
+      const document = await requireDocument(principal, args.doc);
+      const { deleted } = await removeDocuments(documentCaller(principal), [document.id]);
+      return { deleted: deleted === 1, document: { id: document.id, name: document.name } };
+    },
+  },
+  {
+    name: ['folders', 'delete'],
+    args: ['folder'],
+    summary: 'Delete a folder. Its documents are kept and move to the top of the library.',
+    run: async ({ args }, { principal }) => {
+      const id = folderId(args.folder);
+      const folders = await listFolders(principal, new URLSearchParams({ limit: '200' }));
+      const folder = folders.data.find(candidate => candidate.id === id);
+      if (!folder) throw new ApiRequestError(404, 'FOLDER_NOT_FOUND', 'Folder not found. "folders list" shows the folders.');
+      await deleteFolder(principal, id);
+      return { deleted: true, folder: { id, name: folder.name } };
     },
   },
 ];
@@ -296,7 +433,8 @@ function describe(summary: string, tool: string, commands: CliCommand<Context>[]
 export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServer {
   const server = new McpServer({ name: 'openreader', version: '1' }, {
     instructions: [
-      'OpenReader turns documents in the user\'s library into audiobooks. Its tools take gh-style command lines: openreader reads, openreader_docs adds documents and openreader_audio generates audio. Output is JSON.',
+      'OpenReader turns documents in the user\'s library into audiobooks. Its tools take gh-style command lines: openreader reads, openreader_docs adds and organizes documents and folders, openreader_docs_delete deletes them, and openreader_audio generates audio. Output is JSON.',
+      'To add a file from the user\'s device, run "docs upload". Give the user its uploadPageUrl, or, with a shell, send the file to the one-time upload URL it prepares and then run "docs add <uploadId>".',
       'Before creating an audiobook, run "voices cached <doc>": a voice listed there, with its modelSpeed, reuses audio already generated for the book. Otherwise "audiobook create" uses the saved speech settings, or a voice ID from "voices list".',
       'Audiobooks generate in the background: "audiobook create" returns at once and "audiobook view <id>" reports progress. webUrl opens the document for the user, and webDownloadUrl, once the audiobook is ready, starts its download. Give the user these links as they are.',
     ].join('\n'),
@@ -314,20 +452,30 @@ export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServe
 
   server.registerTool('openreader_docs', {
     title: 'OpenReader documents',
-    description: describe('Add documents to the user\'s OpenReader library.', 'openreader_docs', docsCommands),
+    description: describe('Add, rename and move documents in the user\'s OpenReader library, and organize its folders.', 'openreader_docs', docsCommands),
     inputSchema: z.object({
       command,
       input: z.string().optional().describe('Text for "docs add -": plain text or Markdown.'),
     }),
-    annotations: { openWorldHint: true },
+    // Adding fetches public links; none of these commands removes anything.
+    annotations: { openWorldHint: true, destructiveHint: false },
     scopeChallenge: scope('documents:write'),
   }, ({ command: line, input }) => runCommand('openreader_docs', docsCommands, line, context(input)));
+
+  server.registerTool('openreader_docs_delete', {
+    title: 'OpenReader delete',
+    description: describe('Delete documents or folders from the user\'s OpenReader library. Confirm with the user first: a deleted document cannot be recovered.', 'openreader_docs_delete', deleteCommands),
+    inputSchema: z.object({ command }),
+    annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    scopeChallenge: scope('documents:write'),
+  }, ({ command: line }) => runCommand('openreader_docs_delete', deleteCommands, line, context()));
 
   server.registerTool('openreader_audio', {
     title: 'OpenReader audio',
     description: describe('Generate and cancel audiobooks. Generation uses the user\'s speech quota.', 'openreader_audio', audioCommands),
     inputSchema: z.object({ command }),
-    annotations: { idempotentHint: true },
+    // Cancelling keeps the generated audio, and creating again resumes it.
+    annotations: { idempotentHint: true, destructiveHint: false },
     scopeChallenge: scope('audio:generate'),
   }, ({ command: line }) => runCommand('openreader_audio', audioCommands, line, context()));
 

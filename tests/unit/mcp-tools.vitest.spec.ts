@@ -4,6 +4,8 @@ import { beforeEach, expect, test, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   access: vi.fn(), create: vi.fn(), voices: vi.fn(), providers: vi.fn(), start: vi.fn(), get: vi.fn(), stop: vi.fn(), caller: vi.fn(), intent: vi.fn(),
   worker: vi.fn(() => true), cached: vi.fn(), owner: vi.fn(), requests: vi.fn(), list: vi.fn(),
+  update: vi.fn(), remove: vi.fn(), require: vi.fn(), prepare: vi.fn(), submit: vi.fn(),
+  folders: vi.fn(), createFolder: vi.fn(), updateFolder: vi.fn(), deleteFolder: vi.fn(),
 }));
 vi.mock('@/lib/server/auth/auth', () => ({ getTrustedOrigins: () => ['http://localhost:3003'] }));
 vi.mock('@/lib/server/auth/config', () => ({ getRequiredAuthEnv: () => ({ baseUrl: 'http://localhost:3003' }) }));
@@ -17,8 +19,11 @@ vi.mock('@/lib/server/documents/request', async () => {
 });
 vi.mock('@/lib/server/documents/resources', () => ({
   documentId: (value: string) => value, documentWebUrl: (document: { id: string }) => `http://localhost:3003/html/${document.id}`,
-  listDocumentResources: mocks.list, requireDocument: vi.fn(), describeDocument: vi.fn(),
+  listDocumentResources: mocks.list, requireDocument: mocks.require, describeDocument: vi.fn(), updateDocuments: mocks.update, removeDocuments: mocks.remove,
 }));
+vi.mock('@/lib/server/documents/uploads', () => ({ prepareDocumentUpload: mocks.prepare, submitDocumentUpload: mocks.submit, uploadId: (value: string) => value.toLowerCase() }));
+vi.mock('@/lib/server/folders', () => ({ listFolders: mocks.folders, createFolder: mocks.createFolder, updateFolder: mocks.updateFolder, deleteFolder: mocks.deleteFolder,
+  folderId: (value: string) => { if (!/^[a-zA-Z0-9-]{1,100}$/.test(value)) throw new Error('Invalid folder ID.'); return value; } }));
 vi.mock('@/lib/server/tts/voices', () => ({ listVoices: mocks.voices, listSpeechProviders: mocks.providers }));
 vi.mock('@/lib/server/tts/cached-voices', () => ({ listCachedVoices: mocks.cached }));
 vi.mock('@/lib/server/audiobooks/audiobooks', () => ({ ChapterNotFoundError: class extends Error {}, ChapterCommandError: class extends Error {},
@@ -45,6 +50,8 @@ const run = (name: string, command: string, extra: Record<string, unknown> = {})
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Vite sets BASE_URL to its own base path under test.
+  vi.stubEnv('BASE_URL', 'http://localhost:3003');
   mocks.worker.mockReturnValue(true);
   mocks.access.mockResolvedValue({ userId: 'user', isAnonymous: false, clientId: 'client', scopes: ['documents:read', 'documents:write', 'audio:generate'] });
   mocks.caller.mockResolvedValue({ scope: {} });
@@ -52,11 +59,16 @@ beforeEach(() => {
   mocks.owner.mockResolvedValue('doc');
 });
 
-test('three tools split the commands by the scope they need', async () => {
+test('four tools split the commands by scope, and only the delete tool is destructive', async () => {
   const { tools } = await rpc('tools/list');
-  expect(tools.map(({ name }: { name: string }) => name)).toEqual(['openreader', 'openreader_docs', 'openreader_audio']);
-  const [read, docs, audio] = tools;
+  expect(tools.map(({ name }: { name: string }) => name)).toEqual(['openreader', 'openreader_docs', 'openreader_docs_delete', 'openreader_audio']);
+  const [read, docs, remove, audio] = tools;
   expect(read.annotations).toMatchObject({ readOnlyHint: true });
+  expect(docs.annotations).toMatchObject({ destructiveHint: false });
+  expect(audio.annotations).toMatchObject({ destructiveHint: false });
+  expect(remove.annotations).toMatchObject({ destructiveHint: true });
+  expect(remove.description).toContain('docs delete <doc>');
+  expect(docs.description).not.toContain('docs delete');
   expect(read.description).toContain('voices cached <doc>');
   expect(docs.description).toContain('docs add <source>');
   expect(audio.description).toContain('audiobook create <doc>');
@@ -83,13 +95,73 @@ test('docs add imports a URL or the input text and returns a clickable link, not
   mocks.create.mockResolvedValue({ id: 'upload', status: 'ready', statusUrl: '/api/v1/uploads/upload', document: { id: 'doc', name: 'page.md', type: 'html', size: 3, fileUrl: '/api/v1/documents/doc/file', webUrl: 'x' } });
   const result = await run('openreader_docs', 'docs add https://example.com/page --folder f1');
   expect(mocks.create.mock.calls[0][1]).toEqual({ source: { type: 'url', url: 'https://example.com/page' }, folderId: 'f1' });
-  expect(result.structuredContent).toEqual({ status: 'ready', document: { id: 'doc', name: 'page.md', type: 'html', size: 3, author: null, language: null, webUrl: 'http://localhost:3003/html/doc' } });
+  expect(result.structuredContent).toEqual({ status: 'ready', document: { id: 'doc', name: 'page.md', type: 'html', size: 3, author: null, language: null, folderId: null, webUrl: 'http://localhost:3003/html/doc' } });
   expect(JSON.stringify(result)).not.toContain('/api/v1');
   await run('openreader_docs', 'docs add - --name notes.md', { input: '# Notes' });
   expect(mocks.create.mock.calls[1][1]).toEqual({ source: { type: 'text', text: '# Notes' }, name: 'notes.md' });
   expect((await run('openreader_docs', 'docs add -')).isError).toBe(true);
   expect((await run('openreader_docs', 'docs add notes')).isError).toBe(true);
   expect(mocks.create).toHaveBeenCalledTimes(2);
+});
+
+const doc = { id: 'a'.repeat(64), name: 'Paper.pdf', type: 'pdf', size: 10, folderId: 'f1' };
+
+test('docs upload gives the upload page, and with a name and size a one-time URL that docs add then registers', async () => {
+  const page = await run('openreader_docs', 'docs upload --folder f1');
+  expect(page.structuredContent).toMatchObject({ uploadPageUrl: 'http://localhost:3003/app/upload/f1' });
+  expect(mocks.prepare).not.toHaveBeenCalled();
+
+  const id = '0b5e1a2c-3d4e-4f50-8a6b-7c8d9e0f1a2b';
+  mocks.prepare.mockResolvedValue({ id, url: `/api/v1/uploads/${id}/file`, headers: { 'Content-Type': 'application/pdf' }, expiresAt: Date.UTC(2026, 10, 8) });
+  const prepared = (await run('openreader_docs', "docs upload --name \"Bob's paper.pdf\" --size 10")).structuredContent;
+  expect(mocks.prepare.mock.calls[0][1]).toEqual({ name: "Bob's paper.pdf", size: 10 });
+  // The app's own upload route needs a v1 token, so its URL carries a signature instead.
+  const url = prepared.upload.url as string;
+  expect(url).toMatch(new RegExp(`^http://localhost:3003/api/v1/uploads/${id}/file\\?owner=[\\w-]+&expires=\\d+&signature=[\\w-]+$`));
+  expect(prepared.curl).toBe(`curl -fsS -X PUT -H 'Content-Type: application/pdf' --data-binary @'Bob'\\''s paper.pdf' '${url}'`);
+  expect((await run('openreader_docs', 'docs upload --name a.pdf')).isError).toBe(true);
+
+  mocks.submit.mockResolvedValueOnce({ id, status: 'processing', document: null, error: null });
+  expect((await run('openreader_docs', `docs add ${id.toUpperCase()} --folder f1`)).structuredContent).toMatchObject({ status: 'processing', uploadId: id, next: expect.stringContaining(`docs add ${id}`) });
+  expect(mocks.submit.mock.calls[0].slice(1)).toEqual([id, 'f1']);
+  mocks.submit.mockResolvedValueOnce({ id, status: 'ready', document: doc, error: null });
+  expect((await run('openreader_docs', `docs add ${id}`)).structuredContent).toMatchObject({ status: 'ready', document: { id: doc.id, folderId: 'f1' } });
+  expect(mocks.create).not.toHaveBeenCalled();
+});
+
+test('documents rename keeping their extension and move between folders, and folders are listed and organized', async () => {
+  mocks.require.mockResolvedValue(doc);
+  mocks.update.mockImplementation(async (_caller: unknown, ids: string[], patch: Record<string, unknown>) => ({ data: [{ ...doc, id: ids[0], ...patch }] }));
+  expect((await run('openreader_docs', `docs rename ${doc.id} "Attention Is All You Need.txt"`)).structuredContent.document.name).toBe('Attention Is All You Need.pdf');
+  expect((await run('openreader_docs', `docs rename ${doc.id} ".pdf"`)).isError).toBe(true);
+  await run('openreader_docs', `docs move ${doc.id} f2`);
+  await run('openreader_docs', `docs move ${doc.id} -`);
+  expect(mocks.update.mock.calls.slice(1).map(call => call[2])).toEqual([{ folderId: 'f2' }, { folderId: null }]);
+
+  mocks.list.mockResolvedValue({ data: [], nextCursor: null });
+  await run('openreader', 'docs list --folder -');
+  expect(mocks.list.mock.calls[0][1].toString()).toBe('limit=50&folderId=');
+  mocks.folders.mockResolvedValue({ data: [{ id: 'f1', name: 'Papers', position: 1, createdAt: 1, updatedAt: 1 }], nextCursor: null });
+  expect((await run('openreader', 'folders list')).structuredContent).toEqual({ folders: [{ id: 'f1', name: 'Papers' }] });
+  mocks.createFolder.mockResolvedValue({ id: 'f3', name: 'Novels' });
+  expect((await run('openreader_docs', 'folders create Novels')).structuredContent).toEqual({ folder: { id: 'f3', name: 'Novels' } });
+  mocks.updateFolder.mockResolvedValue({ id: 'f1', name: 'Research' });
+  await run('openreader_docs', 'folders rename f1 Research');
+  expect(mocks.updateFolder.mock.calls[0].slice(1)).toEqual(['f1', { name: 'Research' }]);
+});
+
+test('deleting is its own tool: a document goes with its audio, and a folder keeps its documents', async () => {
+  expect((await run('openreader_docs', `docs delete ${doc.id}`)).isError).toBe(true);
+  mocks.require.mockResolvedValue(doc);
+  mocks.remove.mockResolvedValue({ deleted: 1 });
+  expect((await run('openreader_docs_delete', `docs delete ${doc.id}`)).structuredContent).toEqual({ deleted: true, document: { id: doc.id, name: 'Paper.pdf' } });
+  expect(mocks.remove.mock.calls[0][1]).toEqual([doc.id]);
+
+  mocks.folders.mockResolvedValue({ data: [{ id: 'f1', name: 'Papers' }], nextCursor: null });
+  expect((await run('openreader_docs_delete', 'folders delete f1')).structuredContent).toEqual({ deleted: true, folder: { id: 'f1', name: 'Papers' } });
+  expect(mocks.deleteFolder.mock.calls[0][1]).toBe('f1');
+  expect((await run('openreader_docs_delete', 'folders delete f9')).structuredContent.error.code).toBe('FOLDER_NOT_FOUND');
+  expect(mocks.deleteFolder).toHaveBeenCalledTimes(1);
 });
 
 test('voice IDs carry provider and model, so a listed voice names one speech setting', async () => {

@@ -24,7 +24,8 @@ const httpAgent = ssrfPolicy.getHttpAgent();
 const httpsAgent = ssrfPolicy.getHttpsAgent();
 
 export type ExternalFetchOptions = {
-  maxBytes: number;
+  /** A limit for every response, or one chosen by its content type. */
+  maxBytes: number | ((contentType: string) => number);
   timeoutMs: number;
   maxRedirects: number;
   accept: string;
@@ -34,13 +35,15 @@ export type ExternalFetchOptions = {
   messages: { status: (status: number) => string; contentType: string; tooLarge: string; tooManyRedirects: string };
 };
 
+type ExternalResponse = { body: Buffer; contentType: string; contentDisposition: string | null };
+
 /**
  * Performs a single GET request through the AntiSSRF agent. Resolves with either
  * the response body or a redirect location to follow. Enforces a size limit and
  * a hard timeout (resource limits, independent of the SSRF policy).
  */
-function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number): Promise<{ body?: Buffer; redirectLocation?: string }> {
-  const { maxBytes, messages } = options;
+function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number): Promise<ExternalResponse | { redirectLocation: string }> {
+  const { messages } = options;
   const timeoutMs = deadline - Date.now();
   if (timeoutMs <= 0) return Promise.reject(new Error('Request timed out'));
   const isHttps = url.protocol === 'https:';
@@ -64,7 +67,7 @@ function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number):
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    const ok = (v: { body?: Buffer; redirectLocation?: string }) => {
+    const ok = (v: ExternalResponse | { redirectLocation: string }) => {
       if (settled) return;
       settled = true;
       clearTimeout(hardTimer);
@@ -92,12 +95,14 @@ function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number):
         return;
       }
 
-      if (!options.acceptsContentType((res.headers['content-type'] || '').toString())) {
+      const contentType = (res.headers['content-type'] || '').toString();
+      if (!options.acceptsContentType(contentType)) {
         res.resume();
         fail(new Error(messages.contentType));
         return;
       }
 
+      const maxBytes = typeof options.maxBytes === 'number' ? options.maxBytes : options.maxBytes(contentType);
       const contentLength = res.headers['content-length'];
       if (contentLength && parseInt(contentLength.toString(), 10) > maxBytes) {
         res.resume();
@@ -117,7 +122,8 @@ function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number):
         }
         chunks.push(chunk);
       });
-      res.on('end', () => ok({ body: Buffer.concat(chunks) }));
+      const disposition = res.headers['content-disposition'];
+      res.on('end', () => ok({ body: Buffer.concat(chunks), contentType, contentDisposition: disposition ? String(disposition) : null }));
       res.on('error', fail);
     });
 
@@ -140,7 +146,7 @@ function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number):
  * manually so each hop is re-checked by the AntiSSRF agent and `allowsUrl`, and
  * counted against the redirect cap. Returns the body and the final URL.
  */
-export async function fetchExternal(urlStr: string, options: ExternalFetchOptions): Promise<{ body: Buffer; finalUrl: string }> {
+export async function fetchExternal(urlStr: string, options: ExternalFetchOptions): Promise<ExternalResponse & { finalUrl: string }> {
   let currentUrl = urlStr;
   const deadline = Date.now() + options.timeoutMs;
 
@@ -159,12 +165,12 @@ export async function fetchExternal(urlStr: string, options: ExternalFetchOption
 
     const result = await requestOnce(url, options, deadline);
 
-    if (result.redirectLocation) {
+    if ('redirectLocation' in result) {
       currentUrl = new URL(result.redirectLocation, url).href;
       continue;
     }
 
-    return { body: result.body ?? Buffer.alloc(0), finalUrl: currentUrl };
+    return { ...result, finalUrl: currentUrl };
   }
 
   throw new Error(options.messages.tooManyRedirects);
