@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   db: null as unknown, sqlite: null as unknown as import('better-sqlite3').Database,
-  userId: 'owner' as string | null, blobs: new Map<string, Buffer>(), receipts: new Map<string, unknown>(), leases: new Set<string>(),
+  userId: 'owner' as string | null, blobs: new Map<string, Buffer>(), receipts: new Map<string, unknown>(), leases: new Set<string>(), leaseExpired: false,
   parse: vi.fn(), article: vi.fn(), conversion: vi.fn(), workerAvailable: false, admit: vi.fn(),
 }));
 vi.mock('next/server', async original => ({ ...await original<typeof import('next/server')>(), after: () => undefined }));
@@ -24,6 +24,7 @@ vi.mock('@/lib/server/documents/blob-lease', () => ({
     state.leases.add(key);
     return { owner: key, release: async () => { state.leases.delete(key); } };
   },
+  renewDocumentBlobLease: async (key: string) => state.leases.has(key) && !state.leaseExpired,
 }));
 vi.mock('@/lib/server/compute-limits/run-admitted', async original => ({
   ...await original<typeof import('@/lib/server/compute-limits/run-admitted')>(), createAdmittedComputeOperation: state.admit,
@@ -82,7 +83,7 @@ function insert(id: string, owner = 'owner', name = 'notes.txt', type = 'html') 
 
 beforeEach(() => {
   vi.stubEnv('BASE_URL', 'http://localhost:3003');
-  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.leases.clear(); state.workerAvailable = false;
+  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.leases.clear(); state.leaseExpired = false; state.workerAvailable = false;
   state.admit.mockReset().mockImplementation(async (input: { create: () => Promise<unknown> }) => input.create());
   state.article.mockReset().mockResolvedValue({ kind: 'page', title: 'An article', content: '# Imported article', author: 'Article Author', language: 'de' });
   state.parse.mockReset().mockResolvedValue({ artifact: { objectKey: 'parsed' }, operation: null });
@@ -176,6 +177,32 @@ test('a signed upload is claimed for its whole transfer, and a failed transfer f
   expect(replaced.status).toBe(409);
   expect((await replaced.json()).error.code).toBe('UPLOAD_ALREADY_RECEIVED');
   expect((await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }))).status).toBe(201);
+  expect(state.leases.size).toBe(0);
+});
+
+test('a request whose upload lease expired writes nothing', async () => {
+  const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'expired.txt', size: 5 }))).json();
+  const { query } = signUploadLink('owner', prepared.id);
+  const submit = () => create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
+  // The lease lapses mid-transfer, so the link writes no file and stays usable.
+  state.userId = null;
+  state.leaseExpired = true;
+  const put = () => transfer(new NextRequest(`http://localhost/api/v1/uploads/${prepared.id}/file?${query}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
+  const lapsed = await put();
+  expect(lapsed.status).toBe(409);
+  expect((await lapsed.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  expect(state.blobs.size).toBe(0);
+  state.leaseExpired = false;
+  expect((await put()).status).toBe(204);
+  // A submit that loses its lease leaves the receipt unsubmitted.
+  state.userId = 'owner';
+  state.leaseExpired = true;
+  const stale = await submit();
+  expect(stale.status).toBe(409);
+  expect((await stale.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  expect((await (await uploadStatus(request(`/api/v1/uploads/${prepared.id}`), uploadParams(prepared.id))).json()).status).toBe('pending');
+  state.leaseExpired = false;
+  expect((await submit()).status).toBe(201);
   expect(state.leases.size).toBe(0);
 });
 

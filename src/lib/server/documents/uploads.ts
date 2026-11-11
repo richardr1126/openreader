@@ -9,7 +9,7 @@ import { createOrReuseCurrentPdfParseOperation, resolveCurrentPdfParse } from '@
 import { getComputeWorkerClient, isComputeWorkerAvailable, isComputeWorkerUnavailableError } from '@/lib/server/compute-worker/client';
 import { TEMP_DOCUMENT_UPLOAD_TTL_MS, getTempDocumentFinalizeReceipt, putTempDocumentFinalizeReceipt,
   putTempDocumentBlob, presignTempPut, isValidTempUploadToken, headTempDocumentBlob, verifyDocumentBlobIntegrity } from './blobstore';
-import { tryAcquireDocumentBlobLease } from './blob-lease';
+import { renewDocumentBlobLease, tryAcquireDocumentBlobLease, type DocumentBlobLease } from './blob-lease';
 import { finalizeUploadedDocument, verifyUploadFolder, type FinalizeUpload } from './finalize-upload';
 import { describeDocument, requireDocument } from './resources';
 import { documentContentType, safeDocumentName, toDocumentTypeFromName } from './utils';
@@ -86,10 +86,18 @@ export async function receiveDocumentUpload(caller: DocumentCaller, id: string, 
   const lease = await tryAcquireDocumentBlobLease(uploadLeaseKey(id), { leaseMs: TEMP_DOCUMENT_UPLOAD_TTL_MS });
   if (!lease) throw once ? usedLink() : uploadInProgress();
   try {
-    await storeUploadBody(caller, id, body, once);
+    await storeUploadBody(caller, id, body, once, lease);
   } finally {
     await lease.release().catch(() => undefined);
   }
+}
+
+/**
+ * A lease can expire during a slow request and pass to another one. Renewing it before each
+ * write fails in that case, so a request never writes over a receipt it no longer owns.
+ */
+async function assertLeaseHeld(id: string, lease: DocumentBlobLease) {
+  if (!await renewDocumentBlobLease(uploadLeaseKey(id), lease.owner)) throw uploadInProgress();
 }
 
 function uploadInProgress() {
@@ -100,7 +108,7 @@ function usedLink() {
   return new ApiRequestError(409, 'UPLOAD_ALREADY_RECEIVED', 'This upload\'s file has already been received through its link. Run "docs upload" again for a new one.');
 }
 
-async function storeUploadBody(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, once: boolean): Promise<void> {
+async function storeUploadBody(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, once: boolean, lease: DocumentBlobLease): Promise<void> {
   const value = await receipt(caller, id);
   if (!('upload' in value) || value.requested) throw new ApiRequestError(409, 'UPLOAD_ALREADY_SUBMITTED', 'This upload has already been submitted.');
   if (value.received) throw usedLink();
@@ -120,9 +128,13 @@ async function storeUploadBody(caller: DocumentCaller, id: string, body: Readabl
     reader?.releaseLock();
   }
   if (size !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
+  await assertLeaseHeld(id, lease);
   await putTempDocumentBlob(id, caller.principal.userId, Buffer.concat(chunks), documentContentType(value.upload.name), null);
   // Submit takes the same lease, so it cannot have changed the receipt since it was read.
-  if (once) await saveReceipt(caller, id, { ...value, received: true });
+  if (once) {
+    await assertLeaseHeld(id, lease);
+    await saveReceipt(caller, id, { ...value, received: true });
+  }
 }
 
 /**
@@ -180,12 +192,11 @@ export async function submitDocumentUpload(caller: DocumentCaller, id: string, f
   try {
     const value = await receipt(caller, id);
     if ('upload' in value && !value.requested) {
-      value.upload.folderId = folder;
       await verifyUploadFolder(folder ?? null, caller.principal.userId);
       const head = await headTempDocumentBlob(id, caller.principal.userId, null);
       if (head.contentLength !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
-      value.requested = true;
-      await saveReceipt(caller, id, value);
+      await assertLeaseHeld(id, lease);
+      await saveReceipt(caller, id, { ...value, upload: { ...value.upload, folderId: folder }, requested: true });
     } else {
       assertSameFolder(value, folder);
     }
