@@ -170,7 +170,11 @@ test('a signed upload is claimed for its whole transfer, and a failed transfer f
   expect((await put('hel')).status).toBe(400);
   expect(state.leases.size).toBe(0);
   expect((await put('hello')).status).toBe(204);
+  // The owner's own session can't replace a file that arrived through the link either.
   state.userId = 'owner';
+  const replaced = await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'other' }), uploadParams(prepared.id));
+  expect(replaced.status).toBe(409);
+  expect((await replaced.json()).error.code).toBe('UPLOAD_ALREADY_RECEIVED');
   expect((await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }))).status).toBe(201);
   expect(state.leases.size).toBe(0);
 });
@@ -180,6 +184,11 @@ test('prepared upload ownership, bounded transfer and repeated status lead to on
   state.userId = 'other';
   expect((await uploadStatus(request(`/api/v1/uploads/${prepared.id}`), uploadParams(prepared.id))).status).toBe(404);
   state.userId = 'owner';
+  // A session transfer also holds the upload's claim while it runs.
+  state.leases.add(`upload:${prepared.id}`);
+  const busy = await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
+  expect((await busy.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  state.leases.clear();
   const sent = await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
   expect(sent.status).toBe(204);
   const created = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));

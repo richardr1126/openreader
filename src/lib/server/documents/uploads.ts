@@ -76,30 +76,34 @@ async function createPreparedUpload(caller: DocumentCaller, body: Record<string,
 const uploadLeaseKey = (id: string) => `upload:${id}`;
 
 /**
- * With `once`, as for a signed upload link, the file can arrive only one time, so it can't be swapped before it is added.
- * The claim is a lease held for the whole transfer: a second PUT is refused while the first runs, and a
- * transfer that fails releases it without marking the upload received, so the link can be retried.
+ * Every transfer holds the upload's lease while it runs, and a file that arrived through a
+ * signed link is final: no PUT may replace it before it is added. With `once`, as for that
+ * link, a finished transfer marks the upload received. A failed transfer releases the lease
+ * without marking it, so the transfer can be retried.
  */
 export async function receiveDocumentUpload(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, { once = false } = {}): Promise<void> {
   if (getBrowserStorageTransport() !== 'proxy') throw new ApiRequestError(409, 'PROXY_UPLOAD_DISABLED', 'Use the prepared storage URL for this upload.');
-  if (!once) return storeUploadBody(caller, id, body);
   const lease = await tryAcquireDocumentBlobLease(uploadLeaseKey(id), { leaseMs: TEMP_DOCUMENT_UPLOAD_TTL_MS });
-  if (!lease) throw usedLink();
+  if (!lease) throw once ? usedLink() : uploadInProgress();
   try {
-    await storeUploadBody(caller, id, body, true);
+    await storeUploadBody(caller, id, body, once);
   } finally {
     await lease.release().catch(() => undefined);
   }
 }
 
-function usedLink() {
-  return new ApiRequestError(409, 'UPLOAD_ALREADY_RECEIVED', 'This upload link has already been used. Run "docs upload" again for a new one.');
+function uploadInProgress() {
+  return new ApiRequestError(409, 'UPLOAD_IN_PROGRESS', 'The file is still being sent or added. Try again in a moment.');
 }
 
-async function storeUploadBody(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, once = false): Promise<void> {
+function usedLink() {
+  return new ApiRequestError(409, 'UPLOAD_ALREADY_RECEIVED', 'This upload\'s file has already been received through its link. Run "docs upload" again for a new one.');
+}
+
+async function storeUploadBody(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, once: boolean): Promise<void> {
   const value = await receipt(caller, id);
   if (!('upload' in value) || value.requested) throw new ApiRequestError(409, 'UPLOAD_ALREADY_SUBMITTED', 'This upload has already been submitted.');
-  if (once && value.received) throw usedLink();
+  if (value.received) throw usedLink();
   const reader = body?.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -172,7 +176,7 @@ export async function submitDocumentUpload(caller: DocumentCaller, id: string, f
   const folder = folderId === undefined ? undefined : folderId === null ? null : (folderId as string).trim();
   // Under the upload's lease, so a concurrent submit or link transfer can't write over this receipt.
   const lease = await tryAcquireDocumentBlobLease(uploadLeaseKey(id));
-  if (!lease) throw new ApiRequestError(409, 'UPLOAD_IN_PROGRESS', 'The file is still being sent or added. Try again in a moment.');
+  if (!lease) throw uploadInProgress();
   try {
     const value = await receipt(caller, id);
     if ('upload' in value && !value.requested) {
