@@ -61,6 +61,7 @@ import { POST as prepare } from '@/app/api/v1/uploads/route';
 import { GET as uploadStatus } from '@/app/api/v1/uploads/[uploadId]/route';
 import { PUT as transfer } from '@/app/api/v1/uploads/[uploadId]/file/route';
 import { signUploadLink } from '@/lib/server/documents/upload-links';
+import { safeDocumentName } from '@/lib/server/documents/utils';
 
 function request(path: string, method = 'GET', body?: unknown) {
   return new NextRequest(`http://localhost${path}`, { method,
@@ -116,7 +117,14 @@ test('creates text and URL documents directly on the server with canonical ident
   expect(linked).toMatchObject({ name: 'Reading list.txt', status: 'ready' });
 });
 
-test('a signed upload link sends one upload\'s bytes without a session, for its owner only', async () => {
+test('a long name is shortened before its extension, which decides the document type', () => {
+  const name = safeDocumentName(`${'a'.repeat(300)}.pdf`, 'document.pdf');
+  expect(name).toHaveLength(240);
+  expect(name.endsWith('a.pdf')).toBe(true);
+  expect(safeDocumentName('short.epub', 'document.epub')).toBe('short.epub');
+});
+
+test('a signed upload link sends one upload\'s bytes once without a session, for its owner only', async () => {
   const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'linked.txt', size: 5 }))).json();
   const { query } = signUploadLink('owner', prepared.id);
   state.userId = null;
@@ -126,6 +134,10 @@ test('a signed upload link sends one upload\'s bytes without a session, for its 
   expect((await put(query.replace(/owner=[^&]+/, `owner=${Buffer.from('other').toString('base64url')}`))).status).toBe(403);
   expect((await put(signUploadLink('owner', prepared.id, Date.now() - 31 * 60 * 1000).query)).status).toBe(403);
   expect((await put(query)).status).toBe(204);
+  // Used once, so the file can't be replaced before it is added.
+  const again = await put(query);
+  expect(again.status).toBe(409);
+  expect((await again.json()).error.code).toBe('UPLOAD_ALREADY_RECEIVED');
   state.userId = 'owner';
   const created = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
   expect(created.status).toBe(201);

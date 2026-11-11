@@ -33,7 +33,8 @@ export function tokenize(line: string): string[] {
     const char = line[index];
     if (quote) {
       if (char === quote) quote = null;
-      else if (char === '\\' && quote === '"' && index + 1 < line.length) current += line[++index];
+      // As in a shell, a backslash inside double quotes escapes only a quote or another backslash.
+      else if (char === '\\' && quote === '"' && (line[index + 1] === '"' || line[index + 1] === '\\')) current += line[++index];
       else current += char;
     } else if (char === '"' || char === '\'') {
       quote = char;
@@ -99,11 +100,16 @@ export function parseCommand<Context>(tool: string, commands: CliCommand<Context
       : `Unknown command "${tokens[0]}". Run "help" for the commands ${tool} has.`);
   }
   const rest = tokens.slice(2);
-  if (rest.includes('--help') || rest.includes('-h')) return { help: helpText(tool, commands, command.name) };
   const positional: string[] = [];
   const flags: Record<string, string | number> = {};
   for (let index = 0; index < rest.length; index += 1) {
     const token = rest[index];
+    // Everything after "--" is an argument, so a name may start with a dash.
+    if (token === '--') {
+      positional.push(...rest.slice(index + 1));
+      break;
+    }
+    if (token === '--help' || token === '-h') return { help: helpText(tool, commands, command.name) };
     if (!token.startsWith('--')) {
       positional.push(token);
       continue;

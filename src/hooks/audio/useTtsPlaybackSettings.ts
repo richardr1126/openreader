@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useRef, type MutableRefObject } from 'react';
 import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { AppConfigValues } from '@/types/config';
@@ -9,6 +10,7 @@ import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings, type BookSpeechSettings } from '@/types/document-settings';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import { queryKeys } from '@/lib/client/query-keys';
 
 type UseTtsPlaybackSettingsInput = {
   isPlaying: boolean;
@@ -29,6 +31,9 @@ type UseTtsPlaybackSettingsInput = {
   providerRef: string;
   providerType: TtsProviderType;
   ttsModel: string;
+  /** The saved instructions and model options, restored if a provider switch has to be undone. */
+  ttsInstructions: string;
+  ttsModelOptions: string;
   defaultVoice: string;
   defaultVoiceSpeed: number;
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
@@ -62,12 +67,17 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     providerRef,
     providerType,
     ttsModel,
+    ttsInstructions,
+    ttsModelOptions,
     defaultVoice,
     defaultVoiceSpeed,
     updateConfigKey,
     updateConfig,
     reacquirePlaybackPlan,
   } = input;
+  /** The latest book voice change; an older one that fails must not undo it. */
+  const voiceChangeSeq = useRef(0);
+  const queryClient = useQueryClient();
 
   const clearSegmentCaches = useCallback(() => {
     const wasPlaying = isPlaying;
@@ -159,6 +169,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
       },
     });
     const previous = readerSettings;
+    const seq = ++voiceChangeSeq.current;
     void restartAfterConfigUpdate(
       () => setReaderSettings(next),
       async () => {
@@ -167,7 +178,11 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         let switched = false;
         try {
           if (switching) {
-            await updateConfig({ providerRef: switching.providerRef, providerType: switching.providerType, ttsModel: switching.ttsModel });
+            // The new provider's own instructions and options, as the cached-voice
+            // check assumed: the ones saved for the provider being left would
+            // name different audio.
+            await updateConfig({ providerRef: switching.providerRef, providerType: switching.providerType, ttsModel: switching.ttsModel,
+              ttsInstructions: '', ttsModelOptions: '' });
             switched = true;
           }
           // The audio controller's snapshot does not own live font/color edits.
@@ -176,15 +191,17 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
           onSettingsSaved(saved.settings);
         } catch (error) {
           console.error('Could not save book voice:', error);
+          toast.error('Could not save this book\'s voice');
+          // A newer change has already replaced this one's settings and provider.
+          if (seq !== voiceChangeSeq.current) return;
           setReaderSettings(previous);
           // Other books follow the saved provider, so a switch made for this
           // book must not outlive the save it was made for.
           if (switched) {
-            await updateConfig({ providerRef, providerType, ttsModel }).catch((restoreError: unknown) => {
+            await updateConfig({ providerRef, providerType, ttsModel, ttsInstructions, ttsModelOptions }).catch((restoreError: unknown) => {
               console.error('Could not restore the previous provider:', restoreError);
             });
           }
-          toast.error('Could not save this book\'s voice');
         }
       },
       { resetPlan: true },
@@ -199,7 +216,9 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     readerSettings,
     restartAfterConfigUpdate,
     setReaderSettings,
+    ttsInstructions,
     ttsModel,
+    ttsModelOptions,
     updateConfig,
   ]);
 
@@ -224,6 +243,8 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         const result = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
         onSettingsSaved(result.settings);
         saved = true;
+        // Which cached audio a voice reuses depends on these settings.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.allCachedVoices() });
       } catch (error) {
         console.error('Could not save book speech settings:', error);
         setReaderSettings(previous);
@@ -231,7 +252,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
       }
     }, { resetPlan: true });
     return saved;
-  }, [documentId, onSettingsSaved, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
+  }, [documentId, onSettingsSaved, queryClient, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
 
   return {
     clearSegmentCaches,

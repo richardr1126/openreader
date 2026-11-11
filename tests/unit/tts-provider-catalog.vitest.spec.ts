@@ -183,6 +183,24 @@ describe('tts provider catalog', () => {
     }
   });
 
+  test('a busy or silent provider leaves its standard voices unconfirmed', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response;
+      await expect(resolveVoices({ provider: 'custom-openai', model: 'kokoro', apiKey: 'token', baseUrl: 'https://busy.example.com' }))
+        .resolves.toMatchObject({ status: 'unreachable' });
+      await expect(resolveVoices({ provider: 'replicate', model: 'acme/my-tts-model-busy', apiKey: 'r8_token' }))
+        .resolves.toEqual({ voices: ['default'], status: 'unreachable' });
+      globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
+      await expect(resolveVoices({ provider: 'replicate', model: 'acme/my-tts-model-down', apiKey: 'r8_token' }))
+        .resolves.toMatchObject({ status: 'unreachable' });
+      await expect(resolveVoices({ provider: 'openrouter', model: 'openai/gpt-4o-mini-tts' }))
+        .resolves.toMatchObject({ status: 'unreachable' });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
   test('fetches custom Replicate model voices from model schema', async () => {
     const originalFetch = globalThis.fetch;
     let calls = 0;

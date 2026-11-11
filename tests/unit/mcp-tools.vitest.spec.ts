@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, expect, test, vi } from 'vitest';
+import { verifyUploadLink } from '@/lib/server/documents/upload-links';
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(), create: vi.fn(), voices: vi.fn(), providers: vi.fn(), start: vi.fn(), get: vi.fn(), stop: vi.fn(), caller: vi.fn(), intent: vi.fn(),
@@ -89,6 +90,19 @@ test('docs list passes quoted searches through, and a leading tool name is ignor
   mocks.list.mockResolvedValue({ data: [], nextCursor: null });
   await run('openreader', 'openreader docs list --search "dune messiah" --limit=5');
   expect(mocks.list.mock.calls[0][1].toString()).toBe('limit=5&q=dune+messiah');
+  // A flag's value is never read as --help.
+  await run('openreader', 'docs list --search --help');
+  expect(mocks.list.mock.calls[1][1].toString()).toBe('limit=50&q=--help');
+});
+
+test('names keep their backslashes, and after "--" a name may start with a dash', async () => {
+  mocks.createFolder.mockImplementation(async (_principal: unknown, body: { name: string }) => ({ id: 'f9', name: body.name }));
+  await run('openreader_docs', 'folders create "C:\\Books\\ and \\"quotes\\""');
+  expect(mocks.createFolder.mock.calls[0][1]).toEqual({ name: 'C:\\Books\\ and "quotes"' });
+  await run('openreader_docs', 'folders create -- --drafts');
+  expect(mocks.createFolder.mock.calls[1][1]).toEqual({ name: '--drafts' });
+  await run('openreader_docs', 'folders create -- -h');
+  expect(mocks.createFolder.mock.calls[2][1]).toEqual({ name: '-h' });
 });
 
 test('docs add imports a URL or the input text and returns a clickable link, not a v1 resource URL', async () => {
@@ -112,12 +126,19 @@ test('docs upload gives the upload page, and with a name and size a one-time URL
   expect(mocks.prepare).not.toHaveBeenCalled();
 
   const id = '0b5e1a2c-3d4e-4f50-8a6b-7c8d9e0f1a2b';
-  mocks.prepare.mockResolvedValue({ id, url: `/api/v1/uploads/${id}/file`, headers: { 'Content-Type': 'application/pdf' }, expiresAt: Date.UTC(2026, 10, 8) });
+  vi.stubEnv('AUTH_SECRET', 'test-auth-secret');
+  const now = Date.now();
+  mocks.prepare.mockResolvedValue({ id, url: `/api/v1/uploads/${id}/file`, headers: { 'Content-Type': 'application/pdf' }, expiresAt: now + 60 * 60 * 1000 });
   const prepared = (await run('openreader_docs', "docs upload --name \"Bob's paper.pdf\" --size 10")).structuredContent;
   expect(mocks.prepare.mock.calls[0][1]).toEqual({ name: "Bob's paper.pdf", size: 10 });
   // The app's own upload route needs a v1 token, so its URL carries a signature instead.
   const url = prepared.upload.url as string;
   expect(url).toMatch(new RegExp(`^http://localhost:3003/api/v1/uploads/${id}/file\\?owner=[\\w-]+&expires=\\d+&signature=[\\w-]+$`));
+  const signed = new URL(url).searchParams;
+  expect(verifyUploadLink(id, signed)).toMatchObject({ userId: 'user' });
+  // The link expires before the prepared upload, and the result says when.
+  expect(Number(signed.get('expires'))).toBeLessThanOrEqual(now + 31 * 60 * 1000);
+  expect(Date.parse(prepared.upload.expiresAt)).toBe(Number(signed.get('expires')));
   expect(prepared.curl).toBe(`curl -fsS -X PUT -H 'Content-Type: application/pdf' --data-binary @'Bob'\\''s paper.pdf' '${url}'`);
   expect((await run('openreader_docs', 'docs upload --name a.pdf')).isError).toBe(true);
 
@@ -184,10 +205,11 @@ test('voice IDs carry provider and model, so a listed voice names one speech set
   expect(JSON.stringify(created)).not.toMatch(/secret|op-internal/);
 });
 
-test('an unreachable provider is reported instead of guessed voices', async () => {
-  mocks.providers.mockResolvedValue([]);
+test('an unreachable provider is reported instead of guessed voices, and the other providers stay listed', async () => {
+  mocks.providers.mockResolvedValue([{ id: 'fish', name: 'Fish', defaultModel: 's2', selected: false, models: [{ id: 's2' }] }]);
   mocks.voices.mockResolvedValue({ provider: 'local', model: 'kokoro', status: 'unreachable', nextCursor: null, data: [{ id: 'af_sky', name: 'Sky' }] });
-  expect((await run('openreader', 'voices list')).structuredContent.error.code).toBe('PROVIDER_UNAVAILABLE');
+  const listed = (await run('openreader', 'voices list')).structuredContent;
+  expect(listed).toMatchObject({ voices: [], error: { code: 'PROVIDER_UNAVAILABLE' }, providers: [{ id: 'fish' }] });
 });
 
 test('voices cached lists reusable audio with the voice ID and model speed to ask for', async () => {
@@ -208,7 +230,20 @@ test('audiobooks are named by ID alone, and cancel keeps the request as cancelle
 
   mocks.requests.mockResolvedValueOnce([{ id: 'book', documentId: 'doc' }]);
   mocks.get.mockResolvedValueOnce(audiobook);
-  expect((await run('openreader', 'audiobook list doc')).structuredContent.audiobooks).toHaveLength(1);
+  expect((await run('openreader', 'audiobook list doc')).structuredContent).toMatchObject({ audiobooks: [{ id: 'book' }], nextCursor: null });
+
+  // A chapter that left the book is skipped, and a full page points to the next.
+  const { ChapterNotFoundError } = await import('@/lib/server/audiobooks/audiobooks');
+  mocks.requests.mockResolvedValueOnce(Array.from({ length: 21 }, (_, index) => ({ id: `b${index}`, documentId: 'doc' })));
+  mocks.get.mockRejectedValueOnce(new ChapterNotFoundError());
+  mocks.get.mockResolvedValue(audiobook);
+  const page = (await run('openreader', 'audiobook list doc')).structuredContent;
+  expect(page.audiobooks).toHaveLength(19);
+  expect(page.nextCursor).toBe('20');
+  mocks.requests.mockResolvedValueOnce([]);
+  expect((await run('openreader', 'audiobook list doc --cursor 20')).structuredContent).toEqual({ audiobooks: [], nextCursor: null });
+  expect(mocks.requests.mock.calls.at(-1)).toEqual(['user', 'doc', 21, 20]);
+  mocks.get.mockReset();
 
   mocks.owner.mockResolvedValueOnce(null);
   expect((await run('openreader', 'audiobook view missing')).structuredContent.error.code).toBe('AUDIOBOOK_NOT_FOUND');

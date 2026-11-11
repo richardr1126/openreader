@@ -190,6 +190,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     providerRef: configProviderRef,
     providerType: configProviderType,
     ttsModel: configTTSModel,
+    ttsInstructions: configTtsInstructions,
+    ttsModelOptions: configTtsModelOptions,
     updateConfigKey,
     updateConfig,
   } = useConfig();
@@ -593,6 +595,8 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     providerRef: configProviderRef,
     providerType: configProviderType,
     ttsModel,
+    ttsInstructions: configTtsInstructions,
+    ttsModelOptions: configTtsModelOptions,
     defaultVoice: voice,
     defaultVoiceSpeed: speed,
     updateConfigKey,

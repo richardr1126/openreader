@@ -2,8 +2,12 @@ import path from 'path';
 import type { DocumentType } from '@/types/documents';
 
 export function safeDocumentName(rawName: string, fallback: string): string {
-  const baseName = path.basename(rawName || fallback);
-  return baseName.replaceAll('\u0000', '').slice(0, 240) || fallback;
+  const baseName = path.basename(rawName || fallback).replaceAll('\u0000', '');
+  if (baseName.length <= 240) return baseName || fallback;
+  // A long name is shortened before its extension, which decides the document's type.
+  const extension = path.extname(baseName);
+  if (extension.length > 16) return baseName.slice(0, 240);
+  return `${baseName.slice(0, baseName.length - extension.length).slice(0, 240 - extension.length)}${extension}`;
 }
 
 /** Derived from the name so stored content types never depend on what a client declared. */

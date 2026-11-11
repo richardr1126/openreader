@@ -84,6 +84,11 @@ export async function resolveDefaultPlaybackRequest(
   } else if (selection.voice && policy.voiceSource === 'static' && !selection.voice.includes('+') && !policy.defaultVoices.includes(selection.voice)) {
     return { error: 'That voice is not available for this provider and model. Use an ID from the list of voices.', invalid: true };
   }
+  // The cache is named by the speed asked for, so a speed the provider can't
+  // reach must not name audio made at a slower one.
+  if (policy.supportsNativeModelSpeed && selection.modelSpeed !== undefined && selection.modelSpeed > policy.maxNativeModelSpeed) {
+    return { error: `This model's speed goes up to ${policy.maxNativeModelSpeed}.`, invalid: true };
+  }
   let voice = selection.voice || bookVoice.voice;
   // A static catalogue needs no credentials. An unconfigured installation
   // must still support reading with an estimated timeline; only generation

@@ -72,10 +72,12 @@ An assistant that can run commands can send the file itself instead:
 returns it with its headers and a `curl` command. Once the file is sent,
 `docs add <uploadId>` adds it. A DOCX is converted first; while it is, `docs add`
 reports `processing`, and running it again finishes. The upload URL needs no other
-credentials, works for 30 minutes and accepts only that one file, so treat it like a
-password.
+credentials, works for 30 minutes and accepts that one file a single time, so treat it
+like a password.
 
-`docs rename` keeps the document's file extension. `docs move <doc> <folder>` files a
+`docs rename` keeps the document's file extension. Arguments are quoted as in a shell,
+and after `--` every word is an argument, so `folders create -- --drafts` names a
+folder `--drafts`. `docs move <doc> <folder>` files a
 document, and `-` in place of a folder takes it out of its folder; `docs list --folder`
 filters the same way. `docs delete` removes a document with its generated audio and
 audiobooks, and cannot be undone. `folders delete` removes only the folder: its
@@ -87,8 +89,8 @@ A voice ID names its provider and model as well as the voice, as
 `provider/model/voice`, so a voice from `voices list` or `voices cached` means one
 speech setting. `voices list` shows the providers and models the user can use, then the
 voices of the saved provider and model, or of the `--provider` and `--model` you name.
-If the provider does not answer, the command fails rather than list voices it could
-not check.
+If the provider does not answer, the voices are left out with a `PROVIDER_UNAVAILABLE`
+error rather than listed unchecked, and the providers stay listed so you can pick another.
 
 `voices cached <doc>` lists the voices a document already has audio for, with the
 model speed the audio was made at. Creating an audiobook with one of those voices and

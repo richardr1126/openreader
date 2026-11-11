@@ -19,7 +19,7 @@ beforeEach(() => { state.fetchExternal.mockReset(); });
 test('keeps a linked PDF as a file named from the URL, with a limit for files and one for pages', async () => {
   reply('application/pdf', '%PDF-1.7 body');
   const source = await fetchUrlSource('https://example.test/files/paper.pdf', 50 * 1024 * 1024);
-  expect(source).toMatchObject({ kind: 'file', name: 'paper.pdf' });
+  expect(source).toMatchObject({ kind: 'file', name: 'paper.pdf', bytes: Buffer.from('%PDF-1.7 body') });
   const { maxBytes } = state.fetchExternal.mock.calls[0][1];
   expect(maxBytes('application/pdf')).toBe(50 * 1024 * 1024);
   expect(maxBytes('text/html; charset=utf-8')).toBe(2 * 1024 * 1024);

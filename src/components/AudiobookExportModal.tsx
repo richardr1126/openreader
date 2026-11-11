@@ -344,7 +344,7 @@ export function AudiobookExportModal({
                 variant="secondary"
                 size="sm"
                 onClick={onChangeVoice}
-                disabled={isGenerating}
+                disabled={isGenerating || pendingAction !== null}
                 aria-label="Change voice"
               >
                 Change
@@ -354,7 +354,7 @@ export function AudiobookExportModal({
               voices={cachedVoices}
               current={{ providerRef, ttsModel, voice, nativeSpeed: nativeSpeedSupported ? voiceSpeed : 1 }}
               onPick={(entry) => setBookVoiceAndRestart(cachedVoiceChange(entry, providers))}
-              disabled={isGenerating}
+              disabled={isGenerating || pendingAction !== null}
             />
             {languageWarnings.length > 0 && (
               <div className="space-y-1">

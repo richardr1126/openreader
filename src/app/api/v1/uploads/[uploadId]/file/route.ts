@@ -12,7 +12,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ upl
     const { logger } = createRequestLogger({ route: request.nextUrl.pathname, request });
     try {
       const id = uploadId((await context.params).uploadId);
-      await receiveDocumentUpload(documentCaller(verifyUploadLink(id, request.nextUrl.searchParams)), id, request.body);
+      await receiveDocumentUpload(documentCaller(verifyUploadLink(id, request.nextUrl.searchParams)), id, request.body, { once: true });
       return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'private, no-store' } });
     } catch (error) {
       return documentRequestFailure(error, logger);

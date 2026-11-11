@@ -13,6 +13,9 @@ export function useCachedVoices(documentId: string, enabled: boolean) {
     queryFn: ({ signal }) => getCachedVoices(documentId, signal),
     enabled: enabled && Boolean(documentId) && !isSessionPending,
     staleTime: 0,
+    // A worker restart is brief; keep trying rather than show no cached voices.
+    retry: 4,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
   });
   return query.data ?? [];
 }

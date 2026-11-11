@@ -89,7 +89,9 @@ test('client uses query selection and projects IDs into the existing voice picke
   expect(await getVoices({ provider: 'speech', model: 'tts-1' })).toEqual({ voices: ['alloy'] });
   fetch.mockImplementationOnce(async () => Response.json({ provider: 'speech', model: 'tts-1', nextCursor: null, data: [{ id: 'alloy', name: 'alloy' }, { id: 'clone:mine', name: 'My voice' }] }));
   expect(await getVoices({ provider: 'speech', model: 'tts-1' })).toEqual({ voices: ['alloy'] });
-  expect(fetch).toHaveBeenCalledWith('/api/v1/voices?provider=speech&model=tts-1', { signal: undefined });
+  expect(fetch).toHaveBeenCalledWith('/api/v1/voices?provider=speech&model=tts-1', { signal: undefined });  // The picker warns about unconfirmed voices, so the status comes through.
+  fetch.mockImplementationOnce(async () => Response.json({ provider: 'speech', model: 'tts-1', status: 'unreachable', nextCursor: null, data: [{ id: 'alloy', name: 'Alloy' }] }));
+  expect(await getVoices({ provider: 'speech', model: 'tts-1' })).toEqual({ voices: ['alloy'], status: 'unreachable' });
 });
 
 test('default discovery follows only the caller saved provider and model', async () => {

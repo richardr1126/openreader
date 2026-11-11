@@ -20,10 +20,8 @@ process.env.S3_PREFIX = process.env.S3_PREFIX || 'openreader';
 import fs from 'node:fs';
 import { afterAll, vi } from 'vitest';
 
-const { testDocstore } = vi.hoisted(() => {
-  const nodeFs = require('node:fs') as typeof import('node:fs');
-  const nodeOs = require('node:os') as typeof import('node:os');
-  const nodePath = require('node:path') as typeof import('node:path');
+const { testDocstore } = await vi.hoisted(async () => {
+  const [nodeFs, nodeOs, nodePath] = await Promise.all([import('node:fs'), import('node:os'), import('node:path')]);
   return { testDocstore: nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'openreader-worker-docstore-')) };
 });
 vi.mock('../src/infrastructure/platform', () => ({ DOCSTORE_DIR: testDocstore }));

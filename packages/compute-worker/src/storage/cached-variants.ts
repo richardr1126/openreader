@@ -28,7 +28,8 @@ export async function listCachedPlaybackVariants(input: {
   const version = Math.max(0, Math.floor(input.documentVersion));
   const audioRoot = `${s3Prefix}/tts_playback_segments_audio_v1/users/${encodeURIComponent(storageUserId)}/docs/${documentId}/${version}/`;
   const sidecarRoot = `${s3Prefix}/tts_playback_segments_v1/users/${storageUserHash(storageUserId)}/docs/${documentId}/${version}/`;
-  const hashes = await storage.listChildPrefixes(audioRoot, { limit: VARIANT_LIMIT });
+  // Every variant is read before the newest are kept, since key order says nothing of age.
+  const hashes = await storage.listChildPrefixes(audioRoot);
   const variants: CachedPlaybackVariant[] = [];
   for (const hash of hashes) {
     const settingsHash = hash.replace(/\/$/, '');
@@ -53,12 +54,12 @@ export async function listCachedPlaybackVariants(input: {
       updatedAt,
     });
   }
-  return variants.sort((left, right) => right.updatedAt - left.updatedAt);
+  return variants.sort((left, right) => right.updatedAt - left.updatedAt).slice(0, VARIANT_LIMIT);
 }
 
 async function readVariantSettings(storage: ArtifactStorage, prefix: string): Promise<unknown> {
   for await (const page of storage.listPrefixPages(prefix)) {
-    for (const object of page.slice(0, 5)) {
+    for (const object of page) {
       try {
         const record = JSON.parse(Buffer.from(await storage.readObject(object.key)).toString('utf8')) as { settingsJson?: unknown };
         const settings = typeof record.settingsJson === 'string' ? JSON.parse(record.settingsJson) : record.settingsJson;
@@ -67,7 +68,6 @@ async function readVariantSettings(storage: ArtifactStorage, prefix: string): Pr
         // A record being rewritten is skipped; the next one carries the same settings.
       }
     }
-    return null;
   }
   return null;
 }

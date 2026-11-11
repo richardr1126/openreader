@@ -76,6 +76,7 @@ const uploadPageUrl = (folder?: string) => appUrl(folder ? `/app/upload/${encode
 /** `-` names the top of the library; anything else is a folder ID. */
 const folderArg = (value: string) => (value === '-' ? null : folderId(value));
 
+const AUDIOBOOK_PAGE = 20;
 const UPLOAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DOCUMENT_EXTENSION = /\.(pdf|epub|docx|txt|md|markdown|mdown|mkd|html?)$/i;
 
@@ -166,16 +167,16 @@ const readCommands: CliCommand<Context>[] = [
           ...(flags.provider ? { provider: String(flags.provider) } : {}), ...(flags.model ? { model: String(flags.model) } : {}),
         })),
       ]);
-      if (voices.status === 'unreachable') {
-        throw new ApiRequestError(503, 'PROVIDER_UNAVAILABLE', `The speech provider "${voices.provider}" can't be reached, so its voices can't be listed. Try again once it is back, or use another provider.`);
-      }
+      const unreachable = voices.status === 'unreachable';
       return {
         providers: providers.map(({ id, name, defaultModel, selected, selectedModel, models }) => ({
           id, name, defaultModel, models: models.map(model => model.id), ...(selected ? { saved: true, savedModel: selectedModel } : {}),
         })),
         provider: voices.provider,
         model: voices.model,
-        voices: voices.data.map(voice => ({ id: voiceId(voices.provider, voices.model, voice.id), name: voice.name })),
+        // Unconfirmed voices are left out; the providers above stay listed so another can be chosen.
+        voices: unreachable ? [] : voices.data.map(voice => ({ id: voiceId(voices.provider, voices.model, voice.id), name: voice.name })),
+        ...(unreachable ? { error: { code: 'PROVIDER_UNAVAILABLE', message: `The speech provider "${voices.provider}" can't be reached, so its voices can't be listed. Try again once it is back, or use another provider.` } } : {}),
       };
     },
   },
@@ -197,16 +198,24 @@ const readCommands: CliCommand<Context>[] = [
     name: ['audiobook', 'list'],
     args: ['doc'],
     summary: 'List the audiobooks requested for a document, newest first.',
-    run: async ({ args }, { principal }) => {
+    flags: { cursor: { type: 'string', description: 'nextCursor from an earlier page.' } },
+    run: async ({ args, flags }, { principal }) => {
       const bookDocumentId = documentId(args.doc);
       const caller = await audiobookOwner(principal, bookDocumentId);
-      const requests = await listAudiobookRequests(principal.userId, bookDocumentId, 20);
+      const offset = flags.cursor === undefined ? 0 : Number(flags.cursor);
+      if (!Number.isSafeInteger(offset) || offset < 0) throw new CliUsageError('--cursor must be a nextCursor from an earlier page.');
+      const requests = await listAudiobookRequests(principal.userId, bookDocumentId, AUDIOBOOK_PAGE + 1, offset);
       const audiobooks = [];
-      for (const { id } of requests) {
-        const audiobook = await getAudiobook(caller, id, bookDocumentId);
-        if (audiobook) audiobooks.push(audiobookSummary(audiobook));
+      for (const { id } of requests.slice(0, AUDIOBOOK_PAGE)) {
+        try {
+          const audiobook = await getAudiobook(caller, id, bookDocumentId);
+          if (audiobook) audiobooks.push(audiobookSummary(audiobook));
+        } catch (error) {
+          // A chapter that is no longer in the book leaves its request behind; list the rest.
+          if (!(error instanceof ChapterNotFoundError)) throw error;
+        }
       }
-      return { audiobooks };
+      return { audiobooks, nextCursor: requests.length > AUDIOBOOK_PAGE ? String(offset + AUDIOBOOK_PAGE) : null };
     },
   },
   {

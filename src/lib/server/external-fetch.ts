@@ -84,20 +84,20 @@ function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number):
       const status = res.statusCode ?? 0;
 
       if (status >= 300 && status < 400 && res.headers.location) {
-        res.resume(); // drain so the socket can be reused/closed
+        req.destroy(); // an untrusted body is never drained: it could run past every limit
         ok({ redirectLocation: res.headers.location });
         return;
       }
 
       if (status < 200 || status >= 300) {
-        res.resume();
+        req.destroy();
         fail(new Error(messages.status(status)));
         return;
       }
 
       const contentType = (res.headers['content-type'] || '').toString();
       if (!options.acceptsContentType(contentType)) {
-        res.resume();
+        req.destroy();
         fail(new Error(messages.contentType));
         return;
       }
@@ -105,7 +105,7 @@ function requestOnce(url: URL, options: ExternalFetchOptions, deadline: number):
       const maxBytes = typeof options.maxBytes === 'number' ? options.maxBytes : options.maxBytes(contentType);
       const contentLength = res.headers['content-length'];
       if (contentLength && parseInt(contentLength.toString(), 10) > maxBytes) {
-        res.resume();
+        req.destroy();
         fail(new Error(messages.tooLarge));
         return;
       }

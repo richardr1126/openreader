@@ -19,7 +19,7 @@ import { normalizeAuthor, normalizeLanguage } from './import-metadata';
 import { assertStorageAvailable } from '@/lib/server/storage/usage';
 import { consumeDocumentIntake } from './intake';
 
-type UploadReceipt = { upload: FinalizeUpload; createdAt: number; size: number; requested: boolean } | { stored: BaseDocument };
+type UploadReceipt = { upload: FinalizeUpload; createdAt: number; size: number; requested: boolean; received?: boolean } | { stored: BaseDocument };
 
 export function uploadId(value: string): string {
   const id = value.trim().toLowerCase();
@@ -71,10 +71,12 @@ async function createPreparedUpload(caller: DocumentCaller, body: Record<string,
   return { id, ...transfer, expiresAt: value.createdAt + (proxy ? TEMP_DOCUMENT_UPLOAD_TTL_MS : 5 * 60 * 1000) };
 }
 
-export async function receiveDocumentUpload(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null): Promise<void> {
+/** With `once`, as for a signed upload link, the file can arrive only one time, so it can't be swapped before it is added. */
+export async function receiveDocumentUpload(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, { once = false } = {}): Promise<void> {
   if (getBrowserStorageTransport() !== 'proxy') throw new ApiRequestError(409, 'PROXY_UPLOAD_DISABLED', 'Use the prepared storage URL for this upload.');
   const value = await receipt(caller, id);
   if (!('upload' in value) || value.requested) throw new ApiRequestError(409, 'UPLOAD_ALREADY_SUBMITTED', 'This upload has already been submitted.');
+  if (once && value.received) throw new ApiRequestError(409, 'UPLOAD_ALREADY_RECEIVED', 'This upload link has already been used. Run "docs upload" again for a new one.');
   const reader = body?.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -92,6 +94,7 @@ export async function receiveDocumentUpload(caller: DocumentCaller, id: string, 
   }
   if (size !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
   await putTempDocumentBlob(id, caller.principal.userId, Buffer.concat(chunks), documentContentType(value.upload.name), null);
+  if (once) await saveReceipt(caller, id, { ...value, received: true });
 }
 
 /**

@@ -8,6 +8,7 @@ import { useFolders } from '@/hooks/useFolders';
 import { useUserPreferences } from '@/hooks/useUserPreferences';
 import { putUserPreferences, type PreferencesResponse } from '@/lib/client/api/user-state';
 import { queryKeys } from '@/lib/client/query-keys';
+import { combineQueryStates, deriveQueryState } from '@/lib/client/query/query-state';
 import type { DocumentListDocument, ReadingStatusFilter } from '@/types/documents';
 import { useDocumentSelection } from './dnd/DocumentSelectionContext';
 import type { DocumentDragItem } from './dnd/dndTypes';
@@ -274,19 +275,27 @@ export function useDocumentListController({ uploadTo }: { uploadTo?: UploadReque
   }, [folderState.query, preferencesQuery, refreshDocuments]);
 
   // Waits for saved list state, which would otherwise replace the folder chosen here.
-  const uploadRequest = useRef(uploadTo);
+  const [uploadRequest, setUploadRequest] = useState(uploadTo);
   const folders = folderState.query.data;
   const preferencesReady = preferencesQuery.data !== undefined;
   useEffect(() => {
-    const request = uploadRequest.current;
-    if (!request || !preferencesReady || !folders) return;
-    uploadRequest.current = undefined;
-    if (request.folderId && folders.some((folder) => folder.id === request.folderId)) {
-      updateListState({ sidebarFilter: `folder:${request.folderId}` });
-    }
+    if (!uploadRequest || !preferencesReady || !folders) return;
+    setUploadRequest(undefined);
+    // A link to the library, or to a folder that is gone, files into the library itself.
+    const folderId = uploadRequest.folderId;
+    updateListState({ sidebarFilter: folderId && folders.some((folder) => folder.id === folderId) ? `folder:${folderId}` : 'all' });
     setIsUploadDialogOpen(true);
     window.history.replaceState(null, '', '/app');
-  }, [folders, preferencesReady, updateListState]);
+  }, [folders, preferencesReady, updateListState, uploadRequest]);
+  // A pending upload link needs folders and preferences too, so their failure shows the retry.
+  const listQueryState = useMemo(() => uploadRequest
+    ? combineQueryStates([
+      documentsQueryState,
+      deriveQueryState({ hasData: Boolean(folders), isFetching: folderState.query.isFetching, isError: folderState.query.isError, error: folderState.query.error }),
+      deriveQueryState({ hasData: preferencesReady, isFetching: preferencesQuery.isFetching, isError: preferencesQuery.isError, error: preferencesQuery.error }),
+    ])
+    : documentsQueryState, [documentsQueryState, folderState.query.error, folderState.query.isError, folderState.query.isFetching, folders,
+    preferencesQuery.error, preferencesQuery.isError, preferencesQuery.isFetching, preferencesReady, uploadRequest]);
 
   const activeFolderId = listState.sidebarFilter.startsWith('folder:')
     ? listState.sidebarFilter.slice('folder:'.length)
@@ -311,7 +320,7 @@ export function useDocumentListController({ uploadTo }: { uploadTo?: UploadReque
     closeMobileSidebar: () => {
       if (isNarrow) setMobileSidebarOpen(false);
     },
-    documentsQueryState,
+    documentsQueryState: listQueryState,
     retryQueries,
     requestDeleteDocuments,
     documentsToDelete,

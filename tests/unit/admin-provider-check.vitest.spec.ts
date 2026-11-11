@@ -94,6 +94,13 @@ describe('admin provider check', () => {
     expect(disabled.at(-1)).toMatchObject({ id: 'speech', status: 'skipped' });
   });
 
+  test('voices the provider did not confirm are a warning', async () => {
+    const d = deps({ resolveVoices: vi.fn(async () => ({ voices: ['af_bella'], status: 'unreachable' as const })) });
+    const local = draft({ providerType: 'kokoro-local', baseUrl: '', defaultModel: '' });
+    const items = await runProviderCheck(local, { slug: 'kokoro-local', enabled: true, matchesDraft: true }, d, signal);
+    expect(items.find(({ id }) => id === 'voices')).toMatchObject({ status: 'warn', detail: expect.stringContaining('unconfirmed') });
+  });
+
   test('checks the local Kokoro provider without a key or a network probe', async () => {
     const d = deps({ resolveVoices: vi.fn(async () => ({ voices: ['af_bella', 'af_heart'], status: 'defaults' as const })) });
     const local = draft({ providerType: 'kokoro-local', baseUrl: '', defaultModel: '' });

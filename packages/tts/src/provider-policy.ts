@@ -37,6 +37,8 @@ export interface TtsProviderModelPolicy {
   isKokoroModel: boolean;
   maxVoices: number;
   supportsNativeModelSpeed: boolean;
+  /** The fastest model speed the provider accepts; a faster request would be sent at this speed. */
+  maxNativeModelSpeed: number;
   supportsInstructions: boolean;
   supportsCustomModel: boolean;
   defaultVoices: string[];
@@ -173,6 +175,8 @@ export function resolveTtsProviderModelPolicy(input: ResolveTtsPolicyInput): Tts
     supportsNativeModelSpeed: isResolvedProviderType
       ? supportsNativeModelSpeed(providerType, model)
       : false,
+    maxNativeModelSpeed: providerType === 'fish-audio' || providerType === 'openrouter'
+      || (providerType === 'replicate' && model === 'minimax/speech-2.8-turbo') ? 2 : 3,
     supportsInstructions: supportsTtsInstructions(model, providerType),
     supportsCustomModel: isResolvedProviderType
       ? providerSupportsCustomModel(providerType)

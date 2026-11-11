@@ -702,10 +702,10 @@ export async function findAudiobookDocumentId(id: string, storageUserId: string)
 }
 
 /** A user's audiobook requests, newest first, for one document or all of them. */
-export async function listAudiobookRequests(storageUserId: string, documentId?: string, limit = 50): Promise<Array<{ id: string; documentId: string }>> {
+export async function listAudiobookRequests(storageUserId: string, documentId?: string, limit = 50, offset = 0): Promise<Array<{ id: string; documentId: string }>> {
   return db.select({ id: audiobookRequests.id, documentId: audiobookRequests.documentId }).from(audiobookRequests)
     .where(and(eq(audiobookRequests.userId, storageUserId), ...(documentId ? [eq(audiobookRequests.documentId, documentId)] : [])))
-    .orderBy(desc(audiobookRequests.createdAt)).limit(limit) as Promise<Array<{ id: string; documentId: string }>>;
+    .orderBy(desc(audiobookRequests.createdAt), desc(audiobookRequests.id)).limit(limit).offset(offset) as Promise<Array<{ id: string; documentId: string }>>;
 }
 
 // A signal is the only thing that moves a closed tab's audiobook on, so it waits out
@@ -813,9 +813,11 @@ async function pruneRequest(id: string, userId: string, documentId: string): Pro
       // A chapter that no longer exists has nothing left to do.
       const settled = await getAudiobookUnlocked(caller, id, documentId).then(
         // A ready file says nothing about a run that is still changing the audio.
-        // A cancelled request asks for nothing more, whatever its run is doing.
+        // A cancelled request asks for nothing more, but keeps its run's
+        // reference while the worker is still draining that run.
         audiobook => audiobook !== null && (audiobook.status === 'cancelled'
-          || (!UNSETTLED.has(audiobook.status) && !UNSETTLED.has(audiobook.generation.state))),
+          ? audiobook.generation.state !== 'generating' && audiobook.generation.state !== 'queued'
+          : !UNSETTLED.has(audiobook.status) && !UNSETTLED.has(audiobook.generation.state)),
         (error: unknown) => {
           if (error instanceof ChapterNotFoundError) return true;
           throw error;

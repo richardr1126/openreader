@@ -226,17 +226,22 @@ export async function runProviderCheck(
   }
 
   let voices: string[] = [];
+  let unconfirmed = false;
   try {
-    ({ voices } = await deps.resolveVoices({
+    let status: string;
+    ({ voices, status } = await deps.resolveVoices({
       provider: draft.providerType,
       model,
       apiKey: draft.apiKey,
       baseUrl: draft.baseUrl || defaultBaseUrlForProviderType(draft.providerType),
     }));
+    unconfirmed = status === 'unreachable';
   } catch {
     voices = [];
   }
-  items.push(voices.length > 0
+  items.push(unconfirmed
+    ? { id: 'voices', label: 'Voices', status: 'warn', detail: 'The provider did not return its voice list, so its standard voices are unconfirmed.' }
+    : voices.length > 0
     ? { id: 'voices', label: 'Voices', status: 'ok', detail: `${voices.length} ${voices.length === 1 ? 'voice' : 'voices'} available.` }
     : { id: 'voices', label: 'Voices', status: 'warn', detail: 'No voices were found for this model.' });
 
