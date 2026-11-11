@@ -9,6 +9,7 @@ import { createOrReuseCurrentPdfParseOperation, resolveCurrentPdfParse } from '@
 import { getComputeWorkerClient, isComputeWorkerAvailable, isComputeWorkerUnavailableError } from '@/lib/server/compute-worker/client';
 import { TEMP_DOCUMENT_UPLOAD_TTL_MS, getTempDocumentFinalizeReceipt, putTempDocumentFinalizeReceipt,
   putTempDocumentBlob, presignTempPut, isValidTempUploadToken, headTempDocumentBlob, verifyDocumentBlobIntegrity } from './blobstore';
+import { tryAcquireDocumentBlobLease } from './blob-lease';
 import { finalizeUploadedDocument, verifyUploadFolder, type FinalizeUpload } from './finalize-upload';
 import { describeDocument, requireDocument } from './resources';
 import { documentContentType, safeDocumentName, toDocumentTypeFromName } from './utils';
@@ -71,12 +72,34 @@ async function createPreparedUpload(caller: DocumentCaller, body: Record<string,
   return { id, ...transfer, expiresAt: value.createdAt + (proxy ? TEMP_DOCUMENT_UPLOAD_TTL_MS : 5 * 60 * 1000) };
 }
 
-/** With `once`, as for a signed upload link, the file can arrive only one time, so it can't be swapped before it is added. */
+/** Receipt changes for one upload hold this lease, so a stale read never overwrites a newer state. */
+const uploadLeaseKey = (id: string) => `upload:${id}`;
+
+/**
+ * With `once`, as for a signed upload link, the file can arrive only one time, so it can't be swapped before it is added.
+ * The claim is a lease held for the whole transfer: a second PUT is refused while the first runs, and a
+ * transfer that fails releases it without marking the upload received, so the link can be retried.
+ */
 export async function receiveDocumentUpload(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, { once = false } = {}): Promise<void> {
   if (getBrowserStorageTransport() !== 'proxy') throw new ApiRequestError(409, 'PROXY_UPLOAD_DISABLED', 'Use the prepared storage URL for this upload.');
+  if (!once) return storeUploadBody(caller, id, body);
+  const lease = await tryAcquireDocumentBlobLease(uploadLeaseKey(id), { leaseMs: TEMP_DOCUMENT_UPLOAD_TTL_MS });
+  if (!lease) throw usedLink();
+  try {
+    await storeUploadBody(caller, id, body, true);
+  } finally {
+    await lease.release().catch(() => undefined);
+  }
+}
+
+function usedLink() {
+  return new ApiRequestError(409, 'UPLOAD_ALREADY_RECEIVED', 'This upload link has already been used. Run "docs upload" again for a new one.');
+}
+
+async function storeUploadBody(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, once = false): Promise<void> {
   const value = await receipt(caller, id);
   if (!('upload' in value) || value.requested) throw new ApiRequestError(409, 'UPLOAD_ALREADY_SUBMITTED', 'This upload has already been submitted.');
-  if (once && value.received) throw new ApiRequestError(409, 'UPLOAD_ALREADY_RECEIVED', 'This upload link has already been used. Run "docs upload" again for a new one.');
+  if (once && value.received) throw usedLink();
   const reader = body?.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
@@ -94,6 +117,7 @@ export async function receiveDocumentUpload(caller: DocumentCaller, id: string, 
   }
   if (size !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
   await putTempDocumentBlob(id, caller.principal.userId, Buffer.concat(chunks), documentContentType(value.upload.name), null);
+  // Submit takes the same lease, so it cannot have changed the receipt since it was read.
   if (once) await saveReceipt(caller, id, { ...value, received: true });
 }
 
@@ -146,19 +170,23 @@ function assertSameFolder(value: UploadReceipt, folder: string | null | undefine
 export async function submitDocumentUpload(caller: DocumentCaller, id: string, folderId?: unknown) {
   if (folderId !== undefined && folderId !== null && (typeof folderId !== 'string' || !folderId.trim())) throw new ApiRequestError(400, 'REQUEST_INVALID', 'folderId must be a string or null.');
   const folder = folderId === undefined ? undefined : folderId === null ? null : (folderId as string).trim();
-  const value = await receipt(caller, id);
-  if ('upload' in value && !value.requested) {
-    value.upload.folderId = folder;
-    await verifyUploadFolder(folder ?? null, caller.principal.userId);
-    const head = await headTempDocumentBlob(id, caller.principal.userId, null);
-    if (head.contentLength !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
-    value.requested = true;
-    // A concurrent submit may have finished meanwhile; never write over its receipt.
-    const latest = await receipt(caller, id);
-    if ('upload' in latest && !latest.requested) await saveReceipt(caller, id, value);
-    else assertSameFolder(latest, folder);
-  } else {
-    assertSameFolder(value, folder);
+  // Under the upload's lease, so a concurrent submit or link transfer can't write over this receipt.
+  const lease = await tryAcquireDocumentBlobLease(uploadLeaseKey(id));
+  if (!lease) throw new ApiRequestError(409, 'UPLOAD_IN_PROGRESS', 'The file is still being sent or added. Try again in a moment.');
+  try {
+    const value = await receipt(caller, id);
+    if ('upload' in value && !value.requested) {
+      value.upload.folderId = folder;
+      await verifyUploadFolder(folder ?? null, caller.principal.userId);
+      const head = await headTempDocumentBlob(id, caller.principal.userId, null);
+      if (head.contentLength !== value.size) throw new ApiRequestError(400, 'UPLOAD_INCOMPLETE', 'Upload does not match its declared size.');
+      value.requested = true;
+      await saveReceipt(caller, id, value);
+    } else {
+      assertSameFolder(value, folder);
+    }
+  } finally {
+    await lease.release().catch(() => undefined);
   }
   return readDocumentUpload(caller, id);
 }

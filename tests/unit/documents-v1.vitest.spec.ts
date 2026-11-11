@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   db: null as unknown, sqlite: null as unknown as import('better-sqlite3').Database,
-  userId: 'owner' as string | null, blobs: new Map<string, Buffer>(), receipts: new Map<string, unknown>(),
+  userId: 'owner' as string | null, blobs: new Map<string, Buffer>(), receipts: new Map<string, unknown>(), leases: new Set<string>(),
   parse: vi.fn(), article: vi.fn(), conversion: vi.fn(), workerAvailable: false, admit: vi.fn(),
 }));
 vi.mock('next/server', async original => ({ ...await original<typeof import('next/server')>(), after: () => undefined }));
@@ -17,7 +17,14 @@ vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async 
 vi.mock('@/lib/server/documents/web-loader', () => ({ fetchUrlSource: state.article }));
 vi.mock('@/lib/server/documents/previews', () => ({ enqueueDocumentPreview: async () => undefined }));
 vi.mock('@/lib/server/tts/segments-cache', () => ({ deleteDocumentTtsSegmentCache: async () => undefined }));
-vi.mock('@/lib/server/documents/blob-lease', () => ({ withDocumentBlobLease: async (_id: string, run: () => Promise<unknown>) => run() }));
+vi.mock('@/lib/server/documents/blob-lease', () => ({
+  withDocumentBlobLease: async (_id: string, run: () => Promise<unknown>) => run(),
+  tryAcquireDocumentBlobLease: async (key: string) => {
+    if (state.leases.has(key)) return null;
+    state.leases.add(key);
+    return { owner: key, release: async () => { state.leases.delete(key); } };
+  },
+}));
 vi.mock('@/lib/server/compute-limits/run-admitted', async original => ({
   ...await original<typeof import('@/lib/server/compute-limits/run-admitted')>(), createAdmittedComputeOperation: state.admit,
 }));
@@ -75,7 +82,7 @@ function insert(id: string, owner = 'owner', name = 'notes.txt', type = 'html') 
 
 beforeEach(() => {
   vi.stubEnv('BASE_URL', 'http://localhost:3003');
-  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.workerAvailable = false;
+  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.leases.clear(); state.workerAvailable = false;
   state.admit.mockReset().mockImplementation(async (input: { create: () => Promise<unknown> }) => input.create());
   state.article.mockReset().mockResolvedValue({ kind: 'page', title: 'An article', content: '# Imported article', author: 'Article Author', language: 'de' });
   state.parse.mockReset().mockResolvedValue({ artifact: { objectKey: 'parsed' }, operation: null });
@@ -141,6 +148,31 @@ test('a signed upload link sends one upload\'s bytes once without a session, for
   state.userId = 'owner';
   const created = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
   expect(created.status).toBe(201);
+});
+
+test('a signed upload is claimed for its whole transfer, and a failed transfer frees the link', async () => {
+  const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'claimed.txt', size: 5 }))).json();
+  const { query } = signUploadLink('owner', prepared.id);
+  state.userId = null;
+  const put = (body: string) => transfer(new NextRequest(`http://localhost/api/v1/uploads/${prepared.id}/file?${query}`, { method: 'PUT', body }), uploadParams(prepared.id));
+  // A transfer in flight holds the claim: a second PUT and a submit are both refused.
+  state.leases.add(`upload:${prepared.id}`);
+  const second = await put('hello');
+  expect(second.status).toBe(409);
+  expect((await second.json()).error.code).toBe('UPLOAD_ALREADY_RECEIVED');
+  state.userId = 'owner';
+  const early = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
+  expect(early.status).toBe(409);
+  expect((await early.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  state.leases.clear();
+  state.userId = null;
+  // A short body fails and releases the claim without using up the link.
+  expect((await put('hel')).status).toBe(400);
+  expect(state.leases.size).toBe(0);
+  expect((await put('hello')).status).toBe(204);
+  state.userId = 'owner';
+  expect((await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }))).status).toBe(201);
+  expect(state.leases.size).toBe(0);
 });
 
 test('prepared upload ownership, bounded transfer and repeated status lead to one verified document', async () => {
