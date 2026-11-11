@@ -160,7 +160,7 @@ test('a signed upload is claimed for its whole transfer, and a failed transfer f
   state.leases.add(`upload:${prepared.id}`);
   const second = await put('hello');
   expect(second.status).toBe(409);
-  expect((await second.json()).error.code).toBe('UPLOAD_ALREADY_RECEIVED');
+  expect((await second.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
   state.userId = 'owner';
   const early = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
   expect(early.status).toBe(409);

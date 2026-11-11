@@ -84,7 +84,8 @@ const uploadLeaseKey = (id: string) => `upload:${id}`;
 export async function receiveDocumentUpload(caller: DocumentCaller, id: string, body: ReadableStream<Uint8Array> | null, { once = false } = {}): Promise<void> {
   if (getBrowserStorageTransport() !== 'proxy') throw new ApiRequestError(409, 'PROXY_UPLOAD_DISABLED', 'Use the prepared storage URL for this upload.');
   const lease = await tryAcquireDocumentBlobLease(uploadLeaseKey(id), { leaseMs: TEMP_DOCUMENT_UPLOAD_TTL_MS });
-  if (!lease) throw once ? usedLink() : uploadInProgress();
+  // Another transfer may still fail and leave the link usable, so this is not "received".
+  if (!lease) throw uploadInProgress();
   try {
     await storeUploadBody(caller, id, body, once, lease);
   } finally {
