@@ -16,14 +16,16 @@ export function resolvePdfOperationReadiness(
   const snapshot = pdfParseSnapshotFromWorkerState(operation);
   if (snapshot.parseStatus === 'ready') return null;
   if (snapshot.parseStatus === 'failed') {
+    const abandoned = operation.error?.code === ORPHANED_OPERATION_ERROR_CODE;
     return {
       result: {
         status: 'error',
-        message: operation.error?.code === ORPHANED_OPERATION_ERROR_CODE
+        message: abandoned
           ? 'PDF preparation stopped before it finished, because the app or its compute worker restarted.'
           : snapshot.error || 'PDF structure could not be prepared.',
         retryable: true,
         failedPdfOperationId: operation.opId,
+        ...(abandoned ? { abandoned: true } : {}),
       },
     };
   }

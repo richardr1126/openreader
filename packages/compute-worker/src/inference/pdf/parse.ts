@@ -23,9 +23,36 @@ interface ParsePdfInput {
     pageMs: number;
   }) => void | Promise<void>;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
+  /** Pages an earlier run already parsed, covering 1..pages.length. */
+  resume?: { pages: ParsedPdfPage[]; sawText: boolean } | null;
+  /** Hands back whole pages as they finish, so a caller can make them durable. */
+  onPagesCompleted?: (input: {
+    pages: ParsedPdfPage[];
+    startPage: number;
+    totalPages: number;
+    sawText: boolean;
+  }) => void | Promise<void>;
 }
 
 const LAYOUT_RENDER_SCALE = 1.5;
+
+/**
+ * Pages per handback. Small enough that an interrupted parse loses seconds of
+ * work rather than minutes, large enough not to put a write between every page.
+ */
+const COMPLETED_PAGE_BATCH = 8;
+
+/** Block ids run in one sequence across a document and must keep doing so. */
+function nextBlockIdAfter(pages: ParsedPdfPage[]): number {
+  let highest = 0;
+  for (const page of pages) {
+    for (const block of page.blocks) {
+      const id = Number(block.id.slice(1));
+      if (Number.isFinite(id) && id > highest) highest = id;
+    }
+  }
+  return highest + 1;
+}
 
 export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument> {
   await ensureModel({ onProgress: input.onModelDownloadProgress });
@@ -50,11 +77,15 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
   const pdf = await loadingTask.promise;
 
   try {
-    const pages: ParsedPdfPage[] = [];
-    let nextBlockId = 1;
-    let sawText = false;
+    // A checkpoint from a different document would be caught before it got
+    // here, but one that claims more pages than this PDF has is not usable.
+    const resumed = input.resume && input.resume.pages.length <= pdf.numPages ? input.resume : null;
+    const pages: ParsedPdfPage[] = [...(resumed?.pages ?? [])];
+    let nextBlockId = nextBlockIdAfter(pages);
+    let sawText = resumed?.sawText ?? false;
+    let uncompleted = 0;
 
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    for (let pageNumber = pages.length + 1; pageNumber <= pdf.numPages; pageNumber += 1) {
       const pageStartedAt = Date.now();
       if (input.onPageStarted) {
         await input.onPageStarted({
@@ -133,6 +164,17 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
           totalPages: pdf.numPages,
           pageMs: Date.now() - pageStartedAt,
         });
+      }
+
+      uncompleted += 1;
+      if (input.onPagesCompleted && uncompleted >= COMPLETED_PAGE_BATCH) {
+        await input.onPagesCompleted({
+          pages: pages.slice(pages.length - uncompleted),
+          startPage: pages.length - uncompleted + 1,
+          totalPages: pdf.numPages,
+          sawText,
+        });
+        uncompleted = 0;
       }
     }
 

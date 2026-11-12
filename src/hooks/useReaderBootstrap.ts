@@ -197,6 +197,22 @@ export function useReaderBootstrap(documentId: string | undefined) {
     queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
   }, [key, queryClient]);
   const restartablePdfOperationId = watchedPdfOperationId(currentResult);
+  // Work abandoned when its worker stopped says nothing about the document, so
+  // the reader starts it again itself rather than making a stuck preparation
+  // the reader's problem. Once per opened document: if the replacement is
+  // abandoned too, something is wrong that repeating will not fix, and the
+  // error and its button say so.
+  const abandonedPdfOperationId = currentResult.status === 'error' && currentResult.abandoned
+    ? currentResult.failedPdfOperationId
+    : undefined;
+  const autoRestartedDocument = useRef<string | null>(null);
+  const restartPdfOperation = pdfRestartMutation.mutate;
+  useEffect(() => {
+    if (!documentId || !abandonedPdfOperationId) return;
+    if (autoRestartedDocument.current === documentId) return;
+    autoRestartedDocument.current = documentId;
+    restartPdfOperation(abandonedPdfOperationId);
+  }, [abandonedPdfOperationId, documentId, restartPdfOperation]);
   const restartPdfPreparation = useCallback(() => {
     if (restartablePdfOperationId) pdfRestartMutation.mutate(restartablePdfOperationId);
   }, [pdfRestartMutation, restartablePdfOperationId]);

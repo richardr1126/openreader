@@ -55,4 +55,10 @@ export type ReaderBootstrapResult =
     retryable: boolean;
     notFound?: boolean;
     failedPdfOperationId?: string;
+    /**
+     * The work was abandoned when its worker stopped, rather than judged and
+     * found wanting. Nothing was learned about the document, so the reader may
+     * start the preparation again on its own.
+     */
+    abandoned?: boolean;
   };

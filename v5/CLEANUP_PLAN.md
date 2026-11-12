@@ -881,6 +881,36 @@ NATS key scans explicitly close and delete their consumers, including empty
 scans and early exits. The installed KV client's five-minute consumer retention
 made repeated account cleanup exhaust the broker's consumer limit.
 
+### Baseline: interrupted PDF parse checkpoints
+
+A PDF parse holds every page in memory and writes one artifact at the end, so an
+interrupted parse left nothing behind and the next run started at page one.
+Completed pages are now written in chunks as parsing proceeds, and a later run
+resumes from the last whole chunk.
+
+Chunks live under the parsed-PDF prefix the document already owns:
+
+    <prefix>/documents_v1/parsed_v2/<ns?>/<documentId>/checkpoint/<parser-version>/<start-page>.json
+
+They are deliberately inside `parsedPdfArtifactPrefix`, so every path that
+already walks a document's derived data covers them and no new sweep is added:
+`clearPdfLayoutArtifacts` for document deletion and layout cache clearing,
+`listDocumentDerivedIds` for the orphan reaper, and the storage-usage
+accounting. A checkpoint cannot outlive the document it belongs to.
+
+The parser version is in the key, so a parser upgrade ignores old chunks instead
+of mixing them in. Each chunk also records the document id, the source object key
+and the parser version. A resume takes the longest run of chunks covering pages
+1..n with no gap and stops at the first chunk that is missing, unreadable or
+written for different source bytes; anything it cannot vouch for means parsing
+from page one, which is the behaviour that predates checkpoints.
+
+The checkpoint is deleted once the parsed artifact is durable, so it exists only
+while a parse is unfinished. A failed checkpoint write is logged and the parse
+continues: losing a chunk costs a few pages of rework, not the parse. This does
+not lower peak memory, which still holds the whole document for the final
+cross-page stitch.
+
 ---
 
 ## Remaining Work
