@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { RUNNING_OPERATION_STALE_MS } from '../../src/operations/contracts';
 import { createComputeWorkerApp } from '../../src/api/app';
 import { buildTtsPlaybackOperationKey } from '../../src/operations/keys';
 import { FakeControlPlane } from '../fixtures/fake-control-plane';
@@ -602,7 +603,7 @@ describe('compute worker API routes', () => {
       jobId: 'job-op-stale-playback-running',
       status: 'running',
       queuedAt: 1,
-      updatedAt: now - 40_000,
+      updatedAt: now - (RUNNING_OPERATION_STALE_MS + 10_000),
     });
     fake.seedState({
       opId: 'op-stale-playback-queued',
@@ -620,7 +621,7 @@ describe('compute worker API routes', () => {
       jobId: 'job-op-stale-pdf-running',
       status: 'running',
       queuedAt: 1,
-      updatedAt: now - 310_000,
+      updatedAt: now - (RUNNING_OPERATION_STALE_MS + 10_000),
     });
     fake.seedState({
       opId: 'op-stale-pdf-queued',

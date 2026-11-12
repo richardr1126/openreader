@@ -215,7 +215,11 @@ export function ReaderShell<T extends ReaderType>({
 
   if (result.status === 'pending') {
     return statusScreen(
-      <ReaderLoader progress={result.progress} />,
+      <ReaderLoader
+        progress={result.progress}
+        onRestart={bootstrap.restartPdfPreparation}
+        restarting={bootstrap.restarting}
+      />,
     );
   }
 
@@ -230,8 +234,9 @@ export function ReaderShell<T extends ReaderType>({
   if (result.status === 'error') {
     return statusScreen(
       <ReaderError
-        error={new Error(result.message)}
+        error={bootstrap.retryError ?? new Error(result.message)}
         onRetry={result.retryable ? () => void bootstrap.retry() : undefined}
+        retrying={bootstrap.retrying}
       />,
     );
   }
