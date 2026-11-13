@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { InlineButton, Input, SaveBar, Section, SettingRow, ToggleRow } from '@/components/ui';
@@ -51,6 +51,8 @@ export function useAdminSettingsDraft() {
   const [edits, setEdits] = useState<Record<string, unknown>>({});
   const draft = useMemo(() => ({ ...data?.values, ...edits }), [data, edits]);
   const dirty = useMemo(() => new Set(Object.keys(edits)), [edits]);
+  // Values a save is sending. While it runs they, not the fetched ones, are what an edit undoes.
+  const pending = useRef<Record<string, unknown>>({});
 
   useEffect(() => {
     if (!error) return;
@@ -60,9 +62,10 @@ export function useAdminSettingsDraft() {
 
   const resetMutation = useMutation({
     mutationFn: (key: string) => patchAdminSettings({ reset: [key] }),
-    onSuccess: async (_failed, key) => {
-      setEdits((current) => without(current, key));
-      toast.success('Reset to env default');
+    // Reset shows only on keys without an edit, so any edit here was made while it ran and stays.
+    onSuccess: async (failed) => {
+      if (failed.length) toast.error('Reset failed');
+      else toast.success('Reset to env default');
       await queryClient.invalidateQueries({ queryKey });
     },
     onError: (mutationError) => {
@@ -73,6 +76,8 @@ export function useAdminSettingsDraft() {
 
   const saveMutation = useMutation({
     mutationFn: (updates: Record<string, unknown>) => patchAdminSettings({ updates }),
+    onMutate: (updates) => { pending.current = updates; },
+    onSettled: () => { pending.current = {}; },
     onSuccess: async (failed, updates) => {
       // Saved keys leave the draft unless they were edited again meanwhile; refused ones stay to fix.
       setEdits((current) => Object.fromEntries(Object.entries(current).filter(([key, value]) => (
@@ -82,8 +87,10 @@ export function useAdminSettingsDraft() {
       else toast.success('Settings saved');
       await queryClient.invalidateQueries({ queryKey });
     },
-    onError: (mutationError) => {
+    onError: (mutationError, updates) => {
       console.error(mutationError);
+      // Nothing was saved, so an edit cleared for matching the request comes back.
+      setEdits((current) => ({ ...updates, ...current }));
       toast.error('Save failed');
     },
   });
@@ -91,8 +98,9 @@ export function useAdminSettingsDraft() {
   const saving = resetMutation.isPending || saveMutation.isPending;
 
   const update = (key: string, value: unknown) => {
+    const base = key in pending.current ? pending.current[key] : data?.values?.[key];
     setEdits((current) => (
-      Object.is(value, data?.values?.[key]) ? without(current, key) : { ...current, [key]: value }
+      Object.is(value, base) ? without(current, key) : { ...current, [key]: value }
     ));
   };
 

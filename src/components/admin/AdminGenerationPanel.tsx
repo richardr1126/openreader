@@ -56,6 +56,7 @@ export function AdminGenerationPanel() {
           controlClassName="w-52"
         >
           <Select
+            aria-label="Background generation"
             value={extent}
             onChange={(option) => update('ttsPlaybackBackgroundExtent', option.value)}
             options={BACKGROUND_EXTENT_OPTIONS}
