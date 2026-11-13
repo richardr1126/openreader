@@ -1,8 +1,15 @@
 import { expect, test, vi } from 'vitest';
 
-vi.mock('@openreader/database', () => ({
-  db: { select: () => ({ from: () => Promise.reject(new Error('database unavailable')) }) },
-}));
+// A query builder that chains like drizzle's and rejects only when awaited.
+function failingQuery(): PromiseLike<never> & Record<string, unknown> {
+  const query: PromiseLike<never> & Record<string, unknown> = {
+    then: (onFulfilled, onRejected) => Promise.reject(new Error('database unavailable')).then(onFulfilled, onRejected),
+  };
+  for (const method of ['from', 'where', 'orderBy', 'limit']) query[method] = () => query;
+  return query;
+}
+
+vi.mock('@openreader/database', () => ({ db: { select: () => failingQuery() } }));
 
 const { getRuntimeConfigWithSources, getRuntimeConfig } = await import('@/lib/server/admin/settings');
 
