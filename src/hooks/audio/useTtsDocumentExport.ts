@@ -2,7 +2,7 @@
 
 import { useCallback, type MutableRefObject } from 'react';
 
-import { lookupAudiobook, startAudiobook, stopAudiobook, TtsExportRequestError } from '@/lib/client/api/tts';
+import { deleteAudiobook, lookupAudiobook, startAudiobook, stopAudiobook, TtsExportRequestError } from '@/lib/client/api/tts';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { TtsPlaybackPlanRequest } from '@/hooks/audio/useTtsPlayback';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
@@ -14,7 +14,7 @@ export type TtsDocumentAudioExportRequest = {
   action: TtsExportAction;
   chapterIndex?: number;
   includeProgress?: boolean;
-  /** The audiobook a stop applies to. */
+  /** The audiobook a stop or delete applies to. */
   audiobookId?: string;
 };
 
@@ -25,6 +25,14 @@ type UseTtsDocumentExportInput = {
 };
 
 /** Binds audiobook export requests to the reader's adopted canonical plan. */
+/** The delete succeeded but reading the audiobook afterwards did not; its file is gone either way. */
+export class AudiobookDeletedError extends Error {
+  constructor(cause: unknown) {
+    super('The audiobook was deleted, but its state could not be refreshed.', { cause });
+    this.name = 'AudiobookDeletedError';
+  }
+}
+
 export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
   const {
     playbackPlanRef,
@@ -76,6 +84,15 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
           }
         }
         return lookupAudiobook(documentId, payload, signal);
+      case 'delete':
+        if (!options.audiobookId) return lookupAudiobook(documentId, payload, signal);
+        await deleteAudiobook(documentId, options.audiobookId, signal);
+        try {
+          return await lookupAudiobook(documentId, payload, signal);
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          throw new AudiobookDeletedError(error);
+        }
       default:
         return lookupAudiobook(documentId, payload, signal);
     }

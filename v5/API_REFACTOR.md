@@ -138,8 +138,10 @@ All routes are under `/api/v1`.
 | `GET /documents/{id}/file` | Download the original file |
 | `GET /voices` | List available voices with stable IDs |
 | `POST /documents/{id}/audiobooks` | Start an audiobook, or return the matching existing one |
+| `GET /documents/{id}/audiobooks` | List a document's audiobooks, without advancing them |
 | `GET /documents/{id}/audiobooks/{audiobookId}` | Status, progress and download link |
-| `DELETE /documents/{id}/audiobooks/{audiobookId}` | Stop generation |
+| `POST /documents/{id}/audiobooks/{audiobookId}/cancel` | Stop generation |
+| `DELETE /documents/{id}/audiobooks/{audiobookId}` | Delete the audiobook and its file, keeping cached audio |
 | `POST /documents/{id}/audiobooks/lookup` | Read the state of given settings without creating anything |
 | `GET /documents/{id}/audiobooks/events?opId=` | Live progress for one of its operations |
 | `GET /documents/{id}/audiobooks/files/{artifactId}` | Download the finished file |
@@ -1257,3 +1259,29 @@ phase 5.3 reshaped those tools without returning to the request. This phase clos
   `openreader_docs` and `openreader_audio` now say `destructiveHint: false`, since MCP
   assumes a non-read-only tool is destructive. Audiobook cancel stays in `openreader_audio`:
   it keeps the generated audio and can be resumed, so there is nothing to delete.
+
+### Phase 5.5: Audiobook follow-ups
+
+Using the MCP to manage audiobooks showed gaps: a listing that did not say which voice an
+audiobook used or when it was asked for, no way to remove one audiobook short of deleting
+its document, interrupted runs with no hint of how to resume, and read commands that
+failed with `AUDIOBOOK_BUSY` or could advance generation.
+
+- **Deleting an audiobook.** `DELETE /documents/{id}/audiobooks/{audiobookId}`
+  (`documents:write`, `204`) removes the request and its built file through a new worker
+  route, `DELETE /v1/tts-playback/exports/{artifactId}`, which deletes only that artifact's
+  prefix with the shared `deletePrefix`. Segment audio is the document's playback cache and
+  stays, so asking again reuses it and generates only what was missing. A whole-book run is stopped
+  first only when no other uncancelled format or speed shares it. A file being built returns
+  `409 AUDIOBOOK_BUILDING`. Stop moved to `POST .../{audiobookId}/cancel`; v1 audiobook
+  routes were not in a release, so the old DELETE meaning is replaced rather than kept. The
+  reader's export panel offers **Delete file** for a finished audiobook.
+- **Listing.** `GET /documents/{id}/audiobooks` pages a document's audiobooks and only
+  observes. Audiobooks carry `provider`, `model`, `voice`, `modelSpeed` and `requestedAt`.
+- **MCP.** `openreader_docs_delete` became `openreader_delete` and gained
+  `audiobook delete <id>`; its description and the server instructions steer an agent away
+  from `docs delete` when it means one audiobook. `audiobook list` and `audiobook view` read
+  with generation disabled and wait briefly for a held lock. Summaries add the voice ID,
+  model speed, `requestedAt` and a `next` hint with the exact `audiobook create` command
+  that resumes a cancelled, interrupted or usage-limited run. `audiobook create` reports
+  `created`. Provider health is still reported only by `voices list`.

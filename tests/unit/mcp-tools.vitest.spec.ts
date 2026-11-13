@@ -4,7 +4,7 @@ import { verifyUploadLink } from '@/lib/server/documents/upload-links';
 
 const mocks = vi.hoisted(() => ({
   access: vi.fn(), create: vi.fn(), voices: vi.fn(), providers: vi.fn(), start: vi.fn(), get: vi.fn(), stop: vi.fn(), caller: vi.fn(), intent: vi.fn(),
-  worker: vi.fn(() => true), cached: vi.fn(), owner: vi.fn(), requests: vi.fn(), list: vi.fn(),
+  worker: vi.fn(() => true), cached: vi.fn(), owner: vi.fn(), audiobooks: vi.fn(), deleteBook: vi.fn(), list: vi.fn(),
   update: vi.fn(), remove: vi.fn(), require: vi.fn(), prepare: vi.fn(), submit: vi.fn(),
   folders: vi.fn(), requireFolder: vi.fn(), createFolder: vi.fn(), updateFolder: vi.fn(), deleteFolder: vi.fn(),
 }));
@@ -28,12 +28,15 @@ vi.mock('@/lib/server/folders', () => ({ listFolders: mocks.folders, requireFold
 vi.mock('@/lib/server/tts/voices', () => ({ listVoices: mocks.voices, listSpeechProviders: mocks.providers }));
 vi.mock('@/lib/server/tts/cached-voices', () => ({ listCachedVoices: mocks.cached }));
 vi.mock('@/lib/server/audiobooks/audiobooks', () => ({ ChapterNotFoundError: class extends Error {}, ChapterCommandError: class extends Error {},
-  getAudiobook: mocks.get, startAudiobook: mocks.start, stopAudiobook: mocks.stop, findAudiobookDocumentId: mocks.owner, listAudiobookRequests: mocks.requests }));
+  AudiobookBuildingError: class extends Error {}, getAudiobook: mocks.get, startAudiobook: mocks.start, stopAudiobook: mocks.stop,
+  findAudiobookDocumentId: mocks.owner, listAudiobooks: mocks.audiobooks, deleteAudiobook: mocks.deleteBook,
+  whenAudiobookFree: (run: () => Promise<unknown>) => run() }));
 vi.mock('@/lib/server/audiobooks/request', async () => ({ audiobookCaller: mocks.caller, resolveAudiobookIntent: mocks.intent,
   parseAudiobookBody: (record: Record<string, unknown>) => ({ record, format: record.format ?? 'mp3', speed: record.speed ?? 1, chapterIndex: record.chapter ?? null }) }));
 vi.mock('@/lib/server/compute-worker/client', () => ({ isComputeWorkerAvailable: mocks.worker, isComputeWorkerUnavailableError: () => false }));
 
-const audiobook = { id: 'book', documentId: 'doc', status: 'generating', progress: 0.5, format: 'mp3', speed: 1, chapter: null,
+const audiobook = { id: 'book', documentId: 'doc', status: 'generating', progress: 0.5, provider: 'kokoro', model: 'kokoro', voice: 'af_sky', modelSpeed: 1.2,
+  requestedAt: '2026-11-12T00:00:00.000Z', format: 'mp3', speed: 1, chapter: null,
   downloadUrl: '/api/v1/documents/doc/audiobooks/files/secret', filename: null, webUrl: 'http://localhost:3003/html/doc', webDownloadUrl: null, retryAfterMs: null,
   generation: { state: 'generating', operationId: 'op-internal', issue: null }, segments: { completedSegments: 40 }, artifact: { state: 'none', operationId: null, issue: null } };
 
@@ -62,7 +65,7 @@ beforeEach(() => {
 
 test('four tools split the commands by scope, and only the delete tool is destructive', async () => {
   const { tools } = await rpc('tools/list');
-  expect(tools.map(({ name }: { name: string }) => name)).toEqual(['openreader', 'openreader_docs', 'openreader_docs_delete', 'openreader_audio']);
+  expect(tools.map(({ name }: { name: string }) => name)).toEqual(['openreader', 'openreader_docs', 'openreader_delete', 'openreader_audio']);
   const [read, docs, remove, audio] = tools;
   expect(read.annotations).toMatchObject({ readOnlyHint: true });
   expect(docs.annotations).toMatchObject({ destructiveHint: false });
@@ -178,15 +181,15 @@ test('deleting is its own tool: a document goes with its audio, and a folder kee
   expect((await run('openreader_docs', `docs delete ${doc.id}`)).isError).toBe(true);
   mocks.require.mockResolvedValue(doc);
   mocks.remove.mockResolvedValue({ deleted: 1 });
-  expect((await run('openreader_docs_delete', `docs delete ${doc.id}`)).structuredContent).toEqual({ deleted: true, document: { id: doc.id, name: 'Paper.pdf' } });
+  expect((await run('openreader_delete', `docs delete ${doc.id}`)).structuredContent).toEqual({ deleted: true, document: { id: doc.id, name: 'Paper.pdf' } });
   expect(mocks.remove.mock.calls[0][1]).toEqual([doc.id]);
 
   mocks.requireFolder.mockResolvedValueOnce({ id: 'f1', name: 'Papers' });
-  expect((await run('openreader_docs_delete', 'folders delete f1')).structuredContent).toEqual({ deleted: true, folder: { id: 'f1', name: 'Papers' } });
+  expect((await run('openreader_delete', 'folders delete f1')).structuredContent).toEqual({ deleted: true, folder: { id: 'f1', name: 'Papers' } });
   expect(mocks.deleteFolder.mock.calls[0][1]).toBe('f1');
   const { ApiRequestError } = await import('@/lib/server/api/responses');
   mocks.requireFolder.mockRejectedValueOnce(new ApiRequestError(404, 'FOLDER_NOT_FOUND', 'Folder not found.'));
-  expect((await run('openreader_docs_delete', 'folders delete f9')).structuredContent.error.code).toBe('FOLDER_NOT_FOUND');
+  expect((await run('openreader_delete', 'folders delete f9')).structuredContent.error.code).toBe('FOLDER_NOT_FOUND');
   expect(mocks.deleteFolder).toHaveBeenCalledTimes(1);
 });
 
@@ -198,10 +201,13 @@ test('voice IDs carry provider and model, so a listed voice names one speech set
   expect(listed.structuredContent).toEqual({ providers: [{ id: 'fish', name: 'Fish Audio', defaultModel: 's2', models: ['s2'], saved: true, savedModel: 's2' }],
     provider: 'fish', model: 's2', voices: [{ id: 'fish/s2/a%2Fb', name: 'Sarah' }] });
 
-  mocks.start.mockResolvedValue(audiobook);
+  mocks.start.mockImplementation(async (_caller: unknown, _intent: unknown, options: { onRequested?: (request: { created: boolean }) => void }) => {
+    options.onRequested?.({ created: true });
+    return audiobook;
+  });
   const created = await run('openreader_audio', 'audiobook create doc --voice fish/s2/a%2Fb --model-speed 1.2 --format m4b');
   expect(mocks.intent.mock.calls[0][2]).toMatchObject({ format: 'm4b', record: { provider: 'fish', model: 's2', voice: 'a/b', modelSpeed: 1.2 } });
-  expect(created.structuredContent).toMatchObject({ id: 'book', voice: 'kokoro/kokoro/af_sky', modelSpeed: 1.2, reusedCachedAudio: true });
+  expect(created.structuredContent).toMatchObject({ id: 'book', voice: 'kokoro/kokoro/af_sky', modelSpeed: 1.2, created: true, reusedCachedAudio: true });
   expect(JSON.stringify(created)).not.toMatch(/secret|op-internal/);
 });
 
@@ -222,28 +228,17 @@ test('audiobooks are named by ID alone, and cancel keeps the request as cancelle
   mocks.get.mockResolvedValueOnce({ ...audiobook, status: 'ready', webDownloadUrl: 'http://localhost:3003/audiobooks/doc/abcdef12' });
   const viewed = await run('openreader', 'audiobook view book');
   expect(mocks.get.mock.calls[0].slice(1)).toEqual(['book', 'doc']);
+  // Reading never starts or resumes generation, whatever the token's scopes.
+  expect(mocks.get.mock.calls[0][0]).toMatchObject({ mayGenerate: false });
   expect(viewed.structuredContent).toMatchObject({ status: 'ready', webDownloadUrl: 'http://localhost:3003/audiobooks/doc/abcdef12' });
   expect(JSON.stringify(viewed)).not.toContain('/api/v1');
 
   mocks.stop.mockResolvedValueOnce({ ...audiobook, status: 'cancelled' });
   expect((await run('openreader_audio', 'audiobook cancel book')).structuredContent).toMatchObject({ id: 'book', status: 'cancelled' });
 
-  mocks.requests.mockResolvedValueOnce([{ id: 'book', documentId: 'doc' }]);
-  mocks.get.mockResolvedValueOnce(audiobook);
-  expect((await run('openreader', 'audiobook list doc')).structuredContent).toMatchObject({ audiobooks: [{ id: 'book' }], nextCursor: null });
-
-  // A chapter that left the book is skipped, and a full page points to the next.
-  const { ChapterNotFoundError } = await import('@/lib/server/audiobooks/audiobooks');
-  mocks.requests.mockResolvedValueOnce(Array.from({ length: 21 }, (_, index) => ({ id: `b${index}`, documentId: 'doc' })));
-  mocks.get.mockRejectedValueOnce(new ChapterNotFoundError());
-  mocks.get.mockResolvedValue(audiobook);
-  const page = (await run('openreader', 'audiobook list doc')).structuredContent;
-  expect(page.audiobooks).toHaveLength(19);
-  expect(page.nextCursor).toBe('20');
-  mocks.requests.mockResolvedValueOnce([]);
-  expect((await run('openreader', 'audiobook list doc --cursor 20')).structuredContent).toEqual({ audiobooks: [], nextCursor: null });
-  expect(mocks.requests.mock.calls.at(-1)).toEqual(['user', 'doc', 21, 20]);
-  mocks.get.mockReset();
+  mocks.audiobooks.mockResolvedValueOnce({ data: [audiobook], nextCursor: '2.ab' });
+  expect((await run('openreader', 'audiobook list doc --cursor 1.cd')).structuredContent).toMatchObject({ audiobooks: [{ id: 'book', voice: 'kokoro/kokoro/af_sky' }], nextCursor: '2.ab' });
+  expect(mocks.audiobooks.mock.calls[0].slice(1)).toEqual(['doc', { limit: 20, cursor: '1.cd' }]);
 
   mocks.owner.mockResolvedValueOnce(null);
   expect((await run('openreader', 'audiobook view missing')).structuredContent.error.code).toBe('AUDIOBOOK_NOT_FOUND');
@@ -256,4 +251,32 @@ test('tool failures come back as readable errors with their code', async () => {
     structuredContent: { error: { code: 'DOCUMENT_PREPARING', retryAfterMs: 5000 } } });
   mocks.worker.mockReturnValue(false);
   expect((await run('openreader', 'audiobook view book')).structuredContent.error.code).toBe('COMPUTE_WORKER_REQUIRED');
+});
+
+test('every audiobook says what to do next, with the exact command that resumes it', async () => {
+  const view = async (fields: Record<string, unknown>) => {
+    mocks.get.mockResolvedValueOnce({ ...audiobook, ...fields });
+    return (await run('openreader', 'audiobook view book')).structuredContent;
+  };
+  const resume = 'audiobook create doc --voice kokoro/kokoro/af_sky --model-speed 1.2 --speed 1 --format mp3';
+  expect((await view({ status: 'interrupted' })).next).toContain(resume);
+  // A chapter resumes through the whole-book run, which is what generates speech.
+  expect((await view({ status: 'cancelled', chapter: 2 })).next).toMatch(new RegExp(`"${resume}" .* "${resume} --chapter 2"`));
+  expect((await view({ status: 'usage_limited' })).next).toContain('quota');
+  // A voice ID the command parser would split is quoted, so the command still runs as given.
+  expect((await view({ status: 'interrupted', voice: "speaker's" })).next).toContain(`--voice 'kokoro/kokoro/speaker'\\''s'`);
+  expect((await view({ status: 'generating' })).next).toContain('audiobook view book');
+  expect(await view({ status: 'ready' })).toMatchObject({ next: expect.stringContaining('webDownloadUrl'), requestedAt: '2026-11-12T00:00:00.000Z' });
+});
+
+test('deleting an audiobook keeps its document, and a file being built cannot be deleted yet', async () => {
+  expect((await run('openreader_audio', 'audiobook delete book')).isError).toBe(true);
+  mocks.deleteBook.mockResolvedValueOnce(true);
+  expect((await run('openreader_delete', 'audiobook delete book')).structuredContent).toEqual({ deleted: true, audiobook: { id: 'book', documentId: 'doc' } });
+  expect(mocks.deleteBook.mock.calls[0].slice(1)).toEqual(['book', 'doc']);
+  expect(mocks.remove).not.toHaveBeenCalled();
+
+  const { AudiobookBuildingError } = await import('@/lib/server/audiobooks/audiobooks');
+  mocks.deleteBook.mockRejectedValueOnce(new AudiobookBuildingError());
+  expect((await run('openreader_delete', 'audiobook delete book')).structuredContent.error.code).toBe('AUDIOBOOK_BUILDING');
 });

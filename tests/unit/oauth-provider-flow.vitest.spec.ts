@@ -202,7 +202,7 @@ test('MCP and v1 tokens only work on their own resource', async () => {
 
   const token = await grant('documents:read offline_access', mcpResource);
   const tools = await mcpResult(await mcp(token.access_token, 'tools/list'));
-  expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['openreader', 'openreader_docs', 'openreader_docs_delete', 'openreader_audio']);
+  expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['openreader', 'openreader_docs', 'openreader_delete', 'openreader_audio']);
   const called = await mcpResult(await mcp(token.access_token, 'tools/call', { name: 'openreader', arguments: { command: 'docs list' } }));
   expect(called.structuredContent).toEqual({ documents: [], nextCursor: null });
   expect((await principal(token.access_token) as Response).status).toBe(401);

@@ -148,10 +148,25 @@ export const stopAudiobook = async (
   documentId: string,
   audiobookId: string,
   signal?: AbortSignal,
-): Promise<Audiobook> => audiobookResponse(await fetch(`${audiobooksUrl(documentId)}/${encodeURIComponent(audiobookId)}`, {
-  method: 'DELETE',
+): Promise<Audiobook> => audiobookResponse(await fetch(`${audiobooksUrl(documentId)}/${encodeURIComponent(audiobookId)}/cancel`, {
+  method: 'POST',
   signal,
 }));
+
+/** Deletes an audiobook and its built file; the document's cached speech stays. */
+export const deleteAudiobook = async (
+  documentId: string,
+  audiobookId: string,
+  signal?: AbortSignal,
+): Promise<void> => {
+  const response = await fetch(`${audiobooksUrl(documentId)}/${encodeURIComponent(audiobookId)}`, {
+    method: 'DELETE',
+    signal,
+  });
+  // Already gone is the outcome a delete asks for.
+  if (response.status === 404) return;
+  if (!response.ok) await audiobookResponse(response);
+};
 
 export type TtsPlaybackPlanPayload = {
   documentId: string;

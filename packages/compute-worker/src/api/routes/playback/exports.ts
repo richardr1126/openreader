@@ -3,9 +3,11 @@ import { hashOpKey } from '../../../infrastructure/nats-adapters';
 import type { TtsPlaybackExportArtifactMetadata, WorkerOperationRequest } from '../../../operations/contracts';
 import { buildTtsPlaybackExportOperationKey } from '../../../operations/keys';
 import {
+  ttsPlaybackExportArtifactDirPrefix,
   ttsPlaybackExportMetadataArtifactKey,
   ttsPlaybackPlanArtifactPrefix,
 } from '../../../storage/artifact-addressing';
+import { deletePrefix } from '../../../storage/prefix-cleanup';
 import { groupExportChapters, type ExportChapterGroup } from '../../../jobs/playback/export-chapters';
 import { readPersistedTtsPlaybackPlanSegments } from '../../../jobs/playback/plan';
 import { toComputeOperation } from '../../compute-operation';
@@ -27,6 +29,16 @@ import {
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
 const CHAPTER_GROUP_CACHE_MAX = 4;
+const artifactParamsSchema = {
+  type: 'object',
+  properties: { artifactId: { type: 'string' } },
+  required: ['artifactId'],
+} as const;
+const artifactScopeQuerySchema = {
+  type: 'object',
+  properties: { storageUserId: { type: 'string' }, documentId: { type: 'string' } },
+  required: ['storageUserId', 'documentId'],
+} as const;
 const sessionIdParamsSchema = {
   type: 'object',
   properties: { sessionId: { type: 'string' } },
@@ -54,16 +66,8 @@ export function registerPlaybackExportRoutes(context: ComputeWorkerRouteContext)
 
   app.get('/v1/tts-playback/exports/:artifactId', {
     schema: {
-      params: {
-        type: 'object',
-        properties: { artifactId: { type: 'string' } },
-        required: ['artifactId'],
-      },
-      querystring: {
-        type: 'object',
-        properties: { storageUserId: { type: 'string' }, documentId: { type: 'string' } },
-        required: ['storageUserId', 'documentId'],
-      },
+      params: artifactParamsSchema,
+      querystring: artifactScopeQuerySchema,
       response: {
         200: jsonSchema(ttsPlaybackExportArtifactMetadataSchema),
         400: errorResponseSchema,
@@ -85,6 +89,35 @@ export function registerPlaybackExportRoutes(context: ComputeWorkerRouteContext)
       return { error: 'Export artifact not found' };
     }
     return artifact;
+  });
+
+  // Removes one built file. The segment audio it was built from is the
+  // document's playback cache and stays; the app refuses while a build runs.
+  app.delete('/v1/tts-playback/exports/:artifactId', {
+    schema: {
+      params: artifactParamsSchema,
+      querystring: artifactScopeQuerySchema,
+      response: {
+        200: { type: 'object', properties: { deletedObjects: { type: 'number' } }, required: ['deletedObjects'] },
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const artifactId = (request.params as { artifactId?: string }).artifactId?.trim() ?? '';
+    const query = request.query as { storageUserId?: string; documentId?: string };
+    const storageUserId = query.storageUserId?.trim() ?? '';
+    const documentId = query.documentId?.trim() ?? '';
+    let prefix: string;
+    try {
+      prefix = ttsPlaybackExportArtifactDirPrefix({ artifactId, storageUserId, documentId, prefix: context.s3Prefix });
+    } catch {
+      prefix = '';
+    }
+    if (!prefix || !storageUserId) {
+      reply.code(400);
+      return { error: 'Missing or invalid export artifact scope' };
+    }
+    return { deletedObjects: await deletePrefix(context.storage, prefix) };
   });
 }
 

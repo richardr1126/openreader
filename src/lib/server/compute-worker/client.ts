@@ -268,6 +268,16 @@ export class ComputeWorkerClient {
     }
   }
 
+  /** Deletes one built audiobook file; its segment audio stays cached. */
+  async deleteTtsPlaybackExportArtifact(input: {
+    artifactId: string;
+    storageUserId: string;
+    documentId: string;
+  }): Promise<void> {
+    const query = new URLSearchParams({ storageUserId: input.storageUserId, documentId: input.documentId });
+    await this.requestJson('DELETE', `/v1/tts-playback/exports/${encodeURIComponent(input.artifactId)}?${query.toString()}`);
+  }
+
   async getTtsPlaybackExportProgress(
     input: TtsPlaybackExportProgressRequest,
   ): Promise<TtsPlaybackExportProgressSummary | null> {

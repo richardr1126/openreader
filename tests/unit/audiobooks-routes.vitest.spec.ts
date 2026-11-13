@@ -10,6 +10,7 @@ const hoisted = vi.hoisted(() => ({
   createAdmitted: vi.fn(),
   exportProgress: vi.fn(),
   cancelSession: vi.fn(),
+  deleteArtifact: vi.fn(),
   artifactId: vi.fn(),
   getOperation: vi.fn(),
   plan: vi.fn(),
@@ -30,6 +31,7 @@ vi.mock('drizzle-orm', () => ({
   and: (...filters: Array<Array<[string, unknown]>>) => filters.flat(),
   lt: (column: string, value: number) => [[column, { below: value }]],
   asc: (column: string) => column,
+  desc: (column: string) => column,
 }));
 
 vi.mock('@openreader/database/schema', () => ({
@@ -71,7 +73,8 @@ vi.mock('@openreader/database', () => {
           onConflictDoNothing: () => ({
             returning: async () => {
               if (hoisted.rows.some((existing) => existing.id === row.id)) return [];
-              hoisted.rows.push(row);
+              // created_at defaults to now in both schemas.
+              hoisted.rows.push({ createdAt: Date.now(), ...row });
               return [{ id: row.id }];
             },
           }),
@@ -136,6 +139,7 @@ vi.mock('@/lib/server/compute-worker/client', async (importOriginal) => ({
     createTtsPlaybackExportArtifactOperation = hoisted.createArtifact;
     getTtsPlaybackExportProgress = hoisted.exportProgress;
     cancelTtsPlaybackSession = hoisted.cancelSession;
+    deleteTtsPlaybackExportArtifact = hoisted.deleteArtifact;
     getOperation = hoisted.getOperation;
   },
 }));
@@ -260,8 +264,20 @@ async function get(audiobookId: string) {
 }
 
 async function stop(audiobookId: string) {
+  const { POST } = await import('../../src/app/api/v1/documents/[id]/audiobooks/[audiobookId]/cancel/route');
+  const response = await POST(new NextRequest(`${baseUrl}/${audiobookId}/cancel`, { method: 'POST' }), itemContext(audiobookId));
+  return { status: response.status, json: await response.json() };
+}
+
+async function remove(audiobookId: string) {
   const { DELETE } = await import('../../src/app/api/v1/documents/[id]/audiobooks/[audiobookId]/route');
   const response = await DELETE(new NextRequest(`${baseUrl}/${audiobookId}`, { method: 'DELETE' }), itemContext(audiobookId));
+  return { status: response.status, json: response.status === 204 ? null : await response.json() };
+}
+
+async function list(query = '') {
+  const { GET } = await import('../../src/app/api/v1/documents/[id]/audiobooks/route');
+  const response = await GET(new NextRequest(`${baseUrl}${query}`), route);
   return { status: response.status, json: await response.json() };
 }
 
@@ -269,7 +285,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
   beforeEach(() => {
     for (const mock of [
       hoisted.resolveSession, hoisted.resolveArtifact, hoisted.createPlayback, hoisted.createArtifact,
-      hoisted.createAdmitted, hoisted.exportProgress, hoisted.cancelSession, hoisted.artifactId,
+      hoisted.createAdmitted, hoisted.exportProgress, hoisted.cancelSession, hoisted.deleteArtifact, hoisted.artifactId,
       hoisted.getOperation, hoisted.plan,
       hoisted.readPlan, hoisted.findPlan, hoisted.ensurePdf, hoisted.settingsHash, hoisted.storageLimit,
     ]) mock.mockReset();
@@ -295,7 +311,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     hoisted.createPlayback.mockResolvedValue({ opId: 'generation-op-2', status: 'queued' });
     hoisted.createArtifact.mockResolvedValue({ opId: 'artifact-op-1', status: 'queued' });
     hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 10), chapter(1, 10)]));
-    hoisted.cancelSession.mockResolvedValue({ sessionId: 'session-1', status: 'canceled' });
+    hoisted.cancelSession.mockResolvedValue({ sessionId: 'session-1', canceled: true, status: 'canceled' });
     hoisted.resolveArtifact
       .mockResolvedValue(noArtifact)
       .mockResolvedValueOnce(noArtifact)
@@ -696,6 +712,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       entered();
       await gate;
       hoisted.resolveSession.mockResolvedValue({ session: { status: 'canceled' }, operation: null });
+      return { sessionId: 'session-1', canceled: true, status: 'canceled' };
     });
     const stopping = stop(json.id);
     await cancelling;
@@ -794,6 +811,23 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     });
     await lookup();
     expect(hoisted.rows).toHaveLength(1);
+  });
+
+  test('deleting an adopted run\'s request stops the run even before its plan is stored', async () => {
+    hoisted.resolveSession.mockResolvedValue({
+      session: { status: 'running', generationRunId: 'adopted-run' },
+      operation: { opId: 'generation-op-1', status: 'running' },
+      progress: null,
+    });
+    await lookup();
+    hoisted.rows[0].planObjectKey = null;
+    hoisted.resolveArtifact.mockReset().mockResolvedValue(noArtifact);
+    hoisted.findPlan.mockResolvedValue({ opId: 'plan-op', status: 'succeeded', result: { kind: 'tts_playback_plan', planObjectKey: 'plans/found.json' } });
+
+    expect((await remove(hoisted.rows[0].id as string)).status).toBe(204);
+
+    expect(hoisted.cancelSession).toHaveBeenCalledWith(expect.any(String), 'adopted-run');
+    expect(hoisted.rows).toHaveLength(0);
   });
 
   describe('worker completion signal', () => {
@@ -1021,6 +1055,19 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       expect(hoisted.rows.filter((row) => !row.cancelledAt).map((row) => row.id)).toEqual([other.id]);
     });
 
+    test('a run that finished before the cancel reached it leaves the formats sharing it alone', async () => {
+      hoisted.resolveSession.mockResolvedValue(running);
+      const mp3 = (await start({ includeProgress: false })).json;
+      const m4b = (await start({ includeProgress: false, format: 'm4b' })).json;
+      hoisted.cancelSession.mockResolvedValueOnce({ sessionId: 'session-1', canceled: false, status: 'succeeded' });
+      hoisted.resolveSession.mockReset();
+      hoisted.resolveSession.mockResolvedValueOnce(running).mockResolvedValue(completeSession);
+
+      await stop(mp3.id);
+
+      expect(hoisted.rows.filter((row) => !row.cancelledAt).map((row) => row.id)).toEqual([m4b.id]);
+    });
+
     test('stopping an already-stopped format leaves a resumed sibling running', async () => {
       hoisted.resolveSession.mockResolvedValue(running);
       const mp3 = (await start({ includeProgress: false })).json;
@@ -1060,6 +1107,83 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     });
   });
 
+  describe('deleting and listing', () => {
+    const running = {
+      session: { status: 'running', generationRunId: 'observed-run' },
+      operation: { opId: 'generation-op', status: 'running' },
+    };
+    const readyArtifact = {
+      artifact: { artifactId: 'abcdef1234567890', generatedSegments: 20, skippedSegments: 0, dispositionFilename: 'book.mp3' },
+      operation: null,
+    };
+
+    test('deleting removes the request and its file, and keeps the cached audio', async () => {
+      hoisted.resolveSession.mockResolvedValue(completeSession);
+      hoisted.resolveArtifact.mockReset().mockResolvedValue(readyArtifact);
+      const { json } = await start();
+      expect(json.status).toBe('ready');
+
+      expect((await remove(json.id)).status).toBe(204);
+
+      expect(hoisted.deleteArtifact).toHaveBeenCalledWith({ artifactId: 'abcdef1234567890', storageUserId: 'user-1', documentId: 'doc-1' });
+      expect(hoisted.cancelSession).not.toHaveBeenCalled();
+      expect(hoisted.rows).toHaveLength(0);
+      expect((await get(json.id)).status).toBe(404);
+      expect((await remove(json.id)).status).toBe(404);
+    });
+
+    test('a file still being built cannot be deleted yet', async () => {
+      hoisted.resolveSession.mockResolvedValue(completeSession);
+      const { json } = await start();
+      expect(json.artifact.state).toBe('building');
+      hoisted.resolveArtifact.mockReset().mockResolvedValue(queuedArtifact);
+
+      const refused = await remove(json.id);
+
+      expect(refused.status).toBe(409);
+      expect(refused.json.error.code).toBe('AUDIOBOOK_BUILDING');
+      expect(hoisted.deleteArtifact).not.toHaveBeenCalled();
+      expect(hoisted.rows).toHaveLength(1);
+    });
+
+    test('deleting stops a run only when no other format still needs it', async () => {
+      hoisted.resolveSession.mockResolvedValue(running);
+      const mp3 = (await start({ includeProgress: false })).json;
+      const m4b = (await start({ includeProgress: false, format: 'm4b' })).json;
+
+      expect((await remove(mp3.id)).status).toBe(204);
+      expect(hoisted.cancelSession).not.toHaveBeenCalled();
+
+      expect((await remove(m4b.id)).status).toBe(204);
+      expect(hoisted.cancelSession).toHaveBeenCalledOnce();
+      expect(hoisted.rows).toHaveLength(0);
+    });
+
+    test('lists a document\'s audiobooks with their speech settings and never advances one', async () => {
+      hoisted.resolveSession.mockResolvedValue(completeSession);
+      await start({ includeProgress: false });
+      await start({ includeProgress: false, format: 'm4b' });
+      hoisted.createArtifact.mockClear();
+      hoisted.createAdmitted.mockClear();
+
+      const page = await list('?limit=1');
+
+      expect(page.status).toBe(200);
+      expect(page.json.data).toHaveLength(1);
+      expect(page.json.data[0]).toMatchObject({ provider: 'provider', model: 'tts-1', voice: 'alloy', modelSpeed: 1 });
+      expect(Date.parse(page.json.data[0].requestedAt)).not.toBeNaN();
+      expect(page.json.nextCursor).toMatch(/^\d+\.[0-9a-f]+$/);
+      // The cursor names the last audiobook listed, so deleting it skips nothing.
+      expect((await remove(page.json.data[0].id)).status).toBe(204);
+      const next = await list(`?cursor=${page.json.nextCursor}`);
+      expect(next.json).toMatchObject({ data: [expect.anything()], nextCursor: null });
+      expect(next.json.data[0].id).not.toBe(page.json.data[0].id);
+      expect(hoisted.createAdmitted).not.toHaveBeenCalled();
+      expect((await list('?limit=500')).status).toBe(400);
+      expect((await list('?cursor=20')).status).toBe(400);
+    });
+  });
+
   test('responses match the published specification', async () => {
     hoisted.resolveSession.mockResolvedValue(completeSession);
     // These tests name the document doc-1; the published ID format is checked elsewhere.
@@ -1070,8 +1194,10 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(responseProblems('/documents/{id}/audiobooks/lookup', 'post', found.status, published(found.json))).toEqual([]);
     const read = await get(started.json.id);
     expect(responseProblems('/documents/{id}/audiobooks/{audiobookId}', 'get', read.status, published(read.json))).toEqual([]);
+    const listed = await list();
+    expect(responseProblems('/documents/{id}/audiobooks', 'get', listed.status, { ...listed.json, data: listed.json.data.map(published) })).toEqual([]);
     const stopped = await stop(started.json.id);
-    expect(responseProblems('/documents/{id}/audiobooks/{audiobookId}', 'delete', stopped.status, published(stopped.json))).toEqual([]);
+    expect(responseProblems('/documents/{id}/audiobooks/{audiobookId}/cancel', 'post', stopped.status, published(stopped.json))).toEqual([]);
     const missing = await get('missing');
     expect(missing.status).toBe(404);
     expect(responseProblems('/documents/{id}/audiobooks/{audiobookId}', 'get', 404, missing.json)).toEqual([]);

@@ -3,13 +3,16 @@ import { z } from 'zod';
 import type { ApiPrincipal, ApiScope } from '@/lib/server/api/principal';
 import { ApiRequestError, apiErrorResponse } from '@/lib/server/api/responses';
 import {
+  AudiobookBuildingError,
   ChapterCommandError,
   ChapterNotFoundError,
+  deleteAudiobook,
   findAudiobookDocumentId,
   getAudiobook,
-  listAudiobookRequests,
+  listAudiobooks,
   startAudiobook,
   stopAudiobook,
+  whenAudiobookFree,
 } from '@/lib/server/audiobooks/audiobooks';
 import { audiobookCaller, parseAudiobookBody, resolveAudiobookIntent } from '@/lib/server/audiobooks/request';
 import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
@@ -25,6 +28,7 @@ import { listSpeechProviders, listVoices } from '@/lib/server/tts/voices';
 import { API_SCOPES } from '@/lib/shared/api-scopes';
 import type { BaseDocument } from '@/types/documents';
 import type { DocumentUploadResource } from '@/types/document-api';
+import type { AudiobookCaller } from '@/lib/server/audiobooks/audiobooks';
 import type { Audiobook } from '@/types/tts-export';
 import { CliUsageError, helpText, parseCommand, type CliCommand } from './cli';
 
@@ -89,11 +93,47 @@ function uploadResult(upload: DocumentUploadResource) {
 
 const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
-function audiobookSummary(audiobook: Audiobook) {
-  const { id, documentId: bookDocumentId, status, progress, format, speed, chapter, filename, webUrl, webDownloadUrl, retryAfterMs } = audiobook;
-  return { id, documentId: bookDocumentId, status, progress, format, speed, chapter, filename, webUrl, webDownloadUrl, retryAfterMs,
-    issue: audiobook.generation.issue ?? audiobook.artifact.issue ?? null };
+/** The command that asks for this audiobook again, which resumes it from the audio already cached. */
+function createCommand(audiobook: Audiobook, chapter = audiobook.chapter): string {
+  const { documentId: bookDocumentId, provider, model, voice, modelSpeed, speed, format } = audiobook;
+  const id = voiceId(provider, model, voice);
+  return `audiobook create ${bookDocumentId} --voice ${/^[\w./%:-]+$/.test(id) ? id : shellQuote(id)} --model-speed ${modelSpeed} --speed ${speed} --format ${format}${chapter === null ? '' : ` --chapter ${chapter}`}`;
 }
+
+/** What to do next with an audiobook in this status, so a caller need not know the state machine. */
+function audiobookNext(audiobook: Audiobook): string {
+  // Only a whole-book run generates speech; a chapter's file is built from it.
+  const resume = audiobook.chapter === null
+    ? `Run "${createCommand(audiobook)}" to resume it; audio generated so far is reused.`
+    : `Run "${createCommand(audiobook, null)}" to resume generating the book's audio, reusing what is already generated, then "${createCommand(audiobook)}" to build this chapter's file.`;
+  switch (audiobook.status) {
+    case 'ready': return 'Give the user webDownloadUrl to download it.';
+    case 'preparing': case 'queued': case 'generating': case 'building':
+      return `Run "audiobook view ${audiobook.id}" to follow its progress.`;
+    case 'waiting': return `A compute limit is holding back its file. After retryAfterMs, run "${createCommand(audiobook)}" to build it.`;
+    case 'complete': return `Its audio is generated. Run "${createCommand(audiobook)}" to build the file.`;
+    case 'interrupted': return `The run ended early, for example when the server restarted. ${resume}`;
+    case 'cancelled': case 'stopped': return `It was cancelled. ${resume}`;
+    case 'usage_limited': return `The user's speech quota stopped it. Once the quota allows more, ${resume[0].toLowerCase()}${resume.slice(1)}`;
+    case 'failed': return `It failed; issue says why. Once that is fixed, ${resume[0].toLowerCase()}${resume.slice(1)}`;
+    default: return `Run "${createCommand(audiobook)}" to start it.`;
+  }
+}
+
+function audiobookSummary(audiobook: Audiobook) {
+  const { id, documentId: bookDocumentId, status, progress, provider, model, voice, modelSpeed, format, speed, chapter,
+    requestedAt, filename, webUrl, webDownloadUrl, retryAfterMs } = audiobook;
+  return { id, documentId: bookDocumentId, status, progress, voice: voiceId(provider, model, voice), modelSpeed, format, speed, chapter,
+    requestedAt, filename, webUrl, webDownloadUrl, retryAfterMs,
+    issue: audiobook.generation.issue ?? audiobook.artifact.issue ?? null,
+    next: audiobookNext(audiobook) };
+}
+
+// Another command on the same book holds its lock briefly; a read waits for it.
+const READ_BUSY_DELAYS_MS = [500, 1_000, 2_000, 4_000];
+
+/** A caller that reports an audiobook and never starts or resumes its generation. */
+const readOnly = (caller: AudiobookCaller): AudiobookCaller => ({ ...caller, mayGenerate: false });
 
 function requireComputeWorker() {
   if (!isComputeWorkerAvailable()) throw new ApiRequestError(503, 'COMPUTE_WORKER_REQUIRED', 'Compute worker is required for audiobooks.');
@@ -197,34 +237,24 @@ const readCommands: CliCommand<Context>[] = [
   {
     name: ['audiobook', 'list'],
     args: ['doc'],
-    summary: 'List the audiobooks requested for a document, newest first.',
+    summary: 'List the audiobooks requested for a document, most recently requested first.',
     flags: { cursor: { type: 'string', description: 'nextCursor from an earlier page.' } },
     run: async ({ args, flags }, { principal }) => {
       const bookDocumentId = documentId(args.doc);
-      const caller = await audiobookOwner(principal, bookDocumentId);
-      const offset = flags.cursor === undefined ? 0 : Number(flags.cursor);
-      if (!Number.isSafeInteger(offset) || offset < 0) throw new CliUsageError('--cursor must be a nextCursor from an earlier page.');
-      const requests = await listAudiobookRequests(principal.userId, bookDocumentId, AUDIOBOOK_PAGE + 1, offset);
-      const audiobooks = [];
-      for (const { id } of requests.slice(0, AUDIOBOOK_PAGE)) {
-        try {
-          const audiobook = await getAudiobook(caller, id, bookDocumentId);
-          if (audiobook) audiobooks.push(audiobookSummary(audiobook));
-        } catch (error) {
-          // A chapter that is no longer in the book leaves its request behind; list the rest.
-          if (!(error instanceof ChapterNotFoundError)) throw error;
-        }
-      }
-      return { audiobooks, nextCursor: requests.length > AUDIOBOOK_PAGE ? String(offset + AUDIOBOOK_PAGE) : null };
+      const caller = readOnly(await audiobookOwner(principal, bookDocumentId));
+      const cursor = flags.cursor === undefined ? null : String(flags.cursor);
+      const page = await whenAudiobookFree(() => listAudiobooks(caller, bookDocumentId, { limit: AUDIOBOOK_PAGE, cursor }), READ_BUSY_DELAYS_MS);
+      return { audiobooks: page.data.map(audiobookSummary), nextCursor: page.nextCursor };
     },
   },
   {
     name: ['audiobook', 'view'],
     args: ['id'],
-    summary: 'Show an audiobook\'s status and progress, and its download link once it is ready.',
+    summary: 'Show an audiobook\'s status and progress, what to do next, and its download link once it is ready.',
     run: async ({ args }, { principal }) => {
       const bookDocumentId = await requireAudiobookDocument(principal, args.id);
-      const audiobook = await getAudiobook(await audiobookOwner(principal, bookDocumentId), args.id, bookDocumentId);
+      const caller = readOnly(await audiobookOwner(principal, bookDocumentId));
+      const audiobook = await whenAudiobookFree(() => getAudiobook(caller, args.id, bookDocumentId), READ_BUSY_DELAYS_MS);
       if (!audiobook) throw new ApiRequestError(404, 'AUDIOBOOK_NOT_FOUND', 'Audiobook not found.');
       return audiobookSummary(audiobook);
     },
@@ -357,13 +387,23 @@ const deleteCommands: CliCommand<Context>[] = [
       return { deleted: true, folder: { id, name } };
     },
   },
+  {
+    name: ['audiobook', 'delete'],
+    args: ['id'],
+    summary: 'Delete one audiobook and its file. The document and its generated audio stay, so creating it again reuses the speech already generated. A file still being built cannot be deleted yet.',
+    run: async ({ args }, { principal }) => {
+      const bookDocumentId = await requireAudiobookDocument(principal, args.id);
+      const deleted = await deleteAudiobook(await audiobookOwner(principal, bookDocumentId), args.id, bookDocumentId);
+      return { deleted, audiobook: { id: args.id, documentId: bookDocumentId } };
+    },
+  },
 ];
 
 const audioCommands: CliCommand<Context>[] = [
   {
     name: ['audiobook', 'create'],
     args: ['doc'],
-    summary: 'Start an audiobook of a document, or of one chapter, in the background. It uses the saved speech settings unless you name a voice. The same request returns the same audiobook.',
+    summary: 'Start an audiobook of a document, or of one chapter, in the background. It uses the saved speech settings unless you name a voice. The same request returns the same audiobook (created is false) and resumes it if it was cancelled or interrupted; reusedCachedAudio says whether audio already generated was used.',
     flags: {
       voice: { type: 'string', description: 'A voice ID from "voices list" or "voices cached". Default: the saved voice.' },
       'model-speed': { type: 'number', description: 'Speaking rate the model generates at, 0.5 to 3, where the model has one. It changes the audio, so it must match a cached voice to reuse it. Default: the saved speed.' },
@@ -385,21 +425,23 @@ const audioCommands: CliCommand<Context>[] = [
       const caller = await audiobookOwner(principal, bookDocumentId);
       const intent = await resolveAudiobookIntent(caller, bookDocumentId, body);
       if (intent instanceof Response) throw intent;
-      const audiobook = await startAudiobook(caller, intent, { retrySkipped: false, includeProgress: true });
-      const { providerRef, ttsModel, voice: voiceName, nativeSpeed } = intent.parsed.settings;
-      const cachedSegments = audiobook.segments?.completedSegments ?? 0;
+      let created = false;
+      const audiobook = await startAudiobook(caller, intent, {
+        retrySkipped: false,
+        includeProgress: true,
+        onRequested: (request) => { created = request.created; },
+      });
       return {
         ...audiobookSummary(audiobook),
-        voice: voiceId(providerRef, ttsModel, voiceName),
-        modelSpeed: nativeSpeed,
-        reusedCachedAudio: cachedSegments > 0,
+        created,
+        reusedCachedAudio: (audiobook.segments?.completedSegments ?? 0) > 0,
       };
     },
   },
   {
     name: ['audiobook', 'cancel'],
     args: ['id'],
-    summary: 'Stop a whole-book audiobook. Audio generated so far stays cached, and creating it again resumes it.',
+    summary: 'Stop generating a whole-book audiobook. It stays listed as cancelled, and the audio generated so far stays cached: "audiobook create" with the same settings (its next field gives the command) resumes it. To remove it, use "audiobook delete" in openreader_delete.',
     run: async ({ args }, { principal }) => {
       const bookDocumentId = await requireAudiobookDocument(principal, args.id);
       const audiobook = await stopAudiobook(await audiobookOwner(principal, bookDocumentId), args.id, bookDocumentId);
@@ -414,6 +456,7 @@ async function failure(error: unknown): Promise<CallToolResult> {
   const response = error instanceof Response ? error
     : error instanceof ChapterNotFoundError ? apiErrorResponse(404, 'CHAPTER_NOT_FOUND', error.message)
       : error instanceof ChapterCommandError ? apiErrorResponse(409, 'CHAPTER_COMMAND', error.message)
+        : error instanceof AudiobookBuildingError ? apiErrorResponse(409, 'AUDIOBOOK_BUILDING', error.message)
         : await documentRequestFailure(error, serverLogger);
   const { error: body } = await response.json() as { error: { code: string; message: string } };
   return { isError: true, content: [{ type: 'text', text: body.message }], structuredContent: { error: body } };
@@ -440,10 +483,11 @@ function describe(summary: string, tool: string, commands: CliCommand<Context>[]
 export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServer {
   const server = new McpServer({ name: 'openreader', version: '1' }, {
     instructions: [
-      'OpenReader turns documents in the user\'s library into audiobooks. Its tools take gh-style command lines: openreader reads, openreader_docs adds and organizes documents and folders, openreader_docs_delete deletes them, and openreader_audio generates audio. Output is JSON.',
+      'OpenReader turns documents in the user\'s library into audiobooks. Its tools take gh-style command lines: openreader reads, openreader_docs adds and organizes documents and folders, openreader_audio generates and cancels audiobooks, and openreader_delete deletes documents, folders or audiobooks. Output is JSON.',
       'To add a file from the user\'s device, run "docs upload". Give the user its uploadPageUrl, or, with a shell, send the file to the one-time upload URL it prepares and then run "docs add <uploadId>".',
       'Before creating an audiobook, run "voices cached <doc>": a voice listed there, with its modelSpeed, reuses audio already generated for the book. Otherwise "audiobook create" uses the saved speech settings, or a voice ID from "voices list".',
-      'Audiobooks generate in the background: "audiobook create" returns at once and "audiobook view <id>" reports progress. webUrl opens the document for the user, and webDownloadUrl, once the audiobook is ready, starts its download. Give the user these links as they are.',
+      'Audiobooks generate in the background: "audiobook create" returns at once and "audiobook view <id>" reports progress. Each audiobook has a next field that says what to do with it, such as the command that resumes a cancelled or interrupted one. webUrl opens the document for the user, and webDownloadUrl, once the audiobook is ready, starts its download. Give the user these links as they are.',
+      'To remove only an audiobook, use "audiobook delete <id>": "docs delete" removes the whole document with all of its audio.',
     ].join('\n'),
   });
   const context = (input?: string) => () => ({ principal: mcpPrincipal(authInfo), input });
@@ -469,13 +513,13 @@ export function createMcpServer({ authInfo }: { authInfo?: AuthInfo }): McpServe
     scopeChallenge: scope('documents:write'),
   }, ({ command: line, input }) => runCommand('openreader_docs', docsCommands, line, context(input)));
 
-  server.registerTool('openreader_docs_delete', {
+  server.registerTool('openreader_delete', {
     title: 'OpenReader delete',
-    description: describe('Delete documents or folders from the user\'s OpenReader library. Confirm with the user first: a deleted document cannot be recovered.', 'openreader_docs_delete', deleteCommands),
+    description: describe('Delete documents, folders or audiobooks from the user\'s OpenReader library. Confirm with the user first: a deleted document cannot be recovered. To remove one audiobook, delete the audiobook, not its document.', 'openreader_delete', deleteCommands),
     inputSchema: z.object({ command }),
     annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
     scopeChallenge: scope('documents:write'),
-  }, ({ command: line }) => runCommand('openreader_docs_delete', deleteCommands, line, context()));
+  }, ({ command: line }) => runCommand('openreader_delete', deleteCommands, line, context()));
 
   server.registerTool('openreader_audio', {
     title: 'OpenReader audio',

@@ -144,7 +144,8 @@ export function ttsPlaybackExportArtifactScopePrefix(input: {
   return `${userSegment}docs/${input.documentId}/`;
 }
 
-function ttsPlaybackExportArtifactDirPrefix(input: {
+/** Everything one export artifact owns: each build's file and its metadata. */
+export function ttsPlaybackExportArtifactDirPrefix(input: {
   artifactId: string;
   storageUserId: string;
   documentId: string;

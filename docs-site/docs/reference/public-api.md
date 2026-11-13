@@ -220,14 +220,27 @@ resume; status reads do not restart failed generation.
 Only a caller with `audio:generate` advances a request when reading it. With
 `documents:read` alone, GET and lookup observe and never start work.
 
+`GET /api/v1/documents/{id}/audiobooks` lists a document's audiobooks, most recently
+requested first, 20 to a page (`limit` up to 50, then `cursor` from `nextCursor`).
+Listing only observes, whatever the caller's scopes. Each audiobook names the
+`provider`, `model`, `voice` and `modelSpeed` it is made with, in the fields a POST
+takes, and `requestedAt`, when it was last requested or cancelled.
+
 A request stays addressable for **seven days** after its last POST and until it
 has finished or been cancelled, then GET returns `404`. The audio and any finished file are not
 affected: a new POST with the same settings finds them again.
 
-Stop with `DELETE /api/v1/documents/{id}/audiobooks/{audiobookId}`. Generated
+Stop with `POST /api/v1/documents/{id}/audiobooks/{audiobookId}/cancel`. Generated
 audio remains cached, and the request reports `status: "cancelled"`. Formats and
 speeds of the same settings share one generation run, so stopping that run also
 cancels the other whole-book requests on it. POST again to resume any of them.
+
+`DELETE /api/v1/documents/{id}/audiobooks/{audiobookId}` needs `documents:write` and
+removes the audiobook and its finished file, returning `204`. A run that no other
+format or speed still shares is stopped first. The document's generated audio stays
+cached, so requesting the same audiobook again reuses it and generates only what was missing.
+While the file is being built, DELETE returns `409 AUDIOBOOK_BUILDING`; try again once
+it is ready.
 
 If the speech provider fails several segments in a row, generation stops with
 `PROVIDER_UNAVAILABLE` or `PROVIDER_REJECTED` in `generation.issue` rather than
