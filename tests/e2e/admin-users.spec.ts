@@ -98,16 +98,19 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await expect(catalogSave).toBeEnabled();
   await catalogSwitch.click();
   await expect(catalogSave).toBeDisabled();
-  // A saved setting resets to its seeded value from its own row.
-  await page.getByRole('button', { name: 'Providers', exact: true }).first().click();
-  const retries = page.getByRole('spinbutton', { name: 'Retry attempts', exact: true });
-  const seededRetries = await retries.inputValue();
-  await retries.fill(String(Number(seededRetries) + 1));
-  await page.getByRole('button', { name: /^Save \(1\)$/ }).click();
-  await expect(page.getByText('Settings saved')).toBeVisible();
-  await page.locator('div.justify-between').filter({ has: retries }).getByRole('button', { name: 'Reset', exact: true }).click();
-  await expect(page.getByText('Reset to env default')).toBeVisible();
-  await expect(retries).toHaveValue(seededRetries);
+  // A saved setting resets to its seeded value from its own row. The setting is
+  // instance-wide and both browsers share one server, so only one project changes it.
+  if (testInfo.project.name === 'chromium') {
+    await page.getByRole('button', { name: 'Providers', exact: true }).first().click();
+    const retries = page.getByRole('spinbutton', { name: 'Retry attempts', exact: true });
+    const seededRetries = await retries.inputValue();
+    await retries.fill(String(Number(seededRetries) + 1));
+    await page.getByRole('button', { name: /^Save \(1\)$/ }).click();
+    await expect(page.getByText('Settings saved')).toBeVisible();
+    await page.locator('div.justify-between').filter({ has: retries }).getByRole('button', { name: 'Reset', exact: true }).click();
+    await expect(page.getByText('Reset to env default')).toBeVisible();
+    await expect(retries).toHaveValue(seededRetries);
+  }
   await page.getByRole('button', { name: 'Access', exact: true }).first().click();
   await page.getByRole('radio', { name: 'Approve', exact: true }).click();
   const savePolicy = page.getByRole('button', { name: /^Save \(1\)$/ });
