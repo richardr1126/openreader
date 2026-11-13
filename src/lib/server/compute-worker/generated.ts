@@ -1480,6 +1480,7 @@ export interface paths {
                         namespace: string | null;
                         documentObjectKey: string;
                         replaceToken?: string;
+                        supersedeOpId?: string;
                     };
                 };
             };

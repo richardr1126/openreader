@@ -357,8 +357,6 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const reconciler = createOperationReconciler({
     stateStore: operationStateStore,
     orchestrator,
-    whisperTimeoutMs,
-    pdfTimeoutMs,
     opStaleMs,
     getGeneration: () => options.routeDeps ? 0 : sessionManager.getGeneration(),
     logger: app.log,

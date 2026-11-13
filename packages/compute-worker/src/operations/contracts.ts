@@ -452,6 +452,18 @@ export const WORKER_OPERATION_COMPUTE_ACTION = {
 } as const satisfies Record<Exclude<WorkerOperationKind, UnlimitedOperationKind>, WorkerOperationAction>
   & Record<WorkerOperationAction, Exclude<WorkerOperationKind, UnlimitedOperationKind>>;
 
+/** Every running job rewrites its operation state on this interval. */
+export const RUNNING_HEARTBEAT_MS = 5_000;
+
+/**
+ * A running operation whose state has not been rewritten for this long has no
+ * worker executing it: the process was stopped, killed, or restarted. Job
+ * duration is capped inside each job, so liveness here is heartbeat age alone.
+ * Six missed beats is far more than a slow state write needs, and every one of
+ * them is time a reader spends watching a progress bar that cannot move.
+ */
+export const RUNNING_OPERATION_STALE_MS = RUNNING_HEARTBEAT_MS * 6;
+
 /**
  * Per-kind operation policy. The exhaustive Record forces every new operation
  * kind to declare its policy here instead of growing kind-switches in the
@@ -562,6 +574,12 @@ export type WorkerOperationRequest =
   | ModelDownloadOperationRequest
   | MaintenanceOperationRequest;
 
+/** Identifies the worker process reporting an operation; see runner-identity. */
+export interface WorkerRunner {
+  workerId: string;
+  incarnationId: string;
+}
+
 export interface WorkerOperationState<Result = unknown> {
   opId: string;
   opKey: string;
@@ -575,6 +593,8 @@ export interface WorkerOperationState<Result = unknown> {
   error?: WorkerJobErrorShape;
   timing?: WorkerJobTiming;
   progress?: WorkerOperationProgress;
+  /** The worker process that last reported this operation running. */
+  runner?: WorkerRunner;
 }
 
 export interface WorkerOperationEvent<Result = unknown> {

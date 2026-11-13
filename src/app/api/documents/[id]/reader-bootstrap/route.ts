@@ -24,7 +24,11 @@ export async function POST(
         { status: 400 },
       );
     }
-    const result = await resolveReaderBootstrap(request, documentId);
+    const body = await request.json().catch(() => null) as { restartPdfOperationId?: unknown } | null;
+    const restartPdfOperationId = typeof body?.restartPdfOperationId === 'string'
+      ? body.restartPdfOperationId.trim() || undefined
+      : undefined;
+    const result = await resolveReaderBootstrap(request, documentId, { restartPdfOperationId });
     return result instanceof Response ? result : NextResponse.json(result, {
       status: result.status === 'pending' ? 202 : 200,
       headers: {

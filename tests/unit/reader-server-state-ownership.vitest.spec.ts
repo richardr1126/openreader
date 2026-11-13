@@ -43,7 +43,8 @@ describe('reader server-state ownership', () => {
     const loader = source('src/components/reader/ReaderLoader.tsx');
     const shell = source('src/components/reader/ReaderShell.tsx');
     expect(loader).toContain('progress?: ReaderBootstrapProgress');
-    expect(shell).toContain('<ReaderLoader progress={result.progress} />');
+    expect(shell).toContain('<ReaderLoader');
+    expect(shell).toContain('progress={result.progress}');
     for (const path of [
       'src/app/(app)/pdf/[id]/page.tsx',
       'src/app/(app)/epub/[id]/page.tsx',

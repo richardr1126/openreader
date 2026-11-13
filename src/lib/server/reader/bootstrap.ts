@@ -46,11 +46,16 @@ type DocumentRow = StoredDocumentRow & { userId: string };
 
 export type ReaderBootstrapResolution = {
   result: ReaderBootstrapResult;
-  operationId?: string;
 };
 
 export type ReaderBootstrapResolveOptions = {
   preparationOperationId?: string | null;
+  /**
+   * Replace this PDF preparation with a fresh one. The reader sends the
+   * operation it was watching, whether that failed or is in flight and getting
+   * nowhere, so a restart can never supersede work started after it.
+   */
+  restartPdfOperationId?: string;
   /** Report the parse without starting one. */
   observeOnly?: boolean;
   /** Let an admission refusal reach the caller, with its retry time. */
@@ -112,7 +117,12 @@ export async function ensurePdfReady(
     if (requestedReadiness) return requestedReadiness;
   }
   let resolved = await resolveCurrentPdfParse(input);
-  if (!resolved.artifact && !resolved.operation) {
+  const supersededOperationId = !options.observeOnly
+    && options.restartPdfOperationId
+    && resolved.operation?.opId === options.restartPdfOperationId
+    ? options.restartPdfOperationId
+    : null;
+  if (supersededOperationId || (!resolved.artifact && !resolved.operation)) {
     if (options.observeOnly) {
       return { result: { status: 'error', message: 'PDF preparation has not started.', retryable: true } };
     }
@@ -121,14 +131,19 @@ export async function ensurePdfReady(
       const operation = await createAdmittedComputeOperation({
         policy: runtimeConfig.computeLimitPolicies,
         action: 'pdf_layout',
-        requestKey: `${documentId}:${scope.documentVersion}:current`,
+        requestKey: `${documentId}:${scope.documentVersion}:${supersededOperationId ? `restart:${supersededOperationId}` : 'current'}`,
         subject: {
           userId: scope.userId,
           isAnonymous: scope.isAnonymousUser,
         },
-        create: () => createOrReuseCurrentPdfParseOperation(input),
+        create: () => createOrReuseCurrentPdfParseOperation({
+          ...input,
+          ...(supersededOperationId ? { supersedeOpId: supersededOperationId } : {}),
+        }),
       });
-      resolved = { artifact: null, operation };
+      resolved = operation.status === 'succeeded'
+        ? await resolveCurrentPdfParse(input)
+        : { artifact: null, operation };
     } catch (error) {
       if (!(error instanceof ComputeAdmissionLimitedError) || options.throwAdmissionLimit) throw error;
       return {
@@ -136,6 +151,7 @@ export async function ensurePdfReady(
           status: 'error',
           message: 'PDF preparation is temporarily rate limited. Please try again shortly.',
           retryable: true,
+          ...(supersededOperationId ? { failedPdfOperationId: supersededOperationId } : {}),
         },
       };
     }
