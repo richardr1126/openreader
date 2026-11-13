@@ -113,7 +113,7 @@ export function useAdminSettingsDraft() {
     onSuccess: async (result) => {
       if (result.failed.length) toast.error('Reset failed');
       else toast.success('Reset to env default');
-      await settle(result);
+      await settle(result, (key) => result.failed.includes(key));
     },
     onError: (mutationError) => {
       pending.current = {};
