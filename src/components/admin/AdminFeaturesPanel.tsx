@@ -1,606 +1,103 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import {
-  AudioWaveIcon, ClockIcon, CubeIcon, DatabaseIcon, DocumentIcon, HeadphonesIcon, HourglassIcon,
-  MicrophoneIcon, RefreshIcon, RssIcon, ServerStackIcon, UploadIcon, UserIcon, UserPlusIcon, UsersIcon,
-} from '@/components/icons/Icons';
-import Link from 'next/link';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchTasks } from '@/components/admin/AdminTasksPanel';
+import { useState } from 'react';
 import toast from 'react-hot-toast';
-import {
-  Section,
-  SettingRow,
-  ToggleRow,
-  Select,
-  SelectOptionDetail,
-  SegmentedControl,
-  SaveBar,
-  InlineButton,
-  Input,
-} from '@/components/ui';
-import { type TtsProviderId } from '@openreader/tts/provider-catalog';
-import { useSharedProviders, type SharedProviderEntry } from '@/hooks/useSharedProviders';
-import { queryKeys } from '@/lib/client/query-keys';
-import { useAuthSession } from '@/hooks/useAuthSession';
+import { DocumentIcon, HeadphonesIcon, KeyIcon, RefreshIcon, RssIcon, UploadIcon } from '@/components/icons/Icons';
+import { Input, Section, SettingRow, ToggleRow } from '@/components/ui';
 import { useRuntimeConfig } from '@/contexts/RuntimeConfigContext';
 import { useDesktopUpdates } from '@/hooks/useDesktopUpdates';
-import {
-  parseComputeLimitPolicyDocument,
-} from '@openreader/runtime-config/compute-limits';
-import { ProviderSelect } from '@/components/providers/ProviderSelect';
-import { ComputeLimitsEditor } from './ComputeLimitsEditor';
+import { AdminGutendexPanel } from './AdminGutendexPanel';
+import { AdminSettingsSkeleton, useAdminSettingsDraft } from './admin-settings-draft';
 
-type RuntimeConfigSource = 'json-seed' | 'env-seed' | 'admin' | 'default';
-
-interface SettingsResponse {
-  values: Record<string, unknown>;
-  sources: Record<string, RuntimeConfigSource>;
-}
-
-interface ProviderOption {
-  id: string;
-  name: string;
-  providerType: TtsProviderId;
-}
-
-type PlaybackBackgroundExtent = 'section' | 'document';
-type SignupPolicy = 'open' | 'approval' | 'closed';
-
-interface PlaybackBackgroundExtentOption {
-  value: PlaybackBackgroundExtent;
-  label: string;
-  description: string;
-}
-
-const PLAYBACK_BACKGROUND_EXTENT_OPTIONS: PlaybackBackgroundExtentOption[] = [
-  {
-    value: 'section',
-    label: 'Current section',
-    description: 'Continue through the current PDF page or EPUB chapter after the client stops heartbeating.',
-  },
-  {
-    value: 'document',
-    label: 'Full document',
-    description: 'Continue generating from the current position through the rest of the document.',
-  },
-];
-
-async function fetchAdminSettings(): Promise<SettingsResponse> {
-  const res = await fetch('/api/admin/settings');
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return (await res.json()) as SettingsResponse;
-}
-
-async function patchAdminSettings(payload: { updates?: Record<string, unknown>; reset?: string[] }): Promise<void> {
-  const res = await fetch('/api/admin/settings', {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
-}
-
-export function AdminFeaturesPanel({
-  scope = 'all',
-}: {
-  scope?: 'instance' | 'compute' | 'all';
-}) {
-  const queryClient = useQueryClient();
-  const { data: session } = useAuthSession();
-  // Sign-up policy, guest sessions and per-user limits govern a multi-user
-  // instance. The desktop owner is the only account, so they stay hidden there.
+/** What the app offers readers: documents, the Gutenberg catalog, exports and connected apps. */
+export function AdminFeaturesPanel() {
+  // The changelog feed is for hosted instances; desktop reads the bundled one.
   const multiUser = useRuntimeConfig().installProfile === 'server';
-  const { data: taskData } = useQuery({
-    queryKey: queryKeys.admin(session?.user?.id ?? 'no-session', 'tasks'),
-    queryFn: fetchTasks,
-    enabled: multiUser && scope !== 'compute' && Boolean(session?.user?.id),
-  });
-  const adminSettingsQueryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
-  const { data, error } = useQuery({
-    queryKey: adminSettingsQueryKey,
-    queryFn: fetchAdminSettings,
-    enabled: Boolean(session?.user?.id),
-  });
-  const [draft, setDraft] = useState<Record<string, unknown>>({});
-  const [dirty, setDirty] = useState<Set<string>>(new Set());
-  const { providers: sharedProviders } = useSharedProviders();
-  // Automatic updates belong to the desktop shell, not the instance's settings,
-  // but share this panel's draft and save bar.
-  const desktopUpdates = useDesktopUpdates();
-  const [automaticUpdatesDraft, setAutomaticUpdatesDraft] = useState<boolean | null>(null);
-  const [savingAutomaticUpdates, setSavingAutomaticUpdates] = useState(false);
-  const automaticUpdatesDirty = desktopUpdates !== null
-    && automaticUpdatesDraft !== null
-    && automaticUpdatesDraft !== desktopUpdates.automatic;
-  const dirtyCount = dirty.size + (automaticUpdatesDirty ? 1 : 0);
+  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft();
 
-  useEffect(() => {
-    if (!data) return;
-    setDraft({ ...data.values });
-    setDirty(new Set());
-  }, [data]);
-
-  useEffect(() => {
-    if (!error) return;
-    console.error('[AdminFeaturesPanel] load failed:', error);
-    toast.error('Failed to load site settings');
-  }, [error]);
-
-  const resetMutation = useMutation({
-    mutationFn: async (key: string) => {
-      await patchAdminSettings({ reset: [key] });
-    },
-    onSuccess: async () => {
-      toast.success('Reset to env default');
-      await queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey });
-    },
-    onError: (mutationError) => {
-      console.error(mutationError);
-      toast.error('Reset failed');
-    },
-  });
-
-  const saveMutation = useMutation({
-    mutationFn: async (updates: Record<string, unknown>) => {
-      await patchAdminSettings({ updates });
-    },
-    onSuccess: async () => {
-      toast.success('Settings saved');
-      await queryClient.invalidateQueries({ queryKey: adminSettingsQueryKey });
-    },
-    onError: (mutationError) => {
-      console.error(mutationError);
-      toast.error('Save failed');
-    },
-  });
-
-  const saving = resetMutation.isPending || saveMutation.isPending || savingAutomaticUpdates;
-
-  const updateDraft = (key: string, value: unknown) => {
-    setDraft((d) => ({ ...d, [key]: value }));
-    setDirty((s) => {
-      const next = new Set(s);
-      const baselineValue = data?.values?.[key];
-      if (Object.is(value, baselineValue)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const updatePositiveIntDraft = (key: string, raw: string) => {
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) return;
-    updateDraft(key, Math.max(1, Math.floor(parsed)));
-  };
-
-  const resetField = (key: string) => {
-    if (saving) return;
-    resetMutation.mutate(key);
-  };
-
-  const saveAutomaticUpdates = async (announce: boolean) => {
-    if (!desktopUpdates || automaticUpdatesDraft === null) return;
-    setSavingAutomaticUpdates(true);
-    try {
-      await desktopUpdates.setAutomatic(automaticUpdatesDraft);
-      setAutomaticUpdatesDraft(null);
-      if (announce) toast.success('Settings saved');
-    } catch (saveError) {
-      console.error(saveError);
-      toast.error('Save failed');
-    } finally {
-      setSavingAutomaticUpdates(false);
-    }
-  };
-
-  const saveAll = () => {
-    if (saving || dirtyCount === 0) return;
-    if (automaticUpdatesDirty) void saveAutomaticUpdates(dirty.size === 0);
-    if (dirty.size === 0) return;
-    const updates: Record<string, unknown> = {};
-    for (const key of dirty) updates[key] = draft[key];
-    saveMutation.mutate(updates);
-  };
-
-  const discardAll = () => {
-    setAutomaticUpdatesDraft(null);
-    if (!data) return;
-    setDraft({ ...data.values });
-    setDirty(new Set());
-  };
-
-  const providerOptions = useMemo<ProviderOption[]>(() => {
-    return sharedProviders.map((entry) => ({
-      id: entry.slug,
-      name: entry.displayName,
-      providerType: entry.providerType,
-    }));
-  }, [sharedProviders]);
-
-  const currentProviderId =
-    typeof draft.defaultTtsProvider === 'string'
-      ? draft.defaultTtsProvider
-      : '';
-  const currentSharedEntry: SharedProviderEntry | undefined = sharedProviders.find(
-    (p) => p.slug === currentProviderId,
-  );
-  const fallbackShared = providerOptions[0];
-  const effectiveSelectedProvider = currentSharedEntry
-    ? {
-      id: currentSharedEntry.slug,
-      name: currentSharedEntry.displayName,
-      providerType: currentSharedEntry.providerType,
-    } as ProviderOption
-    : fallbackShared;
-  const selectedProviderOption = effectiveSelectedProvider;
-  const playbackBackgroundExtentValue: PlaybackBackgroundExtent =
-    draft.ttsPlaybackBackgroundExtent === 'document' ? 'document' : 'section';
-  const playbackBackgroundExtentOption = PLAYBACK_BACKGROUND_EXTENT_OPTIONS.find(
-    (option) => option.value === playbackBackgroundExtentValue,
-  ) ?? PLAYBACK_BACKGROUND_EXTENT_OPTIONS[0];
-
-  const handleProviderChange = (opt: ProviderOption) => {
-    updateDraft('defaultTtsProvider', opt.id);
-  };
-
-  const computePolicy = parseComputeLimitPolicyDocument(draft.computeLimitPolicies);
-  const showInstanceSettings = scope === 'instance' || scope === 'all';
-  const showComputeSettings = scope === 'compute' || scope === 'all';
-
-  const renderSource = (key: string) => {
-    const source = data?.sources?.[key] ?? 'default';
-    const isDirty = dirty.has(key);
-    return (
-      <SourceBadge
-        source={source}
-        dirty={isDirty}
-        canReset={source !== 'default'}
-        onReset={() => resetField(key)}
-        saving={saving}
-      />
-    );
-  };
-
-  if (!data) {
-    return (
-      <AdminFeaturesSkeleton multiUser={multiUser} />
-    );
-  }
-
-  const numberRow = ({ key, label, icon, info, description, ariaLabel, unit }: {
-    key: string;
-    label: string;
-    icon: ReactNode;
-    info?: string;
-    description?: ReactNode;
-    ariaLabel?: string;
-    unit?: string;
-  }) => (
-    <SettingRow label={label} icon={icon} info={info} description={description} meta={renderSource(key)} controlClassName="w-40">
-      <div className="flex items-center gap-1.5">
-        <Input
-          type="number"
-          min={1}
-          step={1}
-          inputMode="numeric"
-          aria-label={ariaLabel ?? label}
-          className="text-right"
-          value={String(draft[key] ?? '')}
-          onChange={(event) => updatePositiveIntDraft(key, event.target.value)}
-        />
-        {unit ? <span className="w-9 shrink-0 text-xs text-soft">{unit}</span> : null}
-      </div>
-    </SettingRow>
-  );
-
-  const guestCleanupOff = taskData?.tasks.some((task) => task.key === 'expire-anonymous-users' && !task.enabled);
-  const limitToggle = ({ key, label, icon, info }: { key: string; label: string; icon: ReactNode; info: string }) => (
-    <ToggleRow
-      label={label}
-      icon={icon}
-      info={info}
-      checked={Boolean(draft[key])}
-      onChange={(checked) => updateDraft(key, checked)}
-      meta={renderSource(key)}
-      variant="plain"
-    />
-  );
+  if (!loaded) return <AdminSettingsSkeleton titles={['Documents', 'Connected apps']} label="Loading feature settings" />;
 
   return (
     <div className="space-y-5">
-      {showInstanceSettings ? <Section title="TTS defaults" variant="group">
-        <SettingRow
-          label="Default TTS provider"
-          icon={<ServerStackIcon />}
-          info="The provider new users start with."
-          meta={renderSource('defaultTtsProvider')}
-          controlClassName="w-56"
-        >
-          {providerOptions.length > 0 ? (
-            <ProviderSelect
-              aria-label="Default provider"
-              value={selectedProviderOption}
-              onChange={handleProviderChange}
-              options={providerOptions}
+      <Section title="Documents" variant="group">
+        {number({ key: 'maxUploadMb', label: 'Max upload size', icon: <UploadIcon />, ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
+        {toggle({
+          key: 'enableDocxConversion',
+          label: 'DOCX upload conversion',
+          icon: <DocumentIcon />,
+          info: 'Allows DOCX uploads, converted to PDF on the worker.',
+        })}
+        {toggle({
+          key: 'enableAudiobookExport',
+          label: 'Audiobook export',
+          icon: <HeadphonesIcon />,
+          info: 'Shows Export audiobook on PDF and EPUB pages.',
+        })}
+      </Section>
+
+      {/* Saves on its own: the catalog key is write-only. */}
+      <AdminGutendexPanel />
+
+      <Section title="Connected apps" variant="group">
+        {toggle({
+          key: 'allowOAuthClientRegistration',
+          label: 'Open OAuth client registration',
+          icon: <KeyIcon />,
+          info: 'Let new third-party apps connect, by registering or with a client ID metadata document. This does not grant access; each account must approve its scopes.',
+        })}
+      </Section>
+
+      {multiUser ? (
+        <Section title="Changelog" variant="group">
+          <SettingRow
+            label="Changelog feed URL"
+            icon={<RssIcon />}
+            info="Public URL the standalone changelog page reads."
+            meta={source('changelogFeedUrl')}
+            stacked
+          >
+            <Input
+              type="text"
+              aria-label="Changelog feed URL"
+              value={String(draft.changelogFeedUrl ?? '')}
+              onChange={(event) => update('changelogFeedUrl', event.target.value)}
+              placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
             />
-          ) : (
-            <p className="text-xs text-soft">No shared providers yet. Add one first.</p>
-          )}
-        </SettingRow>
-        <ToggleRow
-          label="Show Model & Voice settings"
-          icon={<MicrophoneIcon />}
-          info="Let users choose their own provider, model and voice."
-          checked={Boolean(draft.enableTtsProvidersTab)}
-          onChange={(checked) => updateDraft('enableTtsProvidersTab', checked)}
-          meta={renderSource('enableTtsProvidersTab')}
-          variant="plain"
-        />
-        <ToggleRow
-          label="Show all provider models"
-          icon={<CubeIcon />}
-          info="Offer every model a provider reports, not only the recommended ones."
-          checked={Boolean(draft.showAllProviderModels)}
-          onChange={(checked) => updateDraft('showAllProviderModels', checked)}
-          meta={renderSource('showAllProviderModels')}
-          variant="plain"
-        />
-      </Section> : null}
-
-      {showInstanceSettings ? <Section title={multiUser ? 'Site features' : 'Features'} variant="group">
-        {multiUser ? <SettingRow
-          label="Changelog feed URL"
-          icon={<RssIcon />}
-          info="Public URL the standalone changelog page reads."
-          meta={renderSource('changelogFeedUrl')}
-          stacked
-        >
-          <Input
-            type="text"
-            aria-label="Changelog feed URL"
-            value={String(draft.changelogFeedUrl ?? '')}
-            onChange={(event) => updateDraft('changelogFeedUrl', event.target.value)}
-            placeholder="https://docs.openreader.richardr.dev/changelog/manifest.json"
-          />
-        </SettingRow> : null}
-        {multiUser ? <>
-        <SettingRow
-          label="New account sign-ups"
-          icon={<UserPlusIcon />}
-          info="Open lets anyone register, Approve holds new accounts until an admin accepts them, and Closed stops registration."
-          description="Approval does not verify email ownership."
-          meta={renderSource('signupPolicy')}
-          stacked
-        >
-          <SegmentedControl<SignupPolicy>
-            value={draft.signupPolicy === 'approval' || draft.signupPolicy === 'closed' ? draft.signupPolicy : 'open'}
-            options={[
-              { value: 'open', label: 'Open' },
-              { value: 'approval', label: 'Approve' },
-              { value: 'closed', label: 'Closed' },
-            ]}
-            onChange={(value) => updateDraft('signupPolicy', value)}
-            ariaLabel="New account sign-up policy"
-            className="grid-cols-3"
-          />
-        </SettingRow>
-        {draft.signupPolicy !== 'closed' ? <>
-          {limitToggle({
-            key: 'limitNewAccountsPerIp',
-            label: 'New accounts per IP',
-            icon: <UserPlusIcon />,
-            info: 'Stops sign-ups from one network once it reaches this count in the period. Existing accounts keep working. Needs a reverse proxy that sets X-Real-IP.',
-          })}
-          {draft.limitNewAccountsPerIp ? <>
-            {numberRow({ key: 'newAccountsPerIp', label: 'Accounts per period', icon: <UserPlusIcon /> })}
-            {numberRow({ key: 'newAccountsPerIpDays', label: 'Account period', icon: <HourglassIcon />, unit: 'days' })}
-          </> : null}
-        </> : null}
-        <ToggleRow
-          label="Guest sessions"
-          icon={<UserIcon />}
-          info="Visitors can use the app without an account and keep their data by signing up later."
-          checked={Boolean(draft.allowAnonymousSessions)}
-          onChange={(checked) => updateDraft('allowAnonymousSessions', checked)}
-          meta={renderSource('allowAnonymousSessions')}
-          variant="plain"
-        />
-        {draft.allowAnonymousSessions ? <>
-          {numberRow({
-            key: 'anonymousUserIdleDays',
-            label: 'Guest idle period',
-            icon: <HourglassIcon />,
-            info: 'Guest accounts idle this long are deleted when the Delete idle guest accounts task is on.',
-            description: guestCleanupOff ? (
-              <>Guests are never removed while <Link className="underline" href="/app/settings?section=maintenance">Delete idle guest accounts</Link> is off.</>
-            ) : undefined,
-            unit: 'days',
-          })}
-          {limitToggle({
-            key: 'limitNewGuestsPerIp',
-            label: 'New guests per IP',
-            icon: <UserPlusIcon />,
-            info: 'Stops new guests from one network once it reaches this count within the guest idle period. Existing guests keep working. Needs a reverse proxy that sets X-Real-IP.',
-          })}
-          {draft.limitNewGuestsPerIp ? numberRow({
-            key: 'newGuestsPerIp',
-            label: `Guests per ${String(draft.anonymousUserIdleDays)} days`,
-            ariaLabel: 'Guests per idle period',
-            icon: <UserPlusIcon />,
-          }) : null}
-        </> : null}
-        </> : null}
-        <ToggleRow
-          label="Open OAuth client registration"
-          info="Let new third-party apps connect, by registering or with a client ID metadata document. This does not grant access; each account must approve its scopes."
-          checked={Boolean(draft.allowOAuthClientRegistration)}
-          onChange={(checked) => updateDraft('allowOAuthClientRegistration', checked)}
-          meta={renderSource('allowOAuthClientRegistration')}
-          variant="plain"
-        />
-        <ToggleRow
-          label="Audiobook export"
-          icon={<HeadphonesIcon />}
-          info="Shows Export audiobook on PDF and EPUB pages."
-          checked={Boolean(draft.enableAudiobookExport)}
-          onChange={(checked) => updateDraft('enableAudiobookExport', checked)}
-          meta={renderSource('enableAudiobookExport')}
-          variant="plain"
-        />
-        <ToggleRow
-          label="DOCX upload conversion"
-          icon={<DocumentIcon />}
-          info="Allows DOCX uploads, converted to PDF on the worker."
-          checked={Boolean(draft.enableDocxConversion)}
-          onChange={(checked) => updateDraft('enableDocxConversion', checked)}
-          meta={renderSource('enableDocxConversion')}
-          variant="plain"
-        />
-      </Section> : null}
-
-      {/* Shell preferences live on this computer, not in instance settings. */}
-      {showInstanceSettings && desktopUpdates ? <Section title="Desktop app" variant="group" footer="Saved on this computer.">
-        <ToggleRow
-          label="Automatic updates"
-          icon={<RefreshIcon />}
-          info="Checks GitHub for new versions and downloads them in the background."
-          checked={automaticUpdatesDraft ?? desktopUpdates.automatic}
-          onChange={setAutomaticUpdatesDraft}
-          variant="plain"
-        />
-      </Section> : null}
-
-      {showComputeSettings ? <Section
-        title={multiUser ? 'Limits' : 'Uploads'}
-        variant="group"
-        action={multiUser ? renderSource('computeLimitPolicies') : undefined}
-        footer={multiUser ? 'Cached audio stays playable after a limit is reached.' : undefined}
-      >
-        {numberRow({ key: 'maxUploadMb', label: 'Max upload size', icon: <UploadIcon />, ariaLabel: 'Max upload size in megabytes', unit: 'MB' })}
-        {multiUser ? <>
-          {limitToggle({
-            key: 'limitAccountStorage',
-            label: 'Storage per account',
-            icon: <DatabaseIcon />,
-            info: 'Documents plus generated audio. At the cap, uploads and new audio stop until space is freed.',
-          })}
-          {draft.limitAccountStorage ? numberRow({ key: 'accountStorageMb', label: 'Account storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
-          {draft.allowAnonymousSessions ? <>
-            {limitToggle({
-              key: 'limitGuestStorage',
-              label: 'Storage per guest',
-              icon: <DatabaseIcon />,
-              info: 'Documents plus generated audio. At the cap, uploads and new audio stop until space is freed.',
-            })}
-            {draft.limitGuestStorage ? numberRow({ key: 'guestStorageMb', label: 'Guest storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
-            {limitToggle({
-              key: 'limitGuestStoragePool',
-              label: 'Total guest storage',
-              icon: <UsersIcon />,
-              info: 'Shared by all guests. When it is full, guests cannot upload or generate new audio. Accounts are unaffected.',
-            })}
-            {draft.limitGuestStoragePool ? numberRow({ key: 'guestStoragePoolMb', label: 'Total guest storage cap', icon: <UsersIcon />, unit: 'MB' }) : null}
-          </> : null}
-        </> : null}
-        {multiUser && computePolicy ? (
-          <ComputeLimitsEditor
-            policy={computePolicy}
-            providers={sharedProviders.map(({ slug, displayName }) => ({ slug, displayName }))}
-            onChange={(nextPolicy) => updateDraft('computeLimitPolicies', nextPolicy)}
-          />
-        ) : null}
-      </Section> : null}
-
-      {showComputeSettings ? <Section title="TTS generation" variant="group">
-        <SettingRow
-          label="Background generation"
-          icon={<AudioWaveIcon />}
-          info="How far the worker keeps generating after the reader stops sending its position."
-          meta={renderSource('ttsPlaybackBackgroundExtent')}
-          controlClassName="w-52"
-        >
-          <Select
-            value={playbackBackgroundExtentOption}
-            onChange={(option) => updateDraft('ttsPlaybackBackgroundExtent', option.value)}
-            options={PLAYBACK_BACKGROUND_EXTENT_OPTIONS}
-            getOptionKey={(option) => option.value}
-            renderValue={(option) => option.label}
-            renderOption={(option, { selected }) => (
-              <span className="block">
-                <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
-                  {option.label}
-                </span>
-                <SelectOptionDetail>{option.description}</SelectOptionDetail>
-              </span>
-            )}
-            chevronClassName="h-4 w-4 text-muted"
-          />
-        </SettingRow>
-        {numberRow({ key: 'ttsUpstreamMaxRetries', label: 'Retry attempts', icon: <RefreshIcon />, info: 'Times a failed provider request is retried before the segment fails.' })}
-        {numberRow({ key: 'ttsUpstreamTimeoutMs', label: 'Upstream timeout', icon: <ClockIcon />, unit: 'ms' })}
-        {numberRow({ key: 'ttsCacheMaxSizeBytes', label: 'Audio cache size', icon: <DatabaseIcon />, info: 'In-memory cache of recently generated audio on the worker.', unit: 'bytes' })}
-        {numberRow({ key: 'ttsCacheTtlMs', label: 'Audio cache TTL', icon: <HourglassIcon />, unit: 'ms' })}
-      </Section> : null}
-
-      {dirtyCount > 0 || saving ? (
-        <SaveBar count={dirtyCount} saving={saving} onDiscard={discardAll} onSave={saveAll} />
-      ) : null}
-    </div>
-  );
-}
-
-function AdminFeaturesSkeleton({ multiUser }: { multiUser: boolean }) {
-  return (
-    <div className="space-y-5 animate-pulse" aria-label="Loading feature settings" aria-busy="true">
-      {['TTS defaults', multiUser ? 'Site features' : 'Features'].map((title) => (
-        <Section key={title} title={title} variant="group">
-          {[0, 1, 2].map((row) => (
-            <div key={row} className="flex items-center justify-between gap-3">
-              <div className="min-w-0 space-y-1.5">
-                <div className="h-4 w-40 rounded bg-offbase" />
-                <div className="h-3 w-56 rounded bg-offbase" />
-              </div>
-              <div className="h-5 w-9 shrink-0 rounded-pill bg-offbase" />
-            </div>
-          ))}
+          </SettingRow>
         </Section>
-      ))}
+      ) : null}
+
+      <DesktopUpdatesSection />
+
+      {saveBar}
     </div>
   );
 }
 
-const SOURCE_LABELS: Partial<Record<RuntimeConfigSource, string>> = {
-  'json-seed': 'From seed',
-  'env-seed': 'From env',
-  admin: 'Set by admin',
-};
-
-function SourceBadge({
-  source,
-  dirty,
-  canReset,
-  onReset,
-  saving,
-}: {
-  source: RuntimeConfigSource;
-  dirty: boolean;
-  canReset: boolean;
-  onReset: () => void;
-  saving: boolean;
-}) {
-  if (dirty) return <span className="font-medium text-accent">Modified</span>;
-  const label = SOURCE_LABELS[source];
-  if (!label && !canReset) return null;
+/** Shell preferences live on this computer, not in instance settings, so they apply at once. */
+function DesktopUpdatesSection() {
+  const desktopUpdates = useDesktopUpdates();
+  const [saving, setSaving] = useState(false);
+  if (!desktopUpdates) return null;
   return (
-    <span className="inline-flex items-center gap-1.5">
-      {label}
-      {canReset ? (
-        <InlineButton onClick={onReset} disabled={saving} className="hover:text-accent">
-          Reset
-        </InlineButton>
-      ) : null}
-    </span>
+    <Section title="Desktop app" variant="group" footer="Saved on this computer.">
+      <ToggleRow
+        label="Automatic updates"
+        icon={<RefreshIcon />}
+        info="Checks GitHub for new versions and downloads them in the background."
+        checked={desktopUpdates.automatic}
+        disabled={saving}
+        onChange={(automatic) => {
+          setSaving(true);
+          desktopUpdates.setAutomatic(automatic)
+            .catch((error: unknown) => {
+              console.error(error);
+              toast.error('Save failed');
+            })
+            .finally(() => setSaving(false));
+        }}
+        variant="plain"
+      />
+    </Section>
   );
 }

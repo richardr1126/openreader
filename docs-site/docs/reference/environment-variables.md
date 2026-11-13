@@ -211,7 +211,7 @@ These are read only while no providers exist and the seed below has no `provider
 | Key | Notes |
 | --- | --- |
 | `version` | Required; must be `1`. |
-| `runtimeConfig` | Any [instance](../configure/instance-settings) or [compute](../configure/compute-rate-limiting) setting, by key. An invalid seed, such as one with unknown keys, is logged and not applied; startup continues. `computeLimitPolicies` must be a complete policy; start from [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). |
+| `runtimeConfig` | Any [access, feature](../configure/instance-settings), [provider](../configure/tts-providers#reader-choices) or [limit](../configure/compute-rate-limiting) setting, by key. An invalid seed, such as one with unknown keys, is logged and not applied; startup continues. `computeLimitPolicies` must be a complete policy; start from [`examples/openreader-seed.json`](https://github.com/richardr1126/openreader/blob/main/examples/openreader-seed.json). |
 | `providers` | Shared providers. When present, even as `[]`, the `API_*` variables are ignored. |
 | `accountEmail` | Resend settings. `enabled`, `senderName`, `senderEmail` and `apiKey` are required; `replyTo` may be `null`. |
 | `gutendex` | A Project Gutenberg catalog server. Omit it to use the public `gutendex.com`. When present, `serverUrl` is required, `enabled` defaults to `true`, and `apiKey` may be `null`. |

@@ -1,9 +1,9 @@
 import type { ComponentType, SVGProps } from 'react';
-import { CpuChipIcon, DatabaseIcon, GlobeIcon, InfoIcon, MicrophoneIcon, PaletteIcon,
-  ServerStackIcon, UserIcon, UsersIcon, WrenchIcon } from '@/components/icons/Icons';
+import { DatabaseIcon, InfoIcon, LockIcon, MicrophoneIcon, PaletteIcon, ServerStackIcon, SlidersIcon,
+  SparkleIcon, UserIcon, UsersIcon, WrenchIcon } from '@/components/icons/Icons';
 import type { InstallProfile } from '@/lib/shared/install-profile';
 
-export type SettingsSectionId = 'api' | 'customize' | 'account' | 'storage' | 'about' | 'users' | 'providers' | 'instance' | 'compute' | 'maintenance';
+export type SettingsSectionId = 'api' | 'customize' | 'account' | 'storage' | 'about' | 'users' | 'access' | 'providers' | 'features' | 'limits' | 'maintenance';
 
 export type SettingsSection = {
   id: SettingsSectionId;
@@ -25,9 +25,10 @@ export const SETTINGS_SECTIONS: readonly SettingsSection[] = [
   { id: 'storage', label: 'Storage', shortLabel: 'Storage', icon: DatabaseIcon, group: 'general' },
   { id: 'about', label: 'About', shortLabel: 'About', icon: InfoIcon, group: 'general' },
   { id: 'users', label: 'Users', shortLabel: 'Users', icon: UsersIcon, group: 'admin', profiles: ['server'] },
+  { id: 'access', label: 'Access', shortLabel: 'Access', icon: LockIcon, group: 'admin', profiles: ['server'] },
   { id: 'providers', label: 'Providers', shortLabel: 'Providers', icon: ServerStackIcon, group: 'admin' },
-  { id: 'instance', label: 'Instance', shortLabel: 'Instance', icon: GlobeIcon, group: 'admin' },
-  { id: 'compute', label: 'Compute', shortLabel: 'Compute', icon: CpuChipIcon, group: 'admin' },
+  { id: 'features', label: 'Features', shortLabel: 'Features', icon: SparkleIcon, group: 'admin' },
+  { id: 'limits', label: 'Limits', shortLabel: 'Limits', icon: SlidersIcon, group: 'admin', profiles: ['server'] },
   { id: 'maintenance', label: 'Maintenance', shortLabel: 'Maintenance', icon: WrenchIcon, group: 'admin' },
 ];
 
@@ -41,11 +42,11 @@ type NavLayout = ReadonlyArray<{ label: string; ids: readonly SettingsSectionId[
 const NAV_LAYOUTS: Record<InstallProfile, NavLayout> = {
   server: [
     { label: 'General', ids: ['api', 'customize', 'account', 'storage', 'about'] },
-    { label: 'Admin', ids: ['users', 'providers', 'instance', 'compute', 'maintenance'] },
+    { label: 'Admin', ids: ['users', 'access', 'providers', 'features', 'limits', 'maintenance'] },
   ],
   desktop: [
     { label: 'General', ids: ['customize', 'api', 'providers', 'storage', 'account'] },
-    { label: 'Advanced', ids: ['instance', 'compute', 'maintenance'] },
+    { label: 'Advanced', ids: ['features', 'maintenance'] },
     { label: 'About', ids: ['about'] },
   ],
 };

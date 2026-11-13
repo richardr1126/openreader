@@ -1,41 +1,41 @@
 ---
-title: Instance Settings
-description: Defaults and site-wide features in Settings → Admin → Instance.
+title: Access and Features
+description: Sign-ups, guests, account email and site-wide features in Settings → Admin → Access and Features.
 ---
 
-**Settings → Admin → Instance** holds the settings that shape the app for everyone. Changes apply as soon as you save. The key in each table is the name to use when seeding the setting through `RUNTIME_SEED_JSON` (see [Administration](./admin-panel#settings-from-seeds-and-from-the-admin-panel)).
+**Settings → Admin → Access** decides who can join, and **Settings → Admin → Features** decides what the app offers. Changes apply as soon as you save. The key in each table is the name to use when seeding the setting through `RUNTIME_SEED_JSON` (see [Administration](./admin-panel#settings-from-seeds-and-from-the-admin-panel)).
 
-## TTS defaults
+## Access
 
-| Setting | Key | What it does |
-| --- | --- | --- |
-| **Default TTS provider** | `defaultTtsProvider` | The provider new users start with. |
-| **Show Model & Voice settings** | `enableTtsProvidersTab` | Lets users choose their own provider, model and voice. Turn off to give everyone the default provider. |
-| **Show all provider models** | `showAllProviderModels` | Offers every model a provider reports, not only the recommended ones. |
-
-## Site features
+**Access** appears on server installs only.
 
 | Setting | Key | What it does |
 | --- | --- | --- |
 | **New account sign-ups** | `signupPolicy` | `open`, `approval` or `closed`. See [Users and Sign-in](./auth#sign-ups-and-guests). |
-| **New accounts per IP** | `limitNewAccountsPerIp`, `newAccountsPerIp`, `newAccountsPerIpDays` | Optional rolling creation cap. Off by default; enabling reveals 5 accounts per 30 days. Existing accounts remain usable. Needs a [proxy that sets the client IP](./compute-rate-limiting#daily-character-limits). |
+| **New accounts per IP** | `limitNewAccountsPerIp`, `newAccountsPerIp`, `newAccountsPerIpDays` | Optional rolling creation cap. Off by default; enabling reveals 5 accounts per 30 days. Existing accounts remain usable. Needs a [proxy that sets the client IP](./compute-rate-limiting#creation-caps-and-client-addresses). |
 | **Guest sessions** | `allowAnonymousSessions` | Adds **Continue as guest** to the sign-in page, so visitors can use the app without an account. Off by default. |
-| **Open OAuth client registration** | `allowOAuthClientRegistration` | Allows new third-party [OAuth clients](../reference/oauth), including [MCP](../reference/mcp) connectors, to connect. On by default; disabling it keeps existing connections usable. |
 | **Guest idle period** | `anonymousUserIdleDays` | Days without a session before [Delete idle guest accounts](./maintenance#scheduled-tasks) removes a guest and its data. That task is off by default. While it is on, guests are told the period once, and again if it gets shorter. Default 90. |
-| **New guests per IP** | `limitNewGuestsPerIp`, `newGuestsPerIp` | Optional rolling creation cap over the current guest idle period. Off by default; enabling reveals 10 guests. Hidden when Guest sessions is off. Needs a [proxy that sets the client IP](./compute-rate-limiting#daily-character-limits). |
-| **Audiobook export** | `enableAudiobookExport` | Shows [audiobook export](../guide/audiobook-export) in the reader. |
+| **New guests per IP** | `limitNewGuestsPerIp`, `newGuestsPerIp` | Optional rolling creation cap over the current guest idle period. Off by default; enabling reveals 10 guests. Hidden when Guest sessions is off. Needs a [proxy that sets the client IP](./compute-rate-limiting#creation-caps-and-client-addresses). |
+
+## Features
+
+| Setting | Key | What it does |
+| --- | --- | --- |
+| **Max upload size** | `maxUploadMb` | The largest document one upload may be, in MB. |
 | **DOCX upload conversion** | `enableDocxConversion` | Accepts `.docx` uploads and converts them to PDF on the compute worker. |
-| **Changelog feed URL** | `changelogFeedUrl` | Where the changelog in Settings is loaded from. |
+| **Audiobook export** | `enableAudiobookExport` | Shows [audiobook export](../guide/audiobook-export) in the reader. |
+| **Open OAuth client registration** | `allowOAuthClientRegistration` | Allows new third-party [OAuth clients](../reference/oauth), including [MCP](../reference/mcp) connectors, to connect. On by default; disabling it keeps existing connections usable. |
+| **Changelog feed URL** | `changelogFeedUrl` | Where the changelog in Settings is loaded from. Server installs only. |
 
 Word highlighting and PDF layout analysis are always on; they run on the compute worker.
 
 ## Account email
 
-Sends verification and password-reset emails through Resend. Setup and behavior are described in [Users and Sign-in](./auth#account-email).
+On the **Access** tab. Sends verification and password-reset emails through Resend. Setup and behavior are described in [Users and Sign-in](./auth#account-email).
 
 ## Project Gutenberg
 
-**Add Documents → Project Gutenberg** lets users search the Project Gutenberg catalog and add public-domain books as EPUBs. Books still under US copyright are left out. It is on by default.
+On the **Features** tab. **Add Documents → Project Gutenberg** lets users search the Project Gutenberg catalog and add public-domain books as EPUBs. Books still under US copyright are left out. It is on by default.
 
 The catalog is searched through a [Gutendex](https://github.com/garethbjohnson/gutendex) server. The default public server, `https://gutendex.com`, needs no key but is shared and can be slow: a search it has not answered recently can take a minute or more.
 
@@ -45,4 +45,4 @@ Searches and downloads run on the server. Books are always downloaded from guten
 
 ## Desktop app
 
-In the [desktop app](../desktop-app#updates), this tab also has **Automatic updates**. That choice is saved on the computer, not in the database.
+In the [desktop app](../desktop-app#updates), **Features** also has **Automatic updates**. That choice is saved on the computer, not in the database, and applies as soon as you switch it.

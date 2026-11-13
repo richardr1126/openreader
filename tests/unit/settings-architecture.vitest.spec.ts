@@ -74,8 +74,8 @@ describe('settings ownership', () => {
     const userMenu = source('src/components/auth/UserMenu.tsx');
     const account = source('src/components/settings/AccountSettingsPanel.tsx');
     const security = source('src/components/settings/AccountSecurityPanel.tsx');
-    const features = source('src/components/admin/AdminFeaturesPanel.tsx');
     const page = source('src/components/settings/SettingsPage.tsx');
+    const sections = source('src/components/settings/settings-sections.ts');
 
     expect(userMenu).toContain("if (isPending || installProfile === 'desktop') return null;");
     const desktopAccount = account.match(/if \(runtimeConfig\.installProfile === 'desktop'\) \{[\s\S]*?\n  \}/)?.[0] ?? '';
@@ -83,11 +83,11 @@ describe('settings ownership', () => {
     expect(desktopAccount).toContain('<ExportDataTile />');
     expect(desktopAccount).not.toContain('Delete Account');
     expect(security).toContain('{nameOnly ? null : <>');
-    expect(features).toContain("const multiUser = useRuntimeConfig().installProfile === 'server';");
-    expect(features).toContain('{multiUser && computePolicy ? (');
-    expect(page).toContain("{installProfile === 'server' ? <AdminEmailPanel /> : null}");
-    // Panels still render behind the same admin guard on every profile.
-    expect(page).toContain("{isAdmin && activeSection === 'instance' ? (");
+    // Multi-user settings live in server-only sections; panels keep the admin guard.
+    expect(sections).toContain("{ id: 'access', label: 'Access', shortLabel: 'Access', icon: LockIcon, group: 'admin', profiles: ['server'] }");
+    expect(sections).toContain("{ id: 'limits', label: 'Limits', shortLabel: 'Limits', icon: SlidersIcon, group: 'admin', profiles: ['server'] }");
+    expect(page).toContain("{isAdmin && activeSection === 'access' ? (");
+    expect(page).toContain("{isAdmin && activeSection === 'limits' ? <AdminLimitsPanel /> : null}");
   });
 
   test('prevents settings sections from importing one another', () => {
