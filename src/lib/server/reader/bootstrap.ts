@@ -51,6 +51,7 @@ export type ReaderBootstrapResolution = {
 
 export type ReaderBootstrapResolveOptions = {
   preparationOperationId?: string | null;
+  retryPdf?: boolean;
   /** Report the parse without starting one. */
   observeOnly?: boolean;
   /** Let an admission refusal reach the caller, with its retry time. */
@@ -112,7 +113,12 @@ export async function ensurePdfReady(
     if (requestedReadiness) return requestedReadiness;
   }
   let resolved = await resolveCurrentPdfParse(input);
-  if (!resolved.artifact && !resolved.operation) {
+  const failedResult = resolved.operation?.status === 'failed'
+    ? resolvePdfOperationReadiness(resolved.operation)?.result
+    : undefined;
+  const retryFailed = options.retryPdf && !options.observeOnly
+    && failedResult?.status === 'error' && failedResult.retryable;
+  if (retryFailed || (!resolved.artifact && !resolved.operation)) {
     if (options.observeOnly) {
       return { result: { status: 'error', message: 'PDF preparation has not started.', retryable: true } };
     }
@@ -128,7 +134,9 @@ export async function ensurePdfReady(
         },
         create: () => createOrReuseCurrentPdfParseOperation(input),
       });
-      resolved = { artifact: null, operation };
+      resolved = operation.status === 'succeeded'
+        ? await resolveCurrentPdfParse(input)
+        : { artifact: null, operation };
     } catch (error) {
       if (!(error instanceof ComputeAdmissionLimitedError) || options.throwAdmissionLimit) throw error;
       return {

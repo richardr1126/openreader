@@ -18,6 +18,14 @@ export interface PdfPageCheckpoint {
 
 export const PDF_CHECKPOINT_BATCH_SIZE = 8;
 
+export function pdfInputErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  if (error.name === 'PasswordException') return 'PDF_PASSWORD_REQUIRED';
+  if (error.name === 'InvalidPDFException') return 'PDF_INVALID';
+  if (error.message === 'no-text-layer') return 'PDF_NO_TEXT_LAYER';
+  return undefined;
+}
+
 export interface ParsePdfInput {
   documentId: string;
   pdfBytes: ArrayBuffer;

@@ -3,9 +3,10 @@ import type { ReaderBootstrapResult } from '@/types/reader-bootstrap';
 
 export async function getReaderBootstrap(
   documentId: string,
+  options?: { retryPdf?: boolean },
 ): Promise<ReaderBootstrapResult> {
   const response = await fetch(
-    `/api/documents/${encodeURIComponent(documentId)}/reader-bootstrap`,
+    `/api/documents/${encodeURIComponent(documentId)}/reader-bootstrap${options?.retryPdf ? '?retry=true' : ''}`,
     {
       method: 'POST',
       cache: 'no-store',

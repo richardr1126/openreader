@@ -28,6 +28,7 @@ import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { OperationAttemptUpdate, OperationExecution } from '../operations/types';
 import type { PdfLayoutExecution } from './pdf-layout';
+import { pdfInputErrorCode } from '../inference/pdf/parse';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 import { toErrorMessage } from '../infrastructure/errors';
@@ -330,6 +331,10 @@ export function createWorkerLoopController(input: {
       }
       const deliveryCount = work.msg.info.deliveryCount;
       const kind = context?.decoded.kind ?? 'pdf_layout';
+      const inputErrorCode = kind === 'pdf_layout' ? pdfInputErrorCode(error) : undefined;
+      const retryable = inputErrorCode ? false
+        : error instanceof TtsCredentialBrokerClientError || error instanceof EmailDeliveryError || error instanceof TtsProviderFailedError
+          ? error.retryable : undefined;
       const notStarted = error instanceof ComputeQueueExpiredError || error instanceof ComputeWorkNotStartedError;
       const action = notStarted
         ? 'term'
@@ -338,10 +343,7 @@ export function createWorkerLoopController(input: {
           deliveryCount,
           pdfAttempts: input.pdfAttempts,
           documentJobAttempts: input.documentJobAttempts,
-          retryable: error instanceof TtsCredentialBrokerClientError || error instanceof EmailDeliveryError
-            || error instanceof TtsProviderFailedError
-            ? error.retryable
-            : undefined,
+          retryable,
         });
       stopHeartbeat();
       if (context) {
@@ -353,7 +355,8 @@ export function createWorkerLoopController(input: {
             status: 'failed',
             error: {
               message: errorMessage,
-              ...(notStarted || error instanceof TtsProviderFailedError ? { code: error.code } : {}),
+              ...(inputErrorCode ? { code: inputErrorCode }
+                : notStarted || error instanceof TtsProviderFailedError ? { code: error.code } : {}),
             },
           })));
         try {

@@ -170,6 +170,18 @@ The SSE route:
 The connection observes work; it does not own it. Closing the browser or losing
 the stream does not cancel a parse or plan job.
 
+PDF layout can continue under the same operation ID after JetStream redelivers
+an interrupted job. The worker saves completed page batches under the
+parsed-PDF prefix and reuses the longest valid prefix for the same source bytes
+and parser version. It can also reuse a completed artifact published by that
+operation before the worker stopped. Bootstrap SSE continues to observe the
+same operation while delivery recovers.
+
+The reader's Try again button explicitly requests a replacement for a failed,
+retryable PDF operation. Normal opens and SSE reconnections continue to observe
+the current operation. Invalid, password-protected, and textless PDFs tell the
+reader what kind of replacement file is needed.
+
 For serverless connection limits, EventSource reconnect is the recovery path.
 The reconnect starts from the current durable snapshot rather than depending on
 an in-memory event history.
