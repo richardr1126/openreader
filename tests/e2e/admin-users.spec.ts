@@ -106,7 +106,7 @@ test('admin approves a pending user and inspects the user directory', async ({ b
     const seededRetries = await retries.inputValue();
     await retries.fill(String(Number(seededRetries) + 1));
     await page.getByRole('button', { name: /^Save \(1\)$/ }).click();
-    await expect(page.getByText('Settings saved')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /^Generation settings saved$/ })).toBeVisible();
     await page.locator('div.justify-between').filter({ has: retries }).getByRole('button', { name: 'Reset', exact: true }).click();
     await expect(page.getByText('Reset to env default')).toBeVisible();
     await expect(retries).toHaveValue(seededRetries);
@@ -116,7 +116,7 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   const savePolicy = page.getByRole('button', { name: /^Save \(1\)$/ });
   if (await savePolicy.isVisible()) {
     await savePolicy.click();
-    await expect(page.getByText('Settings saved')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: /^Access settings saved$/ })).toBeVisible();
   }
 
   const reader = await browser.newPage();

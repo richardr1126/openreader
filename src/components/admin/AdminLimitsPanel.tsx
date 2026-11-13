@@ -16,7 +16,7 @@ const STORAGE_INFO = 'Documents plus generated audio. At the cap, uploads and ne
 
 /** What each user may store and run, and how much the worker and providers take on at once. */
 export function AdminLimitsPanel() {
-  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft();
+  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft('Limits saved');
   const { providers } = useSharedProviders();
 
   if (!loaded) return <AdminSettingsSkeleton titles={['Storage', 'Daily allowances']} label="Loading limit settings" />;

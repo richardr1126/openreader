@@ -1,16 +1,16 @@
 import "./globals.css";
 import { ReactNode } from "react";
 import { Metadata, Viewport } from "next";
-import { Figtree } from "next/font/google";
+import localFont from "next/font/local";
 import { ConsentAwareAnalytics } from "@/components/ConsentAwareAnalytics";
 import { CookieConsentBanner } from "@/components/CookieConsentBanner";
 import { getResolvedRuntimeConfig, publicRuntimeConfig } from "@/lib/server/runtime-config";
 import { getSiteOrigin } from "@/lib/shared/urls";
 import pkg from "../../package.json";
 
-const figtree = Figtree({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
+const figtree = localFont({
+  src: "./fonts/figtree.ttf",
+  weight: "300 800",
   display: "swap",
   variable: "--font-display",
 });

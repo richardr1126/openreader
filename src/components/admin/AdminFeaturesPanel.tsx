@@ -13,7 +13,7 @@ import { AdminSettingsSkeleton, useAdminSettingsDraft } from './admin-settings-d
 export function AdminFeaturesPanel() {
   // The changelog feed is for hosted instances; desktop reads the bundled one.
   const multiUser = useRuntimeConfig().installProfile === 'server';
-  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft();
+  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft('Feature settings saved');
 
   // Desktop updates save on this computer, so they stay usable while site settings load or fail.
   if (!loaded) return (

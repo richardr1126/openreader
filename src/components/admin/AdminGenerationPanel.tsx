@@ -23,7 +23,7 @@ const BACKGROUND_EXTENT_OPTIONS: Array<{ value: PlaybackBackgroundExtent; label:
 
 /** Below the provider list: what readers may choose, and how the worker calls providers. */
 export function AdminGenerationPanel() {
-  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft();
+  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft('Generation settings saved');
 
   if (!loaded) return <AdminSettingsSkeleton titles={['Reader choices', 'Generation']} label="Loading generation settings" />;
 

@@ -16,7 +16,7 @@ const PROXY_NOTE = 'Needs a reverse proxy that sets X-Real-IP.';
 /** Who may join a multi-user instance: account sign-ups and guest sessions. */
 export function AdminAccessPanel() {
   const { data: session } = useAuthSession();
-  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft();
+  const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft('Access settings saved');
   const { data: taskData } = useQuery({
     queryKey: queryKeys.admin(session?.user?.id ?? 'no-session', 'tasks'),
     queryFn: fetchTasks,

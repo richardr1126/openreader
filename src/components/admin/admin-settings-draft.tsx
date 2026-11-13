@@ -48,7 +48,7 @@ async function patchAdminSettings(payload: { updates: Record<string, unknown>; r
  * save bar, so an edit never waits on another tab. Edits sit over the
  * fetched values, so a refetch updates untouched keys and keeps unsaved ones.
  */
-export function useAdminSettingsDraft() {
+export function useAdminSettingsDraft(savedMessage: string) {
   const queryClient = useQueryClient();
   const { data: session } = useAuthSession();
   const queryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
@@ -134,7 +134,7 @@ export function useAdminSettingsDraft() {
         return restored;
       });
       if (failed.length) toast.error(`Not saved: ${failed.join(', ')}`);
-      else toast.success('Settings saved');
+      else toast.success(savedMessage);
       await settle(result, (key) => failed.includes(key));
     },
     onError: (mutationError, updates) => {

@@ -108,6 +108,7 @@ test('added pauses keep Automatic defaults and independent book inheritance', as
     await saveBook(page);
     await expect(page.getByRole('button', { name: 'Use app default for between pieces', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Use app default for between segments', exact: true }).click();
+    await expect(between).toContainText('500 ms');
     await saveBook(page);
     await expect(between).toContainText('500 ms');
     await expect(page.getByRole('button', { name: 'Between pieces', exact: true })).toContainText('Automatic (0 ms)');
