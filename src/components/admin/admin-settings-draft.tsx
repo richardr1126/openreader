@@ -83,7 +83,11 @@ export function useAdminSettingsDraft() {
       await queryClient.cancelQueries({ queryKey });
       settings = await queryClient.fetchQuery({ queryKey, queryFn: fetchAdminSettings, staleTime: 0 }).catch(() => null);
     }
-    if (!settings) unconfirmed.current = { ...unconfirmed.current, ...pending.current };
+    if (!settings) {
+      // Kept keys (the refused ones) were never written, so they are no baseline.
+      const written = Object.entries(pending.current).filter(([key]) => !keep(key));
+      unconfirmed.current = { ...unconfirmed.current, ...Object.fromEntries(written) };
+    }
     pending.current = {};
     if (!settings) return;
     const { values } = settings;
