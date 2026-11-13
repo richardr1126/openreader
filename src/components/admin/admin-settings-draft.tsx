@@ -20,12 +20,14 @@ async function fetchAdminSettings(): Promise<SettingsResponse> {
   return (await res.json()) as SettingsResponse;
 }
 
-interface PatchResult extends SettingsResponse {
+interface PatchResult {
   /** Keys the server refused; a 207 means the others were saved. */
   failed: string[];
+  /** The settings read back after the write, or null when that read failed. */
+  settings: SettingsResponse | null;
 }
 
-/** The response carries the settings as read back after the write, so it is confirmed server state. */
+/** The response carries the settings read fresh from the database after the write. */
 async function patchAdminSettings(payload: { updates: Record<string, unknown>; reset?: string[] }): Promise<PatchResult> {
   const res = await fetch('/api/admin/settings', {
     method: 'PATCH',
@@ -33,8 +35,11 @@ async function patchAdminSettings(payload: { updates: Record<string, unknown>; r
     body: JSON.stringify(payload),
   });
   if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
-  const body = (await res.json()) as SettingsResponse & { errors?: Array<{ key: string }> };
-  return { values: body.values, sources: body.sources, failed: (body.errors ?? []).map(({ key }) => key) };
+  const body = (await res.json()) as Partial<SettingsResponse> & { errors?: Array<{ key: string }> };
+  return {
+    failed: (body.errors ?? []).map(({ key }) => key),
+    settings: body.values && body.sources ? { values: body.values, sources: body.sources } : null,
+  };
 }
 
 /**
@@ -61,17 +66,20 @@ export function useAdminSettingsDraft() {
 
   /**
    * Take a request's read-back as the server state: drop edits that now match it, and
-   * cache it so the draft is right even if the refetch that follows fails.
+   * cache it so the draft is right even if the refetch that follows fails. Without a
+   * read-back every edit stays until the user saves or discards it.
    */
-  const settle = async (result: PatchResult, keep: (key: string, value: unknown) => boolean = () => false) => {
+  const settle = async ({ settings }: PatchResult, keep: (key: string) => boolean = () => false) => {
     pending.current = {};
-    queryClient.setQueryData<SettingsResponse>(queryKey, { values: result.values, sources: result.sources });
-    setEdits((current) => {
-      const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
-        keep(key, value) || !Object.is(value, result.values[key])
-      )));
-      return Object.keys(kept).length === Object.keys(current).length ? current : kept;
-    });
+    if (settings) {
+      queryClient.setQueryData<SettingsResponse>(queryKey, settings);
+      setEdits((current) => {
+        const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
+          keep(key) || !Object.is(value, settings.values[key])
+        )));
+        return Object.keys(kept).length === Object.keys(current).length ? current : kept;
+      });
+    }
     await queryClient.invalidateQueries({ queryKey });
   };
 
