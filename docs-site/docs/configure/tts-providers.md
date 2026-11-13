@@ -50,7 +50,31 @@ Under **External providers**, choose **Add provider**, pick the service, and fil
 
 Choose **Check** before saving. It checks the settings, connects to the service, lists its voices and, for a saved provider, speaks a short sample through the worker. Each result reads **OK**, **Check** or **Fix**, with what to change.
 
-Each provider's menu can edit, disable, delete it, or set it as the default for new users (also available in [Instance Settings](./instance-settings#tts-defaults)).
+Each provider's menu can edit, disable, delete it, or set it as the default for new users (`defaultTtsProvider`).
+
+## Reader choices
+
+Below the provider list, these settings decide what users may change. Like the other admin settings, each shows its source, can be reset, and can be seeded with `RUNTIME_SEED_JSON` (see [Administration](./admin-panel#settings-from-seeds-and-from-the-admin-panel)).
+
+| Setting | Key | What it does |
+| --- | --- | --- |
+| **Show Model & Voice settings** | `enableTtsProvidersTab` | Lets users choose their own provider, model and voice. Turn off to give everyone the default provider. |
+| **Show all provider models** | `showAllProviderModels` | Offers every model a provider reports, not only the recommended ones. |
+
+## Generation
+
+The **Generation** and **Worker audio cache** cards tune how the worker calls providers.
+
+
+| Setting | Key | What it does |
+| --- | --- | --- |
+| **Background generation** | `ttsPlaybackBackgroundExtent` | How far the worker keeps generating after the reader stops reporting its position: to the end of the current page or chapter (**Current section**, the default) or to the end of the document (**Full document**). |
+| **Retry attempts** | `ttsUpstreamMaxRetries` | How many times a failed provider request (429 or 5xx) is retried before the segment fails. |
+| **Upstream timeout** | `ttsUpstreamTimeoutMs` | How long to wait for a provider response. |
+| **Audio cache size** | `ttsCacheMaxSizeBytes` | The worker's in-memory cache of recently generated audio. |
+| **Audio cache TTL** | `ttsCacheTtlMs` | How long audio stays in that cache. |
+
+Generated audio is also stored permanently in object storage, so these cache settings only affect speed, not what is kept.
 
 ## Self-hosted provider addresses
 

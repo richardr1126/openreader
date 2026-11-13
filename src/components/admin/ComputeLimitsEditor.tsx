@@ -180,22 +180,257 @@ function ProviderLimits({
   );
 }
 
-export function ComputeLimitsEditor({
-  policy,
-  providers,
-  onChange,
-}: {
+type PolicyEditorProps = {
   policy: ComputeLimitPolicyDocument;
-  providers: Array<{ slug: string; displayName: string }>;
   onChange: (policy: ComputeLimitPolicyDocument) => void;
-}) {
-  const update = (mutate: (draft: ComputeLimitPolicyDocument) => void) => {
+};
+
+/** Every edit clones the policy and passes on only a document that still parses. */
+function policyUpdater({ policy, onChange }: PolicyEditorProps) {
+  return (mutate: (draft: ComputeLimitPolicyDocument) => void) => {
     const next = cloneComputeLimitPolicyDocument(policy);
     mutate(next);
     const parsed = parseComputeLimitPolicyDocument(next);
     if (parsed) onChange(parsed);
   };
+}
 
+/**
+ * Compute actions as the Limits tab groups them. Every action appears exactly
+ * once; the unit suite checks this against COMPUTE_ACTIONS.
+ */
+export const COMPUTE_ACTION_GROUPS: ReadonlyArray<{ title: string; footer?: string; actions: readonly ComputeAction[] }> = [
+  {
+    title: 'Daily allowances',
+    footer: 'Cached audio stays playable after a limit is reached.',
+    actions: ['tts_synthesis', 'document_intake'],
+  },
+  { title: 'Reading and playback', actions: ['tts_playback', 'tts_playback_plan', 'pdf_layout'] },
+  { title: 'Audiobooks', actions: ['tts_playback_document', 'tts_playback_export'] },
+  { title: 'Background work', actions: ['document_preview', 'document_conversion', 'account_export'] },
+];
+
+/** Expandable rows, one per compute action, for a `Section variant="group"`. */
+export function ComputeActionRows({ policy, onChange, actions }: PolicyEditorProps & { actions: readonly ComputeAction[] }) {
+  const update = policyUpdater({ policy, onChange });
+  return (
+    <div className="divide-y divide-line-soft !p-0">
+      {actions.map((action) => {
+        const actionPolicy = policy.actions[action];
+        const detail = ACTION_DETAILS[action];
+        const Icon = detail.icon;
+        const dailyUnit = DAILY_QUOTA_UNITS[action];
+        return (
+          <details key={action} className="group">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+              <span className="flex min-w-0 items-center gap-3">
+                <RowIcon><Icon /></RowIcon>
+                <span className="truncate text-sm font-medium text-foreground">{detail.label}</span>
+              </span>
+              <span className="flex shrink-0 items-center gap-2">
+                <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  actionPolicy.enabled
+                    ? 'bg-accent-wash text-accent'
+                    : 'bg-surface-sunken text-muted'
+                }`}>
+                  {dailyUnit
+                    ? (actionPolicy.enabled ? 'Limited' : 'Unlimited')
+                    : (actionPolicy.enabled ? 'On' : 'Off')}
+                </span>
+                <ChevronRightIcon className="h-3.5 w-3.5 text-soft transition-transform duration-base group-open:rotate-90" />
+              </span>
+            </summary>
+            <div className="space-y-3 px-3 pb-3 pt-1">
+              <p className="text-xs text-faint">{detail.description}</p>
+              <ToggleRow
+                label={action === 'tts_synthesis' ? 'Limit new generation' : dailyUnit ? `Limit daily ${dailyUnit}` : 'Enforce request limits'}
+                info={action === 'tts_synthesis'
+                  ? 'The segment that crosses a daily threshold finishes; the next uncached segment stops.'
+                  : dailyUnit ? undefined : 'Rejects new work once any start-window or active-work limit is reached. Worker queues and provider capacity apply either way.'}
+                checked={actionPolicy.enabled}
+                onChange={(enabled) => update((draft) => { draft.actions[action].enabled = enabled; })}
+                variant="flat"
+              />
+
+              {dailyUnit ? (actionPolicy.enabled ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {actionPolicy.usage.map((limit, index) => (
+                    <LimitNumber
+                      key={`${limit.scope}:${limit.audience}`}
+                      label={`${usageLabel(limit.scope, limit.audience)} daily ${dailyUnit}`}
+                      value={limit.limit}
+                      onChange={(next) => update((draft) => {
+                        draft.actions[action].usage[index].limit = next;
+                      })}
+                    />
+                  ))}
+                </div>
+              ) : null
+              ) : (
+                <>
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Start windows</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {actionPolicy.admission.windows.map((window, index) => (
+                        <div key={`${window.scope}:${index}`} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
+                          <LimitNumber
+                            label={`${window.scope} starts`}
+                            value={window.limit}
+                            onChange={(next) => update((draft) => {
+                              draft.actions[action].admission.windows[index].limit = next;
+                            })}
+                          />
+                          <LimitNumber
+                            label="Window"
+                            suffix="sec"
+                            value={window.windowSeconds}
+                            onChange={(next) => update((draft) => {
+                              draft.actions[action].admission.windows[index].windowSeconds = next;
+                            })}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Active work</p>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {actionPolicy.admission.active.map((active, index) => (
+                        <div key={active.scope} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
+                          <LimitNumber
+                            label={`${active.scope} concurrent`}
+                            value={active.limit}
+                            onChange={(next) => update((draft) => {
+                              draft.actions[action].admission.active[index].limit = next;
+                            })}
+                          />
+                          <LimitNumber
+                            label="Lease timeout"
+                            suffix="sec"
+                            value={active.leaseSeconds}
+                            onChange={(next) => update((draft) => {
+                              draft.actions[action].admission.active[index].leaseSeconds = next;
+                            })}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {actionPolicy.execution ? (
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Worker queue</p>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <LimitNumber
+                          label="Queued jobs"
+                          value={actionPolicy.execution.maxQueued}
+                          onChange={(next) => update((draft) => {
+                            draft.actions[action].execution!.maxQueued = next;
+                          })}
+                        />
+                        <LimitNumber
+                          label="Concurrent / worker"
+                          value={actionPolicy.execution.maxConcurrentPerWorker}
+                          onChange={(next) => update((draft) => {
+                            draft.actions[action].execution!.maxConcurrentPerWorker = Math.min(
+                              next,
+                              draft.worker.maxExecutingPerWorker,
+                            );
+                          })}
+                        />
+                        <LimitNumber
+                          label="Maximum queue age"
+                          suffix="sec"
+                          value={actionPolicy.execution.maxQueueAgeSeconds}
+                          onChange={(next) => update((draft) => {
+                            draft.actions[action].execution!.maxQueueAgeSeconds = next;
+                          })}
+                        />
+                        <div className="space-y-1">
+                          <span className="block text-[11px] font-medium text-soft">Priority</span>
+                          <Select
+                            value={actionPolicy.execution.priority}
+                            options={PRIORITIES}
+                            onChange={(priority) => update((draft) => {
+                              draft.actions[action].execution!.priority = priority;
+                            })}
+                            buttonClassName="h-8 bg-background py-1 text-xs capitalize"
+                            renderValue={(priority) => priority}
+                            renderOption={(priority) => <span className="capitalize">{priority}</span>}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Worker queue and resource pools; always enforced. */
+export function WorkerCapacityRow({ policy, onChange }: PolicyEditorProps) {
+  const update = policyUpdater({ policy, onChange });
+  const maxActionConcurrency = Math.max(...COMPUTE_ACTIONS.map((action) => (
+    policy.actions[action].execution?.maxConcurrentPerWorker ?? 1
+  )));
+  const minimumResourceCapacity = (resource: WorkerResource) => Math.max(
+    1,
+    ...COMPUTE_ACTIONS.map((action) => policy.actions[action].execution?.resources[resource] ?? 0),
+  );
+  return (
+
+    <details className="group !p-0">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+        <span className="flex min-w-0 items-center gap-3">
+          <RowIcon><CpuChipIcon /></RowIcon>
+          <span className="truncate text-sm font-medium text-foreground">Worker capacity</span>
+        </span>
+        <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
+      </summary>
+      <div className="space-y-3 px-3 pb-3 pt-1">
+        <p className="text-xs text-faint">Always enforced: local queues and named resource pools.</p>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <LimitNumber
+            label="Executing per worker"
+            value={policy.worker.maxExecutingPerWorker}
+            minimum={maxActionConcurrency}
+            onChange={(next) => update((draft) => { draft.worker.maxExecutingPerWorker = next; })}
+          />
+          <LimitNumber
+            label="Policy refresh"
+            suffix="sec"
+            value={policy.worker.policyRefreshSeconds}
+            onChange={(next) => update((draft) => { draft.worker.policyRefreshSeconds = next; })}
+          />
+        </div>
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Resource slots per worker</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {WORKER_RESOURCES.map((resource) => (
+              <LimitNumber
+                key={resource}
+                label={RESOURCE_LABELS[resource]}
+                value={policy.worker.resources[resource]}
+                minimum={minimumResourceCapacity(resource)}
+                onChange={(next) => update((draft) => { draft.worker.resources[resource] = next; })}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+/** Shared provider concurrency and throughput, with per-provider overrides. */
+export function ProviderCapacityRow({ policy, onChange, providers }: PolicyEditorProps & {
+  providers: Array<{ slug: string; displayName: string }>;
+}) {
+  const update = policyUpdater({ policy, onChange });
   const updateProvider = (
     providerRef: string | null,
     mutate: (draft: ProviderLimitPolicy) => void,
@@ -204,265 +439,59 @@ export function ComputeLimitsEditor({
       ? draft.providers.defaults
       : draft.providers.overrides[providerRef]);
   });
-
   const addableProviders = providers.filter(({ slug }) => !(slug in policy.providers.overrides));
-  const maxActionConcurrency = Math.max(...COMPUTE_ACTIONS.map((action) => (
-    policy.actions[action].execution?.maxConcurrentPerWorker ?? 1
-  )));
-  const minimumResourceCapacity = (resource: WorkerResource) => Math.max(
-    1,
-    ...COMPUTE_ACTIONS.map((action) => policy.actions[action].execution?.resources[resource] ?? 0),
-  );
-
   return (
-    <div className="divide-y divide-line-soft !p-0">
-      <div className="divide-y divide-line-soft">
-        {COMPUTE_ACTIONS.map((action) => {
-          const actionPolicy = policy.actions[action];
-          const detail = ACTION_DETAILS[action];
-          const Icon = detail.icon;
-          const dailyUnit = DAILY_QUOTA_UNITS[action];
-          return (
-            <details key={action} className="group">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
-                <span className="flex min-w-0 items-center gap-3">
-                  <RowIcon><Icon /></RowIcon>
-                  <span className="truncate text-sm font-medium text-foreground">{detail.label}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                    actionPolicy.enabled
-                      ? 'bg-accent-wash text-accent'
-                      : 'bg-surface-sunken text-muted'
-                  }`}>
-                    {dailyUnit
-                      ? (actionPolicy.enabled ? 'Limited' : 'Unlimited')
-                      : (actionPolicy.enabled ? 'On' : 'Off')}
-                  </span>
-                  <ChevronRightIcon className="h-3.5 w-3.5 text-soft transition-transform duration-base group-open:rotate-90" />
-                </span>
-              </summary>
-              <div className="space-y-3 px-3 pb-3 pt-1">
-                <p className="text-xs text-faint">{detail.description}</p>
-                <ToggleRow
-                  label={action === 'tts_synthesis' ? 'Limit new generation' : dailyUnit ? `Limit daily ${dailyUnit}` : 'Enforce request limits'}
-                  info={action === 'tts_synthesis'
-                    ? 'The segment that crosses a daily threshold finishes; the next uncached segment stops.'
-                    : dailyUnit ? undefined : 'Rejects new work once any start-window or active-work limit is reached. Worker queues and provider capacity apply either way.'}
-                  checked={actionPolicy.enabled}
-                  onChange={(enabled) => update((draft) => { draft.actions[action].enabled = enabled; })}
-                  variant="flat"
-                />
 
-                {dailyUnit ? (actionPolicy.enabled ? (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {actionPolicy.usage.map((limit, index) => (
-                      <LimitNumber
-                        key={`${limit.scope}:${limit.audience}`}
-                        label={`${usageLabel(limit.scope, limit.audience)} daily ${dailyUnit}`}
-                        value={limit.limit}
-                        onChange={(next) => update((draft) => {
-                          draft.actions[action].usage[index].limit = next;
-                        })}
-                      />
-                    ))}
-                  </div>
-                ) : null
-                ) : (
-                  <>
-                    <div>
-                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Start windows</p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {actionPolicy.admission.windows.map((window, index) => (
-                          <div key={`${window.scope}:${index}`} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
-                            <LimitNumber
-                              label={`${window.scope} starts`}
-                              value={window.limit}
-                              onChange={(next) => update((draft) => {
-                                draft.actions[action].admission.windows[index].limit = next;
-                              })}
-                            />
-                            <LimitNumber
-                              label="Window"
-                              suffix="sec"
-                              value={window.windowSeconds}
-                              onChange={(next) => update((draft) => {
-                                draft.actions[action].admission.windows[index].windowSeconds = next;
-                              })}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Active work</p>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {actionPolicy.admission.active.map((active, index) => (
-                          <div key={active.scope} className="grid grid-cols-2 gap-2 rounded-md bg-surface-sunken p-2">
-                            <LimitNumber
-                              label={`${active.scope} concurrent`}
-                              value={active.limit}
-                              onChange={(next) => update((draft) => {
-                                draft.actions[action].admission.active[index].limit = next;
-                              })}
-                            />
-                            <LimitNumber
-                              label="Lease timeout"
-                              suffix="sec"
-                              value={active.leaseSeconds}
-                              onChange={(next) => update((draft) => {
-                                draft.actions[action].admission.active[index].leaseSeconds = next;
-                              })}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    {actionPolicy.execution ? (
-                      <div>
-                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Worker queue</p>
-                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          <LimitNumber
-                            label="Queued jobs"
-                            value={actionPolicy.execution.maxQueued}
-                            onChange={(next) => update((draft) => {
-                              draft.actions[action].execution!.maxQueued = next;
-                            })}
-                          />
-                          <LimitNumber
-                            label="Concurrent / worker"
-                            value={actionPolicy.execution.maxConcurrentPerWorker}
-                            onChange={(next) => update((draft) => {
-                              draft.actions[action].execution!.maxConcurrentPerWorker = Math.min(
-                                next,
-                                draft.worker.maxExecutingPerWorker,
-                              );
-                            })}
-                          />
-                          <LimitNumber
-                            label="Maximum queue age"
-                            suffix="sec"
-                            value={actionPolicy.execution.maxQueueAgeSeconds}
-                            onChange={(next) => update((draft) => {
-                              draft.actions[action].execution!.maxQueueAgeSeconds = next;
-                            })}
-                          />
-                          <div className="space-y-1">
-                            <span className="block text-[11px] font-medium text-soft">Priority</span>
-                            <Select
-                              value={actionPolicy.execution.priority}
-                              options={PRIORITIES}
-                              onChange={(priority) => update((draft) => {
-                                draft.actions[action].execution!.priority = priority;
-                              })}
-                              buttonClassName="h-8 bg-background py-1 text-xs capitalize"
-                              renderValue={(priority) => priority}
-                              renderOption={(priority) => <span className="capitalize">{priority}</span>}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-              </div>
-            </details>
+    <details className="group !p-0">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+        <span className="flex min-w-0 items-center gap-3">
+          <RowIcon><ServerStackIcon /></RowIcon>
+          <span className="truncate text-sm font-medium text-foreground">TTS provider capacity</span>
+        </span>
+        <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
+      </summary>
+      <div className="space-y-2 px-3 pb-3 pt-1">
+        <p className="text-xs text-faint">Shared concurrency and rolling one-minute throughput.</p>
+        <ProviderLimits
+          title="All providers"
+          value={policy.providers.defaults}
+          onChange={(mutate) => updateProvider(null, mutate)}
+        />
+        {Object.entries(policy.providers.overrides).map(([providerRef, limits]) => {
+          const displayName = providers.find(({ slug }) => slug === providerRef)?.displayName ?? providerRef;
+          return (
+            <ProviderLimits
+              key={providerRef}
+              title={displayName}
+              value={limits}
+              onChange={(mutate) => updateProvider(providerRef, mutate)}
+              onRemove={() => update((draft) => { delete draft.providers.overrides[providerRef]; })}
+            />
           );
         })}
+        {addableProviders.length > 0 ? (
+          <div className="space-y-1">
+            <span className="block text-[11px] font-medium text-soft">Add a provider override</span>
+            <Select
+              value={undefined}
+              options={addableProviders}
+              getOptionKey={(provider) => provider.slug}
+              placeholder="Choose provider…"
+              renderValue={(provider) => `${provider.displayName} (${provider.slug})`}
+              renderOption={(provider) => `${provider.displayName} (${provider.slug})`}
+              onChange={({ slug: providerRef }) => {
+                update((draft) => {
+                  draft.providers.overrides[providerRef] = {
+                    ...draft.providers.defaults,
+                    enabled: true,
+                  };
+                });
+              }}
+              buttonClassName="h-9 bg-background py-1 text-xs"
+            />
+          </div>
+        ) : null}
       </div>
-
-      <details className="group">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
-          <span className="flex min-w-0 items-center gap-3">
-            <RowIcon><CpuChipIcon /></RowIcon>
-            <span className="truncate text-sm font-medium text-foreground">Worker capacity</span>
-          </span>
-          <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
-        </summary>
-        <div className="space-y-3 px-3 pb-3 pt-1">
-          <p className="text-xs text-faint">Always enforced: local queues and named resource pools.</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <LimitNumber
-              label="Executing per worker"
-              value={policy.worker.maxExecutingPerWorker}
-              minimum={maxActionConcurrency}
-              onChange={(next) => update((draft) => { draft.worker.maxExecutingPerWorker = next; })}
-            />
-            <LimitNumber
-              label="Policy refresh"
-              suffix="sec"
-              value={policy.worker.policyRefreshSeconds}
-              onChange={(next) => update((draft) => { draft.worker.policyRefreshSeconds = next; })}
-            />
-          </div>
-          <div>
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-faint">Resource slots per worker</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {WORKER_RESOURCES.map((resource) => (
-                <LimitNumber
-                  key={resource}
-                  label={RESOURCE_LABELS[resource]}
-                  value={policy.worker.resources[resource]}
-                  minimum={minimumResourceCapacity(resource)}
-                  onChange={(next) => update((draft) => { draft.worker.resources[resource] = next; })}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <details className="group">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
-          <span className="flex min-w-0 items-center gap-3">
-            <RowIcon><ServerStackIcon /></RowIcon>
-            <span className="truncate text-sm font-medium text-foreground">TTS provider capacity</span>
-          </span>
-          <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform duration-base group-open:rotate-90" />
-        </summary>
-        <div className="space-y-2 px-3 pb-3 pt-1">
-          <p className="text-xs text-faint">Shared concurrency and rolling one-minute throughput.</p>
-          <ProviderLimits
-            title="All providers"
-            value={policy.providers.defaults}
-            onChange={(mutate) => updateProvider(null, mutate)}
-          />
-          {Object.entries(policy.providers.overrides).map(([providerRef, limits]) => {
-            const displayName = providers.find(({ slug }) => slug === providerRef)?.displayName ?? providerRef;
-            return (
-              <ProviderLimits
-                key={providerRef}
-                title={displayName}
-                value={limits}
-                onChange={(mutate) => updateProvider(providerRef, mutate)}
-                onRemove={() => update((draft) => { delete draft.providers.overrides[providerRef]; })}
-              />
-            );
-          })}
-          {addableProviders.length > 0 ? (
-            <div className="space-y-1">
-              <span className="block text-[11px] font-medium text-soft">Add a provider override</span>
-              <Select
-                value={undefined}
-                options={addableProviders}
-                getOptionKey={(provider) => provider.slug}
-                placeholder="Choose provider…"
-                renderValue={(provider) => `${provider.displayName} (${provider.slug})`}
-                renderOption={(provider) => `${provider.displayName} (${provider.slug})`}
-                onChange={({ slug: providerRef }) => {
-                  update((draft) => {
-                    draft.providers.overrides[providerRef] = {
-                      ...draft.providers.defaults,
-                      enabled: true,
-                    };
-                  });
-                }}
-                buttonClassName="h-9 bg-background py-1 text-xs"
-              />
-            </div>
-          ) : null}
-        </div>
-      </details>
-    </div>
+    </details>
   );
 }

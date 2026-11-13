@@ -7,13 +7,14 @@ A server install is administered from **Settings → Admin**, which appears for 
 
 | Settings → Admin tab | What it manages | Page |
 | --- | --- | --- |
-| **Users** | Accounts, approvals, admin roles, sign-up policy, guest sessions | [Users and Sign-in](./auth) |
-| **Providers** | The text-to-speech services everyone can use | [TTS Providers](./tts-providers) |
-| **Instance** | Default provider, site features, account email, Project Gutenberg | [Instance Settings](./instance-settings) |
-| **Compute** | Upload size, rate limits, TTS generation tuning | [Compute and Rate Limits](./compute-rate-limiting) |
+| **Users** | Accounts, approvals and admin roles | [Users and Sign-in](./auth) |
+| **Access** | Sign-up policy, guest sessions, per-IP creation caps, account email | [Access and Features](./instance-settings#access) |
+| **Providers** | The text-to-speech services everyone can use, what readers may choose, generation tuning | [TTS Providers](./tts-providers) |
+| **Features** | Upload size, DOCX conversion, audiobook export, Project Gutenberg, OAuth client registration | [Access and Features](./instance-settings#features) |
+| **Limits** | Storage caps, daily allowances, compute and provider capacity | [Limits](./compute-rate-limiting) |
 | **Maintenance** | System check and scheduled cleanup tasks | [Maintenance](./maintenance) |
 
-In the [desktop app](../desktop-app) you are the only user and always an admin. There is no Users tab. The other tabs appear under **General** and **Advanced** in Settings.
+In the [desktop app](../desktop-app) you are the only user and always an admin. There are no Users, Access or Limits tabs. Providers appears under **General**, and Features and Maintenance under **Advanced**.
 
 ## Create the first administrator
 

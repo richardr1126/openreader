@@ -10,6 +10,12 @@ async function retainGuestsFor(page: Page, days: () => number) {
   });
 }
 
+// A test can end on a navigation that starts another onboarding read; teardown would then
+// close the context and dispose the response a handler is still reading.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'wait' });
+});
+
 test('the next onboarding step stays open while privacy consent is still saving', async ({ page }) => {
   await retainGuestsFor(page, () => 30);
   await page.route('**/api/user/state/onboarding', async (route) => {

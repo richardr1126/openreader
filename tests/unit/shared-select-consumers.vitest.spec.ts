@@ -5,7 +5,7 @@ import { describe, expect, test } from 'vitest';
 const STANDARD_SELECT_CONSUMERS = [
   'src/components/settings/ProviderSettingsPanel.tsx',
   'src/components/documents/DocumentSettings.tsx',
-  'src/components/admin/AdminFeaturesPanel.tsx',
+  'src/components/admin/AdminGenerationPanel.tsx',
   'src/components/admin/ComputeLimitsEditor.tsx',
   'src/components/admin/ProviderEditorDialog.tsx',
 ];

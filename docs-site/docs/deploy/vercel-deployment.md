@@ -70,7 +70,7 @@ Do this before deploying any release that adds migrations (see [Database and Mig
 
 ## 4. Deploy and set up
 
-Deploy the app, then [create the first administrator](../configure/admin-panel#create-the-first-administrator), add a [TTS provider](../configure/tts-providers) and review [Instance Settings](../configure/instance-settings). Changes there apply without a redeploy.
+Deploy the app, then [create the first administrator](../configure/admin-panel#create-the-first-administrator), add a [TTS provider](../configure/tts-providers) and review [Access and Features](../configure/instance-settings). Changes there apply without a redeploy.
 
 Scheduled cleanup runs once a day through Vercel Cron, which needs `CRON_SECRET` (see [Maintenance](../configure/maintenance#how-tasks-are-triggered)).
 

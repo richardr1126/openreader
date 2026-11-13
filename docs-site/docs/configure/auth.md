@@ -42,7 +42,7 @@ OIDC_PROVIDER_NAME=Pocket ID
 
 Sign-up asks for a display name, and the app identifies accounts by it. Email addresses stay hidden until revealed in **Settings → Account** and **Settings → Admin → Users**.
 
-Both settings are in **Settings → Admin → Instance → Site features**.
+Both settings are in **Settings → Admin → Access**.
 
 - **New account sign-ups**:
   - **Open** lets anyone register.
@@ -74,14 +74,14 @@ Users disconnect apps in **Settings → Account → Connected apps**. Disconnect
 effect immediately, including for already-issued access tokens. Signing out of
 the browser does not disconnect apps with offline access.
 
-**Settings → Admin → Instance → Open OAuth client registration** is on by default.
+**Settings → Admin → Features → Open OAuth client registration** is on by default.
 Turning it off stops new registrations while keeping existing connections usable.
 
 ## Account email
 
 Account email is off by default. When it is on, OpenReader sends verification and password-reset emails through [Resend](https://resend.com).
 
-To set it up in **Settings → Admin → Instance → Account email**:
+To set it up in **Settings → Admin → Access → Account email**:
 
 1. Verify your sending domain in Resend.
 2. Create a sending-only API key, ideally restricted to that domain.

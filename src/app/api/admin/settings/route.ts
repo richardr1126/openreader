@@ -72,6 +72,8 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  const { values, sources } = await getResolvedRuntimeConfigWithSources();
-  return NextResponse.json({ values, sources, errors }, { status: errors.length ? 207 : 200 });
+  // The writes above stand even if reading them back fails (already logged); the
+  // client then waits for a refetch instead of reconciling against unconfirmed values.
+  const settings = await getResolvedRuntimeConfigWithSources().catch(() => null);
+  return NextResponse.json({ ...settings, errors }, { status: errors.length ? 207 : 200 });
 }

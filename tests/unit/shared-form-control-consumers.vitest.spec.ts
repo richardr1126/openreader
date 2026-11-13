@@ -8,6 +8,7 @@ const STANDARD_FORM_CONSUMERS = [
   'src/components/PrivacyModal.tsx',
   'src/components/settings/ProviderSettingsPanel.tsx',
   'src/components/admin/AdminFeaturesPanel.tsx',
+  'src/components/admin/admin-settings-draft.tsx',
   'src/components/admin/ComputeLimitsEditor.tsx',
   'src/components/admin/AdminProvidersPanel.tsx',
   'src/components/documents/DocumentSelectionModal.tsx',
