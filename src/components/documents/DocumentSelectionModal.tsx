@@ -113,7 +113,7 @@ export function DocumentSelectionModal({
   };
 
   return (
-    <ModalFrame open={isOpen} onClose={onClose} size="lg" panelClassName="flex h-[80vh] flex-col" className="z-[60]">
+    <ModalFrame open={isOpen} onClose={onClose} size="lg" panelClassName="flex h-[80vh] flex-col">
       <ModalTitle className="mb-4 flex flex-shrink-0 items-center justify-between">
         {title}
         {files.length > 0 && (

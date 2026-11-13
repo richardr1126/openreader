@@ -58,6 +58,8 @@ export default {
         'fade-out': 'fadeOut 200ms ease-out',
         'scale-in': 'scaleIn 200ms ease-in',
         'scale-out': 'scaleOut 200ms ease-out',
+        'slide-in-left': 'slideInLeft var(--dur-base) var(--ease)',
+        'slide-in-right': 'slideInRight var(--dur-base) var(--ease)',
         'rise-in': 'riseIn 360ms cubic-bezier(0.22,1,0.36,1) both',
         'nudge-down': 'nudgeDown 1.6s ease-in-out infinite',
       },
@@ -77,6 +79,14 @@ export default {
         scaleOut: {
           '0%': { transform: 'scale(1)', opacity: '1' },
           '100%': { transform: 'scale(0.95)', opacity: '0' },
+        },
+        slideInLeft: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        slideInRight: {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
         },
         riseIn: {
           '0%': { transform: 'translateY(8px)', opacity: '0', filter: 'blur(2px)' },

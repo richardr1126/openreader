@@ -134,7 +134,8 @@ export async function resolveDefaultPlaybackRequest(
       providerType: provider.providerType,
       ttsModel: model,
       voice,
-      nativeSpeed: policy.supportsNativeModelSpeed ? selection.modelSpeed ?? bookVoice.voiceSpeed : 1,
+      nativeSpeed: policy.supportsNativeModelSpeed
+        ? selection.modelSpeed ?? Math.min(bookVoice.voiceSpeed, policy.maxNativeModelSpeed) : 1,
       ...(provider.providerType === 'openrouter'
         ? { ttsModelOptions: resolveEffectiveOpenRouterOptions(model, usesSavedSpeech ? preferences.ttsModelOptions : undefined, provider.defaultModelOptions) }
         : {}),

@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
 interface PrivacyModalProps {
   isOpen: boolean;
   onDismiss?: () => void;
-  onAfterLeave?: () => void;
 }
 
 function PrivacyModalBody({ origin }: { origin: string }) {
@@ -48,10 +46,11 @@ function PrivacyModalBody({ origin }: { origin: string }) {
   );
 }
 
-export function PrivacyModal({ isOpen, onDismiss, onAfterLeave }: PrivacyModalProps) {
+export function PrivacyModal({ isOpen, onDismiss }: PrivacyModalProps) {
   const { mutation } = useOnboardingState();
   const [origin, setOrigin] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -61,15 +60,18 @@ export function PrivacyModal({ isOpen, onDismiss, onAfterLeave }: PrivacyModalPr
   useEffect(() => {
     if (isOpen) {
       setAgreed(false);
+      setSaveFailed(false);
     }
   }, [isOpen]);
 
   const handleAccept = async () => {
+    setSaveFailed(false);
     try {
       await mutation.mutateAsync({ privacyAccepted: true });
     } catch (error) {
       console.error('Failed to record privacy acceptance:', error);
-      toast.error('Could not save your consent. Please try again.');
+      // Shown in the dialog: an open modal makes toasts inert.
+      setSaveFailed(true);
     }
   };
 
@@ -77,9 +79,7 @@ export function PrivacyModal({ isOpen, onDismiss, onAfterLeave }: PrivacyModalPr
     <ModalFrame
       open={isOpen}
       onClose={onDismiss ?? (() => {})}
-      afterLeave={onAfterLeave}
       panelTestId="privacy-modal"
-      className="z-[80]"
     >
       <ModalTitle>Privacy & Data Usage</ModalTitle>
 
@@ -104,6 +104,10 @@ export function PrivacyModal({ isOpen, onDismiss, onAfterLeave }: PrivacyModalPr
             </a>
           </div>
         </div>
+
+        {saveFailed && (
+          <p role="alert" className="text-sm text-danger">Could not save your consent. Please try again.</p>
+        )}
 
         <div className="flex justify-end">
           <Button
@@ -138,21 +142,16 @@ export function showPrivacyModal(): void {
       const root = createRoot(container);
 
       const PopupWrapper = () => {
-        const [show, setShow] = useState(true);
-
+        // Unmounting closes the dialog, which returns focus to the opener.
         const handleClose = () => {
-          setShow(false);
+          queueMicrotask(() => {
+            root.unmount();
+            container.remove();
+          });
         };
 
         return (
-          <ModalFrame
-            open={show}
-            onClose={handleClose}
-            afterLeave={() => {
-              root.unmount();
-              container.remove();
-            }}
-          >
+          <ModalFrame open onClose={handleClose}>
             <ModalTitle>Privacy & Data Usage</ModalTitle>
 
             <PrivacyModalBody origin={origin} />

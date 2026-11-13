@@ -199,7 +199,7 @@ export function GalleryView({
     const onKey = (e: KeyboardEvent) => {
       if (documents.length === 0) return;
       if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      if (document.querySelector('[role="dialog"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
+      if (document.querySelector('dialog[open], [role="menu"], [role="listbox"]')) return;
       const target = e.target as HTMLElement;
       if (target?.closest('input, textarea, select, button, a, [contenteditable], [role="slider"], [role="radio"], [role="separator"]')) return;
       if (e.key === 'ArrowRight') {

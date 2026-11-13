@@ -15,13 +15,11 @@ export function VoicesSetupModal({
   voices,
   onContinue,
   onUseService,
-  onAfterLeave,
 }: {
   isOpen: boolean;
   voices: ReturnType<typeof useLocalVoices>;
   onContinue: () => void;
   onUseService: () => void;
-  onAfterLeave: () => void;
 }) {
   const { busy, totalBytes, installedBytes, installed, downloading, progress, failure, start, cancel } = voices;
   const percent = progress && progress.totalBytes > 0
@@ -32,9 +30,7 @@ export function VoicesSetupModal({
     <ModalFrame
       open={isOpen}
       onClose={() => {}}
-      afterLeave={onAfterLeave}
       panelTestId="voices-setup-modal"
-      className="z-[80]"
     >
       <ModalTitle>Choose how OpenReader speaks</ModalTitle>
 

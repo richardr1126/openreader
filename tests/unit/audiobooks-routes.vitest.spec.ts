@@ -1021,6 +1021,21 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       expect(hoisted.rows.filter((row) => !row.cancelledAt).map((row) => row.id)).toEqual([other.id]);
     });
 
+    test('stopping an already-stopped format leaves a resumed sibling running', async () => {
+      hoisted.resolveSession.mockResolvedValue(running);
+      const mp3 = (await start({ includeProgress: false })).json;
+      const m4b = (await start({ includeProgress: false, format: 'm4b' })).json;
+      await stop(mp3.id);
+      expect(hoisted.cancelSession).toHaveBeenCalledOnce();
+
+      await start({ includeProgress: false, format: 'm4b' });
+      const repeated = await stop(mp3.id);
+
+      expect(repeated.json.status).toBe('cancelled');
+      expect(hoisted.cancelSession).toHaveBeenCalledOnce();
+      expect(hoisted.rows.find((row) => row.id === m4b.id)?.cancelledAt).toBeNull();
+    });
+
     test('with nothing to cancel, only the named request is cancelled', async () => {
       hoisted.resolveSession.mockResolvedValue(completeSession);
       const mp3 = (await start()).json;

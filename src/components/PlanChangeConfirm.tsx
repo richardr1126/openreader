@@ -28,20 +28,16 @@ export function usePlanChangeConfirm(): {
     setOpen(true);
   }, []);
 
-  // Headless UI also reports outside clicks while the dialog animates out; by
-  // then the choice is made, and a late cancel must not undo a confirmed change.
   const handleClose = useCallback(() => {
-    if (!open) return;
     setOpen(false);
     request?.onCancel?.();
-  }, [open, request]);
+  }, [request]);
 
   const handleConfirm = useCallback(() => {
     setOpen(false);
     request?.apply();
   }, [request]);
 
-  // `request` stays set while the dialog animates out so its text does not blank.
   const planChangeDialog = (
     <ConfirmDialog
       isOpen={open}

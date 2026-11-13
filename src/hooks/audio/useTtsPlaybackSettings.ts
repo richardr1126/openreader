@@ -176,6 +176,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         // A failed save rolls back here instead of throwing, so the restart
         // still reacquires the plan and clears processing.
         let switched = false;
+        let reconciled = false;
         try {
           if (switching) {
             // The new provider's own instructions and options, as the cached-voice
@@ -188,13 +189,20 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
           // The audio controller's snapshot does not own live font/color edits.
           // Omit those fields so the server preserves their latest values.
           const saved = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+          // A newer change owns the book's settings now; this one's reply is stale.
+          if (seq !== voiceChangeSeq.current) return;
           onSettingsSaved(saved.settings);
+          if (!saved.applied) {
+            // Another tab saved newer settings, which the reply carries.
+            reconciled = true;
+            throw new Error('Newer settings for this book were saved elsewhere');
+          }
         } catch (error) {
           console.error('Could not save book voice:', error);
           toast.error('Could not save this book\'s voice');
           // A newer change has already replaced this one's settings and provider.
           if (seq !== voiceChangeSeq.current) return;
-          setReaderSettings(previous);
+          if (!reconciled) setReaderSettings(previous);
           // Other books follow the saved provider, so a switch made for this
           // book must not outlive the save it was made for.
           if (switched) {
@@ -202,6 +210,9 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
               console.error('Could not restore the previous provider:', restoreError);
             });
           }
+        } finally {
+          // Which voices reuse cached audio depends on the saved provider settings.
+          if (switching) void queryClient.invalidateQueries({ queryKey: queryKeys.allCachedVoices() });
         }
       },
       { resetPlan: true },

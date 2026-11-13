@@ -648,6 +648,11 @@ async function stopAudiobookUnlocked(
   if (!requested) return null;
   const { intent } = requested;
   if (intent.chapterIndex !== null) throw new ChapterCommandError();
+  // Already stopped: its session may since carry a resumed sibling, which a
+  // repeated Stop must leave running.
+  if (requested.cancelled) {
+    return { ...await advanceAudiobook({ id, caller, intent, command: 'read', includeProgress: false }), status: 'cancelled' };
+  }
   let runCancelled = false;
   const audiobook = await advanceAudiobook({
     id,

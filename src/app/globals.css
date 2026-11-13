@@ -376,6 +376,11 @@ h1, h2, h3, h4, h5, h6 {
   --header-height: 3.25rem;
 }
 
+/* An open modal dialog holds the page still behind it. */
+html:has(dialog[open]) {
+  overflow: hidden;
+}
+
 /* Modal scrim: always darkens, using the theme's shadow tone */
 .overlay-dim {
   background-color: rgb(var(--shadow-rgb) / 0.4);

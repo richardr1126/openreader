@@ -52,7 +52,6 @@ describe('settings ownership', () => {
     expect(changelog).toContain('Close changelog');
     expect(onboarding).toContain('<ChangelogModal');
     expect(onboarding).toContain('openChangelog');
-    expect(onboarding).toContain('handleBlockingModalAfterLeave');
     expect(onboarding).toContain('currentUserIdRef.current !== userId');
     expect(onboarding).toContain('claimModalOwnerId !== userId');
     expect(onboarding).toContain("activeBlockingModal === 'claim' && claimModalOwnerId === userId");
