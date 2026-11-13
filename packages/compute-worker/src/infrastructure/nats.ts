@@ -37,6 +37,7 @@ export const EVENTS_STREAM_NAME = 'compute_events';
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 export const NATS_API_TIMEOUT_MS = 60_000;
+export const PDF_LAYOUT_ACK_WAIT_MS = 30_000;
 
 function isAlreadyExistsError(error: unknown): boolean {
   const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
@@ -48,6 +49,7 @@ export async function ensureJetStreamResources(input: {
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
   pdfAttempts: number;
+  documentJobAttempts: number;
   jobsMaxBytes: number;
   eventsMaxBytes: number;
   natsReplicas: number;
@@ -127,13 +129,13 @@ export async function ensureJetStreamResources(input: {
   };
 
   await Promise.all([
-    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
+    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, PDF_LAYOUT_ACK_WAIT_MS, input.pdfAttempts),
     ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
     ensureConsumer(TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME, TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
     ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
     ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
-    ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
-    ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
+    ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.documentJobAttempts),
+    ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.documentJobAttempts),
     ensureConsumer(ACCOUNT_EXPORT_CONSUMER_NAME, ACCOUNT_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
     ensureConsumer(EMAIL_DELIVERY_CONSUMER_NAME, EMAIL_DELIVERY_JOBS_SUBJECT, 60_000, 3),
     // The running job extends the ack as it goes; a failed download is retried by the admin.

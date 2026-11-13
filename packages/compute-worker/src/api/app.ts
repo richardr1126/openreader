@@ -54,7 +54,6 @@ import {
   createArtifactStorage,
   createS3ClientFromEnv,
   normalizeS3Prefix,
-  type ArtifactStorage,
 } from '../infrastructure/storage';
 import { createTtsPlaybackStorage } from '../playback/storage';
 import { createJobHandlers } from '../jobs/handlers';
@@ -78,6 +77,7 @@ import {
   DOCUMENT_CONVERSION_JOBS_SUBJECT,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
+  PDF_LAYOUT_ACK_WAIT_MS,
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
   TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
   TTS_PLAYBACK_JOBS_SUBJECT,
@@ -174,7 +174,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const pdfTimeoutMs = timeoutConfig.pdfTimeoutMs;
   const pdfHardCapMs = timeoutConfig.pdfHardCapMs;
   const ttsPlaybackSegmentTimeoutMs = timeoutConfig.ttsPlaybackSegmentTimeoutMs;
-  const pdfAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
+  const pdfAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 3);
+  const documentJobAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
   const prewarmModels = readBoolEnv('COMPUTE_PREWARM_MODELS', false);
   const jobsStreamMaxBytes = readPositiveIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
   const eventsStreamMaxBytes = readPositiveIntEnv('COMPUTE_EVENTS_STREAM_MAX_BYTES', 128 * 1024 * 1024);
@@ -217,7 +218,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const storageDisabled = async (): Promise<never> => {
     throw new Error('S3 access is disabled for this worker app instance');
   };
-  const storage: ArtifactStorage = disableWorkers
+  const storage = disableWorkers
     ? {
       readObject: storageDisabled,
       objectExists: storageDisabled,
@@ -229,6 +230,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       listChildPrefixes: storageDisabled,
       putObject: storageDisabled,
       putFile: storageDisabled,
+      getParsedPdfRevision: storageDisabled,
       putParsedPdf: storageDisabled,
     }
     : createArtifactStorage({
@@ -359,9 +361,11 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     orchestrator,
     whisperTimeoutMs,
     pdfTimeoutMs,
+    pdfRecoveryMinMs: 2 * PDF_LAYOUT_ACK_WAIT_MS,
     opStaleMs,
     getGeneration: () => options.routeDeps ? 0 : sessionManager.getGeneration(),
     logger: app.log,
+    ...(options.routeDeps ? {} : { onOperationTerminal: notifyComputeAdmissionTerminal }),
   });
   const ensureOrphanedOpRecovery = () => reconciler.run();
   const getOpState = (opId: string) => reconciler.getOpState(opId);
@@ -433,6 +437,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     getComputePolicy: () => computePolicy,
     pdfAttempts,
     pdfCodec: layoutJobCodec,
+    documentJobAttempts,
     ttsPlaybackCodec: ttsPlaybackJobCodec,
     ttsPlaybackPlanCodec: ttsPlaybackPlanJobCodec,
     ttsPlaybackExportCodec: ttsPlaybackExportJobCodec,
@@ -496,6 +501,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     pdfTimeoutMs,
     pdfAttempts,
     jobsStreamMaxBytes,
+    documentJobAttempts,
     eventsStreamMaxBytes,
     jobStatesMaxBytes,
     natsReplicas,

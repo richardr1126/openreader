@@ -1,4 +1,4 @@
-import type { ArtifactStorage } from '../infrastructure/storage';
+import type { ArtifactStorage, ParsedPdfArtifactStorage } from '../infrastructure/storage';
 import type { TtsPlaybackStorage } from '../playback/storage';
 
 export interface JobHandlerContext {
@@ -19,3 +19,5 @@ export interface JobHandlerContext {
   getProviderMaxConcurrent?: (providerRef: string) => number | null;
   coolDownProviderCapacity?: (providerRef: string, retryAfterSeconds: number) => Promise<void>;
 }
+
+export type PdfLayoutJobContext = JobHandlerContext & { storage: ParsedPdfArtifactStorage };

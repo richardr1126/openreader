@@ -12,29 +12,31 @@ const parsedPdfBlockKindSchema = z.enum([
 const documentIdSchema = z.string().trim().regex(/^[a-f0-9]{64}$/i);
 const namespaceSchema = z.string().trim().regex(/^[a-zA-Z0-9._-]{1,128}$/).nullable();
 
+export const parsedPdfPageSchema = z.object({
+  pageNumber: z.number(),
+  width: z.number(),
+  height: z.number(),
+  blocks: z.array(z.object({
+    id: z.string(),
+    kind: parsedPdfBlockKindSchema,
+    fragments: z.array(z.object({
+      page: z.number(),
+      bbox: bboxSchema,
+      text: z.string(),
+      readingOrder: z.number(),
+      modelConfidence: z.number().optional(),
+    })),
+    text: z.string(),
+    parentSectionId: z.string().optional(),
+  })),
+});
+
 export const parsedPdfDocumentSchema = z.object({
   schemaVersion: z.literal(1),
   documentId: z.string(),
   parserVersion: z.string(),
   parsedAt: z.number(),
-  pages: z.array(z.object({
-    pageNumber: z.number(),
-    width: z.number(),
-    height: z.number(),
-    blocks: z.array(z.object({
-      id: z.string(),
-      kind: parsedPdfBlockKindSchema,
-      fragments: z.array(z.object({
-        page: z.number(),
-        bbox: bboxSchema,
-        text: z.string(),
-        readingOrder: z.number(),
-        modelConfidence: z.number().optional(),
-      })),
-      text: z.string(),
-      parentSectionId: z.string().optional(),
-    })),
-  })),
+  pages: z.array(parsedPdfPageSchema),
 });
 
 export const ttsSentenceAlignmentSchema = z.object({

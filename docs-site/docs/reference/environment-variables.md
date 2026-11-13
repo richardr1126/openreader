@@ -111,7 +111,7 @@ These have sensible defaults. With the embedded worker, set them in the app's `.
 | `COMPUTE_WHISPER_TIMEOUT_MS` | `30000` | Word-timing alignment timeout. |
 | `COMPUTE_TTS_PLAYBACK_SEGMENT_TIMEOUT_MS` | the Whisper timeout | Timeout for generating one segment. |
 | `COMPUTE_PDF_TIMEOUT_MS` | `300000` | PDF layout analysis timeout. |
-| `COMPUTE_PDF_JOB_ATTEMPTS` | `1` | Attempts per PDF layout job. |
+| `COMPUTE_PDF_JOB_ATTEMPTS` | `3` | Maximum deliveries per PDF layout job, including recovery after a worker stops. |
 | `COMPUTE_OP_STALE_MS` | 30 minutes, or 4× the longest timeout | When an unfinished operation may be replaced. |
 | `COMPUTE_PREWARM_MODELS` | `false` | Download models at startup instead of on first use. |
 | `WHISPER_MODEL_BASE_URL` | Hugging Face | Mirror for Whisper model files. |

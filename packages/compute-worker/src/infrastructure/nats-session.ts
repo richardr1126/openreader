@@ -65,6 +65,7 @@ export function createNatsSessionManager(input: {
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
   pdfAttempts: number;
+  documentJobAttempts: number;
   jobsStreamMaxBytes: number;
   eventsStreamMaxBytes: number;
   jobStatesMaxBytes: number;
@@ -157,6 +158,7 @@ export function createNatsSessionManager(input: {
         whisperTimeoutMs: input.whisperTimeoutMs,
         pdfTimeoutMs: input.pdfTimeoutMs,
         pdfAttempts: input.pdfAttempts,
+        documentJobAttempts: input.documentJobAttempts,
         jobsMaxBytes: input.jobsStreamMaxBytes,
         eventsMaxBytes: input.eventsStreamMaxBytes,
         natsReplicas: input.natsReplicas,

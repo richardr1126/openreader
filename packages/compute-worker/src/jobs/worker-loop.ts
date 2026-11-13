@@ -27,6 +27,7 @@ import type {
 import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { OperationAttemptUpdate, OperationExecution } from '../operations/types';
+import type { PdfLayoutExecution } from './pdf-layout';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 import { toErrorMessage } from '../infrastructure/errors';
@@ -122,6 +123,7 @@ export function createWorkerLoopController(input: {
   logger: WorkerLogger;
   getComputePolicy: () => ComputeLimitPolicyDocument;
   pdfAttempts: number;
+  documentJobAttempts?: number;
   pdfCodec: JsonCodec<QueuedJob<PdfLayoutJobRequest>>;
   ttsPlaybackCodec?: JsonCodec<QueuedJob<TtsPlaybackJobRequest>>;
   ttsPlaybackPlanCodec?: JsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>;
@@ -156,7 +158,9 @@ export function createWorkerLoopController(input: {
   type JobRunner<TPayload, TResult> = (
     payload: TPayload,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: WorkerOperationProgress) => Promise<void> },
+    hooks: Omit<PdfLayoutExecution, 'onProgress'> & {
+      onProgress: (progress: WorkerOperationProgress) => Promise<void>;
+    },
   ) => Promise<TResult>;
 
   type WorkDefinition<TPayload, TResult> = {
@@ -187,6 +191,7 @@ export function createWorkerLoopController(input: {
     let context: Context<TPayload> | null = null;
     let decodedMessage = false;
     let heartbeat: NodeJS.Timeout | null = null;
+    const controller = new AbortController();
     let heartbeatPending = false;
     // State writes for one job apply in order, so a heartbeat or progress
     // update still in flight cannot land after (and hide) the terminal state.
@@ -249,6 +254,7 @@ export function createWorkerLoopController(input: {
         }));
         if (!active) {
           stopHeartbeat();
+          controller.abort(new Error('Operation attempt no longer owns execution'));
           return false;
         }
         try {
@@ -278,8 +284,15 @@ export function createWorkerLoopController(input: {
         });
       }, RUNNING_HEARTBEAT_MS);
       const result = await work.run(decoded.payload, delivery.queueWaitTiming?.queueWaitMs ?? 0, {
+        opId: decoded.opId,
+        operationKey: decoded.opKey,
+        attempt: delivery.deliveryAttempt,
+        signal: controller.signal,
+        assertActive: async () => {
+          if (!await report()) throw controller.signal.reason;
+        },
         onProgress: async (progress) => {
-          if (!await report(progress)) throw new Error('Operation attempt no longer owns execution');
+          if (!await report(progress)) throw controller.signal.reason;
         },
       });
       const timing = extractTiming(result);
@@ -324,6 +337,7 @@ export function createWorkerLoopController(input: {
           kind,
           deliveryCount,
           pdfAttempts: input.pdfAttempts,
+          documentJobAttempts: input.documentJobAttempts,
           retryable: error instanceof TtsCredentialBrokerClientError || error instanceof EmailDeliveryError
             || error instanceof TtsProviderFailedError
             ? error.retryable
@@ -376,6 +390,7 @@ export function createWorkerLoopController(input: {
       }, 'job.terminal');
     } finally {
       stopHeartbeat();
+      controller.abort();
     }
   };
 
@@ -433,6 +448,7 @@ export function createWorkerLoopController(input: {
         kind: work.codec.decode(msg.data).kind,
         deliveryCount: msg.info.deliveryCount,
         pdfAttempts: input.pdfAttempts,
+        documentJobAttempts: input.documentJobAttempts,
       }) === 'nak_retry';
     } catch {
       return true;

@@ -39,9 +39,11 @@ export function createOperationReconciler(input: {
   orchestrator: ReconciliationOrchestrator;
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
+  pdfRecoveryMinMs?: number;
   opStaleMs: number;
   getGeneration: () => number;
   logger: ReconciliationLogger;
+  onOperationTerminal?: (input: { operationId: string; state: 'failed' }) => Promise<void>;
 }) {
   let recoveryPromise: Promise<void> | null = null;
   let recoveredGeneration = -1;
@@ -61,11 +63,16 @@ export function createOperationReconciler(input: {
         orchestrator: {
           markFailedIfUnchanged: async (request) => {
             const result = await input.orchestrator.markFailedIfUnchanged!(request);
+            if (result) {
+              await input.onOperationTerminal?.({ operationId: request.current.opId, state: 'failed' })
+                .catch((error) => input.logger.warn({ opId: request.current.opId, error }, 'compute admission completion callback failed'));
+            }
             return result as StreamedOperationState | null;
           },
         },
         whisperTimeoutMs: input.whisperTimeoutMs,
         pdfTimeoutMs: input.pdfTimeoutMs,
+        pdfRecoveryMinMs: input.pdfRecoveryMinMs,
         opStaleMs: input.opStaleMs,
       });
       if (recoveredStates.length > 0) {

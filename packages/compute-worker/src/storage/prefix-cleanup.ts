@@ -10,11 +10,16 @@ export function storageUserHash(userId: string): string {
 }
 
 /** Delete every object under `prefix`; `shouldStop` is checked before each batch. */
-export async function deletePrefix(storage: ArtifactStorage, prefix: string, shouldStop?: () => boolean): Promise<number> {
-  const keys = await storage.listPrefix(prefix);
+export async function deletePrefix(
+  storage: ArtifactStorage,
+  prefix: string,
+  shouldStop?: () => boolean,
+  signal?: AbortSignal,
+): Promise<number> {
+  const keys = await storage.listPrefix(prefix, signal);
   for (let index = 0; index < keys.length; index += DELETE_BATCH) {
     if (shouldStop?.()) throw new Error(`Deletion under ${prefix} was stopped`);
-    await Promise.all(keys.slice(index, index + DELETE_BATCH).map((key) => storage.deleteObject(key)));
+    await Promise.all(keys.slice(index, index + DELETE_BATCH).map((key) => storage.deleteObject(key, signal)));
   }
   return keys.length;
 }
