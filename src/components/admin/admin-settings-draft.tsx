@@ -65,22 +65,29 @@ export function useAdminSettingsDraft() {
   const pending = useRef<Record<string, unknown>>({});
 
   /**
-   * Take a request's read-back as the server state: drop edits that now match it, and
-   * cache it so the draft is right even if the refetch that follows fails. Without a
-   * read-back every edit stays until the user saves or discards it.
+   * Reconcile against confirmed server state: the request's read-back, or else a fetch
+   * started after it finished. Drop edits that now match, keep the request's keys
+   * pending until then, and with neither keep every edit until saved or discarded.
    */
-  const settle = async ({ settings }: PatchResult, keep: (key: string) => boolean = () => false) => {
-    pending.current = {};
+  const settle = async (result: PatchResult, keep: (key: string) => boolean = () => false) => {
+    let settings = result.settings;
     if (settings) {
       queryClient.setQueryData<SettingsResponse>(queryKey, settings);
-      setEdits((current) => {
-        const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
-          keep(key) || !Object.is(value, settings.values[key])
-        )));
-        return Object.keys(kept).length === Object.keys(current).length ? current : kept;
-      });
+      void queryClient.invalidateQueries({ queryKey });
+    } else {
+      // A fetch already in flight may predate the write, so cancel it rather than join it.
+      await queryClient.cancelQueries({ queryKey });
+      settings = await queryClient.fetchQuery({ queryKey, queryFn: fetchAdminSettings, staleTime: 0 }).catch(() => null);
     }
-    await queryClient.invalidateQueries({ queryKey });
+    pending.current = {};
+    if (!settings) return;
+    const { values } = settings;
+    setEdits((current) => {
+      const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
+        keep(key) || !Object.is(value, values[key])
+      )));
+      return Object.keys(kept).length === Object.keys(current).length ? current : kept;
+    });
   };
 
   useEffect(() => {
