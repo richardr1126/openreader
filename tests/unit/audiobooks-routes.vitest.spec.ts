@@ -813,6 +813,23 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(hoisted.rows).toHaveLength(1);
   });
 
+  test('deleting an adopted run\'s request stops the run even before its plan is stored', async () => {
+    hoisted.resolveSession.mockResolvedValue({
+      session: { status: 'running', generationRunId: 'adopted-run' },
+      operation: { opId: 'generation-op-1', status: 'running' },
+      progress: null,
+    });
+    await lookup();
+    hoisted.rows[0].planObjectKey = null;
+    hoisted.resolveArtifact.mockReset().mockResolvedValue(noArtifact);
+    hoisted.findPlan.mockResolvedValue({ opId: 'plan-op', status: 'succeeded', result: { kind: 'tts_playback_plan', planObjectKey: 'plans/found.json' } });
+
+    expect((await remove(hoisted.rows[0].id as string)).status).toBe(204);
+
+    expect(hoisted.cancelSession).toHaveBeenCalledWith(expect.any(String), 'adopted-run');
+    expect(hoisted.rows).toHaveLength(0);
+  });
+
   describe('worker completion signal', () => {
     async function requested() {
       hoisted.getOperation.mockResolvedValue({ opId: 'op-1', subject: { kind: 'tts_playback', documentId: 'doc-1' } });

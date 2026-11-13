@@ -297,11 +297,12 @@ async function advanceAudiobook(input: {
 
   let planObjectKey = intent.parsed.planObjectKey ?? null;
   if (!planObjectKey) {
-    if (command === 'stop') return reportGeneration('stopped');
     let operation;
-    if (command === 'read') {
+    // A stop never plans, but an adopted run's request has no plan stored yet:
+    // find the plan it runs on so the run can still be stopped.
+    if (command === 'read' || command === 'stop') {
       const existing = await findPlaybackPlanOperation({ parsed: intent.parsed, scope, planningInput: { settingsHash, settingsJson, planning } });
-      if (!existing) return reportGeneration('idle');
+      if (!existing) return reportGeneration(command === 'stop' ? 'stopped' : 'idle');
       operation = existing;
     } else try {
       operation = await createAdmittedPlaybackPlanOperation({
