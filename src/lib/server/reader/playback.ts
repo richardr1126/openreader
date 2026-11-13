@@ -231,7 +231,7 @@ export async function resolveReaderPlayback(
     };
   }
   if (operation.status === 'queued' || operation.status === 'running') {
-    return { result: { status: 'pending' }, operationId: operation.opId };
+    return { result: { status: 'pending', operationId: operation.opId } };
   }
   if (operation.status === 'failed') {
     return {

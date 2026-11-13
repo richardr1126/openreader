@@ -6,7 +6,16 @@ import { computeLocationPhrase } from '@/lib/shared/install-profile';
 import type { ReaderBootstrapProgress } from '@/types/reader-bootstrap';
 import styles from './ReaderLoader.module.css';
 
-export function ReaderLoader({ progress }: { progress?: ReaderBootstrapProgress }) {
+export function ReaderLoader({
+  progress,
+  onRestart,
+  restarting,
+}: {
+  progress?: ReaderBootstrapProgress;
+  /** Offered while a PDF prepares, so work that is getting nowhere can be restarted. */
+  onRestart?: () => void;
+  restarting?: boolean;
+}) {
   const { computeLocation } = useRuntimeConfig();
   const totalPages = progress?.totalPages ?? 0;
   const pagesParsed = Math.min(totalPages, Math.max(0, progress?.pagesParsed ?? 0));
@@ -73,6 +82,15 @@ export function ReaderLoader({ progress }: { progress?: ReaderBootstrapProgress 
             <span style={progress && displayedPercent !== null ? { width: `${displayedPercent}%` } : undefined} />
           </div>
         </div>
+
+        {onRestart ? (
+          <div className={styles.aside}>
+            <p>Not moving? Start the preparation over.</p>
+            <Button type="button" variant="secondary" size="sm" onClick={onRestart} disabled={restarting}>
+              {restarting ? 'Restarting…' : 'Restart preparation'}
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -81,9 +99,11 @@ export function ReaderLoader({ progress }: { progress?: ReaderBootstrapProgress 
 export function ReaderError({
   error,
   onRetry,
+  retrying,
 }: {
   error: Error;
   onRetry?: () => void;
+  retrying?: boolean;
 }) {
   return (
     <div className={styles.root}>
@@ -95,8 +115,8 @@ export function ReaderError({
           <p>{error.message}</p>
         </div>
         {onRetry ? (
-          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
-            Try again
+          <Button type="button" variant="secondary" size="sm" onClick={onRetry} disabled={retrying}>
+            {retrying ? 'Retrying…' : 'Try again'}
           </Button>
         ) : null}
       </div>

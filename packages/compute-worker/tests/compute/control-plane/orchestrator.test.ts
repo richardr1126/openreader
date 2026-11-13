@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { RUNNING_OPERATION_STALE_MS } from '../../../src/operations/contracts';
 import type { WorkerOperationRequest } from '../../../src/operations/contracts';
 import { OperationOrchestrator } from '../../../src/operations/service';
 import {
@@ -50,7 +51,8 @@ describe('operation orchestrator', () => {
 
     await orchestrator.markRunning({ opId: first.opId, updatedAt: 2_100 });
 
-    now = 6_000;
+    // A running operation is replaced once it stops heartbeating.
+    now = 2_100 + RUNNING_OPERATION_STALE_MS + 1;
     const replaced = await orchestrator.enqueueOrReuse(request);
     expect(replaced.opId).toBe('op-2');
     expect(await stateStore.getOpIndex('shared-op')).toEqual({ opId: 'op-2' });

@@ -1,6 +1,7 @@
 import type { WorkerJobTiming } from './contracts';
 import {
   recoverOrphanedOperations,
+  recoverStaleOperation,
   type StreamedOperationState,
 } from './recovery';
 
@@ -37,8 +38,6 @@ function supportsRecovery(
 export function createOperationReconciler(input: {
   stateStore: ReconciliationStateStore;
   orchestrator: ReconciliationOrchestrator;
-  whisperTimeoutMs: number;
-  pdfTimeoutMs: number;
   opStaleMs: number;
   getGeneration: () => number;
   logger: ReconciliationLogger;
@@ -64,8 +63,6 @@ export function createOperationReconciler(input: {
             return result as StreamedOperationState | null;
           },
         },
-        whisperTimeoutMs: input.whisperTimeoutMs,
-        pdfTimeoutMs: input.pdfTimeoutMs,
         opStaleMs: input.opStaleMs,
       });
       if (recoveredStates.length > 0) {
@@ -87,9 +84,29 @@ export function createOperationReconciler(input: {
 
   return {
     run,
+    /**
+     * Read one operation, settling whether it is still alive. The sweep runs
+     * once per control-plane generation, so a worker that restarts while a job
+     * is in flight can sweep before that job's state has gone stale and then
+     * never look again. Reading an operation is the moment its liveness
+     * matters, so the read settles it: an abandoned operation becomes a
+     * failure the caller can report and retry, rather than a running operation
+     * nothing is working on.
+     */
     async getOpState(opId: string): Promise<StreamedOperationState | null> {
       await run();
-      return await input.stateStore.getOpState(opId);
+      const state = await input.stateStore.getOpState(opId);
+      if (!state || !supportsRecovery(input.stateStore, input.orchestrator)) return state;
+      return await recoverStaleOperation({
+        operationStateStore: { getOpStateRecord: (id) => input.stateStore.getOpStateRecord!(id) },
+        orchestrator: {
+          markFailedIfUnchanged: async (request) => (
+            await input.orchestrator.markFailedIfUnchanged!(request)
+          ) as StreamedOperationState | null,
+        },
+        state,
+        opStaleMs: input.opStaleMs,
+      });
     },
   };
 }

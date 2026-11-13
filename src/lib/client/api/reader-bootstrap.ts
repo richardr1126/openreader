@@ -3,12 +3,17 @@ import type { ReaderBootstrapResult } from '@/types/reader-bootstrap';
 
 export async function getReaderBootstrap(
   documentId: string,
+  restartPdfOperationId?: string,
 ): Promise<ReaderBootstrapResult> {
   const response = await fetch(
     `/api/documents/${encodeURIComponent(documentId)}/reader-bootstrap`,
     {
       method: 'POST',
       cache: 'no-store',
+      ...(restartPdfOperationId ? {
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ restartPdfOperationId }),
+      } : {}),
     },
   );
   if (response.status === 404) {
