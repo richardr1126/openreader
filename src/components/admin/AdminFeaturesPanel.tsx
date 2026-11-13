@@ -15,7 +15,13 @@ export function AdminFeaturesPanel() {
   const multiUser = useRuntimeConfig().installProfile === 'server';
   const { loaded, draft, update, source, toggle, number, saveBar } = useAdminSettingsDraft();
 
-  if (!loaded) return <AdminSettingsSkeleton titles={['Documents', 'Connected apps']} label="Loading feature settings" />;
+  // Desktop updates save on this computer, so they stay usable while site settings load or fail.
+  if (!loaded) return (
+    <div className="space-y-5">
+      <AdminSettingsSkeleton titles={['Documents', 'Connected apps']} label="Loading feature settings" />
+      <DesktopUpdatesSection />
+    </div>
+  );
 
   return (
     <div className="space-y-5">

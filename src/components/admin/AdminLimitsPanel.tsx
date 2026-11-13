@@ -31,17 +31,16 @@ export function AdminLimitsPanel() {
       <Section title="Storage" variant="group">
         {toggle({ key: 'limitAccountStorage', label: 'Storage per account', icon: <DatabaseIcon />, info: STORAGE_INFO })}
         {draft.limitAccountStorage ? number({ key: 'accountStorageMb', label: 'Account storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
-        {draft.allowAnonymousSessions ? <>
-          {toggle({ key: 'limitGuestStorage', label: 'Storage per guest', icon: <DatabaseIcon />, info: STORAGE_INFO })}
-          {draft.limitGuestStorage ? number({ key: 'guestStorageMb', label: 'Guest storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
-          {toggle({
-            key: 'limitGuestStoragePool',
-            label: 'Total guest storage',
-            icon: <UsersIcon />,
-            info: 'Shared by all guests. When it is full, guests cannot upload or generate new audio. Accounts are unaffected.',
-          })}
-          {draft.limitGuestStoragePool ? number({ key: 'guestStoragePoolMb', label: 'Total guest storage cap', icon: <UsersIcon />, unit: 'MB' }) : null}
-        </> : null}
+        {/* Shown while guests are off too, so caps can be set before guests are let in. */}
+        {toggle({ key: 'limitGuestStorage', label: 'Storage per guest', icon: <DatabaseIcon />, info: STORAGE_INFO })}
+        {draft.limitGuestStorage ? number({ key: 'guestStorageMb', label: 'Guest storage cap', icon: <DatabaseIcon />, unit: 'MB' }) : null}
+        {toggle({
+          key: 'limitGuestStoragePool',
+          label: 'Total guest storage',
+          icon: <UsersIcon />,
+          info: 'Shared by all guests. When it is full, guests cannot upload or generate new audio. Accounts are unaffected.',
+        })}
+        {draft.limitGuestStoragePool ? number({ key: 'guestStoragePoolMb', label: 'Total guest storage cap', icon: <UsersIcon />, unit: 'MB' }) : null}
       </Section>
 
       {policy ? <>

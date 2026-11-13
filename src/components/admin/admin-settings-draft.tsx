@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { InlineButton, Input, SaveBar, Section, SettingRow, ToggleRow } from '@/components/ui';
@@ -20,19 +20,24 @@ async function fetchAdminSettings(): Promise<SettingsResponse> {
   return (await res.json()) as SettingsResponse;
 }
 
-async function patchAdminSettings(payload: { updates?: Record<string, unknown>; reset?: string[] }): Promise<void> {
+/** Returns the keys the server refused; a 207 means the others were saved. */
+async function patchAdminSettings(payload: { updates?: Record<string, unknown>; reset?: string[] }): Promise<string[]> {
   const res = await fetch('/api/admin/settings', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
+  if (res.status !== 207) return [];
+  const body = (await res.json()) as { errors?: Array<{ key: string }> };
+  return (body.errors ?? []).map(({ key }) => key);
 }
 
 /**
  * One admin tab's edits to the shared runtime settings. Every tab reads the same
  * query, keeps its own draft of the keys it shows, and saves them with its own
- * save bar, so an edit never waits on another tab.
+ * save bar, so an edit never waits on another tab. Edits sit over the
+ * fetched values, so a refetch updates untouched keys and keeps unsaved ones.
  */
 export function useAdminSettingsDraft() {
   const queryClient = useQueryClient();
@@ -43,14 +48,9 @@ export function useAdminSettingsDraft() {
     queryFn: fetchAdminSettings,
     enabled: Boolean(session?.user?.id),
   });
-  const [draft, setDraft] = useState<Record<string, unknown>>({});
-  const [dirty, setDirty] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (!data) return;
-    setDraft({ ...data.values });
-    setDirty(new Set());
-  }, [data]);
+  const [edits, setEdits] = useState<Record<string, unknown>>({});
+  const draft = useMemo(() => ({ ...data?.values, ...edits }), [data, edits]);
+  const dirty = useMemo(() => new Set(Object.keys(edits)), [edits]);
 
   useEffect(() => {
     if (!error) return;
@@ -60,7 +60,8 @@ export function useAdminSettingsDraft() {
 
   const resetMutation = useMutation({
     mutationFn: (key: string) => patchAdminSettings({ reset: [key] }),
-    onSuccess: async () => {
+    onSuccess: async (_failed, key) => {
+      setEdits((current) => without(current, key));
       toast.success('Reset to env default');
       await queryClient.invalidateQueries({ queryKey });
     },
@@ -72,8 +73,13 @@ export function useAdminSettingsDraft() {
 
   const saveMutation = useMutation({
     mutationFn: (updates: Record<string, unknown>) => patchAdminSettings({ updates }),
-    onSuccess: async () => {
-      toast.success('Settings saved');
+    onSuccess: async (failed, updates) => {
+      // Saved keys leave the draft unless they were edited again meanwhile; refused ones stay to fix.
+      setEdits((current) => Object.fromEntries(Object.entries(current).filter(([key, value]) => (
+        failed.includes(key) || !(key in updates) || !Object.is(value, updates[key])
+      ))));
+      if (failed.length) toast.error(`Not saved: ${failed.join(', ')}`);
+      else toast.success('Settings saved');
       await queryClient.invalidateQueries({ queryKey });
     },
     onError: (mutationError) => {
@@ -85,27 +91,17 @@ export function useAdminSettingsDraft() {
   const saving = resetMutation.isPending || saveMutation.isPending;
 
   const update = (key: string, value: unknown) => {
-    setDraft((d) => ({ ...d, [key]: value }));
-    setDirty((s) => {
-      const next = new Set(s);
-      if (Object.is(value, data?.values?.[key])) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setEdits((current) => (
+      Object.is(value, data?.values?.[key]) ? without(current, key) : { ...current, [key]: value }
+    ));
   };
 
   const save = () => {
     if (saving || dirty.size === 0) return;
-    const updates: Record<string, unknown> = {};
-    for (const key of dirty) updates[key] = draft[key];
-    saveMutation.mutate(updates);
+    saveMutation.mutate({ ...edits });
   };
 
-  const discard = () => {
-    if (!data) return;
-    setDraft({ ...data.values });
-    setDirty(new Set());
-  };
+  const discard = () => setEdits({});
 
   /** Where a value came from, with Reset when it is not the built-in default. */
   const source = (key: string) => {
@@ -169,6 +165,12 @@ export function useAdminSettingsDraft() {
     : null;
 
   return { loaded: Boolean(data), draft, update, source, toggle, number, saveBar };
+}
+
+function without(edits: Record<string, unknown>, key: string): Record<string, unknown> {
+  const next = { ...edits };
+  delete next[key];
+  return next;
 }
 
 const SOURCE_LABELS: Record<Exclude<RuntimeConfigSource, 'default'>, string> = {

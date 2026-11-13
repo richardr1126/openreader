@@ -24,7 +24,7 @@ Choose **Add Documents** at the top of the library sidebar. You can:
 - **Project Gutenberg**: search public-domain books and add them as EPUBs. You can filter results by language. An admin can turn this catalog off.
 - **Server Library**: import files from a folder on the server that an admin has set up. It is called **Library Folder** in the desktop app. See [Server Library Import](../configure/server-library-import).
 
-The maximum upload size is set by an admin (**Settings → Admin → Features**).
+The maximum upload size is set by an admin (**Settings → Admin → Features**, or **Settings → Advanced → Features** in the desktop app).
 
 ## Organize
 

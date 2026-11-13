@@ -3,7 +3,7 @@ title: Access and Features
 description: Sign-ups, guests, account email and site-wide features in Settings → Admin → Access and Features.
 ---
 
-**Settings → Admin → Access** decides who can join, and **Settings → Admin → Features** decides what the app offers. Changes apply as soon as you save. The key in each table is the name to use when seeding the setting through `RUNTIME_SEED_JSON` (see [Administration](./admin-panel#settings-from-seeds-and-from-the-admin-panel)).
+**Settings → Admin → Access** decides who can join, and **Settings → Admin → Features** (**Settings → Advanced → Features** in the desktop app) decides what the app offers. Changes apply as soon as you save. The key in each table is the name to use when seeding the setting through `RUNTIME_SEED_JSON` (see [Administration](./admin-panel#settings-from-seeds-and-from-the-admin-panel)).
 
 ## Access
 

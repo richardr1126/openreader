@@ -32,7 +32,9 @@ TTS usage is counted in characters sent to a provider, and only for audio that h
 - Playback can continue through audio that is already generated, and seeking still works.
 - Retries never count twice.
 
-Separate per-user limits apply to signed-in users and guests. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**. ### Creation caps and client addresses
+Separate per-user limits apply to signed-in users and guests. They reset at midnight UTC. Users see their usage in **Settings → Account**, and admins see it per user in **Users**.
+
+### Creation caps and client addresses
 
 Optional creation caps under [Access](./instance-settings#access) limit new accounts per IP over a rolling period and new guests per IP over the guest idle period. IPv6 addresses share a /64 bucket; stored IP values are keyed hashes. Existing accounts keep working when a creation cap is reached.
 
