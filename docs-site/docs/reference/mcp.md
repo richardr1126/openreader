@@ -41,7 +41,7 @@ npx @modelcontextprotocol/inspector
 ```
 
 Administrators can stop new clients from connecting with
-[Open OAuth client registration](../configure/instance-settings). Clients that are
+[Open OAuth client registration](../configure/instance-settings#features). Clients that are
 already connected keep working.
 
 ## Tools

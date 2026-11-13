@@ -38,7 +38,7 @@ data, signing keys and authorization requests. No separate OAuth secret is neede
 
 A client either registers dynamically or uses a client ID metadata document. Both
 are open by default. Administrators can disable both with **Open OAuth client
-registration** in **Settings → Admin → Instance**. This stops new clients; it does
+registration** in **Settings → Admin → Features**. This stops new clients; it does
 not disconnect existing apps. The setting is also named
 `allowOAuthClientRegistration` in a runtime seed. There is no separate
 client-management API. A client that no user has approved is removed 30 days after

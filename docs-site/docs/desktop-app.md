@@ -43,7 +43,7 @@ DOCX conversion needs [LibreOffice](https://www.libreoffice.org/), which is not 
 
 The app checks GitHub Releases for new versions and downloads them in the background. **Restart to update** appears in the library sidebar once one is ready; otherwise it installs the next time you quit. You can also choose **Check for updates** in Settings or the application menu.
 
-To turn off automatic updates, go to **Settings → Instance → Desktop app**. An update check sends nothing about your library.
+To turn off automatic updates, go to **Settings → Features → Desktop app**. An update check sends nothing about your library.
 
 On Linux, a `.deb` update asks for your password. An AppImage moved to a read-only location cannot update itself.
 

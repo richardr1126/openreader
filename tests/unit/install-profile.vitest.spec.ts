@@ -7,8 +7,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 vi.mock('@/components/icons/Icons', () => {
   const icon = () => null;
   return {
-    CpuChipIcon: icon, DatabaseIcon: icon, GlobeIcon: icon, InfoIcon: icon, MicrophoneIcon: icon,
-    PaletteIcon: icon, ServerStackIcon: icon, UserIcon: icon, UsersIcon: icon, WrenchIcon: icon, BookIcon: icon,
+    DatabaseIcon: icon, InfoIcon: icon, LockIcon: icon, MicrophoneIcon: icon, PaletteIcon: icon,
+    ServerStackIcon: icon, SlidersIcon: icon, SparkleIcon: icon, UserIcon: icon, UsersIcon: icon, WrenchIcon: icon,
   };
 });
 import {
@@ -69,17 +69,17 @@ describe('settings sections by install profile', () => {
   test('server keeps the General and Admin grouping', () => {
     expect(groups('server')).toEqual([
       { label: 'General', sections: ['api:Model & Voice', 'customize:Customize', 'account:Account', 'storage:Storage', 'about:About'] },
-      { label: 'Admin', sections: ['users:Users', 'providers:Providers', 'instance:Instance', 'compute:Compute', 'maintenance:Maintenance'] },
+      { label: 'Admin', sections: ['users:Users', 'access:Access', 'providers:Providers', 'features:Features', 'limits:Limits', 'maintenance:Maintenance'] },
     ]);
     expect(groups('server', false)).toEqual([
       { label: 'General', sections: ['api:Model & Voice', 'customize:Customize', 'account:Account', 'storage:Storage', 'about:About'] },
     ]);
   });
 
-  test('desktop hides Users and regroups the rest under General, Advanced and About', () => {
+  test('desktop hides Users, Access and Limits and regroups the rest under General, Advanced and About', () => {
     expect(groups('desktop')).toEqual([
       { label: 'General', sections: ['customize:Customize', 'api:Model & Voice', 'providers:Providers', 'storage:Library and storage', 'account:Profile'] },
-      { label: 'Advanced', sections: ['instance:Instance', 'compute:Compute', 'maintenance:Maintenance'] },
+      { label: 'Advanced', sections: ['features:Features', 'maintenance:Maintenance'] },
       { label: 'About', sections: ['about:About'] },
     ]);
   });

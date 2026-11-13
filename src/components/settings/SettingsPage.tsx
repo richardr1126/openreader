@@ -4,9 +4,11 @@ import { Fragment, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DocumentIcon, InfoIcon } from '@/components/icons/Icons';
+import { AdminAccessPanel } from '@/components/admin/AdminAccessPanel';
 import { AdminEmailPanel } from '@/components/admin/AdminEmailPanel';
-import { AdminGutendexPanel } from '@/components/admin/AdminGutendexPanel';
 import { AdminFeaturesPanel } from '@/components/admin/AdminFeaturesPanel';
+import { AdminGenerationPanel } from '@/components/admin/AdminGenerationPanel';
+import { AdminLimitsPanel } from '@/components/admin/AdminLimitsPanel';
 import { AdminProvidersPanel } from '@/components/admin/AdminProvidersPanel';
 import { AdminSystemPanel } from '@/components/admin/AdminSystemPanel';
 import { AdminTasksPanel } from '@/components/admin/AdminTasksPanel';
@@ -183,15 +185,20 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                   {activeSection === 'storage' ? <StorageSettingsPanel /> : null}
                   {activeSection === 'about' ? <AboutSettingsPanel /> : null}
                   {isAdmin && activeSection === 'users' ? <AdminUsersPanel /> : null}
-                  {isAdmin && activeSection === 'providers' ? <AdminProvidersPanel /> : null}
-                  {isAdmin && activeSection === 'instance' ? (
+                  {isAdmin && activeSection === 'access' ? (
                     <div className="space-y-5">
-                      <AdminFeaturesPanel scope="instance" />
-                      {installProfile === 'server' ? <AdminEmailPanel /> : null}
-                      <AdminGutendexPanel />
+                      <AdminAccessPanel />
+                      <AdminEmailPanel />
                     </div>
                   ) : null}
-                  {isAdmin && activeSection === 'compute' ? <AdminFeaturesPanel scope="compute" /> : null}
+                  {isAdmin && activeSection === 'providers' ? (
+                    <div className="space-y-6">
+                      <AdminProvidersPanel />
+                      <AdminGenerationPanel />
+                    </div>
+                  ) : null}
+                  {isAdmin && activeSection === 'features' ? <AdminFeaturesPanel /> : null}
+                  {isAdmin && activeSection === 'limits' ? <AdminLimitsPanel /> : null}
                   {isAdmin && activeSection === 'maintenance' ? (
                     <div className="space-y-5">
                       <AdminSystemPanel />

@@ -258,6 +258,9 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
       step: 'read_runtime_config_rows',
       error,
     });
+    // A forced-fresh read promises DB truth: admin screens reconcile against it and
+    // seeding decides inserts from it, so a fallback snapshot would mislead both.
+    if (options?.forceFresh) throw error;
     // Prefer last-known-good config over snapping every key back to its default
     // during a transient DB blip (which could, e.g., momentarily reopen
     // signups). A recent write nulls the active cache but leaves the fallback

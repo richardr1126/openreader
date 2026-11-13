@@ -452,7 +452,7 @@ describe('server-state architecture', () => {
     const workerContracts = source('packages/compute-worker/src/operations/contracts.ts');
     const workerKeys = source('packages/compute-worker/src/operations/keys.ts');
     const computeGenerated = source('src/lib/server/compute-worker/generated.ts');
-    const adminFeatures = source('src/components/admin/AdminFeaturesPanel.tsx');
+    const adminGeneration = source('src/components/admin/AdminGenerationPanel.tsx');
     const playbackPlan = source('src/lib/shared/playback-plan.ts');
     const playbackGrid = source('src/lib/client/tts/playback-grid.ts');
     const playbackModel = source('src/hooks/audio/useTtsPlaybackModel.ts');
@@ -715,8 +715,8 @@ describe('server-state architecture', () => {
     expect(playbackProjection).not.toContain('ordinalIndexCacheRef');
     expect(playbackProjection).not.toContain('ordinalIndexCache.byOrdinal.get(targetOrdinal) ?? -1');
     expect(playbackProjection).not.toContain('segment.key === segmentKey');
-    expect(adminFeatures).toContain('ttsPlaybackBackgroundExtent');
-    expect(adminFeatures).toContain('PLAYBACK_BACKGROUND_EXTENT_OPTIONS');
+    expect(adminGeneration).toContain('ttsPlaybackBackgroundExtent');
+    expect(adminGeneration).toContain('BACKGROUND_EXTENT_OPTIONS');
     expect(context).not.toContain('restartPlaybackSessionFromCurrentPosition');
     expect(playbackModel).toContain('const setSelectedOrdinal = useCallback((ordinal: number | null) =>');
     expect(playbackModel).not.toContain('setPlaybackIndex');
