@@ -62,7 +62,8 @@ export function useAdminSettingsDraft() {
   }, [error]);
 
   const resetMutation = useMutation({
-    mutationFn: (key: string) => patchAdminSettings({ reset: [key] }),
+    // Without `updates`, the route reads the whole body as updates and refuses `reset` as a key.
+    mutationFn: (key: string) => patchAdminSettings({ updates: {}, reset: [key] }),
     onMutate: (key) => { pending.current = { [key]: RESETTING }; },
     onSettled: () => { pending.current = {}; },
     // Reset shows only on keys without an edit, so any edit here was made while it ran and stays.
@@ -83,9 +84,13 @@ export function useAdminSettingsDraft() {
     onSettled: () => { pending.current = {}; },
     onSuccess: async (failed, updates) => {
       // Saved keys leave the draft unless they were edited again meanwhile; refused ones stay to fix.
-      setEdits((current) => Object.fromEntries(Object.entries(current).filter(([key, value]) => (
-        failed.includes(key) || !(key in updates) || !Object.is(value, updates[key])
-      ))));
+      setEdits((current) => {
+        const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
+          failed.includes(key) || !(key in updates) || !Object.is(value, updates[key])
+        )));
+        for (const key of failed) if (key in updates && !(key in kept)) kept[key] = updates[key];
+        return kept;
+      });
       if (failed.length) toast.error(`Not saved: ${failed.join(', ')}`);
       else toast.success('Settings saved');
       await queryClient.invalidateQueries({ queryKey });
