@@ -15,7 +15,10 @@ import {
 } from './state-machine';
 import type {
   OperationClock,
+  OperationAttemptOutcome,
+  OperationAttemptUpdate,
   OperationEventStream,
+  OperationExecution,
   OperationIdFactory,
   OperationLifecycleConfig,
   OperationQueue,
@@ -38,7 +41,7 @@ export interface OperationOrchestratorDeps {
   idFactory?: OperationIdFactory;
 }
 
-export class OperationOrchestrator {
+export class OperationOrchestrator implements OperationExecution {
   private readonly queue: OperationQueue;
   private readonly stateStore: OperationStateStore;
   private readonly eventStream: OperationEventStream;
@@ -174,87 +177,36 @@ export class OperationOrchestrator {
     return this.stateStore.getOpState(opId);
   }
 
-  async markRunning(input: {
-    opId: string;
-    startedAt?: number;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<WorkerOperationState> {
-    return this.persistActiveState(input.opId, (current) => {
-      const now = input.updatedAt ?? this.clock.now();
-      return {
+  async claimAttempt(input: OperationAttemptUpdate & { jobId: string }): ReturnType<OperationExecution['claimAttempt']> {
+    for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
+      const record = await this.stateStore.getOpStateRecord(input.opId);
+      if (!record || record.state.jobId !== input.jobId) return 'missing';
+      const current = record.state;
+      if (current.status === 'succeeded' || current.status === 'failed') return current.status;
+      if (input.deliveryAttempt <= (current.deliveryAttempt ?? 0)) return 'superseded';
+
+      const next: WorkerOperationState = {
         ...current,
         status: 'running',
-        startedAt: input.startedAt ?? current.startedAt ?? now,
-        updatedAt: now,
+        deliveryAttempt: input.deliveryAttempt,
+        startedAt: current.startedAt ?? input.updatedAt,
+        updatedAt: Math.max(current.updatedAt + 1, input.updatedAt),
         ...(input.timing ? { timing: input.timing } : {}),
       };
-    });
+      if (await this.persistStateIfUnchanged(next, record.revision)) return 'claimed';
+    }
+    throw new Error('Unable to claim operation attempt after repeated CAS conflicts');
   }
 
-  async markProgress(input: {
-    opId: string;
-    progress: WorkerOperationState['progress'];
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<WorkerOperationState> {
-    return this.persistActiveState(input.opId, (current) => {
-      const now = input.updatedAt ?? this.clock.now();
-      return {
-        ...current,
-        status: 'running',
-        startedAt: current.startedAt ?? now,
-        updatedAt: now,
-        progress: input.progress,
-        ...(input.timing ? { timing: input.timing } : {}),
-      };
-    });
+  async updateAttempt(input: Parameters<OperationExecution['updateAttempt']>[0]): Promise<boolean> {
+    return this.writeAttempt(input, input.progress ? { progress: input.progress } : {});
   }
 
-  async markSucceeded(input: {
-    opId: string;
-    result: unknown;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<WorkerOperationState> {
-    const current = await this.requireState(input.opId);
-    const now = input.updatedAt ?? this.clock.now();
-
-    const next: WorkerOperationState = {
-      ...current,
-      status: 'succeeded',
-      startedAt: current.startedAt ?? now,
-      updatedAt: now,
-      result: input.result,
-      ...(input.timing ? { timing: input.timing } : {}),
-    };
-
-    await this.persistState(next);
-    return next;
-  }
-
-  async markFailed(input: {
-    opId: string;
-    error: WorkerJobErrorShape | string;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<WorkerOperationState> {
-    const current = await this.requireState(input.opId);
-    const now = input.updatedAt ?? this.clock.now();
-
-    const shape = typeof input.error === 'string' ? { message: input.error } : input.error;
-
-    const next: WorkerOperationState = {
-      ...current,
-      status: 'failed',
-      startedAt: current.startedAt ?? now,
-      updatedAt: now,
-      error: shape,
-      ...(input.timing ? { timing: input.timing } : {}),
-    };
-
-    await this.persistState(next);
-    return next;
+  async settleAttempt(input: OperationAttemptUpdate & OperationAttemptOutcome): Promise<boolean> {
+    const outcome: OperationAttemptOutcome = input.status === 'succeeded'
+      ? { status: 'succeeded', result: input.result }
+      : { status: 'failed', error: input.error };
+    return this.writeAttempt(input, outcome);
   }
 
   async markFailedIfUnchanged(input: {
@@ -271,20 +223,12 @@ export class OperationOrchestrator {
       ...input.current,
       status: 'failed',
       startedAt: input.current.startedAt ?? now,
-      updatedAt: now,
+      updatedAt: Math.max(input.current.updatedAt + 1, now),
       error: shape,
       ...(input.timing ? { timing: input.timing } : {}),
     };
 
-    const updated = await this.stateStore.compareAndSetOpState({
-      opId: input.current.opId,
-      expectedRevision: input.expectedRevision,
-      newState: next,
-    });
-    if (!updated) return null;
-
-    await this.eventStream.append(next.opId, next);
-    return next;
+    return await this.persistStateIfUnchanged(next, input.expectedRevision) ? next : null;
   }
 
   async explainReuseDecision(input: {
@@ -299,38 +243,33 @@ export class OperationOrchestrator {
     });
   }
 
-  private async requireState(opId: string): Promise<WorkerOperationState> {
-    const current = await this.stateStore.getOpState(opId);
-    if (!current) {
-      throw new Error(`Operation not found: ${opId}`);
+  private async writeAttempt(
+    input: OperationAttemptUpdate,
+    patch: Pick<WorkerOperationState, 'progress'> | OperationAttemptOutcome,
+  ): Promise<boolean> {
+    for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
+      const record = await this.stateStore.getOpStateRecord(input.opId);
+      if (!record || isTerminalStatus(record.state.status)
+        || record.state.deliveryAttempt !== input.deliveryAttempt) return false;
+      const next = {
+        ...record.state,
+        ...patch,
+        updatedAt: Math.max(record.state.updatedAt + 1, input.updatedAt),
+        ...(input.timing ? { timing: input.timing } : {}),
+      };
+      if (await this.persistStateIfUnchanged(next, record.revision)) return true;
     }
-    return current;
+    throw new Error('Unable to update operation attempt after repeated CAS conflicts');
   }
 
-  /**
-   * Writes a running/progress update only while the operation is still
-   * active. A heartbeat or progress write that read the state before the job
-   * finished must not reopen it: a terminal state that reads as running again
-   * leaves every waiting reader stalled.
-   */
-  private async persistActiveState(
-    opId: string,
-    build: (current: WorkerOperationState) => WorkerOperationState,
-  ): Promise<WorkerOperationState> {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const record = await this.stateStore.getOpStateRecord(opId);
-      if (!record) throw new Error(`Operation not found: ${opId}`);
-      if (isTerminalStatus(record.state.status)) return record.state;
-      const next = build(record.state);
-      const updated = await this.stateStore.compareAndSetOpState({
-        opId,
-        expectedRevision: record.revision,
-        newState: next,
-      });
-      if (!updated) continue;
-      await this.eventStream.append(opId, next);
-      return next;
-    }
-    throw new Error('Unable to update operation after repeated CAS conflicts');
+  private async persistStateIfUnchanged(state: WorkerOperationState, expectedRevision: number): Promise<boolean> {
+    const updated = await this.stateStore.compareAndSetOpState({
+      opId: state.opId,
+      expectedRevision,
+      newState: state,
+    });
+    if (!updated) return false;
+    await this.eventStream.append(state.opId, state);
+    return true;
   }
 }

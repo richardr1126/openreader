@@ -49,30 +49,6 @@ export interface OperationStateStoreLike extends ReconciliationStateStore {}
 
 export interface OrchestratorLike {
   enqueueOrReuse(request: WorkerOperationRequest): Promise<WorkerOperationState>;
-  markRunning(input: {
-    opId: string;
-    startedAt?: number;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<unknown>;
-  markProgress(input: {
-    opId: string;
-    progress: WorkerOperationState['progress'];
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<unknown>;
-  markSucceeded(input: {
-    opId: string;
-    result: unknown;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<unknown>;
-  markFailed(input: {
-    opId: string;
-    error: { message: string; code?: string } | string;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<unknown>;
   markFailedIfUnchanged?(input: {
     current: StreamedOperationState;
     expectedRevision: number;

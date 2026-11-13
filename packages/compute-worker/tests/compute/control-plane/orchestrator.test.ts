@@ -48,7 +48,7 @@ describe('operation orchestrator', () => {
     const reused = await orchestrator.enqueueOrReuse(request);
     expect(reused.opId).toBe('op-1');
 
-    await orchestrator.markRunning({ opId: first.opId, updatedAt: 2_100 });
+    await orchestrator.claimAttempt({ opId: first.opId, jobId: first.jobId, deliveryAttempt: 1, updatedAt: 2_100 });
 
     now = 6_000;
     const replaced = await orchestrator.enqueueOrReuse(request);
@@ -107,7 +107,7 @@ describe('operation orchestrator', () => {
     });
 
     const created = await orchestrator.enqueueOrReuse(buildRequest('stale-op'));
-    await orchestrator.markRunning({ opId: created.opId, updatedAt: 2_000 });
+    await orchestrator.claimAttempt({ opId: created.opId, jobId: created.jobId, deliveryAttempt: 1, updatedAt: 2_000 });
 
     const record = await stateStore.getOpStateRecord(created.opId);
     expect(record).not.toBeNull();
@@ -153,7 +153,9 @@ describe('operation orchestrator', () => {
         const record = await store.getOpStateRecord(opId);
         if (finishDuringRead) {
           finishDuringRead = false;
-          await orchestrator.markSucceeded({ opId, result: { ok: true }, updatedAt: 3_000 });
+          await orchestrator.settleAttempt({
+            opId, deliveryAttempt: 1, status: 'succeeded', result: { ok: true }, updatedAt: 3_000,
+          });
         }
         return record;
       },
@@ -166,20 +168,43 @@ describe('operation orchestrator', () => {
     });
 
     const created = await orchestrator.enqueueOrReuse(buildRequest('racing-op'));
-    await orchestrator.markRunning({ opId: created.opId, updatedAt: 2_000 });
+    await orchestrator.claimAttempt({ opId: created.opId, jobId: created.jobId, deliveryAttempt: 1, updatedAt: 2_000 });
 
     finishDuringRead = true;
-    const heartbeat = await orchestrator.markRunning({ opId: created.opId, updatedAt: 3_100 });
-    const progress = await orchestrator.markProgress({
+    const heartbeat = await orchestrator.updateAttempt({ opId: created.opId, deliveryAttempt: 1, updatedAt: 3_100 });
+    const progress = await orchestrator.updateAttempt({
       opId: created.opId,
+      deliveryAttempt: 1,
       progress: { totalPages: 2, pagesParsed: 2, currentPage: 2, phase: 'merge' },
       updatedAt: 3_200,
     });
 
-    expect(heartbeat.status).toBe('succeeded');
-    expect(progress.status).toBe('succeeded');
+    expect(heartbeat).toBe(false);
+    expect(progress).toBe(false);
     expect((await store.getOpState(created.opId))?.status).toBe('succeeded');
     const events = await eventStream.listSince(created.opId, 0);
     expect(events.at(-1)?.snapshot.status).toBe('succeeded');
+  });
+
+  test('only the latest delivery can write to an operation', async () => {
+    const store = new InMemoryOperationStateStore();
+    const eventStream = new InMemoryOperationEventStream();
+    const deps = { queue: new InMemoryOperationQueue(), stateStore: store, eventStream, config: { opStaleMs: 2_000 } };
+    const firstWorker = new OperationOrchestrator(deps);
+    const nextWorker = new OperationOrchestrator(deps);
+    const { opId, jobId } = await firstWorker.enqueueOrReuse(buildRequest('redelivered'));
+    const initial = { opId, jobId, deliveryAttempt: 1, updatedAt: 2_000 };
+    const redelivery = { ...initial, deliveryAttempt: 2, updatedAt: 3_000 };
+
+    await expect(firstWorker.claimAttempt(initial)).resolves.toBe('claimed');
+    expect(await Promise.all([
+      firstWorker.claimAttempt(redelivery),
+      nextWorker.claimAttempt(redelivery),
+    ])).toEqual(expect.arrayContaining(['claimed', 'superseded']));
+    await expect(firstWorker.updateAttempt(initial)).resolves.toBe(false);
+    await expect(firstWorker.settleAttempt({ ...initial, status: 'failed', error: { message: 'late' } })).resolves.toBe(false);
+    await expect(nextWorker.settleAttempt({ ...redelivery, status: 'succeeded', result: { ok: true } })).resolves.toBe(true);
+    await expect(nextWorker.claimAttempt({ ...redelivery, deliveryAttempt: 3 })).resolves.toBe('succeeded');
+    expect(await store.getOpState(opId)).toMatchObject({ status: 'succeeded', deliveryAttempt: 2, result: { ok: true } });
   });
 });

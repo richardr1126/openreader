@@ -4,10 +4,10 @@ import { cloneComputeLimitPolicyDocument } from '@openreader/runtime-config/comp
 import type { MaintenanceJobRequest, PdfLayoutJobRequest, PdfLayoutProgress } from '../../src/operations/contracts';
 import { createJsonCodec } from '../../src/infrastructure/json-codec';
 import type { JobHandlers } from '../../src/jobs/handlers';
+import type { OperationExecution } from '../../src/operations/types';
 import {
   createWorkerLoopController,
   type QueuedJob,
-  type WorkerLoopOrchestrator,
 } from '../../src/jobs/worker-loop';
 
 function createMessage<T>(job: QueuedJob<T>, deliveryCount = 1) {
@@ -49,20 +49,58 @@ function createConsumer(message?: JsMsg): Consumer {
 
 function createOrchestrator() {
   const calls: Array<{ method: string; input: unknown }> = [];
-  const record = (method: string) => async (input: unknown) => {
-    calls.push({ method, input });
-    return input;
-  };
-  const orchestrator: WorkerLoopOrchestrator = {
-    markRunning: record('running'),
-    markProgress: record('progress'),
-    markSucceeded: record('succeeded'),
-    markFailed: record('failed'),
+  const orchestrator: OperationExecution = {
+    claimAttempt: async (input) => {
+      calls.push({ method: 'running', input });
+      return 'claimed';
+    },
+    updateAttempt: async (input) => {
+      calls.push({ method: input.progress ? 'progress' : 'running', input });
+      return true;
+    },
+    settleAttempt: async (input) => {
+      calls.push({ method: input.status, input });
+      return true;
+    },
   };
   return { orchestrator, calls };
 }
 
 describe('worker loop controller', () => {
+  test('acknowledges a redelivered completed operation without rerunning it', async () => {
+    const pdf = createMessage<PdfLayoutJobRequest>({
+      jobId: 'job-pdf', opId: 'op-pdf', opKey: 'pdf-key', kind: 'pdf_layout',
+      queuedAt: Date.now(),
+      payload: { documentId: 'a'.repeat(64), namespace: null, documentObjectKey: 'openreader/doc.pdf' },
+    }, 2);
+    const runPdfLayout = vi.fn();
+    const { orchestrator } = createOrchestrator();
+    orchestrator.claimAttempt = vi.fn(async () => 'succeeded' as const);
+    const onOperationTerminal = vi.fn(async () => {});
+    const controller = createWorkerLoopController({
+      orchestrator,
+      handlers: { runPdfLayout } as unknown as JobHandlers,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      getComputePolicy: () => cloneComputeLimitPolicyDocument(),
+      pdfAttempts: 2,
+      pdfCodec: pdf.codec,
+      isOwnerActive: () => true,
+      isStopping: () => false,
+      markActivity: vi.fn(),
+      onInFlightJobsChanged: vi.fn(),
+      onOperationTerminal,
+    });
+    controller.start({}, { pdfLayout: createConsumer(pdf.msg) });
+    try {
+      await vi.waitFor(() => expect(pdf.ack).toHaveBeenCalledOnce());
+      expect(orchestrator.claimAttempt).toHaveBeenCalledWith(expect.objectContaining({ deliveryAttempt: 2 }));
+      expect(runPdfLayout).not.toHaveBeenCalled();
+      expect(onOperationTerminal).toHaveBeenCalledWith({ operationId: 'op-pdf', state: 'succeeded' });
+    } finally {
+      await controller.stop();
+    }
+  });
+
   test('executes maintenance after more than an hour waiting behind another sweep', async () => {
     let active = true;
     let complete!: () => void;
@@ -452,16 +490,15 @@ describe('worker loop controller', () => {
     const writes: string[] = [];
     let complete!: () => void;
     const completed = new Promise<void>((resolve) => { complete = resolve; });
-    const orchestrator: WorkerLoopOrchestrator = {
-      markRunning: async (input) => { writes.push('running'); return input as never; },
+    const orchestrator: OperationExecution = {
+      claimAttempt: async () => { writes.push('running'); return 'claimed'; },
       // A slow KV write that is still in flight when the job returns.
-      markProgress: async (input) => {
+      updateAttempt: async () => {
         await new Promise((resolve) => setTimeout(resolve, 20));
         writes.push('progress');
-        return input as never;
+        return true;
       },
-      markSucceeded: async (input) => { writes.push('succeeded'); complete(); return input as never; },
-      markFailed: async (input) => { writes.push('failed'); complete(); return input as never; },
+      settleAttempt: async (input) => { writes.push(input.status); complete(); return true; },
     };
     const pdf = createMessage({
       jobId: 'job-pdf',

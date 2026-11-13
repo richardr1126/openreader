@@ -2,6 +2,9 @@ import type {
   WorkerOperationEvent,
   WorkerOperationKind,
   WorkerOperationState,
+  WorkerJobErrorShape,
+  WorkerJobTiming,
+  WorkerOperationProgress,
 } from '../operations/contracts';
 
 export type OperationState<Result = unknown> = WorkerOperationState<Result>;
@@ -14,6 +17,25 @@ export interface QueuedOperation<TPayload = unknown> {
   kind: WorkerOperationKind;
   queuedAt: number;
   payload: TPayload;
+}
+
+export interface OperationAttemptUpdate {
+  opId: string;
+  deliveryAttempt: number;
+  updatedAt: number;
+  timing?: WorkerJobTiming;
+}
+
+export type OperationAttemptOutcome =
+  | { status: 'succeeded'; result: unknown }
+  | { status: 'failed'; error: WorkerJobErrorShape };
+
+export interface OperationExecution {
+  claimAttempt(input: OperationAttemptUpdate & { jobId: string }): Promise<
+    'claimed' | 'superseded' | 'missing' | 'succeeded' | 'failed'
+  >;
+  updateAttempt(input: OperationAttemptUpdate & { progress?: WorkerOperationProgress }): Promise<boolean>;
+  settleAttempt(input: OperationAttemptUpdate & OperationAttemptOutcome): Promise<boolean>;
 }
 
 export interface OperationQueue<TPayload = unknown> {

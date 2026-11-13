@@ -41,30 +41,6 @@ export class FakeControlPlane {
   readonly deps = {
     orchestrator: {
       enqueueOrReuse: async (request) => this.enqueueOrReuse(request),
-      markRunning: async (input) => this.updateState(input.opId, {
-        status: 'running',
-        startedAt: input.startedAt,
-        updatedAt: input.updatedAt,
-        timing: input.timing,
-      }),
-      markProgress: async (input) => this.updateState(input.opId, {
-        status: 'running',
-        progress: input.progress,
-        updatedAt: input.updatedAt,
-        timing: input.timing,
-      }),
-      markSucceeded: async (input) => this.updateState(input.opId, {
-        status: 'succeeded',
-        result: input.result as ComputeResult,
-        updatedAt: input.updatedAt,
-        timing: input.timing,
-      }),
-      markFailed: async (input) => this.updateState(input.opId, {
-        status: 'failed',
-        error: typeof input.error === 'string' ? { message: input.error } : input.error,
-        updatedAt: input.updatedAt,
-        timing: input.timing,
-      }),
       markFailedIfUnchanged: async (input) => this.compareAndSetFailed(input),
     },
     operationStateStore: {

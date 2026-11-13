@@ -26,6 +26,7 @@ import type {
 } from '../operations/contracts';
 import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
+import type { OperationAttemptUpdate, OperationExecution } from '../operations/types';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 import { toErrorMessage } from '../infrastructure/errors';
@@ -79,23 +80,6 @@ export interface QueuedJob<TPayload> {
   payload: TPayload;
 }
 
-export interface WorkerLoopOrchestrator {
-  markRunning(input: { opId: string; startedAt?: number; updatedAt?: number; timing?: WorkerJobTiming }): Promise<unknown>;
-  markProgress(input: {
-    opId: string;
-    progress: WorkerOperationProgress;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<unknown>;
-  markSucceeded(input: { opId: string; result: unknown; updatedAt?: number; timing?: WorkerJobTiming }): Promise<unknown>;
-  markFailed(input: {
-    opId: string;
-    error: { message: string; code?: string } | string;
-    updatedAt?: number;
-    timing?: WorkerJobTiming;
-  }): Promise<unknown>;
-}
-
 export interface WorkerLogger {
   info(data: unknown, message?: string): void;
   warn(data: unknown, message?: string): void;
@@ -133,7 +117,7 @@ function extractResultRef(kind: WorkerOperationKind, result: unknown): string | 
 }
 
 export function createWorkerLoopController(input: {
-  orchestrator: WorkerLoopOrchestrator;
+  orchestrator: OperationExecution;
   handlers: JobHandlers;
   logger: WorkerLogger;
   getComputePolicy: () => ComputeLimitPolicyDocument;
@@ -165,9 +149,8 @@ export function createWorkerLoopController(input: {
   type Context<TPayload> = {
     decoded: QueuedJob<TPayload>;
     workerLabel: string;
-    startedAt: number;
+    deliveryAttempt: number;
     queueWaitTiming?: { queueWaitMs: number };
-    latestProgress?: WorkerOperationProgress;
   };
 
   type JobRunner<TPayload, TResult> = (
@@ -182,22 +165,18 @@ export function createWorkerLoopController(input: {
     action?: WorkerOperationAction;
   };
 
-  const markRunning = async <TPayload>(context: Context<TPayload>, updatedAt: number): Promise<void> => {
-    if (context.latestProgress) {
-      await input.orchestrator.markProgress({
-        opId: context.decoded.opId,
-        progress: context.latestProgress,
-        updatedAt,
-        ...(context.queueWaitTiming ? { timing: context.queueWaitTiming } : {}),
-      });
-      return;
-    }
-    await input.orchestrator.markRunning({
-      opId: context.decoded.opId,
-      startedAt: context.startedAt,
-      updatedAt,
-      ...(context.queueWaitTiming ? { timing: context.queueWaitTiming } : {}),
-    });
+  const attemptUpdate = <TPayload>(context: Context<TPayload>, updatedAt = Date.now()): OperationAttemptUpdate => ({
+    opId: context.decoded.opId,
+    deliveryAttempt: context.deliveryAttempt,
+    updatedAt,
+    timing: context.queueWaitTiming,
+  });
+
+  const notifyTerminal = async (opId: string, state: 'succeeded' | 'failed'): Promise<void> => {
+    await input.onOperationTerminal?.({ operationId: opId, state }).catch((error) => input.logger.warn({
+      opId,
+      error: toErrorMessage(error),
+    }, 'compute admission completion callback failed'));
   };
 
   const processMessage = async <TPayload, TResult>(work: WorkDefinition<TPayload, TResult> & {
@@ -206,7 +185,9 @@ export function createWorkerLoopController(input: {
     notStarted?: ComputeQueueExpiredError | ComputeWorkNotStartedError;
   }): Promise<void> => {
     let context: Context<TPayload> | null = null;
+    let decodedMessage = false;
     let heartbeat: NodeJS.Timeout | null = null;
+    let heartbeatPending = false;
     // State writes for one job apply in order, so a heartbeat or progress
     // update still in flight cannot land after (and hide) the terminal state.
     let stateWrites: Promise<unknown> = Promise.resolve();
@@ -221,23 +202,38 @@ export function createWorkerLoopController(input: {
     };
     try {
       const decoded = work.codec.decode(work.msg.data);
+      decodedMessage = true;
       const startedAt = Date.now();
       const maxQueueAgeMs = work.action
         ? input.getComputePolicy().actions[work.action].execution!.maxQueueAgeSeconds * 1000
         : Math.max(1, decoded.payload && typeof decoded.payload === 'object' && 'expiresAt' in decoded.payload
           ? Number((decoded.payload as { expiresAt: number }).expiresAt) - decoded.queuedAt
           : 60 * 60 * 1000);
-      context = {
+      const delivery = {
         decoded,
         workerLabel: work.workerLabel,
-        startedAt,
+        deliveryAttempt: work.msg.info.deliveryCount,
         queueWaitTiming: buildQueueWaitTiming(decoded.queuedAt, startedAt),
       };
+      const claim = await input.orchestrator.claimAttempt({
+        ...attemptUpdate(delivery, startedAt),
+        jobId: decoded.jobId,
+      });
+      if (claim === 'superseded') return;
+      if (claim === 'missing') {
+        work.msg.term('Operation is no longer available');
+        return;
+      }
+      if (claim !== 'claimed') {
+        await notifyTerminal(decoded.opId, claim);
+        work.msg.ack();
+        return;
+      }
+      context = delivery;
       if (work.notStarted) throw work.notStarted;
       if (WORKER_OPERATION_KIND_POLICY[decoded.kind].enforcesQueueDeadline && startedAt - decoded.queuedAt > maxQueueAgeMs) {
         throw new ComputeQueueExpiredError();
       }
-      await writeState(() => markRunning(context!, startedAt));
       input.logger.info({
         worker: work.workerLabel,
         kind: decoded.kind,
@@ -246,54 +242,57 @@ export function createWorkerLoopController(input: {
         queueWaitMs: context.queueWaitTiming?.queueWaitMs ?? null,
         deliveryCount: work.msg.info.deliveryCount,
       }, 'job.started');
-      heartbeat = setInterval(() => {
-        // Long jobs (multi-window alignment) can outlast ack_wait without ever
-        // reporting progress, so the execution heartbeat also extends the ack.
+      const report = async (progress?: WorkerOperationProgress): Promise<boolean> => {
+        const active = await writeState(() => input.orchestrator.updateAttempt({
+          ...attemptUpdate(delivery),
+          progress,
+        }));
+        if (!active) {
+          stopHeartbeat();
+          return false;
+        }
         try {
           work.msg.working();
-        } catch {
-          // A detached or redelivered message is handled by the normal loop path.
+        } catch (error) {
+          input.logger.warn({
+            worker: work.workerLabel,
+            opId: decoded.opId,
+            jobId: decoded.jobId,
+            error: toErrorMessage(error),
+          }, 'failed to extend JetStream ack wait');
         }
-        void writeState(() => markRunning(context!, Date.now())).catch((error) => {
+        return true;
+      };
+      heartbeat = setInterval(() => {
+        if (heartbeatPending) return;
+        heartbeatPending = true;
+        void report().catch((error) => {
           input.logger.error({
             worker: work.workerLabel,
-            opId: context?.decoded.opId,
-            jobId: context?.decoded.jobId,
+            opId: decoded.opId,
+            jobId: decoded.jobId,
             error: toErrorMessage(error),
-          }, 'failed to persist operation heartbeat state');
+          }, 'failed to renew operation heartbeat');
+        }).finally(() => {
+          heartbeatPending = false;
         });
       }, RUNNING_HEARTBEAT_MS);
-      const result = await work.run(decoded.payload, context.queueWaitTiming?.queueWaitMs ?? 0, {
+      const result = await work.run(decoded.payload, delivery.queueWaitTiming?.queueWaitMs ?? 0, {
         onProgress: async (progress) => {
-          try {
-            work.msg.working();
-          } catch (error) {
-            input.logger.warn({
-              worker: work.workerLabel,
-              kind: context?.decoded.kind,
-              opId: context?.decoded.opId,
-              jobId: context?.decoded.jobId,
-              error: toErrorMessage(error),
-            }, 'failed to extend JetStream ack wait on progress');
-          }
-          context!.latestProgress = progress;
-          await writeState(() => markRunning(context!, Date.now()));
+          if (!await report(progress)) throw new Error('Operation attempt no longer owns execution');
         },
       });
       const timing = extractTiming(result);
       const now = Date.now();
       stopHeartbeat();
-      await writeState(() => input.orchestrator.markSucceeded({
-        opId: decoded.opId,
+      const settled = await writeState(() => input.orchestrator.settleAttempt({
+        ...attemptUpdate(delivery, now),
+        status: 'succeeded',
         result,
-        updatedAt: now,
-        ...(timing ? { timing } : {}),
+        timing: timing ?? delivery.queueWaitTiming,
       }));
-      await input.onOperationTerminal?.({ operationId: decoded.opId, state: 'succeeded' })
-        .catch((error) => input.logger.warn({
-          opId: decoded.opId,
-          error: toErrorMessage(error),
-        }, 'compute admission completion callback failed'));
+      if (!settled) return;
+      await notifyTerminal(decoded.opId, 'succeeded');
       work.msg.ack();
       const durationMs = safeDurationMs(startedAt, now);
       if (durationMs >= WORKER_OPERATION_KIND_POLICY[decoded.kind].slowJobLogThresholdMs) {
@@ -312,6 +311,10 @@ export function createWorkerLoopController(input: {
     } catch (error) {
       const errorMessage = toErrorMessage(error);
       const errorLog = toErrorLog(error);
+      if (!context && decodedMessage) {
+        input.logger.error({ worker: work.workerLabel, error: errorMessage }, 'failed to claim operation attempt');
+        return;
+      }
       const deliveryCount = work.msg.info.deliveryCount;
       const kind = context?.decoded.kind ?? 'pdf_layout';
       const notStarted = error instanceof ComputeQueueExpiredError || error instanceof ComputeWorkNotStartedError;
@@ -326,36 +329,31 @@ export function createWorkerLoopController(input: {
             ? error.retryable
             : undefined,
         });
-      const timing = context ? buildQueueWaitTiming(context.decoded.queuedAt, Date.now()) : undefined;
       stopHeartbeat();
       if (context) {
         const failedContext = context;
         const update = writeState(() => (action === 'nak_retry'
-          ? markRunning(failedContext, Date.now())
-          : input.orchestrator.markFailed({
-            opId: failedContext.decoded.opId,
+          ? input.orchestrator.updateAttempt(attemptUpdate(failedContext))
+          : input.orchestrator.settleAttempt({
+            ...attemptUpdate(failedContext),
+            status: 'failed',
             error: {
               message: errorMessage,
               ...(notStarted || error instanceof TtsProviderFailedError ? { code: error.code } : {}),
             },
-            updatedAt: Date.now(),
-            ...(timing ? { timing } : {}),
           })));
-        await update.catch((stateError) => input.logger.error({
-          worker: context?.workerLabel,
-          opId: context?.decoded.opId,
-          jobId: context?.decoded.jobId,
-          error: toErrorMessage(stateError),
-        }, 'failed to persist operation state'));
-        if (action !== 'nak_retry') {
-          await input.onOperationTerminal?.({
-            operationId: context.decoded.opId,
-            state: 'failed',
-          }).catch((callbackError) => input.logger.warn({
-            opId: context?.decoded.opId,
-            error: toErrorMessage(callbackError),
-          }, 'compute admission completion callback failed'));
+        try {
+          if (!await update) return;
+        } catch (stateError) {
+          input.logger.error({
+            worker: context.workerLabel,
+            opId: context.decoded.opId,
+            jobId: context.decoded.jobId,
+            error: toErrorMessage(stateError),
+          }, 'failed to persist operation state');
+          return;
         }
+        if (action !== 'nak_retry') await notifyTerminal(context.decoded.opId, 'failed');
       }
       if (action === 'nak_retry') {
         const retryDelayMs = error instanceof EmailDeliveryError

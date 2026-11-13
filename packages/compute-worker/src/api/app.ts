@@ -427,7 +427,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   });
 
   const workerLoops = createWorkerLoopController({
-    orchestrator,
+    orchestrator: defaultOrchestrator,
     handlers: { ...jobHandlers, runMaintenance: createMaintenanceHandler({ storage, s3Prefix, cleanup, logger: app.log }) },
     logger: app.log,
     getComputePolicy: () => computePolicy,
