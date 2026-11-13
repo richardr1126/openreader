@@ -8,7 +8,7 @@ import type {
 import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { Audiobook } from '@/types/tts-export';
-import type { VoiceListResource } from '@/types/voice-api';
+import type { CachedVoiceResource, VoiceListResource } from '@/types/voice-api';
 import { parseApiError } from './http';
 
 export const getVoices = async (selection: { provider: string; model: string }, signal?: AbortSignal): Promise<VoicesResponse> => {
@@ -20,7 +20,20 @@ export const getVoices = async (selection: { provider: string; model: string }, 
   if (!response.ok) throw await parseApiError(response, 'Failed to fetch voices');
   const resource = await response.json() as VoiceListResource;
   // Personal voices have their own library in the picker.
-  return { voices: resource.data.map(voice => voice.id).filter(id => !id.startsWith('clone:')) };
+  return { voices: resource.data.map(voice => voice.id).filter(id => !id.startsWith('clone:')), status: resource.status };
+};
+
+/** Voices this document already has audio for. Without a compute worker there is none. */
+export const getCachedVoices = async (documentId: string, signal?: AbortSignal): Promise<CachedVoiceResource[]> => {
+  const response = await fetch(`/api/v1/documents/${encodeURIComponent(documentId)}/cached-voices`, { signal });
+  if (!response.ok) {
+    const error = await parseApiError(response, 'Failed to list cached voices');
+    // Only an installation without a worker has none; a worker that is restarting is retried.
+    const code = (error.body as { error?: { code?: unknown } } | null)?.error?.code;
+    if (response.status === 503 && code === 'COMPUTE_WORKER_REQUIRED') return [];
+    throw error;
+  }
+  return (await response.json() as { data: CachedVoiceResource[] }).data;
 };
 
 export const createTtsPlaybackSession = async (

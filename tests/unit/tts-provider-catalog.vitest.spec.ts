@@ -177,7 +177,25 @@ describe('tts provider catalog', () => {
         model: 'kokoro',
         apiKey: 'token',
         baseUrl: 'https://example.com',
-      })).resolves.toEqual([]);
+      })).resolves.toEqual({ voices: [], status: 'listed' });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  test('a busy or silent provider leaves its standard voices unconfirmed', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = async () => ({ ok: false, status: 503, json: async () => ({}) }) as Response;
+      await expect(resolveVoices({ provider: 'custom-openai', model: 'kokoro', apiKey: 'token', baseUrl: 'https://busy.example.com' }))
+        .resolves.toMatchObject({ status: 'unreachable' });
+      await expect(resolveVoices({ provider: 'replicate', model: 'acme/my-tts-model-busy', apiKey: 'r8_token' }))
+        .resolves.toEqual({ voices: ['default'], status: 'unreachable' });
+      globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
+      await expect(resolveVoices({ provider: 'replicate', model: 'acme/my-tts-model-down', apiKey: 'r8_token' }))
+        .resolves.toMatchObject({ status: 'unreachable' });
+      await expect(resolveVoices({ provider: 'openrouter', model: 'openai/gpt-4o-mini-tts' }))
+        .resolves.toMatchObject({ status: 'unreachable' });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -219,7 +237,7 @@ describe('tts provider catalog', () => {
         provider: 'replicate',
         model: 'acme/my-tts-model-voices',
         apiKey: 'r8_token',
-      })).resolves.toEqual(['Narrator A', 'Narrator B']);
+      })).resolves.toMatchObject({ voices: ['Narrator A', 'Narrator B'] });
       expect(calls).toBe(1);
       expect(url).toContain('/v1/models/acme/my-tts-model-voices');
     } finally {
@@ -240,7 +258,7 @@ describe('tts provider catalog', () => {
         provider: 'replicate',
         model: 'acme/my-tts-model-fallback',
         apiKey: 'r8_token',
-      })).resolves.toEqual(['default']);
+      })).resolves.toMatchObject({ voices: ['default'] });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -280,7 +298,7 @@ describe('tts provider catalog', () => {
         provider: 'replicate',
         model: 'qwen/qwen3-tts',
         apiKey: 'r8_token',
-      })).resolves.toEqual(['Schema Aiden', 'Schema Dylan']);
+      })).resolves.toMatchObject({ voices: ['Schema Aiden', 'Schema Dylan'] });
       expect(calls).toBe(1);
     } finally {
       globalThis.fetch = originalFetch;
@@ -318,7 +336,7 @@ describe('tts provider catalog', () => {
         provider: 'replicate',
         model: 'inworld/tts-1.5-mini',
         apiKey: 'r8_token',
-      })).resolves.toEqual(['Ashley', 'Dennis', 'Alex', 'Darlene']);
+      })).resolves.toMatchObject({ voices: ['Ashley', 'Dennis', 'Alex', 'Darlene'] });
       expect(calls).toBe(1);
     } finally {
       globalThis.fetch = originalFetch;
@@ -404,7 +422,7 @@ describe('tts provider catalog', () => {
         provider: 'replicate',
         model: 'acme/shared-schema-model',
         apiKey: 'r8_token',
-      })).resolves.toEqual(['V1', 'V2']);
+      })).resolves.toMatchObject({ voices: ['V1', 'V2'] });
 
       await expect(resolveReplicateVoiceInputKey({
         provider: 'replicate',

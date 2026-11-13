@@ -57,11 +57,13 @@ export type TtsExportProgress = {
   chapters: TtsExportChapterProgress[];
 };
 
+/** `cancelled` is a request someone stopped; asking for it again resumes it. */
 export type AudiobookStatus =
   | TtsExportGenerationState
   | 'building'
   | 'waiting'
-  | 'ready';
+  | 'ready'
+  | 'cancelled';
 
 export type Audiobook = {
   /** Stable for one document version, settings, format, speed and chapter. */

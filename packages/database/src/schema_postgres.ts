@@ -165,6 +165,8 @@ export const audiobookRequests = pgTable('audiobook_requests', {
   settingsJson: jsonb('settings_json').notNull(),
   planObjectKey: text('plan_object_key'),
   createdAt: bigint('created_at', { mode: 'number' }).notNull().default(PG_NOW_MS),
+  // A stopped request stays readable as cancelled until retention removes it.
+  cancelledAt: bigint('cancelled_at', { mode: 'number' }),
 }, (table) => [
   foreignKey({
     name: 'audiobook_requests_document_fk',

@@ -51,7 +51,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.resolvePlan.mockResolvedValue(null);
   mocks.providers.mockResolvedValue([{ slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true }]);
-  mocks.voices.mockResolvedValue(['Bella', 'Jasper']);
+  mocks.voices.mockResolvedValue({ voices: ['Bella', 'Jasper'], status: 'listed' });
   mocks.credentials.mockResolvedValue({ provider: 'custom-openai', apiKey: 'credential-sentinel', baseUrl: 'http://provider.invalid/v1' });
   mocks.enqueue.mockResolvedValue({
     opId: 'plan', status: 'succeeded', result: { planObjectKey: 'plans/fixture.json', planSignature: 'signature', startOrdinal: 0, plannedCount: 2 },
@@ -78,7 +78,7 @@ describe('bootstrap playback preparation', () => {
     expect(parsed).toMatchObject({ settings: { voice: 'jf_alpha', language: 'ja' }, language: 'ja' });
   });
 
-  test('a named provider starts from its own defaults, not the saved provider\'s speech', async () => {
+  test('a named provider starts from its own voice and instructions, keeping the saved model speed', async () => {
     mocks.providers.mockResolvedValue([
       { slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true },
       { slug: 'fish', providerType: 'fish-audio', defaultModel: 's2.1-pro-free', enabled: true },
@@ -90,7 +90,7 @@ describe('bootstrap playback preparation', () => {
 
     const fish = await select({ provider: 'fish' });
     expect(fish).toMatchObject({ settings: { providerRef: 'fish', providerType: 'fish-audio', ttsModel: 's2.1-pro-free',
-      voice: '933563129e564b19a115bedd57b7406a', nativeSpeed: 1 } });
+      voice: '933563129e564b19a115bedd57b7406a', nativeSpeed: 1.5 } });
     expect(fish).not.toHaveProperty('settings.ttsInstructions');
     expect(await select({ provider: 'fish', voice: 'bf322df2096a46f18c579d0baa36f41d' }))
       .toMatchObject({ settings: { voice: 'bf322df2096a46f18c579d0baa36f41d' } });
@@ -99,6 +99,19 @@ describe('bootstrap playback preparation', () => {
     expect(await select({ provider: 'off' })).toMatchObject({ invalid: true });
     expect(await select({ provider: 'missing' })).toMatchObject({ invalid: true });
     expect(await select({ provider: 'fish', voice: 'Sarah' })).toMatchObject({ invalid: true });
+  });
+
+  test('a request that names its audio checks the voice with the provider and takes a model speed', async () => {
+    mocks.providers.mockResolvedValue([{ slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true }]);
+    const saved = { ...preferences, voiceSpeed: 1.2 };
+    const ask = (selection: { voice?: string; modelSpeed?: number }) =>
+      resolveDefaultPlaybackRequest(documentId, scope, DEFAULT_DOCUMENT_SETTINGS, saved, 'en', { checkVoice: true, ...selection });
+
+    expect(await ask({ voice: 'Bella', modelSpeed: 0.9 })).toMatchObject({ settings: { voice: 'Bella', nativeSpeed: 0.9 } });
+    expect(await ask({ voice: 'Bella(2)+Jasper' })).toMatchObject({ settings: { voice: 'Bella(2)+Jasper', nativeSpeed: 1.2 } });
+    expect(await ask({ voice: 'Nobody' })).toMatchObject({ invalid: true });
+    mocks.voices.mockResolvedValueOnce({ voices: ['Bella'], status: 'unreachable' });
+    expect(await ask({ voice: 'Bella' })).toEqual({ error: expect.stringContaining('can\'t be reached') });
   });
 
   test('uses global PDF skip and segment defaults, then applies independent book overrides', async () => {

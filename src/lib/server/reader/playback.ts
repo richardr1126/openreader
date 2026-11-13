@@ -22,13 +22,18 @@ import { listClonedVoices } from '@/lib/server/tts/cloned-voices';
 import { resolveSpeechPreferences } from '@/lib/server/tts/speech-preferences';
 import type { ReaderBootstrapResolution } from './bootstrap';
 
-/** A caller's choice of an enabled provider, its model and a voice from it. */
-export type SpeechSelection = { provider?: string; model?: string; voice?: string };
+/**
+ * A caller's choice of an enabled provider, its model, a voice from it and the
+ * model's speed. With `checkVoice`, a named voice is checked against the
+ * provider's own list, and an unreachable provider is refused rather than guessed at.
+ */
+export type SpeechSelection = { provider?: string; model?: string; voice?: string; modelSpeed?: number; checkVoice?: boolean };
 
 /**
  * Resolves the playback request for a user's saved voice and document settings.
- * A selection replaces them, and saved values apply only to the saved provider
- * and model, because voices, speeds and options do not carry across them.
+ * A selection replaces them. Saved voices and options apply only to the saved
+ * provider and model, because they do not carry across them; the saved model
+ * speed does, wherever the model has one.
  */
 export async function resolveDefaultPlaybackRequest(
   documentId: string,
@@ -66,7 +71,7 @@ export async function resolveDefaultPlaybackRequest(
     providerRef: provider.providerRef,
     ttsModel: model,
     defaultVoice: usesSavedSpeech ? preferences.voice : '',
-    defaultVoiceSpeed: usesSavedSpeech ? preferences.voiceSpeed : 1,
+    defaultVoiceSpeed: preferences.voiceSpeed,
   });
   // Resolve the same unsaved default as the voice picker before naming the
   // audio cache. Plans may be shared by different voices; the plan's settings
@@ -79,11 +84,18 @@ export async function resolveDefaultPlaybackRequest(
   } else if (selection.voice && policy.voiceSource === 'static' && !selection.voice.includes('+') && !policy.defaultVoices.includes(selection.voice)) {
     return { error: 'That voice is not available for this provider and model. Use an ID from the list of voices.', invalid: true };
   }
+  // The cache is named by the speed asked for, so a speed the provider can't
+  // reach must not name audio made at a slower one.
+  if (policy.supportsNativeModelSpeed && selection.modelSpeed !== undefined && selection.modelSpeed > policy.maxNativeModelSpeed) {
+    return { error: `This model's speed goes up to ${policy.maxNativeModelSpeed}.`, invalid: true };
+  }
   let voice = selection.voice || bookVoice.voice;
   // A static catalogue needs no credentials. An unconfigured installation
   // must still support reading with an estimated timeline; only generation
   // requires a configured provider.
-  if (!voice && policy.voiceSource !== 'static' && normalization.sharedProviders.length > 0) {
+  const checkNamedVoice = Boolean(selection.checkVoice && selection.voice
+    && !selection.voice.startsWith('clone:') && policy.voiceSource !== 'static');
+  if ((!voice || checkNamedVoice) && policy.voiceSource !== 'static' && normalization.sharedProviders.length > 0) {
     const credentials = await resolveTtsCredentials({
       providerHeader: provider.providerRef,
       fallbackProvider: runtimeConfig.defaultTtsProvider,
@@ -91,13 +103,23 @@ export async function resolveDefaultPlaybackRequest(
     if ('error' in credentials) {
       return { error: 'The playback provider is unavailable.' };
     }
-    const voices = await resolveVoices({
+    const listed = await resolveVoices({
       provider: credentials.provider,
       model,
       apiKey: credentials.apiKey,
       baseUrl: credentials.baseUrl,
     });
-    voice = voices[0] ?? policy.defaultVoices[0] ?? '';
+    // Standard voices stand in for a provider that did not answer; a request
+    // that names its audio must not be built on that guess.
+    if (selection.checkVoice && listed.status === 'unreachable') {
+      return { error: 'The speech provider can\'t be reached, so its voices can\'t be checked. Try again once it is back.' };
+    }
+    // A blend such as `af_bella(2)+af_sky` names listed voices with weights.
+    if (checkNamedVoice && listed.status === 'listed'
+      && voice.split('+').some((part) => !listed.voices.includes(part.trim().replace(/\([\d.]+\)$/, '')))) {
+      return { error: 'That voice is not available for this provider and model. Use an ID from the list of voices.', invalid: true };
+    }
+    voice ||= listed.voices[0] ?? policy.defaultVoices[0] ?? '';
   }
   voice ||= policy.defaultVoices[0] ?? '';
   const language = resolveTtsLanguage({
@@ -112,7 +134,8 @@ export async function resolveDefaultPlaybackRequest(
       providerType: provider.providerType,
       ttsModel: model,
       voice,
-      nativeSpeed: policy.supportsNativeModelSpeed ? bookVoice.voiceSpeed : 1,
+      nativeSpeed: policy.supportsNativeModelSpeed
+        ? selection.modelSpeed ?? Math.min(bookVoice.voiceSpeed, policy.maxNativeModelSpeed) : 1,
       ...(provider.providerType === 'openrouter'
         ? { ttsModelOptions: resolveEffectiveOpenRouterOptions(model, usesSavedSpeech ? preferences.ttsModelOptions : undefined, provider.defaultModelOptions) }
         : {}),

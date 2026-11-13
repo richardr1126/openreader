@@ -1,5 +1,5 @@
 /** Links people follow from outside the app, so signing in must lead back to them. */
-const RETURNABLE_PATH = /^\/(?:(?:pdf|epub|html)\/[^/]+|audiobooks\/[^/]+\/[^/]+)$/;
+const RETURNABLE_PATH = /^\/(?:(?:pdf|epub|html)\/[^/]+|audiobooks\/[^/]+\/[^/]+|app\/upload(?:\/[^/]+)?)$/;
 
 export function signInPathFor(pathname: string): string {
   return RETURNABLE_PATH.test(pathname) ? `/signin?returnTo=${encodeURIComponent(pathname)}` : '/signin';

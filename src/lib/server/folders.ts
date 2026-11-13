@@ -46,6 +46,13 @@ export async function listFolders(principal: ApiPrincipal, query: URLSearchParam
     ? Buffer.from(JSON.stringify({ position: last.position, createdAt: last.createdAt, id: last.id })).toString('base64url') : null };
 }
 
+export async function requireFolder(principal: ApiPrincipal, id: string): Promise<FolderResource> {
+  const rows = await db.select(fields).from(userFolders)
+    .where(and(eq(userFolders.userId, principal.userId), eq(userFolders.id, folderId(id)))).limit(1) as FolderResource[];
+  if (!rows[0]) throw new ApiRequestError(404, 'FOLDER_NOT_FOUND', 'Folder not found.');
+  return rows[0];
+}
+
 export async function createFolder(principal: ApiPrincipal, body: Record<string, unknown>): Promise<FolderResource> {
   const folderName = name(body.name);
   const id = body.id === undefined ? randomUUID() : typeof body.id === 'string' ? folderId(body.id) : '';

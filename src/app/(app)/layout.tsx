@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import type { ReactNode } from 'react';
 import { Toaster } from 'react-hot-toast';
+import { AboveModals } from '@/components/ui/top-layer';
 
 import { Providers } from '@/app/providers';
 import { ConfigProvider } from '@/contexts/ConfigContext';
@@ -52,26 +53,28 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <AppMain>{children}</AppMain>
         </AppShell>
       </ConfigProvider>
-      <Toaster
-        toastOptions={{
-          style: {
-            background: 'var(--offbase)',
-            color: 'var(--foreground)',
-          },
-          success: {
-            iconTheme: {
-              primary: 'var(--accent)',
-              secondary: 'var(--background)',
+      <AboveModals>
+        <Toaster
+          toastOptions={{
+            style: {
+              background: 'var(--offbase)',
+              color: 'var(--foreground)',
             },
-          },
-          error: {
-            iconTheme: {
-              primary: 'var(--accent)',
-              secondary: 'var(--background)',
+            success: {
+              iconTheme: {
+                primary: 'var(--accent)',
+                secondary: 'var(--background)',
+              },
             },
-          },
-        }}
-      />
+            error: {
+              iconTheme: {
+                primary: 'var(--accent)',
+                secondary: 'var(--background)',
+              },
+            },
+          }}
+        />
+      </AboveModals>
     </Providers>
   );
 }

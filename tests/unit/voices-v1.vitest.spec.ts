@@ -25,7 +25,7 @@ beforeEach(() => {
   state.sqlite.exec('create table user_preferences (user_id text primary key, data_json text)');
   state.credentials.mockReset().mockResolvedValue({ provider: 'openai', apiKey: 'test-provider-key', baseUrl: 'https://provider.test/v1',
     adminRecord: { slug: 'speech', providerType: 'openai', defaultModel: 'tts-1' } });
-  state.voices.mockReset().mockResolvedValue(['alloy', 'echo', 'alloy']);
+  state.voices.mockReset().mockResolvedValue({ voices: ['alloy', 'echo', 'alloy'], status: 'listed' });
   state.clones.mockReset().mockResolvedValue([]);
   vi.unstubAllGlobals();
 });
@@ -34,21 +34,21 @@ test('uses the provider/model policy and returns stable native IDs without execu
   const response = await GET(new NextRequest('http://localhost/api/v1/voices?provider=speech&model=tts-1'));
   expect(response.status).toBe(200); expect(response.headers.get('cache-control')).toBe('private, no-store');
   const resource = await response.json();
-  expect(resource).toEqual({ provider: 'speech', model: 'tts-1', nextCursor: null, data: [{ id: 'alloy', name: 'alloy' }, { id: 'echo', name: 'echo' }] });
+  expect(resource).toEqual({ provider: 'speech', model: 'tts-1', status: 'listed', nextCursor: null, data: [{ id: 'alloy', name: 'alloy' }, { id: 'echo', name: 'echo' }] });
   expect(state.voices).toHaveBeenCalledWith({ provider: 'openai', model: 'tts-1', apiKey: 'test-provider-key', baseUrl: 'https://provider.test/v1' });
   expect(JSON.stringify(resource)).not.toMatch(/test-provider-key|provider\.test/);
 });
 test('catalogue voices carry their display names, and IDs stay the identity', async () => {
   state.credentials.mockResolvedValue({ provider: 'fish-audio', apiKey: 'test-provider-key', baseUrl: undefined,
     adminRecord: { slug: 'fish', providerType: 'fish-audio', defaultModel: 's2.1-pro-free' } });
-  state.voices.mockResolvedValue(['933563129e564b19a115bedd57b7406a', 'default']);
+  state.voices.mockResolvedValue({ voices: ['933563129e564b19a115bedd57b7406a', 'default'], status: 'listed' });
   const resource = await (await GET(new NextRequest('http://localhost/api/v1/voices?provider=fish'))).json();
   expect(resource.data).toEqual([{ id: '933563129e564b19a115bedd57b7406a', name: 'Sarah' }, { id: 'default', name: 'default' }]);
 });
 test('a provider that can speak clones lists the caller\'s for that model, and survives a storage failure', async () => {
   state.credentials.mockResolvedValue({ provider: 'fish-audio', apiKey: 'test-provider-key', baseUrl: undefined,
     adminRecord: { slug: 'fish', providerType: 'fish-audio', defaultModel: 's2.1-pro-free' } });
-  state.voices.mockResolvedValue(['default']);
+  state.voices.mockResolvedValue({ voices: ['default'], status: 'listed' });
   state.clones.mockResolvedValue([
     { id: 'clone:mine', name: 'My voice', providerRef: 'fish', providerType: 'fish-audio', model: 's2.1-pro-free' },
     { id: 'clone:model', name: 'Other model', providerRef: 'fish', providerType: 'fish-audio', model: 's2-pro' },
@@ -89,7 +89,9 @@ test('client uses query selection and projects IDs into the existing voice picke
   expect(await getVoices({ provider: 'speech', model: 'tts-1' })).toEqual({ voices: ['alloy'] });
   fetch.mockImplementationOnce(async () => Response.json({ provider: 'speech', model: 'tts-1', nextCursor: null, data: [{ id: 'alloy', name: 'alloy' }, { id: 'clone:mine', name: 'My voice' }] }));
   expect(await getVoices({ provider: 'speech', model: 'tts-1' })).toEqual({ voices: ['alloy'] });
-  expect(fetch).toHaveBeenCalledWith('/api/v1/voices?provider=speech&model=tts-1', { signal: undefined });
+  expect(fetch).toHaveBeenCalledWith('/api/v1/voices?provider=speech&model=tts-1', { signal: undefined });  // The picker warns about unconfirmed voices, so the status comes through.
+  fetch.mockImplementationOnce(async () => Response.json({ provider: 'speech', model: 'tts-1', status: 'unreachable', nextCursor: null, data: [{ id: 'alloy', name: 'Alloy' }] }));
+  expect(await getVoices({ provider: 'speech', model: 'tts-1' })).toEqual({ voices: ['alloy'], status: 'unreachable' });
 });
 
 test('default discovery follows only the caller saved provider and model', async () => {

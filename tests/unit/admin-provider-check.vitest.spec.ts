@@ -13,7 +13,7 @@ const draft = (overrides: Partial<ProviderCheckDraft> = {}): ProviderCheckDraft 
 function deps(overrides: Partial<ProviderCheckDeps> = {}): ProviderCheckDeps {
   return {
     fetch: vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })) as unknown as typeof fetch,
-    resolveVoices: vi.fn(async () => ['af_sarah', 'am_adam']),
+    resolveVoices: vi.fn(async () => ({ voices: ['af_sarah', 'am_adam'], status: 'listed' as const })),
     workerAvailable: () => true,
     synthesizePreview: vi.fn(async () => ({ ok: true as const, audio: new ArrayBuffer(4096) })),
     ...overrides,
@@ -94,8 +94,15 @@ describe('admin provider check', () => {
     expect(disabled.at(-1)).toMatchObject({ id: 'speech', status: 'skipped' });
   });
 
+  test('voices the provider did not confirm are a warning', async () => {
+    const d = deps({ resolveVoices: vi.fn(async () => ({ voices: ['af_bella'], status: 'unreachable' as const })) });
+    const local = draft({ providerType: 'kokoro-local', baseUrl: '', defaultModel: '' });
+    const items = await runProviderCheck(local, { slug: 'kokoro-local', enabled: true, matchesDraft: true }, d, signal);
+    expect(items.find(({ id }) => id === 'voices')).toMatchObject({ status: 'warn', detail: expect.stringContaining('unconfirmed') });
+  });
+
   test('checks the local Kokoro provider without a key or a network probe', async () => {
-    const d = deps({ resolveVoices: vi.fn(async () => ['af_bella', 'af_heart']) });
+    const d = deps({ resolveVoices: vi.fn(async () => ({ voices: ['af_bella', 'af_heart'], status: 'defaults' as const })) });
     const local = draft({ providerType: 'kokoro-local', baseUrl: '', defaultModel: '' });
     const items = await runProviderCheck(local, { slug: 'kokoro-local', enabled: true, matchesDraft: true }, d, signal);
     expect(statuses(items)).toEqual({ settings: 'ok', voices: 'ok', speech: 'ok' });

@@ -134,7 +134,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-11-03 the expected clean result is 1789 Vitest tests and 103 local
+- As of 2026-11-08 the expected clean result is 1798 Vitest tests and 103 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.
@@ -238,11 +238,16 @@ caused conflicts, high CPU, misleading failures, and overheating.
 
 ## Current State
 
-- Public API progress on `refactor/public-api` is tracked in `v5/API_REFACTOR.md`.
-- Phases 1 to 5.2 are done (MCP at `/api/mcp`, download links and access pages, no automatic guests). The owner's final verification before
-  release is outstanding, including hosted connectors over public HTTPS.
-- Migration 0027 combines this branch's unshipped migrations (phase 4.9). A local
-  database that ran an earlier version of them must be reset.
+- Public API progress is tracked in `v5/API_REFACTOR.md`. Phases 1 to 5.2 merged
+  in #210 (MCP at `/api/mcp`, download links and access pages, no automatic
+  guests); production has migration 0027.
+- Phases 5.3 and 5.4 on `refactor/mcp-cli`: the MCP is four `gh`-style command
+  tools (one per scope, plus `openreader_docs_delete`, the only destructive one);
+  links keep PDF/EPUB/DOCX/TXT/MD files; `docs upload` gives an `/app/upload`
+  page link or a signed one-time transfer URL; documents rename, move and delete,
+  and folders are managed. Cached voices are listable and offered in the reader
+  and export panels; a stopped audiobook stays as `cancelled`. Migration 0028
+  (`cancelled_at`) is unshipped and needs the owner's production migration before deploy.
 - Open follow-ups for the owner: whether the full Compose files should require
   worker/broker/playback secrets instead of shipping known defaults, and whether
   to bump the pinned `kokoro-fastapi-cpu:v0.2.4` image in the Compose examples.

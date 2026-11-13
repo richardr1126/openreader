@@ -75,8 +75,8 @@ export async function listVoices(principal: ApiPrincipal, query: URLSearchParams
     sharedProviders: resolved.adminRecord ? [resolved.adminRecord] : [],
     fallbackProviderRef: runtime.defaultTtsProvider, showAllProviderModels: runtime.showAllProviderModels,
   }) || defaultModelForProviderType(resolved.provider);
-  const voices = await resolveVoices({ provider: resolved.provider, model: requestedModel, apiKey: resolved.apiKey, baseUrl: resolved.baseUrl });
-  return { provider: providerRef, model: requestedModel, nextCursor: null, data: [
+  const { voices, status } = await resolveVoices({ provider: resolved.provider, model: requestedModel, apiKey: resolved.apiKey, baseUrl: resolved.baseUrl });
+  return { provider: providerRef, model: requestedModel, status, nextCursor: null, data: [
     ...[...new Set(voices)].map(id => ({ id, name: catalogVoiceName(id) })),
     ...await ownVoices(principal, resolved.provider, providerRef, requestedModel),
   ] };

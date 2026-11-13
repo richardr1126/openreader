@@ -23,6 +23,10 @@ import { buildVoicePreviewText } from '@/lib/shared/tts-voice-preview';
 import { useVoiceFavorites } from '@/hooks/useVoiceFavorites';
 import { useClonedVoiceNames } from '@/hooks/useClonedVoiceNames';
 import { BookSkipSettings } from '@/components/settings/BookSkipSettings';
+import { CachedVoiceList, cachedVoiceChange } from '@/components/player/CachedVoiceList';
+import { useCachedVoices } from '@/hooks/audio/useCachedVoices';
+import { useVoiceManagement } from '@/hooks/audio/useVoiceManagement';
+import type { CachedVoiceResource } from '@/types/voice-api';
 
 /**
  * The reader's voice panel. Voice and model-speed picks are a draft: they
@@ -36,6 +40,7 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
   const { providerRef, providerType, ttsModel, ttsInstructions, ttsModelOptions, voiceCustomization } = useConfig();
   const favorites = useVoiceFavorites(providerRef, ttsModel);
   const {
+    documentId,
     voice: appliedVoice,
     voiceSpeed,
     ownVoice,
@@ -51,6 +56,11 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
   } = useTTS();
   const { currentSentence } = useTTSHighlight();
   const { providers } = useSharedProviders();
+  const cachedVoices = useCachedVoices(documentId, isOpen);
+  const { voicesUnreachable } = useVoiceManagement(providerRef, providerType, ttsModel);
+  // A cached voice on another provider or model is its own pending change:
+  // applying it switches the provider for every book.
+  const [elsewherePick, setElsewherePick] = useState<CachedVoiceResource | null>(null);
   const policy = useMemo(
     () => resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel }),
     [providerRef, providerType, ttsModel],
@@ -67,25 +77,43 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
   // Only explicit picks are stored; an untouched field follows the applied value.
   const [edits, setEdits] = useState<Partial<VoiceSettingsDraft>>({});
   const draft: VoiceSettingsDraft = { ...applied, ...edits };
-  const pending = pendingVoiceSettings(applied, draft);
+  const pending = elsewherePick ? null : pendingVoiceSettings(applied, draft);
   const clonedNames = useClonedVoiceNames(applied.voice, draft.voice);
   const pendingLines = describePendingVoiceChanges(applied, draft, clonedNames);
 
   const preview = useVoicePreview({ isPlaying, pausePlayback: pause });
   const { stop: stopPreview } = preview;
 
+  const discard = useCallback(() => {
+    setEdits({});
+    setElsewherePick(null);
+  }, []);
   const close = useCallback(() => {
     stopPreview();
-    setEdits({});
+    discard();
     onClose();
-  }, [onClose, stopPreview]);
+  }, [discard, onClose, stopPreview]);
 
   useEffect(() => {
     if (!isOpen) {
       stopPreview();
-      setEdits({});
+      discard();
     }
-  }, [isOpen, stopPreview]);
+  }, [discard, isOpen, stopPreview]);
+
+  const pickCached = (entry: CachedVoiceResource) => {
+    if (entry.provider === providerRef && entry.model === ttsModel) {
+      setElsewherePick(null);
+      setEdits({ voice: entry.voice, ...(policy.supportsNativeModelSpeed ? { nativeSpeed: entry.modelSpeed } : {}) });
+    } else {
+      setEdits({});
+      setElsewherePick(entry);
+    }
+  };
+  const editDraft = (change: Partial<VoiceSettingsDraft>) => {
+    setElsewherePick(null);
+    setEdits((current) => ({ ...current, ...change }));
+  };
 
   const languageWarnings = getTtsLanguageCompatibilityWarnings({
     model: ttsModel,
@@ -130,20 +158,32 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
   const pickerPreview: VoicePickerPreview = { state: preview.state, play: playPreview, stop: stopPreview };
 
   const apply = () => {
-    if (!pending) return;
+    if (!pending && !elsewherePick) return;
     stopPreview();
-    setBookVoiceAndRestart(pending);
-    setEdits({});
+    setBookVoiceAndRestart(elsewherePick ? cachedVoiceChange(elsewherePick, providers) : pending!);
+    discard();
   };
 
-  const footer = pending ? (
+  const elsewhereName = elsewherePick
+    ? `${providers.find((entry) => entry.slug === elsewherePick.provider)?.displayName || elsewherePick.provider} · ${elsewherePick.model}`
+    : '';
+  const footer = pending || elsewherePick ? (
     <div className="border-t border-line-soft bg-surface-solid px-4 py-3" role="region" aria-label="Pending voice changes">
       <ul className="mb-2.5 space-y-0.5 text-xs text-soft">
-        {pendingLines.map((line) => <li key={line}>{line}</li>)}
+        {elsewherePick
+          ? <>
+            <li>Provider {providerName} · {ttsModel} → {elsewhereName}</li>
+            <li>Voice {elsewherePick.name}</li>
+          </>
+          : pendingLines.map((line) => <li key={line}>{line}</li>)}
       </ul>
-      <p className="mb-2.5 text-[11px] text-faint">Applying regenerates audio from the current position.</p>
+      <p className="mb-2.5 text-[11px] text-faint">
+        {elsewherePick
+          ? 'Uses the cached audio. Your provider and model change for all books.'
+          : 'Applying regenerates audio from the current position.'}
+      </p>
       <div className="flex gap-2">
-        <Button variant="secondary" size="md" className="flex-1" onClick={() => setEdits({})}>
+        <Button variant="secondary" size="md" className="flex-1" onClick={discard}>
           Discard
         </Button>
         <Button variant="primary" size="md" className="flex-1" onClick={apply} disabled={isProcessing}>
@@ -179,7 +219,7 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
               disabled={isProcessing}
               onClick={() => {
                 stopPreview();
-                setEdits({});
+                discard();
                 setBookVoiceAndRestart({ voice: null, nativeSpeed: null });
               }}
             >
@@ -187,17 +227,23 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
             </Button>
           )}
         </div>
+        <CachedVoiceList
+          voices={cachedVoices}
+          current={{ providerRef, ttsModel, voice: draft.voice, nativeSpeed: draft.nativeSpeed }}
+          onPick={pickCached}
+          disabled={isProcessing}
+        />
         {policy.supportsNativeModelSpeed && (
           <Section title="Model speed" variant="group">
             <RangeField
               label="Model speed"
               value={draft.nativeSpeed}
               min={0.5}
-              max={policy.providerType === 'fish-audio' || policy.providerType === 'openrouter' ? 2 : 3}
+              max={policy.maxNativeModelSpeed}
               step={0.1}
               formatter={formatModelSpeed}
               description="Changes how fast the voice speaks and regenerates audio. Playback speed in the player applies instantly."
-              onChange={(value) => setEdits((current) => ({ ...current, nativeSpeed: Number(value.toFixed(2)) }))}
+              onChange={(value) => editDraft({ nativeSpeed: Number(value.toFixed(2)) })}
             />
           </Section>
         )}
@@ -229,11 +275,14 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
             key={isOpen ? 'open' : 'closed'}
             voices={availableVoices}
             value={draft.voice}
-            onChange={(voice) => setEdits((current) => ({ ...current, voice }))}
+            onChange={(voice) => editDraft({ voice })}
             pickPolicy={pickPolicy}
             groupByLanguage={policy.isKokoroModel}
             preview={pickerPreview}
             notices={<>
+              {voicesUnreachable && (
+                <p className="text-xs text-warning">{providerName} did not answer, so these are its standard voices and may not all work.</p>
+              )}
               {policy.providerType === 'fish-audio' && draft.voice === 'default' && (
                 <p className="text-xs text-warning">Select a named voice and Apply to keep narration consistent across passages.</p>
               )}

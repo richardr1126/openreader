@@ -78,7 +78,10 @@ export function Tooltip({
   const wrapperRef = useRef<HTMLSpanElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<number | null>(null);
-  const [open, setOpen] = useState(false);
+  /** Where the open card mounts: an open modal dialog sits in the top layer, above the page. */
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  const open = host !== null;
+  const show = () => setHost(wrapperRef.current?.closest('dialog') ?? document.body);
   const openRef = useRef(false);
   /** Opened by a press rather than hover, so leaving the control keeps it. */
   const pinnedRef = useRef(false);
@@ -101,7 +104,7 @@ export function Tooltip({
     clearTimer();
     if (openRef.current) lastClosedAt = Date.now();
     pinnedRef.current = false;
-    setOpen(false);
+    setHost(null);
     setPosition(null);
   }, []);
 
@@ -110,13 +113,13 @@ export function Tooltip({
     if (!anchor || anchorIsExpanded(anchor)) return;
     clearTimer();
     if (Date.now() - lastClosedAt < WARM_WINDOW_MS) {
-      setOpen(true);
+      show();
       return;
     }
     timerRef.current = window.setTimeout(() => {
       timerRef.current = null;
       const current = anchorOf(wrapperRef.current);
-      if (current && !anchorIsExpanded(current)) setOpen(true);
+      if (current && !anchorIsExpanded(current)) show();
     }, OPEN_DELAY_MS);
   };
 
@@ -142,7 +145,7 @@ export function Tooltip({
     if (pinnedRef.current) { hide(); return; }
     clearTimer();
     pinnedRef.current = true;
-    setOpen(true);
+    show();
   };
 
   useEffect(() => clearTimer, []);
@@ -213,7 +216,7 @@ export function Tooltip({
       onBlur={hide}
     >
       {children}
-      {open && typeof document !== 'undefined' && createPortal(
+      {host && createPortal(
         <div
           ref={tooltipRef}
           id={id}
@@ -247,7 +250,7 @@ export function Tooltip({
             {shortcut ? <KeyHint>{shortcut}</KeyHint> : null}
           </div>
         </div>,
-        document.body,
+        host,
       )}
     </span>
   );

@@ -9,13 +9,11 @@ export function GuestRetentionModal({
   isOpen,
   onContinue,
   onCreateAccount,
-  onAfterLeave,
 }: {
   days: number;
   isOpen: boolean;
   onContinue: () => void;
   onCreateAccount: () => void;
-  onAfterLeave: () => void;
 }) {
   const canSignUp = useRuntimeConfig().signupPolicy !== 'closed';
 
@@ -23,9 +21,7 @@ export function GuestRetentionModal({
     <ModalFrame
       open={isOpen}
       onClose={onContinue}
-      afterLeave={onAfterLeave}
       panelTestId="guest-retention-modal"
-      className="z-[80]"
     >
       <ModalTitle>{`Guest data is deleted after ${days} ${days === 1 ? 'day' : 'days'} without use`}</ModalTitle>
       {canSignUp ? (

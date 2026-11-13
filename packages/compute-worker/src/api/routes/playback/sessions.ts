@@ -14,9 +14,12 @@ import type { PlaybackSessionReadModel } from '../../playback/session-read-model
 import type { ComputeWorkerRouteContext } from '../../route-context';
 import { toErrorMessage } from '../../route-context';
 import { ttsPlaybackPlanArtifactPrefix } from '../../../storage/artifact-addressing';
+import { listCachedPlaybackVariants } from '../../../storage/cached-variants';
 import {
   apiErrorResponseSchema,
   computeOperationSchema,
+  ttsPlaybackCachedVariantsRequestSchema,
+  ttsPlaybackCachedVariantsSchema,
   ttsPlaybackCompletedSegmentsSchema,
   ttsPlaybackExportProgressRequestSchema,
   jsonSchema,
@@ -202,6 +205,24 @@ export function registerPlaybackSessionRoutes(
       if (state.status === 'completed') segments.push({ ordinal, durationMs: state.durationMs });
     }
     return { segments: segments.sort((left, right) => left.ordinal - right.ordinal) };
+  });
+
+  // Every voice this document has audio for, so a reader or an export can reuse it.
+  app.post('/v1/tts-playback/cached-variants', {
+    schema: {
+      body: jsonSchema(ttsPlaybackCachedVariantsRequestSchema),
+      response: {
+        200: jsonSchema(ttsPlaybackCachedVariantsSchema),
+        400: errorResponseSchema,
+      },
+    },
+  }, async (request, reply) => {
+    const parsed = ttsPlaybackCachedVariantsRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: 'Invalid request body', issues: parsed.error.issues };
+    }
+    return { variants: await listCachedPlaybackVariants({ storage: context.storage, s3Prefix: context.s3Prefix, ...parsed.data }) };
   });
 
   app.put('/v1/tts-playback/sessions/:sessionId/cursor', {

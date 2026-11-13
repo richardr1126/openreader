@@ -1,5 +1,6 @@
 import { ApiRequestError } from '@/lib/server/api/responses';
-import { fetchAndParseUrl } from './web-loader';
+import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
+import { fetchUrlSource } from './web-loader';
 import { stageDocumentUpload, submitDocumentUpload, uploadId } from './uploads';
 import { safeDocumentName } from './utils';
 import type { DocumentCaller } from './request';
@@ -34,17 +35,29 @@ export async function createDocument(caller: DocumentCaller, body: Record<string
   } else if (record.type === 'url') {
     if (typeof record.url !== 'string' || !record.url.trim()) throw new ApiRequestError(400, 'REQUEST_INVALID', 'url is required.');
     await consumeDocumentIntake(caller.subject);
-    let article;
-    try { article = await fetchAndParseUrl(record.url); }
+    const { maxUploadMb } = await getResolvedRuntimeConfig();
+    let fetched;
+    try { fetched = await fetchUrlSource(record.url, maxUploadMb * 1024 * 1024); }
     catch (error) {
       const message = error instanceof Error ? error.message : 'URL import failed.';
       throw new ApiRequestError(422, 'URL_IMPORT_FAILED', message);
     }
-    bytes = textBytes(article.content);
-    const title = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : article.title || 'Imported Web Page';
-    name = safeDocumentName(title.endsWith('.md') ? title : `${title.replace(/[/\\?%*:|"<>\s]+/g, '_').slice(0, 80)}.md`, 'document.md');
-    author = article.author;
-    language = article.language;
+    const requested = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null;
+    if (fetched.kind === 'file') {
+      // A linked document keeps its own format; a requested name keeps the file's extension.
+      bytes = fetched.bytes;
+      const extension = fetched.name.slice(fetched.name.lastIndexOf('.'));
+      const base = requested ? requested.replace(/\.(pdf|epub|docx|md|markdown|mdown|mkd|txt)$/i, '') : null;
+      name = safeDocumentName(base ? `${base}${extension}` : fetched.name, `document${extension}`);
+      author = typeof body.author === 'string' ? body.author : null;
+      language = typeof body.language === 'string' ? body.language : null;
+    } else {
+      bytes = textBytes(fetched.content);
+      const title = requested ?? (fetched.title || 'Imported Web Page');
+      name = safeDocumentName(title.endsWith('.md') ? title : `${title.replace(/[/\\?%*:|"<>\s]+/g, '_').slice(0, 80)}.md`, 'document.md');
+      author = fetched.author;
+      language = fetched.language;
+    }
   } else throw new ApiRequestError(400, 'REQUEST_INVALID', 'source.type must be url, text or upload.');
   const id = await stageDocumentUpload(caller, bytes, { name, author, language });
   return submitDocumentUpload(caller, id, body.folderId);

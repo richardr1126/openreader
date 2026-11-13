@@ -14,6 +14,7 @@ vi.mock('@/lib/server/auth/auth', () => ({ getAuthContext: async () => ({ userId
 
 import { GET, POST, DELETE as clear } from '@/app/api/v1/folders/route';
 import { PATCH, DELETE } from '@/app/api/v1/folders/[id]/route';
+import { requireFolder } from '@/lib/server/folders';
 const request = (path: string, method = 'GET', value?: unknown) => new NextRequest(`http://localhost/api/v1/${path}`, { method,
   ...(value === undefined ? {} : { body: JSON.stringify(value), headers: { 'Content-Type': 'application/json' } }) });
 const context = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -83,4 +84,10 @@ test('requires authentication and rejects cross-site writes, oversized bodies an
   expect((await POST(request('folders', 'POST', { name: 'x'.repeat(65536) }))).status).toBe(413);
   expect((await POST(request('folders', 'POST', { name: 'Notes', documentIds: [b, 1] }))).status).toBe(400);
   expect((await PATCH(request('folders/notes', 'PATCH', { position: '1' }), context('notes'))).status).toBe(400);
+});
+
+test('a folder is found by ID for its owner alone', async () => {
+  await POST(request('folders', 'POST', { id: 'notes', name: 'Notes' }));
+  expect(await requireFolder({ userId: 'alice', isAnonymous: false, scopes: [] }, 'notes')).toMatchObject({ id: 'notes', name: 'Notes' });
+  await expect(requireFolder({ userId: 'bob', isAnonymous: false, scopes: [] }, 'notes')).rejects.toMatchObject({ code: 'FOLDER_NOT_FOUND' });
 });

@@ -12,3 +12,17 @@ process.env.S3_REGION = process.env.S3_REGION || 'us-east-1';
 process.env.S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID || 'test';
 process.env.S3_SECRET_ACCESS_KEY = process.env.S3_SECRET_ACCESS_KEY || 'test';
 process.env.S3_PREFIX = process.env.S3_PREFIX || 'openreader';
+
+// Models and caches live under the docstore. Each test file gets an empty one
+// of its own, so a developer's downloaded models never change what a test
+// observes and no test writes into the real docstore. A file that needs
+// particular contents mocks the platform module itself.
+import fs from 'node:fs';
+import { afterAll, vi } from 'vitest';
+
+const { testDocstore } = await vi.hoisted(async () => {
+  const [nodeFs, nodeOs, nodePath] = await Promise.all([import('node:fs'), import('node:os'), import('node:path')]);
+  return { testDocstore: nodeFs.mkdtempSync(nodePath.join(nodeOs.tmpdir(), 'openreader-worker-docstore-')) };
+});
+vi.mock('../src/infrastructure/platform', () => ({ DOCSTORE_DIR: testDocstore }));
+afterAll(() => fs.rmSync(testDocstore, { recursive: true, force: true }));

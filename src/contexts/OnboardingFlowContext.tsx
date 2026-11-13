@@ -66,7 +66,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   const pendingChangelogOpenRef = useRef(false);
-  const leavingBlockingModalRef = useRef<BlockingModal | null>(null);
   const claimDismissedUsersRef = useRef<Set<string>>(new Set());
   const changelogVersionCheckKeyRef = useRef<string | null>(null);
   const changelogVersionCheckInFlightRef = useRef<string | null>(null);
@@ -87,7 +86,7 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     // reads as "not accepted", the modal flashes on first paint, then closes once the
     // real state arrives.
     const onboardingData = onboardingQuery.data;
-    if (onboardingData === undefined || leavingBlockingModalRef.current !== null) {
+    if (onboardingData === undefined) {
       return;
     }
 
@@ -112,7 +111,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       const claimResult = await refetchClaimCounts();
       if (
         currentUserIdRef.current !== userId
-        || leavingBlockingModalRef.current !== null
         || (userId !== null && claimDismissedUsersRef.current.has(userId))
       ) {
         return;
@@ -154,10 +152,8 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     const nextBlockingModal = nextStep === 'privacy' || nextStep === 'claim' || nextStep === 'guestRetention' || nextStep === 'voices'
       ? nextStep
       : null;
-    // Blocking dialogs own focus and page inertness. Let the current dialog fully
-    // leave before presenting the next step so two Headless UI dialogs never overlap.
+    // Close the current step first; the flow runs again once none is open.
     if (activeBlockingModal !== null && activeBlockingModal !== nextBlockingModal) {
-      leavingBlockingModalRef.current = activeBlockingModal;
       setActiveBlockingModal(null);
       return;
     }
@@ -203,7 +199,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       && activeBlockingModal === 'claim'
       && claimModalOwnerId !== userId
     ) {
-      leavingBlockingModalRef.current = 'claim';
       setActiveBlockingModal(null);
     }
   }, [activeBlockingModal, claimModalOwnerId, userId]);
@@ -212,11 +207,15 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     runOnceFlowRef.current = runOnceFlow;
   }, [runOnceFlow]);
 
+  // A closed step lets the flow present the next one.
+  useEffect(() => {
+    if (activeBlockingModal === null) void runFlow();
+  }, [activeBlockingModal, runFlow]);
+
   const handleClaimComplete = useCallback(() => {
     if (claimModalOwnerId) {
       claimDismissedUsersRef.current.add(claimModalOwnerId);
     }
-    leavingBlockingModalRef.current = 'claim';
     setActiveBlockingModal(null);
   }, [claimModalOwnerId]);
 
@@ -224,23 +223,15 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
     // A failed save only means the notice returns on the next load.
     if (guestRetentionDays !== null) saveOnboarding({ guestRetentionSeenDays: guestRetentionDays });
     guestRetentionHandledRef.current = true;
-    leavingBlockingModalRef.current = 'guestRetention';
     setActiveBlockingModal(null);
     if (createAccount) router.push('/signup');
   }, [guestRetentionDays, router, saveOnboarding]);
 
   const handleVoicesChosen = useCallback((useService: boolean) => {
     voicesHandledRef.current = true;
-    leavingBlockingModalRef.current = 'voices';
     setActiveBlockingModal(null);
     if (useService) router.push('/app/settings?section=providers');
   }, [router]);
-
-  const handleBlockingModalAfterLeave = useCallback((modal: BlockingModal) => {
-    if (leavingBlockingModalRef.current !== modal) return;
-    leavingBlockingModalRef.current = null;
-    void runFlow();
-  }, [runFlow]);
 
   useEffect(() => {
     void runFlow();
@@ -273,14 +264,12 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
       <PrivacyModal
         isOpen={activeBlockingModal === 'privacy'}
         onDismiss={() => { }}
-        onAfterLeave={() => handleBlockingModalAfterLeave('privacy')}
       />
       <ClaimDataModal
         isOpen={activeBlockingModal === 'claim' && claimModalOwnerId === userId}
         claimableCounts={claimableCounts}
         onDismiss={handleClaimComplete}
         onClaimed={handleClaimComplete}
-        onAfterLeave={() => handleBlockingModalAfterLeave('claim')}
       />
       {guestRetentionDays !== null ? (
         <GuestRetentionModal
@@ -288,7 +277,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
           isOpen={activeBlockingModal === 'guestRetention'}
           onContinue={() => handleGuestRetentionSeen(false)}
           onCreateAccount={() => handleGuestRetentionSeen(true)}
-          onAfterLeave={() => handleBlockingModalAfterLeave('guestRetention')}
         />
       ) : null}
       <VoicesSetupModal
@@ -296,7 +284,6 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
         voices={voices}
         onContinue={() => handleVoicesChosen(false)}
         onUseService={() => handleVoicesChosen(true)}
-        onAfterLeave={() => handleBlockingModalAfterLeave('voices')}
       />
       <ChangelogModal
         open={isChangelogOpen}

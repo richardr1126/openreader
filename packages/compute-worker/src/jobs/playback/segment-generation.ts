@@ -24,12 +24,16 @@ import { resolveClonedVoice } from './cloned-voice';
 import type { TtsPlaybackRequest } from './schemas';
 import type { ModelDownloadProgressHandler } from '../../inference/model-download';
 import { ProviderCapacityWaitTimeoutError } from '../provider-capacity';
+import { TtsProviderFailedError } from './provider-failure';
 
 const SEGMENT_MAX_ATTEMPTS = 3;
 // A 429 already cools down shared provider capacity, so later attempts wait
 // for the provider window instead of hammering it.
 const SEGMENT_RATE_LIMIT_MAX_ATTEMPTS = 6;
 const SEGMENT_RETRY_BACKOFF_MS = 1_000;
+// Each failed segment has already been retried, so this many in a row means the
+// provider itself is failing: the run stops instead of failing every segment.
+const PROVIDER_FAILURE_SEGMENT_LIMIT = 3;
 // Keep a small ordered pipeline full so a provider configured for parallel
 // requests can build playback runway. Provider capacity remains the actual,
 // admin-controlled concurrency limit; this is only bounded local look-ahead.
@@ -266,6 +270,19 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     }
   }
   let stopScheduling = false;
+  // Failures are judged by their position in this run, not by when they
+  // settle: segments synthesize concurrently, and a cached or generated
+  // segment between two failures breaks the streak.
+  const runPosition = new Map(normalized.map((segment, index) => [segment, index]));
+  const failedPositions = new Set<number>();
+  const failureStreakReached = (position: number) => {
+    for (let start = position - PROVIDER_FAILURE_SEGMENT_LIMIT + 1; start <= position; start += 1) {
+      let failed = 0;
+      while (failed < PROVIDER_FAILURE_SEGMENT_LIMIT && failedPositions.has(start + failed)) failed += 1;
+      if (failed === PROVIDER_FAILURE_SEGMENT_LIMIT) return true;
+    }
+    return false;
+  };
 
   const readSidecar = (segment: (typeof normalized)[number]) =>
     playbackStorage.artifacts.readSegmentMetadata({
@@ -475,7 +492,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       const existing = await freshSidecar(pending.segment);
       if (existing?.status !== 'completed' || existing.alignment) return;
       const alignment = await computeAlignment(pending.audio, pending.segment, pending.audioKey);
-      if (!alignment || !await shouldContinueWrites(planOrdinal)) return;
+      if (!alignment) return;
+      // Pausing or superseding the run stops alignment that has not started,
+      // but finished timing describes audio that is already cached. Keep it, or
+      // a reader who pauses right after the audio arrives would resume with no
+      // word highlight until a new run aligns the same audio again. The
+      // metadata write itself still refuses a cleared cache.
+      const current = await freshSidecar(pending.segment);
+      if (current?.status !== 'completed' || current.alignment || current.audioKey !== pending.audioKey) return;
       await persistSegmentMetadata(pending.segment, 'completed', {
         audioKey: pending.audioKey,
         durationMs: pending.durationMs,
@@ -727,6 +751,15 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       }).catch(() => undefined);
       leaseSettled = true;
       await input.onSegmentErrored?.(planOrdinal);
+      const position = runPosition.get(segment)!;
+      failedPositions.add(position);
+      if (failureStreakReached(position)) {
+        const status = lastErrorInfo?.upstreamStatus;
+        throw new TtsProviderFailedError(
+          status !== undefined && status < 500 ? 'PROVIDER_REJECTED' : 'PROVIDER_UNAVAILABLE',
+          lastErrorInfo?.message ?? (lastError instanceof Error ? lastError.message : String(lastError)),
+        );
+      }
       return null;
     } finally {
       if (!leaseSettled) await releaseOwnLease(segment, audioKey).catch(() => undefined);

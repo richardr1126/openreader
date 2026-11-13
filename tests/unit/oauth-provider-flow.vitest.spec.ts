@@ -202,8 +202,8 @@ test('MCP and v1 tokens only work on their own resource', async () => {
 
   const token = await grant('documents:read offline_access', mcpResource);
   const tools = await mcpResult(await mcp(token.access_token, 'tools/list'));
-  expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['list_documents', 'add_document', 'list_providers', 'list_voices', 'create_audiobook', 'get_audiobook']);
-  const called = await mcpResult(await mcp(token.access_token, 'tools/call', { name: 'list_documents', arguments: {} }));
+  expect(tools.tools.map((tool: { name: string }) => tool.name)).toEqual(['openreader', 'openreader_docs', 'openreader_docs_delete', 'openreader_audio']);
+  const called = await mcpResult(await mcp(token.access_token, 'tools/call', { name: 'openreader', arguments: { command: 'docs list' } }));
   expect(called.structuredContent).toEqual({ documents: [], nextCursor: null });
   expect((await principal(token.access_token) as Response).status).toBe(401);
 
@@ -233,10 +233,10 @@ test('MCP serves the 2026-07-28 protocol with the same tools and token rules', a
   const discovered = await mcpResult(await modern(token.access_token, 'server/discover'));
   expect(discovered.supportedVersions).toContain(version);
   const tools = await mcpResult(await modern(token.access_token, 'tools/list'));
-  expect(tools.tools).toHaveLength(6);
-  const called = await mcpResult(await modern(token.access_token, 'tools/call', { name: 'list_documents', arguments: {} }));
+  expect(tools.tools).toHaveLength(4);
+  const called = await mcpResult(await modern(token.access_token, 'tools/call', { name: 'openreader', arguments: { command: 'docs list' } }));
   expect(called.structuredContent).toEqual({ documents: [], nextCursor: null });
-  const missing = await modern(token.access_token, 'tools/call', { name: 'add_document', arguments: { text: 'Hello', name: 'hello.txt' } });
+  const missing = await modern(token.access_token, 'tools/call', { name: 'openreader_docs', arguments: { command: 'docs add - --name hello.txt', input: 'Hello' } });
   expect(missing.status).toBe(403);
   expect(missing.headers.get('www-authenticate')).toContain('scope="documents:write"');
 });
@@ -248,7 +248,7 @@ test('MCP takes only bearer tokens from an allowed origin, and challenges for a 
   const token = await grant('documents:read offline_access', mcpResource);
   expect((await mcp(token.access_token, 'tools/list', {}, { Origin: 'https://foreign.test' })).status).toBe(403);
   expect((await mcp(token.access_token, 'tools/list', {}, { Origin: origin })).status).toBe(200);
-  const missing = await mcp(token.access_token, 'tools/call', { name: 'add_document', arguments: { text: 'Hello', name: 'hello.txt' } });
+  const missing = await mcp(token.access_token, 'tools/call', { name: 'openreader_docs', arguments: { command: 'docs add - --name hello.txt', input: 'Hello' } });
   expect(missing.status).toBe(403);
   expect(missing.headers.get('www-authenticate')).toContain('error="insufficient_scope"');
   expect(missing.headers.get('www-authenticate')).toContain('scope="documents:write"');

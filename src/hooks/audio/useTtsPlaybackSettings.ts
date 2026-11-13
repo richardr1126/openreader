@@ -1,13 +1,16 @@
 'use client';
 
-import { useCallback, type MutableRefObject } from 'react';
+import { useCallback, useRef, type MutableRefObject } from 'react';
 import toast from 'react-hot-toast';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { AppConfigValues } from '@/types/config';
+import type { TtsProviderType } from '@openreader/tts/provider-catalog';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings, type BookSpeechSettings } from '@/types/document-settings';
 import { putDocumentSettings } from '@/lib/client/api/documents';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
+import { queryKeys } from '@/lib/client/query-keys';
 
 type UseTtsPlaybackSettingsInput = {
   isPlaying: boolean;
@@ -26,11 +29,23 @@ type UseTtsPlaybackSettingsInput = {
   /** Reports the settings the server acknowledged, so later reader writes build on them. */
   onSettingsSaved: (settings: DocumentSettings) => void;
   providerRef: string;
+  providerType: TtsProviderType;
   ttsModel: string;
+  /** The saved instructions and model options, restored if a provider switch has to be undone. */
+  ttsInstructions: string;
+  ttsModelOptions: string;
   defaultVoice: string;
   defaultVoiceSpeed: number;
   updateConfigKey: <K extends keyof AppConfigValues>(key: K, value: AppConfigValues[K]) => Promise<void>;
+  updateConfig: (patch: Partial<AppConfigValues>) => Promise<void>;
   reacquirePlaybackPlan: () => Promise<void>;
+};
+
+export type BookVoiceChange = {
+  voice?: string | null;
+  nativeSpeed?: number | null;
+  /** The provider and model the voice belongs to, when it is not the current one. */
+  target?: { providerRef: string; providerType: TtsProviderType; ttsModel: string };
 };
 
 export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
@@ -50,12 +65,19 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     setReaderSettings,
     onSettingsSaved,
     providerRef,
+    providerType,
     ttsModel,
+    ttsInstructions,
+    ttsModelOptions,
     defaultVoice,
     defaultVoiceSpeed,
     updateConfigKey,
+    updateConfig,
     reacquirePlaybackPlan,
   } = input;
+  /** The latest book voice change; an older one that fails must not undo it. */
+  const voiceChangeSeq = useRef(0);
+  const queryClient = useQueryClient();
 
   const clearSegmentCaches = useCallback(() => {
     const wasPlaying = isPlaying;
@@ -117,40 +139,80 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
    * Changes this book's own voice and/or model speed as one restart: a single
    * plan reset and reacquire. `null` returns that field to the user's default,
    * and a value equal to the default is not stored as an override.
+   *
+   * A `target` on another provider or model first switches the saved provider
+   * and model (for every book, as Settings does), then binds this book's voice
+   * to it. Its values are stored as given, since the defaults belong to the
+   * provider being left.
    */
-  const setBookVoiceAndRestart = useCallback((change: { voice?: string | null; nativeSpeed?: number | null }) => {
+  const setBookVoiceAndRestart = useCallback((change: BookVoiceChange) => {
     if (!documentId || !readerSettings) return;
     if (change.voice === undefined && change.nativeSpeed === undefined) return;
+    const switching = change.target
+      && (change.target.providerRef !== providerRef || change.target.ttsModel !== ttsModel)
+      ? change.target : null;
+    const boundRef = switching?.providerRef ?? providerRef;
+    const boundModel = switching?.ttsModel ?? ttsModel;
     const current = readerSettings.voiceOverride;
-    const matching = current?.providerRef === providerRef && current.ttsModel === ttsModel ? current : undefined;
+    const matching = current?.providerRef === boundRef && current.ttsModel === boundModel ? current : undefined;
     const pick = <T,>(next: T | null | undefined, existing: T | undefined, fallback: T): T | undefined => {
       const value = next === undefined ? existing : next ?? undefined;
-      return value === fallback ? undefined : value;
+      return !switching && value === fallback ? undefined : value;
     };
     const next = mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, {
       ...readerSettings,
       voiceOverride: {
-        providerRef,
-        ttsModel,
+        providerRef: boundRef,
+        ttsModel: boundModel,
         voice: pick(change.voice, matching?.voice, defaultVoice),
         voiceSpeed: pick(change.nativeSpeed, matching?.voiceSpeed, defaultVoiceSpeed),
       },
     });
     const previous = readerSettings;
+    const seq = ++voiceChangeSeq.current;
     void restartAfterConfigUpdate(
       () => setReaderSettings(next),
       async () => {
         // A failed save rolls back here instead of throwing, so the restart
         // still reacquires the plan and clears processing.
+        let switched = false;
+        let reconciled = false;
         try {
+          if (switching) {
+            // The new provider's own instructions and options, as the cached-voice
+            // check assumed: the ones saved for the provider being left would
+            // name different audio.
+            await updateConfig({ providerRef: switching.providerRef, providerType: switching.providerType, ttsModel: switching.ttsModel,
+              ttsInstructions: '', ttsModelOptions: '' });
+            switched = true;
+          }
           // The audio controller's snapshot does not own live font/color edits.
           // Omit those fields so the server preserves their latest values.
           const saved = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
+          // A newer change owns the book's settings now; this one's reply is stale.
+          if (seq !== voiceChangeSeq.current) return;
           onSettingsSaved(saved.settings);
+          if (!saved.applied) {
+            // Another tab saved newer settings, which the reply carries.
+            reconciled = true;
+            throw new Error('Newer settings for this book were saved elsewhere');
+          }
         } catch (error) {
           console.error('Could not save book voice:', error);
-          setReaderSettings(previous);
           toast.error('Could not save this book\'s voice');
+          // A newer change has already replaced this one's settings and provider.
+          if (seq !== voiceChangeSeq.current) return;
+          if (!reconciled) setReaderSettings(previous);
+          // Other books follow the saved provider, so a switch made for this
+          // book must not outlive the save it was made for.
+          if (switched) {
+            await updateConfig({ providerRef, providerType, ttsModel, ttsInstructions, ttsModelOptions }).catch((restoreError: unknown) => {
+              console.error('Could not restore the previous provider:', restoreError);
+            });
+          }
+        } finally {
+          // Which voices reuse cached audio depends on the saved provider settings.
+          if (switching) void queryClient.invalidateQueries({ queryKey: queryKeys.allCachedVoices() });
         }
       },
       { resetPlan: true },
@@ -161,10 +223,14 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     documentId,
     onSettingsSaved,
     providerRef,
+    providerType,
     readerSettings,
     restartAfterConfigUpdate,
     setReaderSettings,
+    ttsInstructions,
     ttsModel,
+    ttsModelOptions,
+    updateConfig,
   ]);
 
   const setAudioPlayerSpeedAndRestart = useCallback((speed: number) => {
@@ -188,6 +254,8 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
         const result = await putDocumentSettings(documentId, { ...next, typography: undefined, highlightAppearance: undefined, presentation: undefined });
         onSettingsSaved(result.settings);
         saved = true;
+        // Which cached audio a voice reuses depends on these settings.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.allCachedVoices() });
       } catch (error) {
         console.error('Could not save book speech settings:', error);
         setReaderSettings(previous);
@@ -195,7 +263,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
       }
     }, { resetPlan: true });
     return saved;
-  }, [documentId, onSettingsSaved, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
+  }, [documentId, onSettingsSaved, queryClient, readerSettings, restartAfterConfigUpdate, setReaderSettings]);
 
   return {
     clearSegmentCaches,

@@ -120,7 +120,7 @@ export function ProviderSettingsPanel({
     model: finalModel,
     sharedProviders,
   });
-  const { availableVoices, voicesPending } = useVoiceManagement(
+  const { availableVoices, voicesPending, voicesUnreachable } = useVoiceManagement(
     viewModel.selectedProviderRef,
     effectiveProviderType,
     finalModel,
@@ -480,6 +480,9 @@ export function ProviderSettingsPanel({
             pickPolicy={voicePickPolicy}
             groupByLanguage={providerModelPolicy.isKokoroModel}
             preview={pickerPreview}
+            notices={voicesUnreachable
+              ? <p className="text-xs text-warning">The provider did not answer, so these are its standard voices and may not all work.</p>
+              : undefined}
           />
         )}
       </Section>

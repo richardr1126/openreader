@@ -13,7 +13,6 @@ export function ChangelogModal({ open, onClose }: { open: boolean; onClose: () =
       onClose={onClose}
       size="xl"
       panelTestId="changelog-modal"
-      className="z-[90]"
     >
       <ModalTitle className="sr-only">Changelog</ModalTitle>
       <SettingsChangelogPanel

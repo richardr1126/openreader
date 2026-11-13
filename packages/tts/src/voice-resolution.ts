@@ -202,7 +202,10 @@ function extractReplicateLanguageInputFromOpenApiSchema(openApiSchema: unknown):
   return found;
 }
 
-async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promise<unknown | null> {
+/** A Replicate schema request that got no usable answer, as opposed to a model without one. */
+const SCHEMA_UNREACHABLE = Symbol('replicate-schema-unreachable');
+
+async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promise<unknown | null | typeof SCHEMA_UNREACHABLE> {
   if (isRetiredReplicateModel(model)) return null;
   const parsedModel = parseReplicateModelIdentifier(replicateExecutionModel(model));
   if (!parsedModel) {
@@ -227,6 +230,7 @@ async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promi
       },
     });
 
+    if (response.status === 429 || response.status >= 500) return SCHEMA_UNREACHABLE;
     if (!response.ok) {
       return null;
     }
@@ -245,7 +249,7 @@ async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promi
     return openApiSchema;
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      return null;
+      return SCHEMA_UNREACHABLE;
     }
     logTtsError(ttsLogger, {
       event: 'tts.voice_resolution.replicate_schema_fetch.failed',
@@ -253,7 +257,7 @@ async function fetchReplicateOpenApiSchema(apiKey: string, model: string): Promi
       error,
       normalize: { code: 'TTS_VOICE_RESOLUTION_REPLICATE_SCHEMA_FETCH_FAILED', errorClass: 'upstream' },
     });
-    return null;
+    return SCHEMA_UNREACHABLE;
   } finally {
     clearTimeout(timeoutId);
   }
@@ -269,11 +273,11 @@ const replicateVoiceInputKeyCache = new LRUCache<string, ReplicateVoiceInputKey>
 const replicateLanguageInputCache = new LRUCache<string, ReplicateLanguageInput>({
   max: REPLICATE_LANGUAGE_INPUT_KEY_CACHE_MAX_ENTRIES,
 });
-const replicateOpenApiSchemaPromiseCache = new LRUCache<string, Promise<unknown | null>>({
+const replicateOpenApiSchemaPromiseCache = new LRUCache<string, Promise<unknown | null | typeof SCHEMA_UNREACHABLE>>({
   max: REPLICATE_OPENAPI_SCHEMA_PROMISE_CACHE_MAX_ENTRIES,
 });
 
-async function getReplicateOpenApiSchemaCached(apiKey: string, model: string): Promise<unknown | null> {
+async function loadReplicateOpenApiSchema(apiKey: string, model: string): Promise<unknown | null | typeof SCHEMA_UNREACHABLE> {
   const cachedPromise = replicateOpenApiSchemaPromiseCache.get(model);
   if (cachedPromise) {
     return cachedPromise;
@@ -283,14 +287,20 @@ async function getReplicateOpenApiSchemaCached(apiKey: string, model: string): P
   replicateOpenApiSchemaPromiseCache.set(model, fetchPromise);
 
   const schema = await fetchPromise;
-  if (schema === null) {
+  if (schema === null || schema === SCHEMA_UNREACHABLE) {
     replicateOpenApiSchemaPromiseCache.delete(model);
   }
   return schema;
 }
 
-async function fetchReplicateVoices(apiKey: string, model: string): Promise<string[] | null> {
-  const openApiSchema = await getReplicateOpenApiSchemaCached(apiKey, model);
+async function getReplicateOpenApiSchemaCached(apiKey: string, model: string): Promise<unknown | null> {
+  const schema = await loadReplicateOpenApiSchema(apiKey, model);
+  return schema === SCHEMA_UNREACHABLE ? null : schema;
+}
+
+async function fetchReplicateVoices(apiKey: string, model: string): Promise<string[] | null | 'unreachable'> {
+  const openApiSchema = await loadReplicateOpenApiSchema(apiKey, model);
+  if (openApiSchema === SCHEMA_UNREACHABLE) return 'unreachable';
   const apiVoices = extractReplicateVoicesFromOpenApiSchema(openApiSchema);
   return apiVoices.length > 0 ? apiVoices : null;
 }
@@ -392,7 +402,7 @@ function extractVoiceNames(payload: unknown): string[] | null {
 async function fetchCustomOpenAiVoicesFromEndpoint(
   url: string,
   apiKey: string,
-): Promise<string[] | null> {
+): Promise<string[] | null | 'unreachable'> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => {
     controller.abort();
@@ -407,19 +417,22 @@ async function fetchCustomOpenAiVoicesFromEndpoint(
       },
     });
 
+    // Busy or down is not the same as having no voices endpoint.
+    if (response.status === 429 || response.status === 503) return 'unreachable';
     if (!response.ok) {
       return null;
     }
 
-    return extractVoiceNames(await response.json());
+    return extractVoiceNames(await response.json().catch(() => null));
   } catch {
-    return null;
+    // No response at all: the server is down or too slow, not missing a voices endpoint.
+    return 'unreachable';
   } finally {
     clearTimeout(timeoutId);
   }
 }
 
-async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise<string[] | null> {
+async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise<string[] | null | 'unreachable'> {
   const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
 
   for (const endpoint of CUSTOM_OPENAI_VOICE_ENDPOINTS) {
@@ -437,12 +450,20 @@ async function fetchCustomOpenAiVoices(baseUrl: string, apiKey: string): Promise
   return null;
 }
 
-export async function resolveVoices({ provider, model, apiKey = '', baseUrl = '' }: ResolveVoicesOptions): Promise<string[]> {
+/**
+ * - listed: the provider named these voices.
+ * - defaults: the provider has no voice list, so these are its standard voices.
+ * - unreachable: the provider did not answer, so these standard voices are unconfirmed.
+ */
+export type VoiceListStatus = 'listed' | 'defaults' | 'unreachable';
+
+export async function resolveVoices({ provider, model, apiKey = '', baseUrl = '' }: ResolveVoicesOptions): Promise<{ voices: string[]; status: VoiceListStatus }> {
   if (provider === 'openrouter') {
-    const models = await fetchOpenRouterModels();
-    return models.find(entry => entry.id === model)?.supportedVoices?.length
-      ? models.find(entry => entry.id === model)!.supportedVoices!
-      : resolveTtsProviderModelPolicy({ providerRef: provider, model }).defaultVoices;
+    const defaults = () => resolveTtsProviderModelPolicy({ providerRef: provider, model }).defaultVoices;
+    const catalog = await fetchOpenRouterModels().catch(() => null);
+    if (!catalog) return { voices: defaults(), status: 'unreachable' };
+    const listed = catalog.find(entry => entry.id === model)?.supportedVoices;
+    return listed?.length ? { voices: listed, status: 'listed' } : { voices: defaults(), status: 'defaults' };
   }
   const providerModelPolicy = resolveTtsProviderModelPolicy({
     providerRef: provider,
@@ -453,26 +474,20 @@ export async function resolveVoices({ provider, model, apiKey = '', baseUrl = ''
   const voiceSource = providerModelPolicy.voiceSource;
 
   if (voiceSource === 'custom-openai-api') {
-    if (baseUrl) {
-      const apiVoices = await fetchCustomOpenAiVoices(baseUrl, apiKey);
-      if (apiVoices !== null) {
-        return apiVoices;
-      }
-    }
-    // No voices endpoint resolved on this OpenAI-compatible server. Fall back to the
-    // canonical OpenAI voices, which every OpenAI-compatible endpoint accepts.
-    return defaultVoices.length > 0 ? defaultVoices : [...OPENAI_DEFAULT_VOICES];
+    // Without a voices endpoint, the canonical OpenAI voices stand in: every
+    // OpenAI-compatible endpoint accepts them.
+    const fallback = defaultVoices.length > 0 ? defaultVoices : [...OPENAI_DEFAULT_VOICES];
+    if (!baseUrl) return { voices: fallback, status: 'defaults' };
+    const apiVoices = await fetchCustomOpenAiVoices(baseUrl, apiKey);
+    if (apiVoices === 'unreachable') return { voices: fallback, status: 'unreachable' };
+    return apiVoices !== null ? { voices: apiVoices, status: 'listed' } : { voices: fallback, status: 'defaults' };
   }
 
-  if (voiceSource === 'replicate-api') {
-    if (!apiKey) {
-      return defaultVoices;
-    }
+  if (voiceSource === 'replicate-api' && apiKey) {
     const apiVoices = await fetchReplicateVoices(apiKey, model);
-    if (apiVoices !== null) {
-      return apiVoices;
-    }
+    if (apiVoices === 'unreachable') return { voices: defaultVoices, status: 'unreachable' };
+    if (apiVoices !== null) return { voices: apiVoices, status: 'listed' };
   }
 
-  return defaultVoices;
+  return { voices: defaultVoices, status: voiceSource === 'static' ? 'listed' : 'defaults' };
 }

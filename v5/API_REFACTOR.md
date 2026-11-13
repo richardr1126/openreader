@@ -1177,3 +1177,83 @@ Both came from checking the session only in the browser.
 - **This closes the 5.1 limit:** a signed-out visitor to a reader link goes straight to
   sign-in and back, with no guest created first.
 
+
+### Phase 5.3: Cached voices, model speed and a command-line MCP
+
+A real MCP session made a second audiobook of a book whose audio was already cached at the
+same voice. Production rows showed why: the MCP request had `nativeSpeed` 1, the cached
+audio 1.2. The saved voice speed applied only when the request used the saved provider and
+model, and the MCP had no way to name a model speed or to see what was cached.
+
+- **The saved voice speed applies to every model that has one,** and `modelSpeed` on the v1
+  audiobook body replaces it. Voices and options still apply only to the saved provider and
+  model.
+- **Cached audio is listable.** The worker's `POST /v1/tts-playback/cached-variants` lists
+  each settings hash the document version has segment audio for, with segment count,
+  duration from the constant-bitrate size, and the settings from one segment record.
+  `GET /api/v1/documents/{id}/cached-voices` keeps a variant only when building the request
+  for its voice and model speed from today's saved settings gives the same hash, so the list
+  never offers audio a request would not reuse.
+- **A named voice is checked.** `resolveVoices` reports `listed`, `defaults` or
+  `unreachable`; an audiobook request naming a voice the provider does not list is a `400`,
+  and one whose provider cannot be reached is a `503` rather than a request built on the
+  fallback list. Kokoro blends check each part.
+- **A failing provider stops the run.** Three segments failing in a row end generation with
+  `PROVIDER_UNAVAILABLE` (no answer or 5xx) or `PROVIDER_REJECTED` (4xx), recorded on the
+  operation and not retried, instead of skipping silence through the rest of the book.
+- **Stopping keeps the request as `cancelled`.** Migration 0028 adds `cancelled_at` to
+  `audiobook_requests`. Stop sets it instead of deleting the row, reads report `cancelled`
+  without advancing, and a new POST clears it and resumes. Prune treats it as settled.
+- **The MCP is three command-line tools** in the style of `gh`, one per scope so a client's
+  permission prompt still names what a call can do: `openreader` (`documents:read`: `docs
+  list|view`, `voices list|cached`, `audiobook list|view`), `openreader_docs`
+  (`documents:write`: `docs add <url|->`, with text in `input`) and `openreader_audio`
+  (`audio:generate`: `audiobook create|cancel`). `src/lib/server/mcp/cli.ts` owns the
+  tokenizer, flags and help. A voice ID is `provider/model/voice`, each part URI-encoded, so
+  the separate provider and model inputs are gone from the MCP. The six earlier tools were
+  removed.
+- **The reader and export panels list cached voices.** A "Cached for this book" list in the
+  voice panel and the export sheet comes from the same route. An entry on the current provider
+  and model becomes a draft voice and model speed for Apply; one on another provider or model
+  says so and, on Apply, switches the saved provider and model (for every book, as Settings
+  does) and binds this book's voice to it in one restart. The export sheet applies a pick at
+  once. The OpenReader iOS app shows the same list from a local per-book index.
+- **The export no longer builds a file on its own.** A finished generation in another format
+  or speed waits for Build file instead of starting assembly when the setting changes; the
+  server still finishes what a caller asked for.
+- **The voice picker says when the provider did not answer,** since the list it shows is then
+  the provider's standard voices, unconfirmed.
+
+### Phase 5.4: Library management in the MCP
+
+The request in #180 asked for an assistant that could import a PDF from a link or an
+upload, rename a document, move it between folders and delete it. Phase 5 kept the MCP to
+reading, adding web pages or text, voices and audiobooks, and left the rest to v1 alone;
+phase 5.3 reshaped those tools without returning to the request. This phase closes the gap.
+
+- **A link keeps its file.** `source.type: "url"` (v1 and `docs add <url>`) stores a PDF,
+  EPUB, DOCX, Markdown or text response as that file, up to `maxUploadMb`, named from
+  `Content-Disposition` or the URL. The type comes from `Content-Type`, or from the name
+  when the server sends a generic one, and PDF/EPUB/DOCX bytes are checked for their
+  signature. HTML still becomes Markdown, up to 2 MB. `fetchExternal` takes a size limit
+  chosen by content type, and the fetch allows 30 s.
+- **Uploads from the user's device** take one of two routes. `docs upload` returns
+  `uploadPageUrl`, `/app/upload[/<folder>]`, a signed-in library page that opens the upload
+  dialog (into that folder when it exists) and is a sign-in return path. With `--name` and
+  `--size` it also prepares a v1 upload and returns its transfer URL, headers and a `curl`
+  command; `docs add <uploadId>` then registers it, and repeats while a DOCX converts.
+- **The proxy transfer URL is signed for MCP clients.** An MCP token cannot call `/api/v1`,
+  so in proxy storage mode the URL carries `owner`, `expires` and an HMAC over the user,
+  upload ID and expiry, keyed by `AUTH_SECRET` under its own label. It is valid for 30
+  minutes and authorizes only `PUT /api/v1/uploads/{id}/file` for that upload's owner;
+  registering still takes the MCP token. Presigned storage URLs are unchanged.
+- **New commands.** `openreader`: `folders list`, `docs list --folder <id|->`, and
+  `folderId` in document results. `openreader_docs`: `docs rename` (keeps the extension),
+  `docs move <doc> <folder|->`, `folders create|rename`. These use the v1 document and
+  folder logic.
+- **Deleting is its own tool.** `openreader_docs_delete` (`documents:write`, the only tool
+  marked `destructiveHint: true`) has `docs delete <doc>`, which removes the document, its
+  audio cache and audiobooks, and `folders delete <folder>`, which keeps the documents.
+  `openreader_docs` and `openreader_audio` now say `destructiveHint: false`, since MCP
+  assumes a non-read-only tool is destructive. Audiobook cancel stays in `openreader_audio`:
+  it keeps the generated audio and can be resumed, so there is nothing to delete.

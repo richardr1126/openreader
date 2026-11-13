@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, asc, eq, lt } from 'drizzle-orm';
+import { and, asc, desc, eq, lt } from 'drizzle-orm';
 import {
   buildTtsPlaybackCanonicalSessionId,
   buildTtsPlaybackExportArtifactId,
@@ -204,9 +204,18 @@ async function insertRow(id: string, caller: AudiobookCaller, intent: AudiobookI
   return inserted.length > 0;
 }
 
-/** A new request restarts the retention period of one that already exists. */
+/** A new request restarts the retention period of one that already exists, and resumes a cancelled one. */
 async function renewRow(id: string, userId: string): Promise<void> {
-  await db.update(audiobookRequests).set({ createdAt: Date.now() }).where(and(
+  await db.update(audiobookRequests).set({ createdAt: Date.now(), cancelledAt: null }).where(and(
+    eq(audiobookRequests.id, id),
+    eq(audiobookRequests.userId, userId),
+  ));
+}
+
+/** A cancelled request is kept for its retention period, so it reads as cancelled rather than unknown. */
+async function cancelRow(id: string, userId: string): Promise<void> {
+  const now = Date.now();
+  await db.update(audiobookRequests).set({ createdAt: now, cancelledAt: now }).where(and(
     eq(audiobookRequests.id, id),
     eq(audiobookRequests.userId, userId),
   ));
@@ -588,9 +597,10 @@ async function lookupAudiobookUnlocked(
     id,
     caller,
     intent: stored?.parsed.planObjectKey ? stored : intent,
-    command: row && caller.mayGenerate ? 'advance' : 'read',
+    command: row && !row.cancelledAt && caller.mayGenerate ? 'advance' : 'read',
     includeProgress: options.includeProgress,
   });
+  if (row?.cancelledAt) return { ...audiobook, status: 'cancelled' };
   // A run with no request predates this table; adopting it lets it be stopped
   // and lets its file be built when it finishes.
   const running = audiobook.generation.state === 'generating' || audiobook.generation.state === 'queued';
@@ -609,7 +619,7 @@ async function loadRequested(caller: AudiobookCaller, id: string, documentId: st
     await deleteRow(id, caller.scope.storageUserId);
     return null;
   }
-  return intent;
+  return { intent, cancelled: Boolean(row.cancelledAt) };
 }
 
 async function getAudiobookUnlocked(
@@ -617,14 +627,16 @@ async function getAudiobookUnlocked(
   id: string,
   documentId: string,
 ): Promise<Audiobook | null> {
-  const intent = await loadRequested(caller, id, documentId);
-  if (!intent) return null;
-  return advanceAudiobook({ id, caller, intent, command: caller.mayGenerate ? 'advance' : 'read', includeProgress: true });
+  const requested = await loadRequested(caller, id, documentId);
+  if (!requested) return null;
+  const { intent, cancelled } = requested;
+  const audiobook = await advanceAudiobook({ id, caller, intent, command: caller.mayGenerate && !cancelled ? 'advance' : 'read', includeProgress: true });
+  return cancelled ? { ...audiobook, status: 'cancelled' } : audiobook;
 }
 
 /**
- * Stops generation and ends the request. Audio generated so far stays cached.
- * Formats and speeds share one generation, so cancelling it also ends the other
+ * Stops generation and cancels the request. Audio generated so far stays cached.
+ * Formats and speeds share one generation, so cancelling it also cancels the other
  * whole-book requests on that session; a new POST resumes any of them.
  */
 async function stopAudiobookUnlocked(
@@ -632,9 +644,15 @@ async function stopAudiobookUnlocked(
   id: string,
   documentId: string,
 ): Promise<Audiobook | null> {
-  const intent = await loadRequested(caller, id, documentId);
-  if (!intent) return null;
+  const requested = await loadRequested(caller, id, documentId);
+  if (!requested) return null;
+  const { intent } = requested;
   if (intent.chapterIndex !== null) throw new ChapterCommandError();
+  // Already stopped: its session may since carry a resumed sibling, which a
+  // repeated Stop must leave running.
+  if (requested.cancelled) {
+    return { ...await advanceAudiobook({ id, caller, intent, command: 'read', includeProgress: false }), status: 'cancelled' };
+  }
   let runCancelled = false;
   const audiobook = await advanceAudiobook({
     id,
@@ -644,12 +662,12 @@ async function stopAudiobookUnlocked(
     includeProgress: false,
     onRunCancelled: () => { runCancelled = true; },
   });
-  await deleteRow(id, caller.scope.storageUserId);
-  if (runCancelled) await deleteRequestsSharingSession(caller, intent);
-  return audiobook;
+  await cancelRow(id, caller.scope.storageUserId);
+  if (runCancelled) await cancelRequestsSharingSession(caller, intent);
+  return { ...audiobook, status: 'cancelled' };
 }
 
-async function deleteRequestsSharingSession(caller: AudiobookCaller, stopped: AudiobookIntent): Promise<void> {
+async function cancelRequestsSharingSession(caller: AudiobookCaller, stopped: AudiobookIntent): Promise<void> {
   const { documentId } = stopped.parsed;
   const { settingsHash } = await buildTtsPlaybackPlanningInput(stopped.parsed, caller.scope);
   const rows = await db.select().from(audiobookRequests).where(and(
@@ -661,7 +679,7 @@ async function deleteRequestsSharingSession(caller: AudiobookCaller, stopped: Au
     const intent = intentFromRow(row);
     if (!intent) continue;
     const planned = await buildTtsPlaybackPlanningInput(intent.parsed, caller.scope);
-    if (planned.settingsHash === settingsHash) await deleteRow(row.id, caller.scope.storageUserId);
+    if (planned.settingsHash === settingsHash && !row.cancelledAt) await cancelRow(row.id, caller.scope.storageUserId);
   }
 }
 
@@ -679,6 +697,20 @@ export function getAudiobook(caller: AudiobookCaller, id: string, documentId: st
 
 export function stopAudiobook(caller: AudiobookCaller, id: string, documentId: string): Promise<Audiobook | null> {
   return withAudiobookLock(caller, documentId, () => stopAudiobookUnlocked(caller, id, documentId));
+}
+
+/** The document an audiobook request belongs to, so a caller can name it by its ID alone. */
+export async function findAudiobookDocumentId(id: string, storageUserId: string): Promise<string | null> {
+  const rows = await db.select({ documentId: audiobookRequests.documentId }).from(audiobookRequests)
+    .where(and(eq(audiobookRequests.id, id), eq(audiobookRequests.userId, storageUserId))).limit(1) as Array<{ documentId: string }>;
+  return rows[0]?.documentId ?? null;
+}
+
+/** A user's audiobook requests, newest first, for one document or all of them. */
+export async function listAudiobookRequests(storageUserId: string, documentId?: string, limit = 50, offset = 0): Promise<Array<{ id: string; documentId: string }>> {
+  return db.select({ id: audiobookRequests.id, documentId: audiobookRequests.documentId }).from(audiobookRequests)
+    .where(and(eq(audiobookRequests.userId, storageUserId), ...(documentId ? [eq(audiobookRequests.documentId, documentId)] : [])))
+    .orderBy(desc(audiobookRequests.createdAt), desc(audiobookRequests.id)).limit(limit).offset(offset) as Promise<Array<{ id: string; documentId: string }>>;
 }
 
 // A signal is the only thing that moves a closed tab's audiobook on, so it waits out
@@ -786,7 +818,11 @@ async function pruneRequest(id: string, userId: string, documentId: string): Pro
       // A chapter that no longer exists has nothing left to do.
       const settled = await getAudiobookUnlocked(caller, id, documentId).then(
         // A ready file says nothing about a run that is still changing the audio.
-        audiobook => audiobook !== null && !UNSETTLED.has(audiobook.status) && !UNSETTLED.has(audiobook.generation.state),
+        // A cancelled request asks for nothing more, but keeps its run's
+        // reference while the worker is still draining that run.
+        audiobook => audiobook !== null && (audiobook.status === 'cancelled'
+          ? audiobook.generation.state !== 'generating' && audiobook.generation.state !== 'queued'
+          : !UNSETTLED.has(audiobook.status) && !UNSETTLED.has(audiobook.generation.state)),
         (error: unknown) => {
           if (error instanceof ChapterNotFoundError) return true;
           throw error;

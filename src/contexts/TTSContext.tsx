@@ -42,7 +42,7 @@ import { useTtsDocumentExport, type TtsDocumentAudioExportRequest } from '@/hook
 import type { Audiobook } from '@/types/tts-export';
 import { useTtsPlanController } from '@/hooks/audio/useTtsPlanController';
 import { useTtsPlaybackModel } from '@/hooks/audio/useTtsPlaybackModel';
-import { useTtsPlaybackSettings } from '@/hooks/audio/useTtsPlaybackSettings';
+import { useTtsPlaybackSettings, type BookVoiceChange } from '@/hooks/audio/useTtsPlaybackSettings';
 import type { TtsPlaybackPlanPayload, TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { isPlaybackPhaseProcessing } from '@/lib/client/tts/playback-control';
 import {
@@ -79,6 +79,8 @@ type EpubLocationChangeHandler = (
  * Interface defining all available methods and properties in the TTS context
  */
 interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'currentSegment'> {
+  /** The open document, from the reader route. */
+  documentId: string;
   /** The open book's voice and model speed: its own picks, else the defaults. */
   voice: string;
   voiceSpeed: number;
@@ -113,7 +115,7 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   setCurrDocPages: (num: number | undefined) => void;
   setAudioPlayerSpeedAndRestart: (speed: number) => void;
   /** Set (or with null, reset) the open book's voice and/or model speed with one plan restart. */
-  setBookVoiceAndRestart: (change: { voice?: string | null; nativeSpeed?: number | null }) => void;
+  setBookVoiceAndRestart: (change: BookVoiceChange) => void;
   bookSpeechSettings: BookSpeechSettings;
   setBookSpeechSettings: (value: BookSpeechSettings) => Promise<boolean>;
   /** Reacquire the server-owned bootstrap payload after plan-affecting settings change. */
@@ -188,7 +190,10 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     providerRef: configProviderRef,
     providerType: configProviderType,
     ttsModel: configTTSModel,
+    ttsInstructions: configTtsInstructions,
+    ttsModelOptions: configTtsModelOptions,
     updateConfigKey,
+    updateConfig,
   } = useConfig();
 
   // Audio and voice management hooks
@@ -588,10 +593,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setReaderSettings,
     onSettingsSaved,
     providerRef: configProviderRef,
+    providerType: configProviderType,
     ttsModel,
+    ttsInstructions: configTtsInstructions,
+    ttsModelOptions: configTtsModelOptions,
     defaultVoice: voice,
     defaultVoiceSpeed: speed,
     updateConfigKey,
+    updateConfig,
     reacquirePlaybackPlan,
   });
 
@@ -603,6 +612,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    * Provides the TTS context value to child components
    */
   const value = useMemo(() => ({
+    documentId,
     followingNarration, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
     isPlaying,
     isProcessing,
@@ -655,6 +665,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }), [
     followingNarration, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
     isPlaying,
+    documentId,
     isProcessing,
     canSkip,
     sentences,

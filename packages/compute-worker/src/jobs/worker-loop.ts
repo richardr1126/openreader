@@ -31,6 +31,7 @@ import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
 import { toErrorMessage } from '../infrastructure/errors';
 import { TtsCredentialBrokerClientError } from './tts-credential-broker-error';
 import { EmailDeliveryError } from './email-delivery';
+import { TtsProviderFailedError } from './playback/provider-failure';
 import {
   type ComputeLimitPolicyDocument,
   type WorkerOperationAction,
@@ -321,6 +322,7 @@ export function createWorkerLoopController(input: {
           deliveryCount,
           pdfAttempts: input.pdfAttempts,
           retryable: error instanceof TtsCredentialBrokerClientError || error instanceof EmailDeliveryError
+            || error instanceof TtsProviderFailedError
             ? error.retryable
             : undefined,
         });
@@ -334,7 +336,7 @@ export function createWorkerLoopController(input: {
             opId: failedContext.decoded.opId,
             error: {
               message: errorMessage,
-              ...(notStarted ? { code: error.code } : {}),
+              ...(notStarted || error instanceof TtsProviderFailedError ? { code: error.code } : {}),
             },
             updatedAt: Date.now(),
             ...(timing ? { timing } : {}),

@@ -26,6 +26,9 @@ import {
 } from '@/lib/client/audiobook-export-issues';
 import type { TtsExportChapterProgress, TtsExportGenerationState } from '@/types/tts-export';
 import { StorageLimitMessage } from '@/components/StorageLimitMessage';
+import { CachedVoiceList, cachedVoiceChange } from '@/components/player/CachedVoiceList';
+import { useCachedVoices } from '@/hooks/audio/useCachedVoices';
+import { useSharedProviders } from '@/hooks/useSharedProviders';
 
 interface AudiobookExportModalProps {
   isOpen: boolean;
@@ -158,8 +161,11 @@ export function AudiobookExportModal({
     documentLanguage,
     detectedDocumentLanguage,
     setAudioPlayerSpeedAndRestart,
+    setBookVoiceAndRestart,
     resolveDocumentAudioExport,
   } = useTTS();
+  const cachedVoices = useCachedVoices(documentId, isOpen);
+  const { providers } = useSharedProviders();
   const [exportFormat, setExportFormat] = useState<ExportFormat>('mp3');
   const [localAudioPlayerSpeed, setLocalAudioPlayerSpeed] = useState(audioPlayerSpeed);
 
@@ -338,12 +344,18 @@ export function AudiobookExportModal({
                 variant="secondary"
                 size="sm"
                 onClick={onChangeVoice}
-                disabled={isGenerating}
+                disabled={isGenerating || pendingAction !== null}
                 aria-label="Change voice"
               >
                 Change
               </Button>
             </SettingRow>
+            <CachedVoiceList
+              voices={cachedVoices}
+              current={{ providerRef, ttsModel, voice, nativeSpeed: nativeSpeedSupported ? voiceSpeed : 1 }}
+              onPick={(entry) => setBookVoiceAndRestart(cachedVoiceChange(entry, providers))}
+              disabled={isGenerating || pendingAction !== null}
+            />
             {languageWarnings.length > 0 && (
               <div className="space-y-1">
                 {languageWarnings.map((warning) => (

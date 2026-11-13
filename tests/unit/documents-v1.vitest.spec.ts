@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
   db: null as unknown, sqlite: null as unknown as import('better-sqlite3').Database,
-  userId: 'owner' as string | null, blobs: new Map<string, Buffer>(), receipts: new Map<string, unknown>(),
+  userId: 'owner' as string | null, blobs: new Map<string, Buffer>(), receipts: new Map<string, unknown>(), leases: new Set<string>(), leaseExpired: false,
   parse: vi.fn(), article: vi.fn(), conversion: vi.fn(), workerAvailable: false, admit: vi.fn(),
 }));
 vi.mock('next/server', async original => ({ ...await original<typeof import('next/server')>(), after: () => undefined }));
@@ -14,10 +14,18 @@ vi.mock('@openreader/database', () => ({ get db() { return state.db; } }));
 vi.mock('@/lib/server/auth/auth', () => ({ getAuthContext: async () => ({ userId: state.userId, user: { isAnonymous: false } }), getTrustedOrigins: () => ['http://localhost'] }));
 vi.mock('@/lib/server/storage/s3', () => ({ isS3Configured: () => true, getBrowserStorageTransport: () => 'proxy' }));
 vi.mock('@/lib/server/runtime-config', () => ({ getResolvedRuntimeConfig: async () => ({ maxUploadMb: 10, computeLimitPolicies: { actions: { document_intake: { enabled: false } } } }) }));
-vi.mock('@/lib/server/documents/web-loader', () => ({ fetchAndParseUrl: state.article }));
+vi.mock('@/lib/server/documents/web-loader', () => ({ fetchUrlSource: state.article }));
 vi.mock('@/lib/server/documents/previews', () => ({ enqueueDocumentPreview: async () => undefined }));
 vi.mock('@/lib/server/tts/segments-cache', () => ({ deleteDocumentTtsSegmentCache: async () => undefined }));
-vi.mock('@/lib/server/documents/blob-lease', () => ({ withDocumentBlobLease: async (_id: string, run: () => Promise<unknown>) => run() }));
+vi.mock('@/lib/server/documents/blob-lease', () => ({
+  withDocumentBlobLease: async (_id: string, run: () => Promise<unknown>) => run(),
+  tryAcquireDocumentBlobLease: async (key: string) => {
+    if (state.leases.has(key)) return null;
+    state.leases.add(key);
+    return { owner: key, release: async () => { state.leases.delete(key); } };
+  },
+  renewDocumentBlobLease: async (key: string) => state.leases.has(key) && !state.leaseExpired,
+}));
 vi.mock('@/lib/server/compute-limits/run-admitted', async original => ({
   ...await original<typeof import('@/lib/server/compute-limits/run-admitted')>(), createAdmittedComputeOperation: state.admit,
 }));
@@ -60,6 +68,8 @@ import { GET as read, PATCH as update } from '@/app/api/v1/documents/[id]/route'
 import { POST as prepare } from '@/app/api/v1/uploads/route';
 import { GET as uploadStatus } from '@/app/api/v1/uploads/[uploadId]/route';
 import { PUT as transfer } from '@/app/api/v1/uploads/[uploadId]/file/route';
+import { signUploadLink } from '@/lib/server/documents/upload-links';
+import { safeDocumentName } from '@/lib/server/documents/utils';
 
 function request(path: string, method = 'GET', body?: unknown) {
   return new NextRequest(`http://localhost${path}`, { method,
@@ -73,9 +83,9 @@ function insert(id: string, owner = 'owner', name = 'notes.txt', type = 'html') 
 
 beforeEach(() => {
   vi.stubEnv('BASE_URL', 'http://localhost:3003');
-  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.workerAvailable = false;
+  state.userId = 'owner'; state.blobs.clear(); state.receipts.clear(); state.leases.clear(); state.leaseExpired = false; state.workerAvailable = false;
   state.admit.mockReset().mockImplementation(async (input: { create: () => Promise<unknown> }) => input.create());
-  state.article.mockReset().mockResolvedValue({ title: 'An article', content: '# Imported article', author: 'Article Author', language: 'de' });
+  state.article.mockReset().mockResolvedValue({ kind: 'page', title: 'An article', content: '# Imported article', author: 'Article Author', language: 'de' });
   state.parse.mockReset().mockResolvedValue({ artifact: { objectKey: 'parsed' }, operation: null });
   state.sqlite = new Database(':memory:');
   state.sqlite.exec(`
@@ -108,7 +118,92 @@ test('creates text and URL documents directly on the server with canonical ident
   expect(document.status).toBe('ready'); expect(document.fileUrl).toContain(document.id);
   const imported = await (await create(request('/api/v1/documents', 'POST', { source: { type: 'url', url: 'https://example.test/article' } }))).json();
   expect(imported).toMatchObject({ name: 'An_article.md', author: 'Article Author', language: 'de' });
-  expect(state.article).toHaveBeenCalledWith('https://example.test/article');
+  expect(state.article).toHaveBeenCalledWith('https://example.test/article', expect.any(Number));
+  // A linked file keeps its format, and a requested name keeps the file's extension.
+  state.article.mockResolvedValueOnce({ kind: 'file', bytes: Buffer.from('Plain linked text.'), name: 'notes.txt' });
+  const linked = await (await create(request('/api/v1/documents', 'POST', { source: { type: 'url', url: 'https://example.test/notes.txt' }, name: 'Reading list' }))).json();
+  expect(linked).toMatchObject({ name: 'Reading list.txt', status: 'ready' });
+});
+
+test('a long name is shortened before its extension, which decides the document type', () => {
+  const name = safeDocumentName(`${'a'.repeat(300)}.pdf`, 'document.pdf');
+  expect(name).toHaveLength(240);
+  expect(name.endsWith('a.pdf')).toBe(true);
+  expect(safeDocumentName('short.epub', 'document.epub')).toBe('short.epub');
+});
+
+test('a signed upload link sends one upload\'s bytes once without a session, for its owner only', async () => {
+  const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'linked.txt', size: 5 }))).json();
+  const { query } = signUploadLink('owner', prepared.id);
+  state.userId = null;
+  const put = (search: string, id = prepared.id) => transfer(new NextRequest(`http://localhost/api/v1/uploads/${id}/file?${search}`, { method: 'PUT', body: 'hello' }), uploadParams(id));
+  expect((await put(query.replace(/signature=[^&]+/, 'signature=AAAA'))).status).toBe(403);
+  expect((await put(signUploadLink('other', prepared.id).query)).status).toBe(404);
+  expect((await put(query.replace(/owner=[^&]+/, `owner=${Buffer.from('other').toString('base64url')}`))).status).toBe(403);
+  expect((await put(signUploadLink('owner', prepared.id, Date.now() - 31 * 60 * 1000).query)).status).toBe(403);
+  expect((await put(query)).status).toBe(204);
+  // Used once, so the file can't be replaced before it is added.
+  const again = await put(query);
+  expect(again.status).toBe(409);
+  expect((await again.json()).error.code).toBe('UPLOAD_ALREADY_RECEIVED');
+  state.userId = 'owner';
+  const created = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
+  expect(created.status).toBe(201);
+});
+
+test('a signed upload is claimed for its whole transfer, and a failed transfer frees the link', async () => {
+  const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'claimed.txt', size: 5 }))).json();
+  const { query } = signUploadLink('owner', prepared.id);
+  state.userId = null;
+  const put = (body: string) => transfer(new NextRequest(`http://localhost/api/v1/uploads/${prepared.id}/file?${query}`, { method: 'PUT', body }), uploadParams(prepared.id));
+  // A transfer in flight holds the claim: a second PUT and a submit are both refused.
+  state.leases.add(`upload:${prepared.id}`);
+  const second = await put('hello');
+  expect(second.status).toBe(409);
+  expect((await second.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  state.userId = 'owner';
+  const early = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
+  expect(early.status).toBe(409);
+  expect((await early.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  state.leases.clear();
+  state.userId = null;
+  // A short body fails and releases the claim without using up the link.
+  expect((await put('hel')).status).toBe(400);
+  expect(state.leases.size).toBe(0);
+  expect((await put('hello')).status).toBe(204);
+  // The owner's own session can't replace a file that arrived through the link either.
+  state.userId = 'owner';
+  const replaced = await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'other' }), uploadParams(prepared.id));
+  expect(replaced.status).toBe(409);
+  expect((await replaced.json()).error.code).toBe('UPLOAD_ALREADY_RECEIVED');
+  expect((await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }))).status).toBe(201);
+  expect(state.leases.size).toBe(0);
+});
+
+test('a request whose upload lease expired writes nothing', async () => {
+  const prepared = await (await prepare(request('/api/v1/uploads', 'POST', { name: 'expired.txt', size: 5 }))).json();
+  const { query } = signUploadLink('owner', prepared.id);
+  const submit = () => create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));
+  // The lease lapses mid-transfer, so the link writes no file and stays usable.
+  state.userId = null;
+  state.leaseExpired = true;
+  const put = () => transfer(new NextRequest(`http://localhost/api/v1/uploads/${prepared.id}/file?${query}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
+  const lapsed = await put();
+  expect(lapsed.status).toBe(409);
+  expect((await lapsed.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  expect(state.blobs.size).toBe(0);
+  state.leaseExpired = false;
+  expect((await put()).status).toBe(204);
+  // A submit that loses its lease leaves the receipt unsubmitted.
+  state.userId = 'owner';
+  state.leaseExpired = true;
+  const stale = await submit();
+  expect(stale.status).toBe(409);
+  expect((await stale.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  expect((await (await uploadStatus(request(`/api/v1/uploads/${prepared.id}`), uploadParams(prepared.id))).json()).status).toBe('pending');
+  state.leaseExpired = false;
+  expect((await submit()).status).toBe(201);
+  expect(state.leases.size).toBe(0);
 });
 
 test('prepared upload ownership, bounded transfer and repeated status lead to one verified document', async () => {
@@ -116,6 +211,11 @@ test('prepared upload ownership, bounded transfer and repeated status lead to on
   state.userId = 'other';
   expect((await uploadStatus(request(`/api/v1/uploads/${prepared.id}`), uploadParams(prepared.id))).status).toBe(404);
   state.userId = 'owner';
+  // A session transfer also holds the upload's claim while it runs.
+  state.leases.add(`upload:${prepared.id}`);
+  const busy = await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
+  expect((await busy.json()).error.code).toBe('UPLOAD_IN_PROGRESS');
+  state.leases.clear();
   const sent = await transfer(new NextRequest(`http://localhost${prepared.url}`, { method: 'PUT', body: 'hello' }), uploadParams(prepared.id));
   expect(sent.status).toBe(204);
   const created = await create(request('/api/v1/documents', 'POST', { source: { type: 'upload', uploadId: prepared.id } }));

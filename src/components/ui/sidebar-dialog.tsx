@@ -16,7 +16,6 @@ export function SidebarDialog<T extends string = string>({
   onClose,
   size = 'xl',
   panelTestId,
-  modalClassName,
   headerTitle,
   headerRight,
   showCloseButton = true,
@@ -32,7 +31,6 @@ export function SidebarDialog<T extends string = string>({
   onClose: () => void;
   size?: DialogSize;
   panelTestId?: string;
-  modalClassName?: string;
   headerTitle: ReactNode;
   headerRight?: ReactNode;
   showCloseButton?: boolean;
@@ -50,7 +48,6 @@ export function SidebarDialog<T extends string = string>({
       onClose={onClose}
       size={size}
       panelTestId={panelTestId}
-      className={modalClassName}
     >
       {customContent}
       <div

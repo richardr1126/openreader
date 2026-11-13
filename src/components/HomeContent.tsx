@@ -1,4 +1,5 @@
 import { DocumentList } from '@/components/doclist/DocumentList';
+import type { UploadRequest } from '@/components/doclist/useDocumentListController';
 import { SettingsIcon } from '@/components/icons/Icons';
 import { SidebarNavLink } from '@/components/ui';
 import { UserMenu } from '@/components/auth/UserMenu';
@@ -14,7 +15,7 @@ const Brand = () => (
   </div>
 );
 
-export function HomeContent() {
+export function HomeContent({ uploadTo }: { uploadTo?: UploadRequest } = {}) {
   const appActions = (
     <div className="flex flex-col gap-0.5 w-full">
       <DesktopRestartToUpdateItem />
@@ -31,7 +32,7 @@ export function HomeContent() {
 
   return (
     <div className="w-full h-full">
-      <DocumentList brand={<Brand />} appActions={appActions} />
+      <DocumentList brand={<Brand />} appActions={appActions} uploadTo={uploadTo} />
     </div>
   );
 }

@@ -33,6 +33,7 @@ import type {
   UserStorageUsageRequest,
   TtsVoicePreviewRequest,
   ComputeOperation,
+  TtsPlaybackCachedVariants,
 } from './protocol';
 import { WORKER_STORAGE_TIMEOUT_MS } from './protocol';
 
@@ -221,6 +222,17 @@ export class ComputeWorkerClient {
 
   createTtsPlaybackExportArtifactOperation(input: TtsPlaybackExportArtifactRequest): Promise<ComputeOperation> {
     return this.requestJson('POST', '/v1/tts-playback/exports/jobs', input);
+  }
+
+  /** Every speech setting this document version has segment audio for, newest first. */
+  async listTtsPlaybackCachedVariants(input: {
+    storageUserId: string;
+    documentId: string;
+    documentVersion: number;
+  }): Promise<TtsPlaybackCachedVariants> {
+    const { variants } = await this.requestJson<{ variants: TtsPlaybackCachedVariants }>(
+      'POST', '/v1/tts-playback/cached-variants', input, { signal: AbortSignal.timeout(WORKER_STORAGE_TIMEOUT_MS) });
+    return variants;
   }
 
   resolveTtsPlaybackSession(input: TtsPlaybackSessionResolveRequest): Promise<TtsPlaybackSessionResolution> {

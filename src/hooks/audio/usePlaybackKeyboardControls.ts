@@ -29,7 +29,7 @@ function listenForReaderKeys(resolve: (event: KeyboardEvent, within: Within) => 
     // Structural checks work for elements belonging to an EPUB frame too.
     const within: Within = (selector) => typeof target?.closest === 'function' && target.closest(selector) !== null;
     if (within(EDITING)) return;
-    if (document.querySelector('[aria-modal="true"]:not([data-closing]), [role="menu"], [role="listbox"]')) return;
+    if (document.querySelector('dialog[open], [role="menu"], [role="listbox"]')) return;
     const action = resolve(event, within);
     if (!action) return;
     event.preventDefault();
