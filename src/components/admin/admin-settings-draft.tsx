@@ -55,6 +55,18 @@ export function useAdminSettingsDraft() {
   // not the fetched values, are what an edit undoes; a reset's outcome is unknown, so no edit undoes it.
   const pending = useRef<Record<string, unknown>>({});
 
+  /** Drop edits that now equal the server's value, unless a request for that key is still running. */
+  const reconcile = () => {
+    const values = queryClient.getQueryData<SettingsResponse>(queryKey)?.values;
+    if (!values) return;
+    setEdits((current) => {
+      const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
+        key in pending.current || !Object.is(value, values[key])
+      )));
+      return Object.keys(kept).length === Object.keys(current).length ? current : kept;
+    });
+  };
+
   useEffect(() => {
     if (!error) return;
     console.error('[admin settings] load failed:', error);
@@ -65,7 +77,7 @@ export function useAdminSettingsDraft() {
     // Without `updates`, the route reads the whole body as updates and refuses `reset` as a key.
     mutationFn: (key: string) => patchAdminSettings({ updates: {}, reset: [key] }),
     onMutate: (key) => { pending.current = { [key]: RESETTING }; },
-    onSettled: () => { pending.current = {}; },
+    onSettled: () => { pending.current = {}; reconcile(); },
     // Reset shows only on keys without an edit, so any edit here was made while it ran and stays.
     onSuccess: async (failed) => {
       if (failed.length) toast.error('Reset failed');
@@ -81,7 +93,7 @@ export function useAdminSettingsDraft() {
   const saveMutation = useMutation({
     mutationFn: (updates: Record<string, unknown>) => patchAdminSettings({ updates }),
     onMutate: (updates) => { pending.current = updates; },
-    onSettled: () => { pending.current = {}; },
+    onSettled: () => { pending.current = {}; reconcile(); },
     onSuccess: async (failed, updates) => {
       // Saved keys leave the draft unless they were edited again meanwhile; refused ones stay to fix.
       setEdits((current) => {
