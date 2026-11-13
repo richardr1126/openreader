@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ProgressPopup } from '@/components/ProgressPopup';
 import { ProgressCard } from '@/components/ProgressCard';
-import { CheckIcon, ClockIcon, DownloadIcon, RefreshIcon, XCircleIcon } from '@/components/icons/Icons';
+import { CheckIcon, ClockIcon, DownloadIcon, RefreshIcon, TrashIcon, XCircleIcon } from '@/components/icons/Icons';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
@@ -197,9 +197,11 @@ export function AudiobookExportModal({
     chapterDownloads,
     start,
     stop,
+    remove,
     retrySkipped,
     downloadChapter,
   } = exportState;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const providerModelPolicy = useMemo(
     () => resolveTtsProviderModelPolicy({ providerRef, providerType, model: ttsModel }),
@@ -460,6 +462,18 @@ export function AudiobookExportModal({
                   <span>Retry {skipped} skipped {skipped === 1 ? 'segment' : 'segments'}</span>
                 </Button>
               )}
+              {canDownload && !isActive && (
+                <Button
+                  onClick={() => setConfirmingDelete(true)}
+                  disabled={pendingAction !== null}
+                  variant="ghost"
+                  size="sm"
+                  className="w-full gap-2"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                  <span>{pendingAction === 'delete' ? 'Deleting…' : `Delete ${exportFormat.toUpperCase()} file`}</span>
+                </Button>
+              )}
             </div>
           </Section>
 
@@ -489,6 +503,19 @@ export function AudiobookExportModal({
           )}
         </div>
       </ReaderSidebarShell>
+
+      <ConfirmDialog
+        isOpen={confirmingDelete}
+        onClose={() => setConfirmingDelete(false)}
+        onConfirm={() => {
+          setConfirmingDelete(false);
+          void remove();
+        }}
+        title={`Delete ${exportFormat.toUpperCase()} file?`}
+        message="The generated speech stays cached, so building it again needs no new speech."
+        confirmText="Delete"
+        isDangerous
+      />
 
       <ConfirmDialog
         isOpen={requestError !== null}

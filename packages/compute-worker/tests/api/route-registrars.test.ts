@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import { afterEach, describe, expect, test } from 'vitest';
 import { registerHealthRoutes } from '../../src/api/routes/health';
-import { registerPlaybackExportSessionRoutes } from '../../src/api/routes/playback/exports';
+import { registerPlaybackExportRoutes, registerPlaybackExportSessionRoutes } from '../../src/api/routes/playback/exports';
 import { registerPlaybackSessionRoutes } from '../../src/api/routes/playback/sessions';
 import type { PlaybackSessionController } from '../../src/api/playback/session-controller';
 import type { PlaybackSessionReadModel } from '../../src/api/playback/session-read-model';
@@ -65,6 +65,43 @@ describe('compute worker domain route registrars', () => {
     });
     expect(current.json()).toEqual({ sessionId: 'session-1', canceled: true, status: 'canceled' });
     expect(patches).toEqual([{ expectedRunId: 'run-1' }, { expectedRunId: 'run-2' }]);
+  });
+
+  test('deletes one export artifact and nothing outside it', async () => {
+    const app = Fastify();
+    apps.push(app);
+    const documentId = 'a'.repeat(64);
+    const root = `openreader/tts_playback_exports_v1/users/user-1/docs/${documentId}/`;
+    const objects = new Set([
+      `${root}abcdef12/artifact-build-1.mp3`,
+      `${root}abcdef12/metadata.json`,
+      `${root}abcdef1234/metadata.json`,
+      `openreader/tts_playback_segments_audio_v1/users/user-1/docs/${documentId}/1/settings-1/0.mp3`,
+    ]);
+    registerPlaybackExportRoutes({
+      app,
+      s3Prefix: 'openreader',
+      storage: {
+        listPrefix: async (prefix: string) => [...objects].filter((key) => key.startsWith(prefix)),
+        deleteObject: async (key: string) => { objects.delete(key); },
+      },
+    } as unknown as ComputeWorkerRouteContext);
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/v1/tts-playback/exports/abcdef12?storageUserId=user-1&documentId=${documentId}`,
+    });
+    expect(deleted.json()).toEqual({ deletedObjects: 2 });
+    expect([...objects]).toEqual([
+      `${root}abcdef1234/metadata.json`,
+      `openreader/tts_playback_segments_audio_v1/users/user-1/docs/${documentId}/1/settings-1/0.mp3`,
+    ]);
+
+    const escaped = await app.inject({
+      method: 'DELETE',
+      url: `/v1/tts-playback/exports/abcdef12%2F..?storageUserId=user-1&documentId=${documentId}`,
+    });
+    expect(escaped.statusCode).toBe(400);
   });
 
   test('summarizes export progress per plan chapter from the cache scope alone', async () => {

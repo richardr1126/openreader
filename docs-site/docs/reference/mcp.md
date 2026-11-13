@@ -49,14 +49,14 @@ already connected keep working.
 The tools take command lines in the style of `gh`, such as `docs list --search dune`,
 and return JSON. There is one tool for each [scope](./oauth), and deleting has a tool of
 its own, so a client that asks before each call still shows what the call can do.
-Only `openreader_docs_delete` is marked destructive. `help` lists a tool's commands,
+Only `openreader_delete` is marked destructive. `help` lists a tool's commands,
 and `--help` after a command describes its flags.
 
 | Tool | Scope | Commands |
 | --- | --- | --- |
 | `openreader` | `documents:read` | `docs list`, `docs view <doc>`, `folders list`, `voices list`, `voices cached <doc>`, `audiobook list <doc>`, `audiobook view <id>` |
 | `openreader_docs` | `documents:write` | `docs add <source>`, `docs upload`, `docs rename <doc> <name>`, `docs move <doc> <folder>`, `folders create <name>`, `folders rename <folder> <name>` |
-| `openreader_docs_delete` | `documents:write` | `docs delete <doc>`, `folders delete <folder>` |
+| `openreader_delete` | `documents:write` | `docs delete <doc>`, `folders delete <folder>`, `audiobook delete <id>` |
 | `openreader_audio` | `audio:generate` | `audiobook create <doc>`, `audiobook cancel <id>` |
 
 ### Documents and folders
@@ -102,10 +102,23 @@ settings, or whose provider is disabled, is left out.
 anything you leave out. `--model-speed` is the rate the model speaks at, so it changes
 the audio; `--speed` only speeds up the finished file. The command returns at once with
 a status and the voice ID it used, and sending the same command again returns the same
-audiobook. `reusedCachedAudio` says whether audio was already there. Use
-`audiobook view <id>` to check on it, and `audiobook cancel <id>` to stop it; generated
-audio stays cached and the audiobook reports `cancelled` until it is created again.
-Because cancelling loses nothing, `openreader_audio` is not marked destructive.
+audiobook with `created: false`, resuming it if it was cancelled or interrupted.
+`reusedCachedAudio` says whether audio was already there. Use `audiobook view <id>` to
+check on it, and `audiobook cancel <id>` to stop it; generated audio stays cached and
+the audiobook reports `cancelled` until it is created again. Because cancelling loses
+nothing, `openreader_audio` is not marked destructive.
+
+`audiobook list` and `audiobook view` show each audiobook's voice ID, model speed,
+format, speed and `requestedAt`, and a `next` field that says what to do with it: follow
+its progress, give the user its download link, or run the `audiobook create` command it
+spells out to resume a cancelled, interrupted or usage-limited one. They only report:
+reading an audiobook never starts or resumes its generation, and a read made while
+another command holds the audiobook waits for it briefly.
+
+`audiobook delete <id>` removes one audiobook and its file but keeps the document and
+its generated audio, so creating the audiobook again needs no new speech. A file that is
+still being built cannot be deleted until it is ready. To remove one audiobook, use it
+rather than `docs delete`, which removes the whole document.
 
 Results include a `webUrl` that opens the document in OpenReader. Once an audiobook is
 ready, `audiobook view` also returns a `webDownloadUrl`, a page that starts the download.

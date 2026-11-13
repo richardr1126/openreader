@@ -127,7 +127,7 @@ export function useAudiobookExport(input: {
         speed,
         action,
         includeProgress,
-        ...(action === 'stop' && snapshotRef.current ? { audiobookId: snapshotRef.current.id } : {}),
+        ...((action === 'stop' || action === 'delete') && snapshotRef.current ? { audiobookId: snapshotRef.current.id } : {}),
       }, controller.signal);
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
       lastRefreshAtRef.current = Date.now();
@@ -390,6 +390,7 @@ export function useAudiobookExport(input: {
     chapterDownloads,
     start: useCallback(() => run('start'), [run]),
     stop: useCallback(() => run('stop'), [run]),
+    remove: useCallback(() => run('delete'), [run]),
     retrySkipped: useCallback(() => run('retry-skipped'), [run]),
     downloadChapter,
   };

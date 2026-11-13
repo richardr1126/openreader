@@ -1,6 +1,6 @@
 /** Audiobook contract shared by the `/api/v1` audiobook routes and the UI. */
 
-export type TtsExportAction = 'resolve' | 'start' | 'retry-skipped' | 'stop';
+export type TtsExportAction = 'resolve' | 'start' | 'retry-skipped' | 'stop' | 'delete';
 
 /**
  * - idle: no export run exists yet for these settings.
@@ -72,6 +72,14 @@ export type Audiobook = {
   status: AudiobookStatus;
   /** Settled share of the planned segments, from 0 to 1, once known. */
   progress: number | null;
+  /** The speech it is made with: the same fields a request names them by. */
+  provider: string;
+  model: string;
+  voice: string;
+  /** The rate the model speaks at; `speed` is the finished file's playback speed. */
+  modelSpeed: number;
+  /** When it was last requested or cancelled; null when nobody has asked for it. */
+  requestedAt: string | null;
   format: 'mp3' | 'm4b';
   speed: number;
   chapter: number | null;

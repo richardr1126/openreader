@@ -2,7 +2,7 @@
 
 import { useCallback, type MutableRefObject } from 'react';
 
-import { lookupAudiobook, startAudiobook, stopAudiobook, TtsExportRequestError } from '@/lib/client/api/tts';
+import { deleteAudiobook, lookupAudiobook, startAudiobook, stopAudiobook, TtsExportRequestError } from '@/lib/client/api/tts';
 import type { TtsPlaybackPlan } from '@/lib/shared/playback-plan';
 import type { TtsPlaybackPlanRequest } from '@/hooks/audio/useTtsPlayback';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
@@ -14,7 +14,7 @@ export type TtsDocumentAudioExportRequest = {
   action: TtsExportAction;
   chapterIndex?: number;
   includeProgress?: boolean;
-  /** The audiobook a stop applies to. */
+  /** The audiobook a stop or delete applies to. */
   audiobookId?: string;
 };
 
@@ -75,6 +75,9 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
             if (!(error instanceof TtsExportRequestError) || error.status !== 404) throw error;
           }
         }
+        return lookupAudiobook(documentId, payload, signal);
+      case 'delete':
+        if (options.audiobookId) await deleteAudiobook(documentId, options.audiobookId, signal);
         return lookupAudiobook(documentId, payload, signal);
       default:
         return lookupAudiobook(documentId, payload, signal);

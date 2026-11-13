@@ -1,12 +1,44 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { apiCatchResponse, apiErrorResponse } from '@/lib/server/api/responses';
-import { ChapterNotFoundError, startAudiobook } from '@/lib/server/audiobooks/audiobooks';
+import { ChapterNotFoundError, listAudiobooks, startAudiobook } from '@/lib/server/audiobooks/audiobooks';
 import { parseAudiobookBody, resolveAudiobookCaller, resolveAudiobookIntent } from '@/lib/server/audiobooks/request';
 import { isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
 import { createRequestLogger } from '@/lib/server/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+const LIST_LIMIT_MAX = 50;
+
+/** A document's audiobooks, newest first. Listing reports them and never advances one. */
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const { logger } = createRequestLogger({ route: '/api/v1/documents/[id]/audiobooks', request });
+  try {
+    if (!isComputeWorkerAvailable()) {
+      return apiErrorResponse(503, 'COMPUTE_WORKER_REQUIRED', 'Compute worker is required for audiobooks.');
+    }
+    const query = request.nextUrl.searchParams;
+    const limit = Number(query.get('limit') ?? 20);
+    if (!Number.isInteger(limit) || limit < 1 || limit > LIST_LIMIT_MAX) {
+      return apiErrorResponse(400, 'REQUEST_INVALID', `limit must be between 1 and ${LIST_LIMIT_MAX}.`);
+    }
+    const offset = Number(query.get('cursor') ?? 0);
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      return apiErrorResponse(400, 'REQUEST_INVALID', 'cursor must be a nextCursor from an earlier page.');
+    }
+    const documentId = (await context.params).id.trim().toLowerCase();
+    const caller = await resolveAudiobookCaller(request, documentId, 'documents:read');
+    if (caller instanceof Response) return caller;
+    return NextResponse.json(await listAudiobooks({ ...caller, mayGenerate: false }, documentId, { limit, offset }));
+  } catch (error) {
+    return apiCatchResponse(error, {
+      logger,
+      event: 'audiobooks.list_failed',
+      msg: 'Failed to list audiobooks',
+      normalize: { code: 'AUDIOBOOK_LIST_FAILED', errorClass: 'unknown' },
+    });
+  }
+}
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   const { logger } = createRequestLogger({ route: '/api/v1/documents/[id]/audiobooks', request });

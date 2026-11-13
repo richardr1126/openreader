@@ -210,6 +210,7 @@ describe('server-state architecture', () => {
 
     expect(routes).toEqual([
       'DELETE /v1/models/:model',
+      'DELETE /v1/tts-playback/exports/:artifactId',
       'GET /health/live',
       'GET /health/ready',
       'GET /v1/models/:model',
@@ -342,6 +343,7 @@ describe('server-state architecture', () => {
       '/api/v1/documents/[id]',
       '/api/v1/documents/[id]/audiobooks',
       '/api/v1/documents/[id]/audiobooks/[audiobookId]',
+      '/api/v1/documents/[id]/audiobooks/[audiobookId]/cancel',
       '/api/v1/documents/[id]/audiobooks/events',
       '/api/v1/documents/[id]/audiobooks/files/[artifactId]',
       '/api/v1/documents/[id]/audiobooks/lookup',

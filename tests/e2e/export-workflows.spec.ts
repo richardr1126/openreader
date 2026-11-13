@@ -79,15 +79,22 @@ test('downloads account data and an already-completed audiobook export', async (
     { index: 1, title: 'Chapter 2', spineHref: null, page: null, plannedSegments: 15, completedSegments: 14, skippedSegments: 1, generatingSegments: 0, durationMs: 48_000 },
   ];
   let m4bActive = false;
+  let bookDeleted = false;
   await page.route('**/api/v1/documents/*/audiobooks{,/**}', async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname.endsWith('/events') || url.pathname.includes('/files/')) {
       await route.fallback();
       return;
     }
-    const method = route.request().method();
-    const action = method === 'DELETE' ? 'stop' : url.pathname.endsWith('/lookup') ? 'resolve' : 'start';
-    const body = (method === 'DELETE'
+    if (route.request().method() === 'DELETE') {
+      resolveActions.push(`delete:${url.pathname.split('/').at(-1)}`);
+      bookDeleted = true;
+      await route.fulfill({ status: 204 });
+      return;
+    }
+    const cancel = url.pathname.endsWith('/cancel');
+    const action = cancel ? 'stop' : url.pathname.endsWith('/lookup') ? 'resolve' : 'start';
+    const body = (cancel
       ? { format: m4bActive ? 'm4b' : 'mp3' }
       : route.request().postDataJSON()) as { format: string; chapter?: number; includeProgress?: boolean };
     resolveActions.push(body.chapter === undefined ? action : `${action}:${body.chapter}`);
@@ -105,12 +112,13 @@ test('downloads account data and an already-completed audiobook export', async (
       return;
     }
     const chapterDownload = body.chapter !== undefined;
-    const artifactReady = chapterDownload || bookArtifactReady;
+    const artifactReady = chapterDownload || (bookArtifactReady && !bookDeleted);
+    const artifactState = artifactReady ? 'ready' : bookDeleted ? 'none' : 'building';
     await route.fulfill({
       json: {
         id: chapterDownload ? 'chapter-audiobook' : 'completed-audiobook',
         documentId: 'test-document',
-        status: artifactReady ? 'ready' : 'building',
+        status: artifactReady ? 'ready' : bookDeleted ? 'complete' : 'building',
         progress: 1,
         format: 'mp3',
         speed: 1,
@@ -126,8 +134,8 @@ test('downloads account data and an already-completed audiobook export', async (
           chapters,
         },
         artifact: {
-          state: artifactReady ? 'ready' : 'building',
-          operationId: artifactReady ? null : 'book-artifact-operation',
+          state: artifactState,
+          operationId: artifactState === 'building' ? 'book-artifact-operation' : null,
           issue: null,
         },
         downloadUrl: artifactReady
@@ -205,6 +213,14 @@ test('downloads account data and an already-completed audiobook export', async (
   expect(audiobookDownload.suggestedFilename()).toMatch(/\.mp3$/);
   expect(resolveActions[0]).toBe('resolve');
   expect(resolveActions).toContain('start:0');
+
+  // Deleting the file keeps the generated audio, so the file can be built again.
+  await exportSidebar.getByRole('button', { name: 'Delete MP3 file', exact: true }).click();
+  const confirmDelete = page.getByRole('dialog', { name: 'Delete MP3 file?', exact: true });
+  await confirmDelete.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(exportSidebar.getByRole('button', { name: 'Build file', exact: true })).toBeEnabled();
+  await expect(downloadButton).toBeDisabled();
+  expect(resolveActions).toContain('delete:completed-audiobook');
 
   await exportSidebar.getByRole('radio', { name: 'M4B', exact: true }).click();
   await exportSidebar.getByRole('button', { name: 'Generate', exact: true }).click();
