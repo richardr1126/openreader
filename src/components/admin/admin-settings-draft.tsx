@@ -52,7 +52,7 @@ export function useAdminSettingsDraft() {
   const queryClient = useQueryClient();
   const { data: session } = useAuthSession();
   const queryKey = queryKeys.admin(session?.user?.id ?? 'no-session', 'settings');
-  const { data, error } = useQuery({
+  const { data, error, dataUpdatedAt } = useQuery({
     queryKey,
     queryFn: fetchAdminSettings,
     enabled: Boolean(session?.user?.id),
@@ -63,6 +63,10 @@ export function useAdminSettingsDraft() {
   // Values a save is sending, or RESETTING for a key being reset. While a request runs these,
   // not the fetched values, are what an edit undoes; a reset's outcome is unknown, so no edit undoes it.
   const pending = useRef<Record<string, unknown>>({});
+  // Values a finished request wrote that no read has confirmed yet. Until one does, the cache
+  // may predate them, so an edit is measured against these instead.
+  const unconfirmed = useRef<Record<string, unknown>>({});
+  useEffect(() => { unconfirmed.current = {}; }, [dataUpdatedAt]);
 
   /**
    * Reconcile against confirmed server state: the request's read-back, or else a fetch
@@ -79,6 +83,7 @@ export function useAdminSettingsDraft() {
       await queryClient.cancelQueries({ queryKey });
       settings = await queryClient.fetchQuery({ queryKey, queryFn: fetchAdminSettings, staleTime: 0 }).catch(() => null);
     }
+    if (!settings) unconfirmed.current = { ...unconfirmed.current, ...pending.current };
     pending.current = {};
     if (!settings) return;
     const { values } = settings;
@@ -140,7 +145,9 @@ export function useAdminSettingsDraft() {
   const saving = resetMutation.isPending || saveMutation.isPending;
 
   const update = (key: string, value: unknown) => {
-    const base = key in pending.current ? pending.current[key] : data?.values?.[key];
+    const base = key in pending.current ? pending.current[key]
+      : key in unconfirmed.current ? unconfirmed.current[key]
+        : data?.values?.[key];
     setEdits((current) => (
       Object.is(value, base) ? without(current, key) : { ...current, [key]: value }
     ));
