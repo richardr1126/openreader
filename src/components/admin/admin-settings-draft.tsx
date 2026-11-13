@@ -51,7 +51,8 @@ export function useAdminSettingsDraft() {
   const [edits, setEdits] = useState<Record<string, unknown>>({});
   const draft = useMemo(() => ({ ...data?.values, ...edits }), [data, edits]);
   const dirty = useMemo(() => new Set(Object.keys(edits)), [edits]);
-  // Values a save is sending. While it runs they, not the fetched ones, are what an edit undoes.
+  // Values a save is sending, or RESETTING for a key being reset. While a request runs these,
+  // not the fetched values, are what an edit undoes; a reset's outcome is unknown, so no edit undoes it.
   const pending = useRef<Record<string, unknown>>({});
 
   useEffect(() => {
@@ -62,6 +63,8 @@ export function useAdminSettingsDraft() {
 
   const resetMutation = useMutation({
     mutationFn: (key: string) => patchAdminSettings({ reset: [key] }),
+    onMutate: (key) => { pending.current = { [key]: RESETTING }; },
+    onSettled: () => { pending.current = {}; },
     // Reset shows only on keys without an edit, so any edit here was made while it ran and stays.
     onSuccess: async (failed) => {
       if (failed.length) toast.error('Reset failed');
@@ -174,6 +177,8 @@ export function useAdminSettingsDraft() {
 
   return { loaded: Boolean(data), draft, update, source, toggle, number, saveBar };
 }
+
+const RESETTING = Symbol('resetting');
 
 function without(edits: Record<string, unknown>, key: string): Record<string, unknown> {
   const next = { ...edits };
