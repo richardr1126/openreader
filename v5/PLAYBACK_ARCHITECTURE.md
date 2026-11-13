@@ -318,7 +318,9 @@ For each planned segment:
 8. Replace the provisional sidecar timing with exact alignment and emit another
    progress snapshot. A paused, superseded, or cache-cleared generation run
    stops both further synthesis and timing backfills at the same ownership
-   boundary.
+   boundary. An alignment that was already running when the run paused or was
+   superseded is still saved, since it describes audio that is already cached.
+   A cleared cache discards it.
 
 There are no segment claims and no completed-claim stale takeover path. Object
 storage is the correctness boundary.

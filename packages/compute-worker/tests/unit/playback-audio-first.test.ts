@@ -297,6 +297,70 @@ describe('playback audio-first segment generation', () => {
     expect(onSegmentAligned).toHaveBeenCalledTimes(2);
   });
 
+  test('keeps exact timing that finishes after playback pauses, and starts no more', async () => {
+    let paused = false;
+    let finishAlignment!: () => void;
+    const alignmentGate = new Promise<void>((resolve) => { finishAlignment = resolve; });
+    mocks.runAlignment.mockImplementation(async ({ text }: { text: string }) => {
+      await alignmentGate;
+      return { alignments: [{ sentence: text, sentenceIndex: 0, words: [{
+        text: text.split(' ')[0], startSec: 0, endSec: 0.5, charStart: 0, charEnd: 5,
+      }] }] };
+    });
+    const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
+    const onSegmentAligned = vi.fn(async () => undefined);
+    const playbackStorage = {
+      artifacts: {
+        readSegmentMetadata: vi.fn(async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null),
+        putSegmentMetadata: vi.fn(async (metadata: TtsPlaybackSegmentMetadata) => {
+          sidecars.set(metadata.ordinal, metadata);
+          return `sidecar-${metadata.ordinal}`;
+        }),
+        getScopeEpoch: vi.fn(async () => 0),
+      },
+    } as unknown as TtsPlaybackStorage;
+
+    const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
+    const run = generateExplicitTtsPlaybackSegments({
+      request: {
+        sessionId: 'session-paused', userId: 'user-1', storageUserId: 'user-1', documentId: 'document-1',
+        documentVersion: 1, readerType: 'epub', settingsHash: 'settings-1',
+        settingsJson: {
+          providerRef: 'local-kokoro', providerType: 'custom-openai', ttsModel: 'kokoro', voice: 'af_heart',
+          nativeSpeed: 1, ttsInstructions: '', language: 'en',
+        },
+        planning: {}, planObjectKey: 'plan-key',
+      },
+      sessionInstanceId: 'instance-paused',
+      s3Prefix: 'openreader',
+      segments: [
+        { ordinal: 0, segmentKey: 'segment-0', text: 'First segment.',
+          locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 0 } },
+        { ordinal: 1, segmentKey: 'segment-1', text: 'Second segment.',
+          locator: { readerType: 'epub', spineHref: 'chapter.xhtml', spineIndex: 0, charOffset: 14 } },
+      ],
+      putAudioObject: vi.fn(async () => undefined),
+      audioObjectExists: vi.fn(async () => false),
+      playbackStorage,
+      synthesisTimeoutMs: 30_000,
+      onBeforeSegment: async () => (paused ? 'stop' : 'continue'),
+      onSegmentAligned,
+    });
+
+    await vi.waitFor(() => {
+      expect(sidecars.get(1)?.status).toBe('completed');
+      expect(mocks.runAlignment).toHaveBeenCalledTimes(1);
+    });
+    paused = true;
+    finishAlignment();
+    await run;
+
+    expect(sidecars.get(0)?.alignment?.words[0]?.text).toBe('First');
+    expect(onSegmentAligned).toHaveBeenCalledWith(0);
+    expect(mocks.runAlignment).toHaveBeenCalledTimes(1);
+    expect(sidecars.get(1)?.alignment).toBeNull();
+  });
+
   test('pipelines three ordered provider requests and starts the next as capacity frees', async () => {
     const releases: Array<(audio: Buffer) => void> = [];
     mocks.generateTTSBuffer.mockImplementation(() => new Promise<Buffer>((resolve) => releases.push(resolve)));

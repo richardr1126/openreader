@@ -492,7 +492,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       const existing = await freshSidecar(pending.segment);
       if (existing?.status !== 'completed' || existing.alignment) return;
       const alignment = await computeAlignment(pending.audio, pending.segment, pending.audioKey);
-      if (!alignment || !await shouldContinueWrites(planOrdinal)) return;
+      if (!alignment) return;
+      // Pausing or superseding the run stops alignment that has not started,
+      // but finished timing describes audio that is already cached. Keep it, or
+      // a reader who pauses right after the audio arrives would resume with no
+      // word highlight until a new run aligns the same audio again. The
+      // metadata write itself still refuses a cleared cache.
+      const current = await freshSidecar(pending.segment);
+      if (current?.status !== 'completed' || current.alignment || current.audioKey !== pending.audioKey) return;
       await persistSegmentMetadata(pending.segment, 'completed', {
         audioKey: pending.audioKey,
         durationMs: pending.durationMs,
