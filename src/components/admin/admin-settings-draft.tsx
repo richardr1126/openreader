@@ -20,17 +20,21 @@ async function fetchAdminSettings(): Promise<SettingsResponse> {
   return (await res.json()) as SettingsResponse;
 }
 
-/** Returns the keys the server refused; a 207 means the others were saved. */
-async function patchAdminSettings(payload: { updates?: Record<string, unknown>; reset?: string[] }): Promise<string[]> {
+interface PatchResult extends SettingsResponse {
+  /** Keys the server refused; a 207 means the others were saved. */
+  failed: string[];
+}
+
+/** The response carries the settings as read back after the write, so it is confirmed server state. */
+async function patchAdminSettings(payload: { updates: Record<string, unknown>; reset?: string[] }): Promise<PatchResult> {
   const res = await fetch('/api/admin/settings', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok && res.status !== 207) throw new Error(`HTTP ${res.status}`);
-  if (res.status !== 207) return [];
-  const body = (await res.json()) as { errors?: Array<{ key: string }> };
-  return (body.errors ?? []).map(({ key }) => key);
+  const body = (await res.json()) as SettingsResponse & { errors?: Array<{ key: string }> };
+  return { values: body.values, sources: body.sources, failed: (body.errors ?? []).map(({ key }) => key) };
 }
 
 /**
@@ -56,19 +60,19 @@ export function useAdminSettingsDraft() {
   const pending = useRef<Record<string, unknown>>({});
 
   /**
-   * Drop edits that now equal the server's value, unless a request for that key is still running.
-   * Only values fetched after the request started count; a failed refetch leaves stale ones that must not.
+   * Take a request's read-back as the server state: drop edits that now match it, and
+   * cache it so the draft is right even if the refetch that follows fails.
    */
-  const reconcile = (startedAt: number) => {
-    const state = queryClient.getQueryState<SettingsResponse>(queryKey);
-    const values = state?.data?.values;
-    if (!values || state.dataUpdatedAt <= startedAt) return;
+  const settle = async (result: PatchResult, keep: (key: string, value: unknown) => boolean = () => false) => {
+    pending.current = {};
+    queryClient.setQueryData<SettingsResponse>(queryKey, { values: result.values, sources: result.sources });
     setEdits((current) => {
       const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
-        key in pending.current || !Object.is(value, values[key])
+        keep(key, value) || !Object.is(value, result.values[key])
       )));
       return Object.keys(kept).length === Object.keys(current).length ? current : kept;
     });
+    await queryClient.invalidateQueries({ queryKey });
   };
 
   useEffect(() => {
@@ -80,15 +84,15 @@ export function useAdminSettingsDraft() {
   const resetMutation = useMutation({
     // Without `updates`, the route reads the whole body as updates and refuses `reset` as a key.
     mutationFn: (key: string) => patchAdminSettings({ updates: {}, reset: [key] }),
-    onMutate: (key) => { pending.current = { [key]: RESETTING }; return { startedAt: Date.now() }; },
-    onSettled: (_result, _error, _key, context) => { pending.current = {}; if (context) reconcile(context.startedAt); },
-    // Reset shows only on keys without an edit, so any edit here was made while it ran and stays.
-    onSuccess: async (failed) => {
-      if (failed.length) toast.error('Reset failed');
+    onMutate: (key) => { pending.current = { [key]: RESETTING }; },
+    // Reset shows only on keys without an edit, so any edit here was made while it ran.
+    onSuccess: async (result) => {
+      if (result.failed.length) toast.error('Reset failed');
       else toast.success('Reset to env default');
-      await queryClient.invalidateQueries({ queryKey });
+      await settle(result);
     },
     onError: (mutationError) => {
+      pending.current = {};
       console.error(mutationError);
       toast.error('Reset failed');
     },
@@ -96,22 +100,21 @@ export function useAdminSettingsDraft() {
 
   const saveMutation = useMutation({
     mutationFn: (updates: Record<string, unknown>) => patchAdminSettings({ updates }),
-    onMutate: (updates) => { pending.current = updates; return { startedAt: Date.now() }; },
-    onSettled: (_result, _error, _updates, context) => { pending.current = {}; if (context) reconcile(context.startedAt); },
-    onSuccess: async (failed, updates) => {
-      // Saved keys leave the draft unless they were edited again meanwhile; refused ones stay to fix.
+    onMutate: (updates) => { pending.current = updates; },
+    onSuccess: async (result, updates) => {
+      const { failed } = result;
+      // Refused keys come back to the draft to fix, even if cleared for matching the request.
       setEdits((current) => {
-        const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
-          failed.includes(key) || !(key in updates) || !Object.is(value, updates[key])
-        )));
-        for (const key of failed) if (key in updates && !(key in kept)) kept[key] = updates[key];
-        return kept;
+        const restored = { ...current };
+        for (const key of failed) if (key in updates && !(key in current)) restored[key] = updates[key];
+        return restored;
       });
       if (failed.length) toast.error(`Not saved: ${failed.join(', ')}`);
       else toast.success('Settings saved');
-      await queryClient.invalidateQueries({ queryKey });
+      await settle(result, (key) => failed.includes(key));
     },
     onError: (mutationError, updates) => {
+      pending.current = {};
       console.error(mutationError);
       // Nothing was saved, so an edit cleared for matching the request comes back.
       setEdits((current) => ({ ...updates, ...current }));
