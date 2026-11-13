@@ -96,7 +96,8 @@ const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 /** The command that asks for this audiobook again, which resumes it from the audio already cached. */
 function createCommand(audiobook: Audiobook): string {
   const { documentId: bookDocumentId, provider, model, voice, modelSpeed, speed, format, chapter } = audiobook;
-  return `audiobook create ${bookDocumentId} --voice ${voiceId(provider, model, voice)} --model-speed ${modelSpeed} --speed ${speed} --format ${format}${chapter === null ? '' : ` --chapter ${chapter}`}`;
+  const id = voiceId(provider, model, voice);
+  return `audiobook create ${bookDocumentId} --voice ${/^[\w./%:-]+$/.test(id) ? id : shellQuote(id)} --model-speed ${modelSpeed} --speed ${speed} --format ${format}${chapter === null ? '' : ` --chapter ${chapter}`}`;
 }
 
 /** What to do next with an audiobook in this status, so a caller need not know the state machine. */

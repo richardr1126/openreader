@@ -704,7 +704,9 @@ async function requestsSharingSession(caller: AudiobookCaller, intent: Audiobook
     const other = intentFromRow(row);
     if (!other) continue;
     const planned = await buildTtsPlaybackPlanningInput(other.parsed, caller.scope);
-    if (planned.settingsHash === settingsHash) sharing.push(row.id);
+    // The plan is part of the session's identity; a request without one yet adopts the current plan.
+    const plans = [intent.parsed.planObjectKey, other.parsed.planObjectKey];
+    if (planned.settingsHash === settingsHash && (plans.includes(undefined) || plans[0] === plans[1])) sharing.push(row.id);
   }
   return sharing;
 }

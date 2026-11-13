@@ -262,6 +262,8 @@ test('every audiobook says what to do next, with the exact command that resumes 
   expect((await view({ status: 'interrupted' })).next).toContain(resume);
   expect((await view({ status: 'cancelled', chapter: 2 })).next).toContain(`${resume} --chapter 2`);
   expect((await view({ status: 'usage_limited' })).next).toContain('quota');
+  // A voice ID the command parser would split is quoted, so the command still runs as given.
+  expect((await view({ status: 'interrupted', voice: "speaker's" })).next).toContain(`--voice 'kokoro/kokoro/speaker'\\''s'`);
   expect((await view({ status: 'generating' })).next).toContain('audiobook view book');
   expect(await view({ status: 'ready' })).toMatchObject({ next: expect.stringContaining('webDownloadUrl'), requestedAt: '2026-11-12T00:00:00.000Z' });
 });

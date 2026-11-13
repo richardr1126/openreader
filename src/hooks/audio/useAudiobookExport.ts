@@ -7,7 +7,7 @@ import {
 } from '@/lib/client/api/tts';
 import { describeAudiobookWait, describeExportIssue, describeExportRequestError } from '@/lib/client/audiobook-export-issues';
 import { useLatestRef } from '@/hooks/useLatestRef';
-import type { TtsDocumentAudioExportRequest } from '@/hooks/audio/useTtsDocumentExport';
+import { AudiobookDeletedError, type TtsDocumentAudioExportRequest } from '@/hooks/audio/useTtsDocumentExport';
 import type { Audiobook, TtsExportAction } from '@/types/tts-export';
 
 // Chapter progress is a read model refresh, not a stream: SSE progress only
@@ -139,6 +139,13 @@ export function useAudiobookExport(input: {
       if (!includeProgress) trailingRefreshRef.current ??= 'details';
     } catch (error) {
       if (controller.signal.aborted || exportKeyRef.current !== key) return;
+      if (error instanceof AudiobookDeletedError) {
+        // The file is gone: drop its download link and read the audiobook again.
+        setSnapshot(null);
+        setRequestError(null);
+        trailingRefreshRef.current = 'lookup';
+        return;
+      }
       if (options?.quiet) {
         setRefreshError(describeExportRequestError(error));
         refreshFailuresRef.current += 1;

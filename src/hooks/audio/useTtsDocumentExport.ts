@@ -25,6 +25,14 @@ type UseTtsDocumentExportInput = {
 };
 
 /** Binds audiobook export requests to the reader's adopted canonical plan. */
+/** The delete succeeded but reading the audiobook afterwards did not; its file is gone either way. */
+export class AudiobookDeletedError extends Error {
+  constructor(cause: unknown) {
+    super('The audiobook was deleted, but its state could not be refreshed.', { cause });
+    this.name = 'AudiobookDeletedError';
+  }
+}
+
 export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
   const {
     playbackPlanRef,
@@ -77,8 +85,14 @@ export function useTtsDocumentExport(input: UseTtsDocumentExportInput) {
         }
         return lookupAudiobook(documentId, payload, signal);
       case 'delete':
-        if (options.audiobookId) await deleteAudiobook(documentId, options.audiobookId, signal);
-        return lookupAudiobook(documentId, payload, signal);
+        if (!options.audiobookId) return lookupAudiobook(documentId, payload, signal);
+        await deleteAudiobook(documentId, options.audiobookId, signal);
+        try {
+          return await lookupAudiobook(documentId, payload, signal);
+        } catch (error) {
+          if (signal?.aborted) throw error;
+          throw new AudiobookDeletedError(error);
+        }
       default:
         return lookupAudiobook(documentId, payload, signal);
     }
