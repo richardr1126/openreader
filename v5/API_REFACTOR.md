@@ -1271,7 +1271,7 @@ failed with `AUDIOBOOK_BUSY` or could advance generation.
   (`documents:write`, `204`) removes the request and its built file through a new worker
   route, `DELETE /v1/tts-playback/exports/{artifactId}`, which deletes only that artifact's
   prefix with the shared `deletePrefix`. Segment audio is the document's playback cache and
-  stays, so asking again rebuilds the file without new speech. A whole-book run is stopped
+  stays, so asking again reuses it and generates only what was missing. A whole-book run is stopped
   first only when no other uncancelled format or speed shares it. A file being built returns
   `409 AUDIOBOOK_BUILDING`. Stop moved to `POST .../{audiobookId}/cancel`; v1 audiobook
   routes were not in a release, so the old DELETE meaning is replaced rather than kept. The

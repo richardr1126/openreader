@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { and, asc, desc, eq, lt } from 'drizzle-orm';
+import { and, asc, eq, lt } from 'drizzle-orm';
 import {
   buildTtsPlaybackCanonicalSessionId,
   buildTtsPlaybackExportArtifactId,
@@ -403,11 +403,12 @@ async function advanceAudiobook(input: {
     // Stop only the run this request observed; if a newer run replaced it
     // in the meantime, the report below describes that run instead.
     const observed = current.generation.session as { generationRunId?: unknown } | null;
-    await client.cancelTtsPlaybackSession(
+    const { canceled } = await client.cancelTtsPlaybackSession(
       sessionId,
       typeof observed?.generationRunId === 'string' ? observed.generationRunId : null,
     );
-    input.onRunCancelled?.();
+    // A run that finished before the cancel reached it was not cancelled.
+    if (canceled) input.onRunCancelled?.();
     current = await readGeneration();
   }
 
@@ -724,7 +725,7 @@ export class AudiobookBuildingError extends Error {
 /**
  * Deletes an audiobook: its request and its built file. The segment audio it
  * was made from is the document's playback cache and stays, so the same
- * audiobook can be made again without new speech. Its run stops only when no
+ * audiobook can be made again from the speech already generated. Its run stops only when no
  * other format still needs it; a chapter never owns the run.
  */
 async function deleteAudiobookUnlocked(caller: AudiobookCaller, id: string, documentId: string): Promise<boolean> {
@@ -783,21 +784,35 @@ export async function findAudiobookDocumentId(id: string, storageUserId: string)
   return rows[0]?.documentId ?? null;
 }
 
+const LIST_CURSOR = /^(\d+)\.([0-9a-f]+)$/;
+
 /**
- * A document's audiobooks, newest first, with a cursor for the next page. A
- * chapter the book no longer has leaves its request behind; the rest are listed.
+ * A document's audiobooks, most recently requested first, with a cursor for the
+ * next page. The cursor names the last audiobook listed, so deleting one between
+ * pages skips nothing. A chapter the book no longer has leaves its request
+ * behind; the rest are listed.
  */
 export async function listAudiobooks(
   caller: AudiobookCaller,
   documentId: string,
-  page: { limit: number; offset: number },
+  page: { limit: number; cursor: string | null },
 ): Promise<{ data: Audiobook[]; nextCursor: string | null }> {
-  const requests = await db.select({ id: audiobookRequests.id }).from(audiobookRequests)
-    .where(and(eq(audiobookRequests.userId, caller.scope.storageUserId), eq(audiobookRequests.documentId, documentId)))
-    .orderBy(desc(audiobookRequests.createdAt), desc(audiobookRequests.id))
-    .limit(page.limit + 1).offset(page.offset) as Array<{ id: string }>;
+  const after = page.cursor === null ? null : LIST_CURSOR.exec(page.cursor);
+  if (page.cursor !== null && !after) {
+    throw new ApiRequestError(400, 'REQUEST_INVALID', 'cursor must be a nextCursor from an earlier page.');
+  }
+  // A document has a handful of requests (formats, speeds, chapters), all read at once.
+  const all = await db.select({ id: audiobookRequests.id, createdAt: audiobookRequests.createdAt }).from(audiobookRequests)
+    .where(and(eq(audiobookRequests.userId, caller.scope.storageUserId), eq(audiobookRequests.documentId, documentId))) as Array<{ id: string; createdAt: number }>;
+  const newestFirst = (a: { id: string; createdAt: number }, b: { id: string; createdAt: number }) =>
+    Number(b.createdAt) - Number(a.createdAt) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+  const sorted = all.sort(newestFirst);
+  const rest = after
+    ? sorted.filter((row) => newestFirst({ createdAt: Number(after[1]), id: after[2] }, row) < 0)
+    : sorted;
+  const requests = rest.slice(0, page.limit);
   const data: Audiobook[] = [];
-  for (const { id } of requests.slice(0, page.limit)) {
+  for (const { id } of requests) {
     try {
       const audiobook = await getAudiobook(caller, id, documentId);
       if (audiobook) data.push(audiobook);
@@ -805,7 +820,8 @@ export async function listAudiobooks(
       if (!(error instanceof ChapterNotFoundError)) throw error;
     }
   }
-  return { data, nextCursor: requests.length > page.limit ? String(page.offset + page.limit) : null };
+  const last = requests.at(-1);
+  return { data, nextCursor: last && rest.length > page.limit ? `${Number(last.createdAt)}.${last.id}` : null };
 }
 
 // A signal is the only thing that moves a closed tab's audiobook on, so it waits out

@@ -116,7 +116,7 @@ reading an audiobook never starts or resumes its generation, and a read made whi
 another command holds the audiobook waits for it briefly.
 
 `audiobook delete <id>` removes one audiobook and its file but keeps the document and
-its generated audio, so creating the audiobook again needs no new speech. A file that is
+its generated audio, so creating the audiobook again reuses the speech already generated. A file that is
 still being built cannot be deleted until it is ready. To remove one audiobook, use it
 rather than `docs delete`, which removes the whole document.
 

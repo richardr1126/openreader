@@ -126,7 +126,7 @@ export const publicApiSpec = {
         { description: 'Only a caller with the audio:generate scope also advances the request, for example starting a limited compile that reported waiting. A documents:read caller only observes.' }),
       delete: operation('deleteAudiobook', 'Delete an audiobook and its file', 'documents:write', { '204': noContent,
         '409': { ...errorResponse, description: 'AUDIOBOOK_BUILDING: its file is still being built; delete it once it is ready.' } },
-        { description: 'Removes the request and its built file. The document\'s generated audio stays cached, so requesting the same audiobook again rebuilds the file without new speech. A run no other format shares is stopped first.' }),
+        { description: 'Removes the request and its built file. The document\'s generated audio stays cached, so requesting the same audiobook again reuses it and generates only what was missing. A run no other format shares is stopped first.' }),
     },
     '/documents/{id}/audiobooks/{audiobookId}/cancel': { parameters: [parameter('id', 'path', docId), parameter('audiobookId', 'path')],
       post: operation('cancelAudiobook', 'Stop a whole-book request and keep generated audio cached', 'audio:generate', { '200': response('Cancelled state, which later reads also report. Chapter cancel is rejected.', ref('Audiobook')) },

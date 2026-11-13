@@ -22,14 +22,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     if (!Number.isInteger(limit) || limit < 1 || limit > LIST_LIMIT_MAX) {
       return apiErrorResponse(400, 'REQUEST_INVALID', `limit must be between 1 and ${LIST_LIMIT_MAX}.`);
     }
-    const offset = Number(query.get('cursor') ?? 0);
-    if (!Number.isSafeInteger(offset) || offset < 0) {
-      return apiErrorResponse(400, 'REQUEST_INVALID', 'cursor must be a nextCursor from an earlier page.');
-    }
     const documentId = (await context.params).id.trim().toLowerCase();
     const caller = await resolveAudiobookCaller(request, documentId, 'documents:read');
     if (caller instanceof Response) return caller;
-    return NextResponse.json(await listAudiobooks({ ...caller, mayGenerate: false }, documentId, { limit, offset }));
+    return NextResponse.json(await listAudiobooks({ ...caller, mayGenerate: false }, documentId, { limit, cursor: query.get('cursor') }));
   } catch (error) {
     return apiCatchResponse(error, {
       logger,

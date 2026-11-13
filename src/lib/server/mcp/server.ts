@@ -94,15 +94,18 @@ function uploadResult(upload: DocumentUploadResource) {
 const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
 
 /** The command that asks for this audiobook again, which resumes it from the audio already cached. */
-function createCommand(audiobook: Audiobook): string {
-  const { documentId: bookDocumentId, provider, model, voice, modelSpeed, speed, format, chapter } = audiobook;
+function createCommand(audiobook: Audiobook, chapter = audiobook.chapter): string {
+  const { documentId: bookDocumentId, provider, model, voice, modelSpeed, speed, format } = audiobook;
   const id = voiceId(provider, model, voice);
   return `audiobook create ${bookDocumentId} --voice ${/^[\w./%:-]+$/.test(id) ? id : shellQuote(id)} --model-speed ${modelSpeed} --speed ${speed} --format ${format}${chapter === null ? '' : ` --chapter ${chapter}`}`;
 }
 
 /** What to do next with an audiobook in this status, so a caller need not know the state machine. */
 function audiobookNext(audiobook: Audiobook): string {
-  const resume = `Run "${createCommand(audiobook)}" to resume it; audio generated so far is reused.`;
+  // Only a whole-book run generates speech; a chapter's file is built from it.
+  const resume = audiobook.chapter === null
+    ? `Run "${createCommand(audiobook)}" to resume it; audio generated so far is reused.`
+    : `Run "${createCommand(audiobook, null)}" to resume generating the book's audio, reusing what is already generated, then "${createCommand(audiobook)}" to build this chapter's file.`;
   switch (audiobook.status) {
     case 'ready': return 'Give the user webDownloadUrl to download it.';
     case 'preparing': case 'queued': case 'generating': case 'building':
@@ -239,9 +242,8 @@ const readCommands: CliCommand<Context>[] = [
     run: async ({ args, flags }, { principal }) => {
       const bookDocumentId = documentId(args.doc);
       const caller = readOnly(await audiobookOwner(principal, bookDocumentId));
-      const offset = flags.cursor === undefined ? 0 : Number(flags.cursor);
-      if (!Number.isSafeInteger(offset) || offset < 0) throw new CliUsageError('--cursor must be a nextCursor from an earlier page.');
-      const page = await whenAudiobookFree(() => listAudiobooks(caller, bookDocumentId, { limit: AUDIOBOOK_PAGE, offset }), READ_BUSY_DELAYS_MS);
+      const cursor = flags.cursor === undefined ? null : String(flags.cursor);
+      const page = await whenAudiobookFree(() => listAudiobooks(caller, bookDocumentId, { limit: AUDIOBOOK_PAGE, cursor }), READ_BUSY_DELAYS_MS);
       return { audiobooks: page.data.map(audiobookSummary), nextCursor: page.nextCursor };
     },
   },
@@ -388,7 +390,7 @@ const deleteCommands: CliCommand<Context>[] = [
   {
     name: ['audiobook', 'delete'],
     args: ['id'],
-    summary: 'Delete one audiobook and its file. The document and its generated audio stay, so creating it again needs no new speech. A file still being built cannot be deleted yet.',
+    summary: 'Delete one audiobook and its file. The document and its generated audio stay, so creating it again reuses the speech already generated. A file still being built cannot be deleted yet.',
     run: async ({ args }, { principal }) => {
       const bookDocumentId = await requireAudiobookDocument(principal, args.id);
       const deleted = await deleteAudiobook(await audiobookOwner(principal, bookDocumentId), args.id, bookDocumentId);

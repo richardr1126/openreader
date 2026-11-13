@@ -238,7 +238,7 @@ cancels the other whole-book requests on it. POST again to resume any of them.
 `DELETE /api/v1/documents/{id}/audiobooks/{audiobookId}` needs `documents:write` and
 removes the audiobook and its finished file, returning `204`. A run that no other
 format or speed still shares is stopped first. The document's generated audio stays
-cached, so requesting the same audiobook again builds the file without new speech.
+cached, so requesting the same audiobook again reuses it and generates only what was missing.
 While the file is being built, DELETE returns `409 AUDIOBOOK_BUILDING`; try again once
 it is ready.
 

@@ -236,9 +236,9 @@ test('audiobooks are named by ID alone, and cancel keeps the request as cancelle
   mocks.stop.mockResolvedValueOnce({ ...audiobook, status: 'cancelled' });
   expect((await run('openreader_audio', 'audiobook cancel book')).structuredContent).toMatchObject({ id: 'book', status: 'cancelled' });
 
-  mocks.audiobooks.mockResolvedValueOnce({ data: [audiobook], nextCursor: '20' });
-  expect((await run('openreader', 'audiobook list doc --cursor 20')).structuredContent).toMatchObject({ audiobooks: [{ id: 'book', voice: 'kokoro/kokoro/af_sky' }], nextCursor: '20' });
-  expect(mocks.audiobooks.mock.calls[0].slice(1)).toEqual(['doc', { limit: 20, offset: 20 }]);
+  mocks.audiobooks.mockResolvedValueOnce({ data: [audiobook], nextCursor: '2.ab' });
+  expect((await run('openreader', 'audiobook list doc --cursor 1.cd')).structuredContent).toMatchObject({ audiobooks: [{ id: 'book', voice: 'kokoro/kokoro/af_sky' }], nextCursor: '2.ab' });
+  expect(mocks.audiobooks.mock.calls[0].slice(1)).toEqual(['doc', { limit: 20, cursor: '1.cd' }]);
 
   mocks.owner.mockResolvedValueOnce(null);
   expect((await run('openreader', 'audiobook view missing')).structuredContent.error.code).toBe('AUDIOBOOK_NOT_FOUND');
@@ -260,7 +260,8 @@ test('every audiobook says what to do next, with the exact command that resumes 
   };
   const resume = 'audiobook create doc --voice kokoro/kokoro/af_sky --model-speed 1.2 --speed 1 --format mp3';
   expect((await view({ status: 'interrupted' })).next).toContain(resume);
-  expect((await view({ status: 'cancelled', chapter: 2 })).next).toContain(`${resume} --chapter 2`);
+  // A chapter resumes through the whole-book run, which is what generates speech.
+  expect((await view({ status: 'cancelled', chapter: 2 })).next).toMatch(new RegExp(`"${resume}" .* "${resume} --chapter 2"`));
   expect((await view({ status: 'usage_limited' })).next).toContain('quota');
   // A voice ID the command parser would split is quoted, so the command still runs as given.
   expect((await view({ status: 'interrupted', voice: "speaker's" })).next).toContain(`--voice 'kokoro/kokoro/speaker'\\''s'`);
