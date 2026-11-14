@@ -75,7 +75,7 @@ export function createNatsSessionManager(input: {
   markActivity: (reason: string) => void;
   startWorkers: (session: NatsSession) => Promise<void> | void;
   stopWorkers: () => Promise<void>;
-  runReconciliation: () => Promise<void>;
+  runReconciliation: () => Promise<boolean>;
 }) {
   let session: NatsSession | null = null;
   let connecting: Promise<NatsSession> | null = null;
@@ -83,6 +83,8 @@ export function createNatsSessionManager(input: {
   let orphanSweepTimer: NodeJS.Timeout | null = null;
   let lastIdleStatusLogAt = 0;
   let generation = -1;
+  let reconciling = false;
+  let hasPendingSettlement = false;
 
   const clearTimers = () => {
     if (idleTimer) clearInterval(idleTimer);
@@ -125,22 +127,27 @@ export function createNatsSessionManager(input: {
           input.logger.info({
             ...activity,
             idleForMs,
-            disconnectEligible: activity.inFlightHttp === 0
+            disconnectEligible: !reconciling && !hasPendingSettlement && activity.activeSse === 0 && activity.inFlightHttp === 0
               && activity.inFlightJobs === 0
               && idleForMs >= IDLE_DISCONNECT_MS,
           }, 'nats idle status');
         }
-        if (activity.inFlightHttp > 0 || activity.inFlightJobs > 0 || idleForMs < IDLE_DISCONNECT_MS) return;
+        if (reconciling || hasPendingSettlement || activity.activeSse > 0 || activity.inFlightHttp > 0
+          || activity.inFlightJobs > 0 || idleForMs < IDLE_DISCONNECT_MS) return;
         void disconnect('idle');
       }, IDLE_CHECK_INTERVAL_MS);
       idleTimer.unref?.();
     }
     if (!orphanSweepTimer) {
       orphanSweepTimer = setInterval(() => {
-        if (!session || input.isStopping()) return;
-        void input.runReconciliation().catch((error) => {
-          input.logger.error({ error: toErrorMessage(error) }, 'periodic orphaned operation recovery failed');
-        });
+        if (!session || input.isStopping() || reconciling) return;
+        reconciling = true;
+        void input.runReconciliation()
+          .then((pending) => { hasPendingSettlement = pending; })
+          .catch((error) => {
+            input.logger.error({ error: toErrorMessage(error) }, 'periodic operation reconciliation failed');
+          })
+          .finally(() => { reconciling = false; });
       }, ORPHAN_SWEEP_INTERVAL_MS);
       orphanSweepTimer.unref?.();
     }

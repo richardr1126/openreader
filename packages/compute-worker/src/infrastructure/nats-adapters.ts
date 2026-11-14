@@ -25,6 +25,7 @@ import type {
 import { createJsonCodec } from './json-codec';
 import { toErrorMessage } from './errors';
 import type { MaintenanceJobRequest } from '../operations/contracts';
+import type { PendingTerminalSettlement } from '../operations/terminal-settlement';
 
 export interface KvEntryLike {
   operation?: string;
@@ -38,6 +39,7 @@ export interface KvStoreLike {
   create(key: string, data: Uint8Array): Promise<unknown>;
   update(key: string, data: Uint8Array, version: number): Promise<unknown>;
   keys(filter?: string | string[]): Promise<AsyncIterable<string>>;
+  delete?(key: string, options?: { previousSeq: number }): Promise<void>;
   watch?: KV['watch'];
 }
 
@@ -68,6 +70,9 @@ export function opIndexKvKey(opKey: string): string {
 export function opStateKvKey(opId: string): string {
   return `op_state.${opId}`;
 }
+
+const TERMINAL_SETTLEMENT_PREFIX = 'op_terminal_pending.';
+const terminalSettlementMarker = new Uint8Array();
 
 export function opEventsSubject(opId: string): string {
   return `${OP_EVENTS_SUBJECT_PREFIX}.${opId}`;
@@ -146,6 +151,50 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
     return states;
   }
 
+  async trackTerminalSettlement(opId: string): Promise<void> {
+    const kv = await this.getKv();
+    try {
+      await kv.create(TERMINAL_SETTLEMENT_PREFIX + opId, terminalSettlementMarker);
+    } catch (error) {
+      if (!isKvCasConflictError(error)) throw error;
+    }
+  }
+
+  async getTerminalSettlement(opId: string): Promise<PendingTerminalSettlement | null> {
+    const entry = await (await this.getKv()).get(TERMINAL_SETTLEMENT_PREFIX + opId);
+    return isPut(entry) ? { opId, revision: entry.revision } : null;
+  }
+
+  async listTerminalSettlements(limit: number): Promise<PendingTerminalSettlement[]> {
+    const pending: PendingTerminalSettlement[] = [];
+    for await (const key of this.listKeys(TERMINAL_SETTLEMENT_PREFIX + '*')) {
+      const entry = await this.getTerminalSettlement(key.slice(TERMINAL_SETTLEMENT_PREFIX.length));
+      if (entry) pending.push(entry);
+      if (pending.length >= limit) break;
+    }
+    return pending;
+  }
+
+  async finishTerminalSettlement(pending: PendingTerminalSettlement): Promise<void> {
+    const kv = await this.getKv();
+    if (!kv.delete) throw new Error('KV store does not support deleting terminal settlement markers');
+    try {
+      await kv.delete(TERMINAL_SETTLEMENT_PREFIX + pending.opId, { previousSeq: pending.revision });
+    } catch (error) {
+      if (!isKvCasConflictError(error)) throw error;
+    }
+  }
+
+  async deferTerminalSettlement(pending: PendingTerminalSettlement): Promise<void> {
+    const kv = await this.getKv();
+    try {
+      // Updating the marker moves it behind the other pending settlements.
+      await kv.update(TERMINAL_SETTLEMENT_PREFIX + pending.opId, terminalSettlementMarker, pending.revision);
+    } catch (error) {
+      if (!isKvCasConflictError(error)) throw error;
+    }
+  }
+
   async getOpIndex(opKey: string): Promise<{ opId: string } | null> {
     const kv = await this.getKv();
     const entry = await kv.get(opIndexKvKey(opKey));
@@ -211,7 +260,9 @@ export class JetStreamOperationEventStream<Result = unknown> implements Operatio
   async append(opId: string, snapshot: OperationState<Result>): Promise<OperationEvent<Result>> {
     const js = await this.getJs();
     const encoder = new TextEncoder();
-    const ack = await js.publish(opEventsSubject(opId), encoder.encode(JSON.stringify(snapshot)));
+    const ack = await js.publish(opEventsSubject(opId), encoder.encode(JSON.stringify(snapshot)),
+      snapshot.status === 'succeeded' || snapshot.status === 'failed'
+        ? { msgID: `${opId}:${snapshot.status}:${snapshot.updatedAt}` } : undefined);
     return {
       eventId: ack.seq,
       snapshot,

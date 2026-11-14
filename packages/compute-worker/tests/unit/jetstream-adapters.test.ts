@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from 'vitest';
 import { DeliverPolicy } from '@nats-io/jetstream';
 import { OperationOrchestrator } from '../../src/operations/service';
-import type { WorkerOperationRequest } from '../../src/operations/contracts';
+import { createTerminalSettlement } from '../../src/operations/terminal-settlement';
+import type { WorkerOperationRequest, WorkerOperationState } from '../../src/operations/contracts';
 import {
   JetStreamOperationEventStream,
   JetStreamOperationQueue,
@@ -48,7 +49,8 @@ class FakeKvStore implements KvStoreLike {
   }
 
   async keys(_filter?: string | string[]): Promise<AsyncIterable<string>> {
-    const keys = Array.from(this.data.keys());
+    const prefix = typeof _filter === 'string' ? _filter.replace(/\*$/, '') : '';
+    const keys = Array.from(this.data.keys()).filter((key) => key.startsWith(prefix));
     return {
       async *[Symbol.asyncIterator]() {
         for (const key of keys) {
@@ -56,6 +58,11 @@ class FakeKvStore implements KvStoreLike {
         }
       }
     };
+  }
+
+  async delete(key: string, options?: { previousSeq: number }): Promise<void> {
+    if (this.data.get(key)?.revision !== options?.previousSeq) throw new Error('wrong last sequence');
+    this.data.delete(key);
   }
 }
 
@@ -89,6 +96,50 @@ function buildPdfRequest(opKey: string): WorkerOperationRequest {
 }
 
 describe('jetstream adapters', () => {
+  test('a new process retries terminal settlement after the broker was unavailable', async () => {
+    const kv = new FakeKvStore();
+    const js = new FakeJetStream();
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const eventStream = new JetStreamOperationEventStream({
+      getJs: async () => js as never,
+      getJsm: async () => ({ consumers: {} }) as never,
+      eventsStreamName: 'events',
+    });
+    const notify = vi.fn()
+      .mockRejectedValueOnce(new Error('broker unavailable'))
+      .mockResolvedValue(undefined);
+    const deps = {
+      store: stateStore,
+      publish: (state: WorkerOperationState) => eventStream.append(state.opId, state),
+      notify,
+      logger: { warn: vi.fn() },
+    };
+    const first = createTerminalSettlement(deps);
+    const orchestrator = new OperationOrchestrator({
+      queue: new JetStreamOperationQueue({
+        getJs: async () => js, layoutSubject: 'jobs.layout', ttsPlaybackSubject: 'jobs.tts_playback',
+      }),
+      stateStore,
+      eventStream,
+      config: { opStaleMs: 30_000 },
+      terminalSettlement: first,
+    });
+    const { opId, jobId } = await orchestrator.enqueueOrReuse(buildPdfRequest('durable-completion'));
+    const attempt = { opId, jobId, deliveryAttempt: 1, updatedAt: Date.now() };
+    await orchestrator.claimAttempt(attempt);
+    await orchestrator.settleAttempt({ ...attempt, status: 'succeeded', result: { parsedObjectKey: 'parsed.json' } });
+
+    await expect(first.flush(opId)).rejects.toThrow('broker unavailable');
+    expect(await stateStore.getTerminalSettlement(opId)).not.toBeNull();
+    expect((await stateStore.getOpState(opId))?.status).toBe('succeeded');
+
+    const replacement = createTerminalSettlement(deps);
+    await expect(replacement.drain()).resolves.toBe(true);
+    expect(notify).toHaveBeenLastCalledWith({ operationId: opId, state: 'succeeded' });
+    expect(await stateStore.getTerminalSettlement(opId)).toBeNull();
+    await expect(replacement.drain()).resolves.toBe(false);
+  });
+
   test('replays a completion published between the initial state read and subscription', async () => {
     let policy: unknown;
     const terminal = { opId: 'op-gap', status: 'succeeded', updatedAt: 2 };

@@ -50,6 +50,7 @@ import {
 } from '../infrastructure/nats-adapters';
 import { createJsonCodec } from '../infrastructure/json-codec';
 import { createOperationReconciler } from '../operations/reconciliation';
+import { createTerminalSettlement } from '../operations/terminal-settlement';
 import {
   createArtifactStorage,
   createS3ClientFromEnv,
@@ -343,10 +344,17 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     modelDownloadSubject: MODEL_DOWNLOAD_JOBS_SUBJECT,
   });
 
+  const terminalSettlement = createTerminalSettlement({
+    store: defaultOperationStateStore,
+    publish: (state) => defaultOperationEventStream.append(state.opId, state),
+    notify: notifyComputeAdmissionTerminal,
+    logger: app.log,
+  });
   const defaultOrchestrator = new OperationOrchestrator({
     queue: operationQueue,
     stateStore: defaultOperationStateStore,
     eventStream: defaultOperationEventStream,
+    terminalSettlement,
     config: {
       opStaleMs,
       maxCasRetries: 10,
@@ -365,7 +373,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     opStaleMs,
     getGeneration: () => options.routeDeps ? 0 : sessionManager.getGeneration(),
     logger: app.log,
-    ...(options.routeDeps ? {} : { onOperationTerminal: notifyComputeAdmissionTerminal }),
+    ...(options.routeDeps ? {} : { onOperationTerminal: ({ operationId }) => terminalSettlement.flush(operationId) }),
   });
   const ensureOrphanedOpRecovery = () => reconciler.run();
   const getOpState = (opId: string) => reconciler.getOpState(opId);
@@ -453,7 +461,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     onInFlightJobsChanged: (delta) => {
       inFlightJobs = Math.max(0, inFlightJobs + delta);
     },
-    onOperationTerminal: notifyComputeAdmissionTerminal,
+    onOperationTerminal: ({ operationId }) => terminalSettlement.flush(operationId),
   });
 
   let computePolicyRefresh: Promise<void> | null = null;
@@ -534,7 +542,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       });
     },
     stopWorkers: () => workerLoops.stop(),
-    runReconciliation: () => reconciler.run({ force: true }),
+    runReconciliation: async () => {
+      const [, pending] = await Promise.all([reconciler.run({ force: true }), terminalSettlement.drain()]);
+      return pending;
+    },
   });
 
   const close = async (): Promise<void> => {

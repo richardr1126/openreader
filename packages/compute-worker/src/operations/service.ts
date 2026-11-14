@@ -39,6 +39,7 @@ export interface OperationOrchestratorDeps {
   config: OperationLifecycleConfig;
   clock?: OperationClock;
   idFactory?: OperationIdFactory;
+  terminalSettlement?: { track(opId: string): Promise<void> };
 }
 
 export class OperationOrchestrator implements OperationExecution {
@@ -49,11 +50,13 @@ export class OperationOrchestrator implements OperationExecution {
   private readonly maxCasRetries: number;
   private readonly clock: OperationClock;
   private readonly ids: OperationIdFactory;
+  private readonly terminalSettlement: OperationOrchestratorDeps['terminalSettlement'];
 
   constructor(deps: OperationOrchestratorDeps) {
     this.queue = deps.queue;
     this.stateStore = deps.stateStore;
     this.eventStream = deps.eventStream;
+    this.terminalSettlement = deps.terminalSettlement;
     this.opStaleMs = deps.config.opStaleMs;
     this.maxCasRetries = Math.max(1, Math.floor(deps.config.maxCasRetries ?? 10));
     this.clock = deps.clock ?? { now: () => Date.now() };
@@ -64,8 +67,10 @@ export class OperationOrchestrator implements OperationExecution {
   }
 
   private async persistState(state: WorkerOperationState): Promise<void> {
+    const pendingTerminal = isTerminalStatus(state.status) && this.terminalSettlement;
+    if (pendingTerminal) await pendingTerminal.track(state.opId);
     await this.stateStore.putOpState(state);
-    await this.eventStream.append(state.opId, state);
+    if (!pendingTerminal) await this.eventStream.append(state.opId, state);
   }
 
   private buildQueuedJob(state: WorkerOperationState, request: WorkerOperationRequest): QueuedOperation {
@@ -263,13 +268,17 @@ export class OperationOrchestrator implements OperationExecution {
   }
 
   private async persistStateIfUnchanged(state: WorkerOperationState, expectedRevision: number): Promise<boolean> {
+    // Record the unfinished side effects before committing terminal state so a
+    // crash between the compare-and-set and event publication is recoverable.
+    const pendingTerminal = isTerminalStatus(state.status) && this.terminalSettlement;
+    if (pendingTerminal) await pendingTerminal.track(state.opId);
     const updated = await this.stateStore.compareAndSetOpState({
       opId: state.opId,
       expectedRevision,
       newState: state,
     });
     if (!updated) return false;
-    await this.eventStream.append(state.opId, state);
+    if (!pendingTerminal) await this.eventStream.append(state.opId, state);
     return true;
   }
 }

@@ -369,7 +369,7 @@ export async function activateComputeAdmission(input: {
   const nowMs = input.nowMs ?? Date.now();
   await safeDb().update(computeLimitAdmissions).set({
     state: 'active',
-    operationId: input.operationId ?? null,
+    ...(input.operationId ? { operationId: input.operationId } : {}),
     activatedAt: sql`coalesce(${computeLimitAdmissions.activatedAt}, ${nowMs})`,
     leaseExpiresAt: nowMs + Math.max(60, input.leaseSeconds) * 1000,
   }).where(and(
