@@ -5,6 +5,7 @@ import { Resend } from 'resend';
 import { getEmailExecutionBrokerConfig } from '../infrastructure/credential-broker-config';
 import { resolveWorkerPath } from '../worker-paths';
 import type { EmailDeliveryJobRequest, EmailDeliveryJobResult } from '../operations/contracts';
+import type { JobAttempt } from '../operations/types';
 
 type EmailExecution = {
   apiKey: string;
@@ -136,7 +137,7 @@ export function renderEmailContent(execution: Omit<EmailExecution, 'apiKey'>): {
   return { subject: details.subject, html, text };
 }
 
-async function resolveExecution(payload: EmailDeliveryJobRequest): Promise<EmailExecution> {
+async function resolveExecution(payload: EmailDeliveryJobRequest, signal?: AbortSignal): Promise<EmailExecution> {
   const config = getEmailExecutionBrokerConfig();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -146,7 +147,7 @@ async function resolveExecution(payload: EmailDeliveryJobRequest): Promise<Email
       headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(payload),
       cache: 'no-store',
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
     });
     const body = await response.json().catch(() => null) as EmailExecution | { error?: string } | null;
     if (!response.ok || !body || !('apiKey' in body)) {
@@ -166,14 +167,16 @@ const TRANSIENT_RESEND_ERRORS = new Set([
   'rate_limit_exceeded', 'concurrent_idempotent_requests', 'application_error', 'internal_server_error',
 ]);
 
-export async function deliverEmail(payload: EmailDeliveryJobRequest): Promise<EmailDeliveryJobResult> {
+export async function deliverEmail(payload: EmailDeliveryJobRequest, _queueWaitMs?: number, attempt?: JobAttempt): Promise<EmailDeliveryJobResult> {
   if (Date.now() >= payload.expiresAt) throw new EmailDeliveryError('EMAIL_ENVELOPE_EXPIRED', false);
-  const execution = await resolveExecution(payload);
+  const execution = await resolveExecution(payload, attempt?.signal);
   if (execution.deliveryId !== payload.deliveryId || execution.expiresAt !== payload.expiresAt) {
     throw new EmailDeliveryError('EMAIL_BROKER_RESPONSE_INVALID', false);
   }
   const message = renderEmailContent(execution);
   const logo = await readFile(resolveEmailLogoPath());
+  await attempt?.assertActive();
+  attempt?.signal.throwIfAborted();
   const response = await new Resend(execution.apiKey).emails.send({
     from: `${execution.senderName} <${execution.senderEmail}>`,
     to: execution.to,

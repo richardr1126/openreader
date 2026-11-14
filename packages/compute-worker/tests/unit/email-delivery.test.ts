@@ -53,13 +53,14 @@ describe('email delivery', () => {
       expiresAt,
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })));
     send.mockResolvedValue({ data: { id: 'resend-message' }, error: null, headers: null });
-    const result = await deliverEmail({
+    const request = {
       deliveryId: '54f60fb9-e895-4c1c-9968-9d27ebbd9c31',
-      purpose: 'admin_test',
+      purpose: 'admin_test' as const,
       envelopeCiphertext: 'encrypted-envelope-content',
       envelopeIv: 'encrypted-iv',
       expiresAt,
-    });
+    };
+    const result = await deliverEmail(request);
     expect(result).toEqual({
       deliveryId: '54f60fb9-e895-4c1c-9968-9d27ebbd9c31',
       status: 'accepted',
@@ -75,6 +76,14 @@ describe('email delivery', () => {
         contentId: 'openreader-logo',
       })],
     }), { idempotencyKey: '54f60fb9-e895-4c1c-9968-9d27ebbd9c31' });
+    // An interrupted operation can be delivered again after Resend accepted it.
+    await expect(deliverEmail(request)).resolves.toEqual(result);
+    expect(send.mock.calls[1]).toEqual(send.mock.calls[0]);
+    await expect(deliverEmail(request, 0, {
+      opId: 'op', operationKey: 'key', attempt: 1, signal: new AbortController().signal,
+      assertActive: async () => { throw new Error('Delivery superseded'); },
+    })).rejects.toThrow('Delivery superseded');
+    expect(send).toHaveBeenCalledTimes(2);
   });
 
   test('rejects expired envelopes without contacting the broker', async () => {

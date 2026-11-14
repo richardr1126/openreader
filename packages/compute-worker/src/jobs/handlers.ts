@@ -39,7 +39,7 @@ import { runModelDownload } from './model-download';
 import type { ModelDownloadProgress } from '../inference/model-download';
 
 export interface JobHandlers {
-  runMaintenance?(payload: MaintenanceJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: MaintenanceProgress) => Promise<void> }): Promise<MaintenanceJobResult>;
+  runMaintenance?(payload: MaintenanceJobRequest, queueWaitMs: number, hooks?: JobExecution<MaintenanceProgress>): Promise<MaintenanceJobResult>;
   runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks: PdfLayoutExecution): Promise<PdfLayoutJobResult>;
   runTtsPlayback(payload: TtsPlaybackJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: TtsPlaybackProgress) => Promise<void> }): Promise<TtsPlaybackJobResult>;
   runTtsPlaybackPlan(payload: TtsPlaybackPlanJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<TtsPlaybackPlanJobResult>;
@@ -47,7 +47,7 @@ export interface JobHandlers {
   runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<DocumentPreviewJobResult>;
   runDocumentConversion(payload: DocumentConversionJobRequest, queueWaitMs: number, hooks?: JobExecution<DocumentConversionProgress>): Promise<DocumentConversionJobResult>;
   runAccountExport(payload: AccountExportJobRequest, queueWaitMs: number, hooks?: JobExecution<AccountExportProgress>): Promise<AccountExportJobResult>;
-  runEmailDelivery?(payload: EmailDeliveryJobRequest): Promise<EmailDeliveryJobResult>;
+  runEmailDelivery?(payload: EmailDeliveryJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<EmailDeliveryJobResult>;
   runModelDownload?(payload: ModelDownloadJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: ModelDownloadProgress) => Promise<void> }): Promise<ModelDownloadJobResult>;
 }
 
