@@ -6,7 +6,7 @@ import { motionColors } from './tokens';
 export type InputControlSize = 'sm' | 'md' | 'lg';
 
 const inputStyles = variants({
-  base: cn('w-full border border-line bg-surface-sunken text-foreground placeholder:text-soft focus:border-accent-line focus:outline-none focus:ring-2 focus:ring-accent-line', motionColors),
+  base: cn('w-full border border-line bg-surface-sunken text-foreground placeholder:text-soft focus:border-accent-line focus:outline-hidden focus:ring-2 focus:ring-accent-line', motionColors),
   variants: {
     size: {
       sm: 'rounded-md px-2 py-1 text-xs',

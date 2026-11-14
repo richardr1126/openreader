@@ -293,7 +293,7 @@ export function AdminProvidersPanel() {
                 <MenuTransition>
                   <MenuItemsSurface
                     anchor="bottom end"
-                    className="z-50 mt-2 min-w-[170px] bg-base focus:outline-none"
+                    className="z-50 mt-2 min-w-[170px] bg-base focus:outline-hidden"
                   >
                     <MenuActionItem onClick={() => setEditorTarget({ kind: 'edit', provider: p })}>
                       Edit
@@ -321,7 +321,7 @@ export function AdminProvidersPanel() {
           <button
             type="button"
             onClick={() => setEditorTarget({ kind: 'new' })}
-            className="flex w-full items-center gap-2 rounded-b-lg text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+            className="flex w-full items-center gap-2 rounded-b-lg text-sm font-medium text-accent transition-colors duration-base hover:bg-accent-wash focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
           >
             <PlusIcon className="h-3.5 w-3.5" aria-hidden="true" />
             Add provider

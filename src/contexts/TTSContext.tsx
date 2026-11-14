@@ -17,8 +17,8 @@ import {
   createContext,
   useContext,
   useState,
-  useCallback,
   useEffect,
+  useCallback,
   useRef,
   useMemo,
   ReactNode,
@@ -305,7 +305,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const isPlayingRef = useRef(false);
   const pauseEpochRef = useRef(0);
   const playbackAnchorRef = useRef<PlaybackAnchor | null>(null);
-  const [, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
+  const [playbackAnchor, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
   const [followingNarration, setFollowing] = useState(true);
   const followingNarrationRef = useRef(true);
   const [readerNavigationRevision, setReaderNavigationRevision] = useState(0);
@@ -403,7 +403,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   } = useTtsPlayback({
     audioContext: audioContext ?? null,
     audioSpeed,
-    canStartPlayback: isPlaying && (Boolean(sentences[currentIndex]) || Boolean(playbackAnchorRef.current?.hasContent || playbackAnchorRef.current?.text.trim())),
+    canStartPlayback: isPlaying && (Boolean(sentences[currentIndex]) || Boolean(playbackAnchor?.hasContent || playbackAnchor?.text.trim())),
     isPlaying,
     isPlayingRef,
     playbackSegmentsRef,
@@ -469,8 +469,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     syncPlaybackLocator,
   });
 
+  // Each completed config load re-applies the saved speed, replacing any local
+  // speed change. This syncs from the config store after it settles.
   useEffect(() => {
     if (configIsLoading) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAudioSpeed(audioPlayerSpeed);
   }, [configIsLoading, audioPlayerSpeed]);
 

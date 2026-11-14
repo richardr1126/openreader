@@ -178,7 +178,7 @@ function DocRow({
           <span className="truncate">{doc.name}</span>
         </Link>
         {doc.author && (
-          <span className="hidden sm:block min-w-0 shrink-[2] truncate text-[11px] text-soft" title={doc.author}>
+          <span className="hidden sm:block min-w-0 shrink-2 truncate text-[11px] text-soft" title={doc.author}>
             {doc.author}
           </span>
         )}

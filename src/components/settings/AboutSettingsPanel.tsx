@@ -72,7 +72,7 @@ function AcknowledgementRow({ component, texts }: { component: Acknowledgement; 
   const versions = component.versions.join(', ');
   return (
     <details className="group" onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-md focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
         <ChevronRightIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-transform group-open:rotate-90" />
         <span className="min-w-0 flex-1 truncate text-sm text-foreground">
           {component.name}
@@ -97,7 +97,7 @@ function AcknowledgementRow({ component, texts }: { component: Acknowledgement; 
           ) : component.textIds.map((id) => (
             <pre
               key={id}
-              className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-line-soft bg-surface-sunken p-2 font-mono text-[11px] leading-relaxed text-foreground"
+              className="max-h-80 overflow-auto whitespace-pre-wrap wrap-break-word rounded-md border border-line-soft bg-surface-sunken p-2 font-mono text-[11px] leading-relaxed text-foreground"
             >
               {texts[id] ?? 'Licence text missing from this build.'}
             </pre>

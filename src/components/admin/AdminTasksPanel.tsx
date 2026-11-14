@@ -180,7 +180,7 @@ export function AdminTasksPanel() {
         {isLoading ? (
           <TasksSkeleton />
         ) : (
-          <ul className="divide-y divide-line-soft !p-0">
+          <ul className="divide-y divide-line-soft p-0!">
             {(data?.tasks ?? []).map((task) => (
               <TaskRow
                 key={task.key}
@@ -218,7 +218,7 @@ function TasksSkeleton() {
   const rows = Array.from({ length: 2 });
   return (
     <div
-      className="animate-pulse divide-y divide-line-soft !p-0"
+      className="animate-pulse divide-y divide-line-soft p-0!"
       aria-label="Loading maintenance tasks"
       aria-busy="true"
     >
@@ -303,7 +303,7 @@ function TaskRow({
             min={minimumIntervalMs / 60000}
             step="any"
             controlSize="sm"
-            className="!w-16 text-center"
+            className="w-16! text-center"
             value={minutes}
             onChange={(e) => onMinutesChange(e.target.value)}
             aria-label={`${task.name} interval in minutes`}

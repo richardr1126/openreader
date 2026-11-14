@@ -66,7 +66,7 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
         type="button"
         aria-label={`About ${label}`}
         aria-description={typeof children === 'string' ? children : undefined}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-faint transition-colors duration-fast ease-standard hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-faint transition-colors duration-fast ease-standard hover:text-accent focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
       >
         <InfoCircleIcon className="h-4 w-4" />
       </button>
@@ -83,7 +83,7 @@ export function InfoTip({ label, children }: { label: string; children: ReactNod
 export function ResetButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button type="button" aria-label={label} title={label} onClick={onClick}
-      className="inline-flex h-5 w-5 shrink-0 animate-scale-in items-center justify-center rounded-full bg-accent-wash text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 motion-reduce:animate-none">
+      className="inline-flex h-5 w-5 shrink-0 animate-scale-in items-center justify-center rounded-full bg-accent-wash text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 motion-reduce:animate-none">
       <RefreshIcon className="h-3 w-3" aria-hidden />
     </button>
   );

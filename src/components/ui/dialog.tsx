@@ -120,6 +120,8 @@ function NativeModal({
         dialog.showModal();
         raiseAboveModals();
       }
+      // Content mounts only after showModal(), so autoFocus lands inside it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShown(true);
     } else {
       if (dialog.open) closeModal(dialog, returnFocusRef.current);
@@ -188,7 +190,7 @@ function NativeModal({
     >
       {/* Always present: Headless UI portals (listboxes, menus) mount into the
           dialog, and remove their container once it has no children left. */}
-      <div data-modal-backdrop className={cn('fixed inset-0 overlay-dim backdrop-blur-sm', shown && 'animate-fade-in')} />
+      <div data-modal-backdrop className={cn('fixed inset-0 overlay-dim backdrop-blur-xs', shown && 'animate-fade-in')} />
       {shown ? (
         <Portal.Group target={ref}>
           <div data-modal-backdrop className={overlayClassName}>

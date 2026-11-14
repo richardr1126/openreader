@@ -58,7 +58,7 @@ function ThemeTile({ label, selected, onClick, children }: {
   label: string; selected: boolean; onClick: () => void; children: ReactNode;
 }) {
   return <button type="button" aria-pressed={selected} onClick={onClick}
-    className={`group flex min-w-0 flex-col overflow-hidden rounded-lg border text-left transition duration-base ease-standard focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+    className={`group flex min-w-0 flex-col overflow-hidden rounded-lg border text-left transition duration-base ease-standard focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent ${
       selected ? 'border-accent ring-1 ring-accent' : 'border-line-soft hover:border-accent-line'}`}>
     <span className="flex h-11 overflow-hidden">{children}</span>
     <span className="flex items-center justify-between gap-2 border-t border-line-soft bg-surface-solid px-2.5 py-1.5 text-xs font-medium text-foreground">

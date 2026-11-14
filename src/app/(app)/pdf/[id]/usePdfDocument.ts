@@ -99,10 +99,11 @@ export function usePdfDocument(
   const [documentSettings, setDocumentSettings] = useState<DocumentSettings>(() => (
     mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings)
   ));
-  useEffect(() => {
-    if (!serverDocumentSettings) return;
+  const [settingsSource, setSettingsSource] = useState(serverDocumentSettings);
+  if (serverDocumentSettings && serverDocumentSettings !== settingsSource) {
+    setSettingsSource(serverDocumentSettings);
     setDocumentSettings(mergeDocumentSettings(DEFAULT_DOCUMENT_SETTINGS, serverDocumentSettings));
-  }, [serverDocumentSettings]);
+  }
   const [parsedOverlayEnabled, setParsedOverlayEnabled] = useState(false);
   const currDocPage = currDocPageNumber;
 
@@ -203,6 +204,8 @@ export function usePdfDocument(
    */
   useEffect(() => {
     if (currDocData && (pdfDocument || !readerShowsLayout)) {
+      // Text extraction reads pdf.js, an external system, and reports readiness.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       loadCurrDocText();
     }
   }, [currDocPageNumber, currDocData, pdfDocument, loadCurrDocText, readerShowsLayout]);

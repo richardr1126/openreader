@@ -89,7 +89,7 @@ describe('reader server-state ownership', () => {
     expect(surfaceKey).toContain('payload.document.contentVersion');
     expect(shell).toContain('playback: replannedPlayback');
     expect(shell).toContain('const attemptKey = `${surfaceKey}:${rendererAttempt}`');
-    expect(shell).toContain('restartBootstrap,');
+    expect(shell).toContain('restartBootstrap={restartBootstrap}');
     expect(shell).toContain('enabled: Boolean(payload && sourceDocument)');
     expect(shell).toContain('<Fragment key={attemptKey}>');
     const surfaceAdoption = source('src/hooks/useReaderSurfaceAdoption.ts');

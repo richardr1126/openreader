@@ -114,7 +114,7 @@ async function waitUntilReady(url, child) {
 export async function startRuntime({ root, dataDir, logDir, onExit }) {
   const node = path.join(root, 'node', exe('node'));
   if (!fs.existsSync(node)) {
-    throw new Error(`The OpenReader runtime is missing (${root}). Run \`pnpm stage\` first.`);
+    throw new Error(`The OpenReader runtime is missing (${root}). Run \`pnpm run stage\` first.`);
   }
 
   const docstore = path.join(dataDir, 'docstore');

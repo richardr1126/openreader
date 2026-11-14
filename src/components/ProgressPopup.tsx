@@ -42,7 +42,7 @@ export function ProgressPopup({
       leaveFrom="opacity-100 translate-y-0"
       leaveTo="opacity-0 -translate-y-4"
     >
-      <div className="fixed inset-x-0 top-2 z-[60] pointer-events-none px-4">
+      <div className="fixed inset-x-0 top-2 z-60 pointer-events-none px-4">
         <div className="w-full max-w-md mx-auto">
           <div 
             className={`pointer-events-auto shadow-elev-3 ${

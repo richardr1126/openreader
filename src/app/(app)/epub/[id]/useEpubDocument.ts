@@ -76,7 +76,8 @@ export interface EpubDocumentState {
   failPlacement: (error: Error) => void;
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
-  tocRef: RefObject<NavItem[]>;
+  toc: NavItem[];
+  setToc: (toc: NavItem[]) => void;
   handleLocationChanged: (
     location: string | number | TTSSegmentLocator,
     intent?: EpubLocationChangeIntent,
@@ -127,7 +128,7 @@ export function useEpubDocument(
 
   const bookRef = useRef<Book | null>(null);
   const renditionRef = useRef<Rendition | undefined>(undefined);
-  const tocRef = useRef<NavItem[]>([]);
+  const [toc, setToc] = useState<NavItem[]>([]);
   const isEPUBSetOnce = useRef(false);
   const renditionEventsCleanupRef = useRef<(() => void) | null>(null);
   const placementIntentRef = useRef<EpubPlacementIntent>('initial');
@@ -135,8 +136,9 @@ export function useEpubDocument(
   const placementOwnerRef = useRef(0);
   const completedPlacementCfiRef = useRef<string | null>(null);
   const committedLocationRef = useRef<EpubCommittedLocation | null>(null);
-  const initialPlacementCommittedRef = useRef(false);
-  const playbackPlanReadyRef = useRef(false);
+  // Once the first placement commits, playback stays ready through later re-placements.
+  const [initialPlacementCommitted, setInitialPlacementCommitted] = useState(false);
+  const playbackPlanReadyRef = useRef(playbackPlanReady);
   const requestPlacementRef = useRef<RequestCommittedPlacement | null>(null);
   // The saved playback cursor a new rendition opens at, and the resolved
   // ordinal the first placement still has to select.
@@ -144,8 +146,6 @@ export function useEpubDocument(
   const pendingInitialOrdinalRef = useRef<number | null>(null);
   const playbackSegmentsRef = useRef<CanonicalTtsSegment[]>(playbackSegments);
   const followingNarrationRef = useRef(followingNarration);
-  followingNarrationRef.current = followingNarration;
-  playbackSegmentsRef.current = playbackSegments;
   // Navigation callbacks change identity whenever playback state does (each
   // SSE seek-layout update during generation). Placement reads the latest ones
   // through refs: as dependencies they re-ran a full placement every few
@@ -155,7 +155,10 @@ export function useEpubDocument(
   useLayoutEffect(() => {
     reconcileEpubRenderedAnchorRef.current = reconcileEpubRenderedAnchor;
     skipToOrdinalRef.current = skipToOrdinal;
-  }, [reconcileEpubRenderedAnchor, skipToOrdinal]);
+    followingNarrationRef.current = followingNarration;
+    playbackSegmentsRef.current = playbackSegments;
+    playbackPlanReadyRef.current = playbackPlanReady;
+  }, [followingNarration, playbackPlanReady, playbackSegments, reconcileEpubRenderedAnchor, skipToOrdinal]);
   const startupDisplayStartedRef = useRef(false);
   const startupDisplayOwnerRef = useRef(0);
 
@@ -220,7 +223,7 @@ export function useEpubDocument(
         }
         setRenderedTextMaps([]);
         completedPlacementCfiRef.current = startCfi;
-        initialPlacementCommittedRef.current = true;
+        setInitialPlacementCommitted(true);
         placementIntentRef.current = 'renderer';
         setPlacementLifecycle({ status: 'empty-plan', error: null });
         return;
@@ -279,7 +282,7 @@ export function useEpubDocument(
       pendingInitialOrdinalRef.current = null;
 
       completedPlacementCfiRef.current = startCfi;
-      initialPlacementCommittedRef.current = true;
+      setInitialPlacementCommitted(true);
       placementIntentRef.current = 'renderer';
       if (!ownsPlacement()) return;
       setPlacementLifecycle({
@@ -303,8 +306,6 @@ export function useEpubDocument(
     setRenderedTextMaps,
   ]);
 
-  playbackPlanReadyRef.current = playbackPlanReady;
-
   const requestCommittedPlacement = useCallback<RequestCommittedPlacement>(async (
     book,
     rendition,
@@ -324,7 +325,9 @@ export function useEpubDocument(
     setPlacementLifecycle({ status: 'placing', error: null });
     await runRenderedPlacement(owner, book, rendition, location, options);
   }, [runRenderedPlacement]);
-  requestPlacementRef.current = requestCommittedPlacement;
+  useLayoutEffect(() => {
+    requestPlacementRef.current = requestCommittedPlacement;
+  }, [requestCommittedPlacement]);
 
   const refreshRenderedPlacement = useCallback<RefreshRenderedPlacement>(async (
     options = {},
@@ -410,6 +413,8 @@ export function useEpubDocument(
     completedPlacementCfiRef.current = null;
     placementOwnerRef.current += 1;
     if (!playbackPlanReady) {
+      // Records that the open rendition is now waiting on the replaced plan.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPlacementLifecycle({ status: 'waiting-plan', error: null });
       return;
     }
@@ -537,6 +542,8 @@ export function useEpubDocument(
         if (saved && saved.ordinal !== resolution.ordinal) skipToOrdinal(saved.ordinal);
       }
     }
+    // Records that the one-time anchoring command above has run.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlanTextAnchored(true);
   }, [
     currentSentenceOrdinal,
@@ -558,7 +565,7 @@ export function useEpubDocument(
   }, [currentSentenceOrdinal, planTextAnchored, playbackSegments, readerShowsLayout]);
 
   const isPlaybackReady = readerShowsLayout
-    ? initialPlacementCommittedRef.current
+    ? initialPlacementCommitted
       || placementLifecycle.status === 'ready'
       || placementLifecycle.status === 'empty-plan'
     : planTextAnchored;
@@ -576,7 +583,8 @@ export function useEpubDocument(
     failPlacement,
     bookRef,
     renditionRef,
-    tocRef,
+    toc,
+    setToc,
     handleLocationChanged,
     setRendition,
     highlightSegment,
@@ -594,6 +602,7 @@ export function useEpubDocument(
     renderedTextRevision,
     refreshRenderedPlacement,
     failPlacement,
+    toc,
     handleLocationChanged,
     setRendition,
     highlightSegment,

@@ -104,7 +104,7 @@ export function AdminSystemPanel() {
       )}
     >
       {data ? (
-        <ul className="divide-y divide-line-soft !p-0" aria-label="System check results">
+        <ul className="divide-y divide-line-soft p-0!" aria-label="System check results">
           {data.map((item) => {
             const badge = STATUS_BADGE[item.status];
             return (

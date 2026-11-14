@@ -106,6 +106,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     const stored = localStorage.getItem('theme') as Theme;
     const initialTheme = stored && THEMES.includes(stored) ? stored : 'system';
+    // Browser storage is only readable after mount; a layout effect applies it before paint.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTheme(initialTheme);
     const effectiveTheme = getEffectiveTheme(initialTheme);
     document.documentElement.classList.remove(...THEMES);

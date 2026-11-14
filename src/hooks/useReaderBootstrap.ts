@@ -35,7 +35,7 @@ export function useReaderBootstrap(documentId: string | undefined) {
   const progressPersistenceEnabled = useRef(false);
   const surfaceOwner = `${sessionId}:${documentId ?? ''}`;
   const lastSettingsCommit = useRef<{ owner: string; settings: DocumentSettings } | null>(null);
-  const bootstrapSettingsAtStart = useRef(lastSettingsCommit.current);
+  const bootstrapSettingsAtStart = useRef<typeof lastSettingsCommit.current>(null);
   const preserveNewerPresentation = useCallback((snapshot: ReaderBootstrapResult, atStart: typeof lastSettingsCommit.current): ReaderBootstrapResult => {
     const commit = lastSettingsCommit.current;
     if (snapshot.status !== 'ready' || !commit || commit.owner !== surfaceOwner || commit === atStart) return snapshot;
@@ -80,10 +80,10 @@ export function useReaderBootstrap(documentId: string | undefined) {
     result: Extract<ReaderBootstrapResult, { status: 'ready' }>;
     version: number;
   } | null>(null);
-  useEffect(() => {
-    if (query.data?.status !== 'ready') return;
+  if (query.data?.status === 'ready' && (settled?.result !== query.data
+    || settled.owner !== surfaceOwner || settled.version !== query.dataUpdatedAt)) {
     setSettled({ owner: surfaceOwner, result: query.data, version: query.dataUpdatedAt });
-  }, [query.data, query.dataUpdatedAt, surfaceOwner]);
+  }
   const settledForSurface = settled?.owner === surfaceOwner ? settled : null;
   const replanning = Boolean(settledForSurface) && currentResult.status === 'pending';
   const replanError = settledForSurface && currentResult.status === 'error'

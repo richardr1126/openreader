@@ -2,7 +2,7 @@
 
 import { ChevronUpDownIcon, SpeedometerIcon } from '@/components/icons/Icons';
 import { useConfig } from '@/contexts/ConfigContext';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { PopoverRoot, PopoverSurface, PopoverTrigger, RangeInput, Tooltip } from '@/components/ui';
 
 export const MIN_SPEED = 0.5;
@@ -25,10 +25,11 @@ export const SpeedControl = ({
 }) => {
   const { audioPlayerSpeed } = useConfig();
   const [localAudioSpeed, setLocalAudioSpeed] = useState(audioPlayerSpeed);
-
-  useEffect(() => {
+  const [savedAudioSpeed, setSavedAudioSpeed] = useState(audioPlayerSpeed);
+  if (savedAudioSpeed !== audioPlayerSpeed) {
+    setSavedAudioSpeed(audioPlayerSpeed);
     setLocalAudioSpeed(audioPlayerSpeed);
-  }, [audioPlayerSpeed]);
+  }
 
   const handleAudioSpeedChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setLocalAudioSpeed(parseFloat(event.target.value));

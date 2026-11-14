@@ -40,7 +40,7 @@ evidence at the end of this document as each phase lands.
   provider), the desktop owner plugin and `nextCookies`. Nothing issues tokens
   to outside clients.
 - **Middleware:** does not block bearer requests, because API routes
-  authenticate themselves. The production region check in `src/middleware.ts`
+  authenticate themselves. The production region check in `src/proxy.ts`
   does apply to them.
 - **Route shapes:** written for the web client.
   - An export needs a `planObjectKey` and full voice settings from

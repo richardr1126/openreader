@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ClonedVoiceLibrary } from './ClonedVoiceLibrary';
 import type { VoiceCloningContext } from './CloneVoiceEditor';
 import { CheckIcon, DisclosureIcon, HeartIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
@@ -46,7 +46,7 @@ export function VoicePickerRow({ voice, name, note, selected, onSelect, preview,
   return <div className={cn('flex items-center gap-2 rounded-md pl-1 pr-2', selected ? 'bg-accent-wash' : 'hover:bg-surface-sunken')}>
     <VoicePreviewButton previewKey={voice} label={name} preview={preview} voice={voice} />
     <button type="button" aria-label={name} aria-pressed={selected} onClick={onSelect}
-      className={cn('flex min-w-0 flex-1 items-center justify-between gap-2 rounded py-1.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', selected ? 'font-medium text-accent' : 'text-foreground')}>
+      className={cn('flex min-w-0 flex-1 items-center justify-between gap-2 rounded py-1.5 text-left text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent', selected ? 'font-medium text-accent' : 'text-foreground')}>
       <span className="min-w-0"><span className="block truncate">{name}</span>{note && <span className="block text-xs text-soft">{note}</span>}</span>
       {selected && <CheckIcon className="h-4 w-4 shrink-0 text-accent" aria-hidden />}
     </button>
@@ -163,13 +163,12 @@ export function VoicePicker({
     setRevealFrom(shownLimit);
     setLimit(Math.min(total, shownLimit + VOICE_BATCH));
   };
-  const revealMoreRef = useRef(revealMore);
-  revealMoreRef.current = revealMore;
+  const revealMoreOnScroll = useEffectEvent(revealMore);
   useEffect(() => {
     const element = sentinel.current;
     if (!endless || !hidden || !element) return;
     const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) revealMoreRef.current();
+      if (entries.some(entry => entry.isIntersecting)) revealMoreOnScroll();
     }, { rootMargin: '0px 0px 160px 0px' });
     // Wait for the last batch to finish growing, or the fade would still be
     // in view and every batch would load at once.
@@ -217,7 +216,7 @@ export function VoicePicker({
       ) : (
         <div ref={listTop} className="relative scroll-mt-4">
           {fold(
-            <div className={cn('space-y-3 pt-1', hidden > 0 && '[mask-image:linear-gradient(to_bottom,black_calc(100%-6rem),transparent)]')}>
+            <div className={cn('space-y-3 pt-1', hidden > 0 && 'mask-[linear-gradient(to_bottom,black_calc(100%-6rem),transparent)]')}>
               {shownGroups.map(({ rows, ...group }) => {
                 return (
                   <div key={group.key} role="group" aria-label={group.label}>
@@ -248,7 +247,7 @@ export function VoicePicker({
           {hidden > 0 ? (
             <div ref={sentinel} className="pointer-events-none absolute inset-x-0 bottom-0 flex h-24 items-end justify-center pb-2">
               <button type="button" ref={showMore} onClick={() => { setEndless(true); revealMore(); }}
-                className="group pointer-events-auto inline-flex animate-scale-in items-center gap-2 rounded-full border border-line-soft bg-[color-mix(in_srgb,var(--surface-solid),transparent_22%)] py-1.5 pl-3.5 pr-3 text-xs font-medium text-foreground shadow-[0_6px_24px_-8px_color-mix(in_srgb,var(--accent),transparent_55%)] backdrop-blur-md transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent active:translate-y-0 active:scale-[0.97] motion-reduce:animate-none motion-reduce:transition-none">
+                className="group pointer-events-auto inline-flex animate-scale-in items-center gap-2 rounded-full border border-line-soft bg-[color-mix(in_srgb,var(--surface-solid),transparent_22%)] py-1.5 pl-3.5 pr-3 text-xs font-medium text-foreground shadow-[0_6px_24px_-8px_color-mix(in_srgb,var(--accent),transparent_55%)] backdrop-blur-md transition duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:border-accent hover:text-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent active:translate-y-0 active:scale-[0.97] motion-reduce:animate-none motion-reduce:transition-none">
                 <span className="tabular-nums">{endless ? `${hidden} more` : `Show ${hidden} more`}</span>
                 <span className="animate-nudge-down text-accent motion-reduce:animate-none" aria-hidden>
                   <DisclosureIcon className="h-3.5 w-3.5 rotate-90" />
@@ -260,7 +259,7 @@ export function VoicePicker({
               <button type="button" onClick={showFewer} ref={(button) => {
                 if (button && focusShowFewer.current) { focusShowFewer.current = false; button.focus(); }
               }}
-                className="inline-flex animate-fade-in items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-soft transition-colors hover:bg-surface-sunken hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent motion-reduce:animate-none">
+                className="inline-flex animate-fade-in items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium text-soft transition-colors hover:bg-surface-sunken hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent motion-reduce:animate-none">
                 Show fewer
                 <DisclosureIcon className="h-3.5 w-3.5 -rotate-90" aria-hidden />
               </button>
@@ -275,7 +274,7 @@ export function VoicePicker({
           onToggle={(event) => setCustomVoiceOpen(event.currentTarget.open)}
         >
           {/* Reset on the opening click: the toggle event fires a task later and would overwrite typing. */}
-          <summary onClick={() => { if (!customVoiceOpen) setCustomVoice(value); }} className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <summary onClick={() => { if (!customVoiceOpen) setCustomVoice(value); }} className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
             Custom voice ID
           </summary>
           <div className="flex items-center gap-2 border-t border-line-soft p-3">

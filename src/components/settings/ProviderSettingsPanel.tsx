@@ -165,6 +165,8 @@ export function ProviderSettingsPanel({
 
   useEffect(() => {
     if (configLoading || (active && hydrated)) return;
+    // Copies the saved settings into the draft: once while editing, on every change otherwise.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSaved();
     setHydrated(true);
   }, [active, configLoading, hydrated, loadSaved]);
@@ -208,13 +210,13 @@ export function ProviderSettingsPanel({
     maxVoices: providerModelPolicy.maxVoices,
   };
 
-  useEffect(() => {
-    if (!viewModel.models.some((model) => model.id === modelValue) && modelValue !== '') {
-      setCustomModelInput(modelValue);
-    } else {
-      setCustomModelInput('');
-    }
-  }, [modelValue, viewModel.models]);
+  // A model outside the provider's list shows in the custom model field.
+  const customModelSource = `${modelValue}\n${viewModel.models.map((model) => model.id).join('\n')}`;
+  const [shownCustomModelSource, setShownCustomModelSource] = useState<string | null>(null);
+  if (shownCustomModelSource !== customModelSource) {
+    setShownCustomModelSource(customModelSource);
+    setCustomModelInput(modelValue !== '' && !viewModel.models.some((model) => model.id === modelValue) ? modelValue : '');
+  }
 
   useEffect(() => {
     if (selectedProvider || viewModel.providers.length === 0) return;
@@ -225,6 +227,8 @@ export function ProviderSettingsPanel({
       providerType: fallback.providerType,
       sharedProviders,
     });
+    // Falls back to the first provider once the list arrives.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     chooseProviderModel({ providerRef: fallback.id, providerType: defaults.providerType, model: defaults.defaultModel });
     setLocalInstructions(defaults.defaultInstructions);
     setCustomModelInput('');

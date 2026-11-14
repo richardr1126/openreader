@@ -92,6 +92,8 @@ export function GutenbergCatalogPanel({ folderId }: { folderId?: string }) {
   // An empty search lists the most downloaded books, which is a better
   // opening screen than an empty box.
   useEffect(() => {
+    // runSearch owns the request's loading and result state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void runSearch({ search: '', language: 'en', page: 1 });
     return () => searchRef.current?.abort();
   }, [runSearch]);

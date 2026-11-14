@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Section, Select, SegmentedControl, SaveBar, RowIcon, InfoTip, ResetButton } from '@/components/ui';
 import { ColorPicker } from '@/components/ColorPicker';
 import { BookIcon, DisclosureIcon, DocumentIcon, HighlighterIcon, MinusIcon, PaletteIcon, PlusIcon, TextCursorIcon, ZoomIcon } from '@/components/icons/Icons';
@@ -46,14 +46,18 @@ const SELECT_OPTIONS = Object.fromEntries(Object.entries(TYPE_OPTIONS).map(([key
   values.map((value) => ({ value, label: value === 'default' ? 'Default / publisher' : value === 'justify' ? 'Justified' : value.charAt(0).toUpperCase() + value.slice(1) })),
 ])) as Record<keyof typeof TYPE_OPTIONS, { value: string; label: string }[]>;
 
-const stepButtonClass = 'inline-flex h-7 w-7 items-center justify-center rounded-full text-soft hover:bg-accent-wash hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-30';
+const stepButtonClass = 'inline-flex h-7 w-7 items-center justify-center rounded-full text-soft hover:bg-accent-wash hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-30';
 
 /** − value + filling the control column, so steppers share both edges. */
 function Stepper({ label, value, min, max, step, suffix = '', onChange }: {
   label: string; value: number; min: number; max: number; step: number; suffix?: string; onChange: (value: number) => void;
 }) {
   const [text, setText] = useState(String(value));
-  useEffect(() => setText(String(value)), [value]);
+  const [shownValue, setShownValue] = useState(value);
+  if (shownValue !== value) {
+    setShownValue(value);
+    setText(String(value));
+  }
   const commit = (raw: number) => {
     if (!Number.isFinite(raw)) { setText(String(value)); return; }
     const next = Number(Math.min(max, Math.max(min, Math.round(raw / step) * step)).toFixed(2));
@@ -62,9 +66,9 @@ function Stepper({ label, value, min, max, step, suffix = '', onChange }: {
   };
   return <div role="group" aria-label={label} className="flex h-9 min-w-0 flex-1 items-center justify-between rounded-full border border-line bg-surface-sunken p-1">
     <button type="button" className={stepButtonClass} aria-label={`Decrease ${label.toLowerCase()}`} disabled={value <= min} onClick={() => commit(value - step)}><MinusIcon className="h-3.5 w-3.5" aria-hidden /></button>
-    <span className="flex w-[4.25rem] items-center justify-center text-xs tabular-nums text-foreground">
+    <span className="flex w-17 items-center justify-center text-xs tabular-nums text-foreground">
       <input type="number" aria-label={label} min={min} max={max} step={step} value={text}
-        className="h-6 w-9 rounded border-0 bg-transparent p-0 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        className="h-6 w-9 rounded border-0 bg-transparent p-0 text-right text-xs tabular-nums focus:outline-hidden focus:ring-1 focus:ring-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         onChange={(event) => setText(event.target.value)} onBlur={() => commit(text.trim() ? Number(text) : NaN)}
         onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
         onKeyUp={(event) => { if (event.key === 'ArrowUp' || event.key === 'ArrowDown') commit(Number(event.currentTarget.value)); }} />
@@ -220,12 +224,12 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
         onClick={() => setPending(resetHighlights(showTypography ? { ...pending, typography: scope === 'book' ? {} : DEFAULT_TYPOGRAPHY } : pending))} />}>
       <div aria-label="Typography preview" role="region" className="overflow-hidden text-foreground">
         <button type="button" aria-expanded={previewOpen} onClick={() => setPreviewOpen(current => !current)}
-          className="mb-2 flex w-full items-center justify-between text-[10px] uppercase tracking-wide text-faint hover:text-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          className="mb-2 flex w-full items-center justify-between text-[10px] uppercase tracking-wide text-faint hover:text-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
           <span>Reading preview</span>
           <span className="flex items-center gap-1">{previewOpen ? 'Show less' : 'Show more'}<DisclosureIcon className={`h-3 w-3 transition-transform duration-300 motion-reduce:transition-none ${previewOpen ? '-rotate-90' : 'rotate-90'}`} aria-hidden /></span>
         </button>
         {/* Short by default so the controls stay in view; the fade marks the clip as intentional. */}
-        <div role="article" aria-label="Reading sample" className={`mx-auto overflow-hidden transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] [mask-image:linear-gradient(to_bottom,black_70%,transparent)] motion-reduce:transition-none ${previewOpen ? 'h-60 lg:h-80' : 'h-24'}`} style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || undefined,
+        <div role="article" aria-label="Reading sample" className={`mx-auto overflow-hidden transition-[height] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] mask-[linear-gradient(to_bottom,black_70%,transparent)] motion-reduce:transition-none ${previewOpen ? 'h-60 lg:h-80' : 'h-24'}`} style={{ width: `${draft.readingWidth}%`, fontFamily: READER_FONT_FAMILIES[draft.fontFamily] || undefined,
           fontSize: `${14 * draft.sizePercent / 100}px`, lineHeight: draft.lineMultiplier, letterSpacing: `${draft.letterSpacing}em`, textAlign: draft.alignment === 'default' ? 'start' : draft.alignment }}>
           {/* The first paragraph is the segment being read: a whole passage, not one sentence. */}
           <p aria-label="Highlight preview" className="-mx-1 rounded-sm px-1" style={{ marginBottom: `${draft.paragraphSpacing}em`, backgroundColor: presentation.highlightSegment ? highlightBackground(draft, 'segment') : undefined }}>
@@ -244,10 +248,10 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
       {showTypography && numberRow('sizePercent')}
       {showTypography && <div>
       <button type="button" aria-expanded={moreTypography} onClick={() => setMoreTypography(current => !current)}
-        className="flex min-h-8 w-full items-center justify-between text-sm font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        className="flex min-h-8 w-full items-center justify-between text-sm font-medium text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
         More typography<DisclosureIcon className={`h-4 w-4 text-faint transition-transform duration-300 motion-reduce:transition-none ${moreTypography ? 'rotate-90' : ''}`} aria-hidden />
       </button>
-      <AnimatedCollapse open={moreTypography}><div className="divide-y divide-line-soft [&>*]:py-2.5">
+      <AnimatedCollapse open={moreTypography}><div className="divide-y divide-line-soft *:py-2.5">
       <Row label="Spacing" wide>
         <SegmentedControl ariaLabel="Spacing presets" className={segmentedClass(3)}
           value={SPACING_PRESETS.find((preset) => draft.lineMultiplier === preset.lineMultiplier && draft.paragraphSpacing === preset.paragraphSpacing && draft.letterSpacing === preset.letterSpacing)?.label ?? ''}
@@ -284,7 +288,7 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
         const title = layer === 'segment' ? 'Segment' : 'Word';
         const actions = <>
           {draft[colorKey] !== 'theme' && <button type="button" aria-label={`Use theme ${layer} color`} title="Use theme color"
-            className="inline-flex h-5 w-5 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex h-5 w-5 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
             onClick={() => change('highlightAppearance', { [colorKey]: 'theme' })}><PaletteIcon className="h-3 w-3" aria-hidden /></button>}
           {resetField('highlightAppearance', [colorKey, opacityKey], `Use global ${layer} highlight`)}
         </>;

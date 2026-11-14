@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { version as appVersion } from "./package.json";
 
 const securityHeaders = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -33,6 +34,11 @@ const serverExternalPackages = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Inlined at build time. Importing package.json from app code makes
+  // Turbopack bundle the whole manifest, scripts included.
+  env: {
+    OPENREADER_APP_VERSION: appVersion,
+  },
   async headers() {
     return [
       {
@@ -65,17 +71,6 @@ const nextConfig: NextConfig = {
       './node_modules/onnxruntime-node/**/*',
       './node_modules/@huggingface/tokenizers/**/*',
     ],
-  },
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals = [
-        ...(config.externals || []),
-        {
-          canvas: 'commonjs @napi-rs/canvas',
-        },
-      ];
-    }
-    return config;
   },
 };
 

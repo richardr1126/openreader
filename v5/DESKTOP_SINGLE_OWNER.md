@@ -131,7 +131,7 @@ Rules for its use:
   Better Auth hook or credential-broker path. The exchange route authorizes with
   the token itself, not with the profile. Add a `check:compute-boundary`-style
   lint that fails if `installProfile` is referenced under `src/app/api/**`,
-  `src/lib/server/auth/**` or `src/middleware.ts`.
+  `src/lib/server/auth/**` or `src/proxy.ts`.
 - Server-side restrictions on desktop come from the ordinary settings the first
   exchange writes: signups closed, guests off. The hidden Users routes stay
   mounted and admin-guarded.

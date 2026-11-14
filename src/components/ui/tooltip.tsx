@@ -223,7 +223,7 @@ export function Tooltip({
           role="tooltip"
           style={position ? { left: position.left, top: position.top } : { left: 0, top: 0 }}
           className={cn(
-            'pointer-events-none fixed z-[100] max-w-72 rounded-md border border-line bg-surface-solid text-[11px] leading-tight text-foreground shadow-elev-3',
+            'pointer-events-none fixed z-100 max-w-72 rounded-md border border-line bg-surface-solid text-[11px] leading-tight text-foreground shadow-elev-3',
             'transition-[opacity,transform] duration-fast ease-standard motion-reduce:transition-none',
             position?.below ? 'origin-top' : 'origin-bottom',
             position ? 'scale-100 opacity-100' : 'scale-95 opacity-0',
@@ -235,7 +235,7 @@ export function Tooltip({
               aria-hidden
               className={cn(
                 'absolute h-2 w-2 -translate-x-1/2 rotate-45 border-line bg-surface-solid',
-                position.below ? '-top-[5px] border-l border-t' : '-bottom-[5px] border-b border-r',
+                position.below ? 'top-[-5px] border-l border-t' : 'bottom-[-5px] border-b border-r',
               )}
               style={{ left: position.arrowLeft }}
             />

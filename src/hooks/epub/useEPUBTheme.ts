@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef } from 'react';
 import type { Contents, Rendition } from 'epubjs';
 import { DEFAULT_TYPOGRAPHY, READER_FONT_FAMILIES, type ReaderTypography } from '@/lib/shared/reader-appearance';
 
 export const useEPUBTheme = (epubTheme: boolean, rendition: Rendition | undefined, typography: ReaderTypography = DEFAULT_TYPOGRAPHY, onReflow?: () => void) => {
   const typographyKey = JSON.stringify(typography);
-  const reflow = useRef(onReflow);
-  reflow.current = onReflow;
+  const reflow = useEffectEvent(() => onReflow?.());
   const applyToDocument = useCallback((doc: Document) => {
     const value = JSON.parse(typographyKey) as ReaderTypography;
     const colors = getComputedStyle(document.documentElement);
@@ -51,7 +50,7 @@ export const useEPUBTheme = (epubTheme: boolean, rendition: Rendition | undefine
     previous.current = typographyKey;
     if (!hadValue) return;
     // Reuse the placement owner after metrics change; keep the audio cursor.
-    const frame = requestAnimationFrame(() => reflow.current?.());
+    const frame = requestAnimationFrame(() => reflow());
     return () => cancelAnimationFrame(frame);
   }, [rendition, typographyKey]);
   return { updateTheme };

@@ -73,12 +73,11 @@ export function OnboardingFlowProvider({ children }: { children: ReactNode }) {
 
   const runOnceFlowRef = useRef<() => Promise<void>>(async () => {});
 
-  const runFlow = useMemo(
-    () => createCoalescedAsyncRunner(async () => {
-      await runOnceFlowRef.current();
-    }),
-    [],
-  );
+  const flowRunnerRef = useRef<(() => Promise<void>) | null>(null);
+  const runFlow = useCallback(() => {
+    flowRunnerRef.current ??= createCoalescedAsyncRunner(() => runOnceFlowRef.current());
+    return flowRunnerRef.current();
+  }, []);
 
   const runOnceFlow = useCallback(async () => {
     // Wait until the onboarding state has actually loaded before deciding whether

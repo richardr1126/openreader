@@ -23,7 +23,7 @@ export function AudiobookDownloadScreen({ download }: { download: AudiobookDownl
       <ButtonLink href={download.webPath} variant="primary" className="w-full">Open document</ButtonLink>
     </AuthCard>;
   }
-  return <AuthCard title="Your download has started" description={<span className="break-words">{download.filename}</span>}>
+  return <AuthCard title="Your download has started" description={<span className="wrap-break-word">{download.filename}</span>}>
     <div className="flex flex-col gap-2 sm:flex-row">
       <Button variant="primary" className="w-full" onClick={() => triggerDownload({ url: download.fileUrl, filename: download.filename })}>Download again</Button>
       <ButtonLink href={download.webPath} className="w-full">Open document</ButtonLink>

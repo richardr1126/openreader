@@ -1,13 +1,5 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
 const LOGGER_LEVEL_METHOD = "trace|debug|info|warn|error|fatal";
 const STATIC_LOGGER_CALL_SELECTOR =
@@ -115,7 +107,11 @@ const RESTRICTED_APP_CLASS_PATTERNS = [
 ];
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
+  {
+    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"],
+  },
   {
     rules: {
       "no-restricted-imports": [

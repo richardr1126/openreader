@@ -155,8 +155,13 @@ export function AdminUsersPanel() {
   const [deletionOperationId, setDeletionOperationId] = useState<string | null>(null);
   const deletionStorageKey = session?.user?.id ? `admin-user-deletion:${session.user.id}` : null;
   useEffect(() => {
+    // Browser storage is only readable after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (deletionStorageKey) setDeletionOperationId(sessionStorage.getItem(deletionStorageKey));
   }, [deletionStorageKey]);
+  const refreshUsers = async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.adminRoot(session?.user?.id ?? 'no-session') });
+  };
   const trackDeletion = (operation: MaintenanceOperation) => {
     if (deletionStorageKey) sessionStorage.setItem(deletionStorageKey, operation.opId);
     setDeletionOperationId(operation.opId);
@@ -187,9 +192,6 @@ export function AdminUsersPanel() {
     enabled: Boolean(session?.user?.id),
     placeholderData: keepPreviousData,
   });
-  const refreshUsers = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.adminRoot(session?.user?.id ?? 'no-session') });
-  };
   const updateMutation = useMutation({
     mutationFn: ({ id, changes }: { id: string; changes: Partial<Pick<ManagedUser, 'isAdmin' | 'accessStatus'>> }) => updateUser(id, changes),
     onSuccess: async () => {
@@ -250,7 +252,13 @@ export function AdminUsersPanel() {
     delete: selectedUsers,
   };
 
-  useEffect(() => { setSelectedIds(new Set()); }, [page, kind, status, deferredSearch]);
+  // Changing the page or filters clears the selection.
+  const selectionScope = `${page}:${kind}:${status}:${deferredSearch}`;
+  const [selectedScope, setSelectedScope] = useState(selectionScope);
+  if (selectedScope !== selectionScope) {
+    setSelectedScope(selectionScope);
+    setSelectedIds(new Set());
+  }
 
   const toggleOne = (id: string, checked: boolean) => setSelectedIds((current) => {
     const next = new Set(current);
@@ -358,7 +366,7 @@ export function AdminUsersPanel() {
           <p className="p-10 text-center text-sm text-soft">No users match these filters</p>
         ) : (
           <div className={`transition-opacity duration-base ${usersQuery.isPlaceholderData ? 'opacity-60' : ''}`}>
-            <div className={`hidden border-b border-line-soft bg-surface-solid px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-faint ${columns}`}>
+            <div className={`hidden border-b border-line-soft bg-surface-solid px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-faint ${columns}`}>
               <span className="flex items-center gap-2">
                 <Checkbox
                   ref={(node) => { if (node) node.indeterminate = someSelected; }}
@@ -389,7 +397,7 @@ export function AdminUsersPanel() {
                         aria-label={`Select ${user.isAnonymous ? user.id : accountName(user)}`}
                         className="shrink-0"
                       />
-                      <button type="button" onClick={() => setExpandedId(expanded ? null : user.id)} className="min-w-0 flex-1 text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                      <button type="button" onClick={() => setExpandedId(expanded ? null : user.id)} className="min-w-0 flex-1 text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-full font-mono text-xs font-bold ${user.isAnonymous ? 'bg-surface-sunken text-soft' : 'bg-accent-wash text-accent'}`}>
                             {user.isAnonymous ? 'AN' : accountName(user).slice(0, 2).toUpperCase()}
@@ -514,7 +522,7 @@ export function AdminUsersPanel() {
 function Detail({ label, value, mono = false }: { label: string; value: ReactNode; mono?: boolean }) {
   return (
     <div className="min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-faint">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-widest text-faint">{label}</p>
       <p className={`mt-0.5 break-all text-foreground ${mono ? 'font-mono text-[11px]' : ''}`}>{value}</p>
     </div>
   );

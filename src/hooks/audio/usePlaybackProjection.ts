@@ -90,8 +90,8 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     locatorKey: string;
   } | null>(null);
   const timelineLoaderRef = useRef<ReturnType<typeof createPlaybackTimelineLoader<TtsPlaybackGrid>> | null>(null);
-  if (!timelineLoaderRef.current) {
-    timelineLoaderRef.current = createPlaybackTimelineLoader({
+  const timelineLoader = useCallback(() => {
+    timelineLoaderRef.current ??= createPlaybackTimelineLoader({
       getRunId: () => playbackRunIdRef.current,
       getSession: () => playbackSessionRef.current,
       apply: (timeline) => {
@@ -112,7 +112,8 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
         return normalizePlaybackGrid(await response.json());
       },
     });
-  }
+    return timelineLoaderRef.current;
+  }, [playbackRunIdRef, playbackSessionRef]);
 
   const publishPlaybackTimeSec = useCallback((value: number, options?: { force?: boolean }) => {
     const next = Math.max(0, Number.isFinite(value) ? value : 0);
@@ -190,10 +191,10 @@ export function usePlaybackProjection(input: UsePlaybackProjectionInput) {
     const query = readWindow
       ? `?minOrdinal=${readWindow.minOrdinal}&limit=${readWindow.limit}${rowsOnly ? '&rows=window' : ''}`
       : '';
-    await timelineLoaderRef.current!.refresh(timelineUrl + query, signal);
+    await timelineLoader().refresh(timelineUrl + query, signal);
     if (signal?.aborted || !playbackTimelineRef.current) throw new DOMException('Playback timeline replaced', 'AbortError');
     return playbackTimelineRef.current;
-  }, [playbackSessionRef]);
+  }, [playbackSessionRef, timelineLoader]);
 
   const setPlaybackStreamAnchor = useCallback((ordinal: number, seconds: number) => {
     playbackStreamStartOrdinalRef.current = ordinal;

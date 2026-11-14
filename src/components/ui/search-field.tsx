@@ -23,7 +23,7 @@ export function SearchField({
       {icon ? <span className="shrink-0 text-soft">{icon}</span> : null}
       <input
         type="search"
-        className={cn('min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-soft', inputClassName)}
+        className={cn('min-w-0 flex-1 bg-transparent text-xs text-foreground outline-hidden placeholder:text-soft', inputClassName)}
         {...props}
       />
     </label>

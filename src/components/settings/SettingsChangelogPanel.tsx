@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChevronRightIcon } from '@/components/icons/Icons';
@@ -24,17 +24,14 @@ export function SettingsChangelogPanel({
     ? (manifestError instanceof Error ? manifestError.message : 'Failed to load changelog')
     : null;
   const bodies = useChangelogReleaseBodies(manifestUrl, manifest, expanded);
-  const didInitExpandRef = useRef(false);
-
-  useEffect(() => {
-    if (didInitExpandRef.current || manifest.length === 0) return;
-    const initialIndex = findCurrentVersionIndex(manifest, normalizedAppVersion);
-    if (initialIndex >= 0) {
-      didInitExpandRef.current = true;
-      const entry = manifest[initialIndex];
-      setExpanded((previous) => ({ ...previous, [entry.tag_name]: true }));
-    }
-  }, [manifest, normalizedAppVersion]);
+  // The running version's entry opens once, when the manifest first lists it.
+  const [expandedCurrent, setExpandedCurrent] = useState(false);
+  const currentIndex = expandedCurrent ? -1 : findCurrentVersionIndex(manifest, normalizedAppVersion);
+  if (currentIndex >= 0) {
+    setExpandedCurrent(true);
+    const entry = manifest[currentIndex];
+    setExpanded((previous) => ({ ...previous, [entry.tag_name]: true }));
+  }
 
   return (
     <div className="flex h-[min(680px,calc(100dvh-3rem))] flex-col bg-surface sm:h-[490px]">
@@ -65,7 +62,7 @@ export function SettingsChangelogPanel({
         {!loading && error && (
           <div className="space-y-2 border-b border-line-soft py-3">
             <p className="text-sm text-foreground">Could not load changelog right now.</p>
-            <p className="break-words text-xs text-soft">{error}</p>
+            <p className="wrap-break-word text-xs text-soft">{error}</p>
             <a
               href="https://github.com/richardr1126/openreader/releases"
               target="_blank"
@@ -128,7 +125,7 @@ export function SettingsChangelogPanel({
               {isExpanded && (
                 <div className="space-y-2 pb-3 pl-6 pr-1 pt-1">
                   {body ? (
-                    <div className="space-y-2 text-sm leading-6 text-foreground [&_a]:text-accent [&_a]:transition-colors [&_a]:hover:underline [&_code]:rounded [&_code]:bg-surface-sunken [&_code]:px-1 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-surface-sunken [&_pre]:p-2 [&_ul]:pl-5">
+                    <div className="space-y-2 text-sm leading-6 text-foreground [&_a]:text-accent [&_a]:transition-colors hover:[&_a]:underline [&_code]:rounded [&_code]:bg-surface-sunken [&_code]:px-1 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-surface-sunken [&_pre]:p-2 [&_ul]:pl-5">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
                         {body.body || '_No release notes provided._'}
                       </ReactMarkdown>

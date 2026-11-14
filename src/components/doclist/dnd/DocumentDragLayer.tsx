@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useDragLayer, type XYCoord } from 'react-dnd';
 import { PDFIcon, EPUBIcon, FileIcon } from '@/components/icons/Icons';
 import type { DocumentListDocument } from '@/types/documents';
@@ -44,10 +44,9 @@ export function DocumentDragLayer() {
 
   // The touch backend reports a null offset between some move frames; hold the
   // last known position so the card doesn't blink out and back mid-drag.
-  const lastOffset = useRef<XYCoord | null>(null);
-  if (!isDragging) lastOffset.current = null;
-  else if (offset) lastOffset.current = offset;
-  const pos = isDragging ? offset ?? lastOffset.current : null;
+  const [heldOffset, setHeldOffset] = useState<XYCoord | null>(null);
+  const pos = isDragging ? offset ?? heldOffset : null;
+  if (pos !== heldOffset) setHeldOffset(pos);
 
   const docs = item?.docs ?? [];
   if (!isDragging || itemType !== DND_DOCUMENT || !pos || docs.length === 0) return null;
@@ -56,7 +55,7 @@ export function DocumentDragLayer() {
   const extra = docs.length - 1;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[100]">
+    <div className="pointer-events-none fixed inset-0 z-100">
       <div
         className="absolute flex items-center gap-2 max-w-[220px] rounded-md border border-accent-line bg-surface px-2.5 py-1.5 shadow-elev-2"
         style={{ transform: `translate(${pos.x + 12}px, ${pos.y - 28}px)`, willChange: 'transform' }}

@@ -24,7 +24,7 @@ export function Section({
           {action ? <div className="shrink-0 text-xs text-faint">{action}</div> : null}
         </div>
         {subtitle ? <p className="px-1 text-xs text-soft">{subtitle}</p> : null}
-        <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid [&>*]:px-3 [&>*]:py-2.5">
+        <div className="divide-y divide-line-soft rounded-lg border border-line-soft bg-surface-solid *:px-3 *:py-2.5">
           {children}
         </div>
         {footer ? <p className="px-1 text-xs leading-5 text-faint">{footer}</p> : null}

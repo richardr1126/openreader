@@ -126,7 +126,7 @@ function GalleryThumb({
       }
       title={doc.name}
     >
-      <div className="aspect-[3/4] bg-surface">
+      <div className="aspect-3/4 bg-surface">
         <DocumentPreview doc={doc} />
       </div>
       <SelectCheck
@@ -184,10 +184,10 @@ export function GalleryView({
     setVisibleOrder(documents);
   }, [documents, setVisibleOrder]);
 
-  useEffect(() => {
-    if (!activeDocumentKey || documentKeys.includes(activeDocumentKey)) return;
+  // A removed active document hands focus to the first one.
+  if (activeDocumentKey && !documentKeys.includes(activeDocumentKey)) {
     setActiveDocumentKey(documentKeys[0] ?? null);
-  }, [activeDocumentKey, documentKeys]);
+  }
 
   useEffect(() => {
     const rail = railRef.current;
@@ -231,7 +231,7 @@ export function GalleryView({
         {activeDoc ? (
           <div className="w-full max-w-[920px] flex flex-col md:flex-row items-center md:items-start justify-center gap-4 md:gap-6">
             <div className="flex flex-col items-center gap-3 w-[180px] sm:w-[260px] md:w-[320px] shrink-0">
-              <div className="w-full aspect-[3/4] rounded-lg overflow-hidden border border-line shadow-elev-2">
+              <div className="w-full aspect-3/4 rounded-lg overflow-hidden border border-line shadow-elev-2">
                 <DocumentPreview key={`${activeDoc.type}-${activeDoc.id}-${activeDoc.lastModified}`} doc={activeDoc} />
               </div>
               <div className="text-center">
@@ -279,7 +279,7 @@ export function GalleryView({
         </div>
       </div>
 
-      <div className="shrink-0 border-t border-line-soft bg-gradient-to-b from-surface to-surface-sunken">
+      <div className="shrink-0 border-t border-line-soft bg-linear-to-b from-surface to-surface-sunken">
         <div
           ref={railRef}
           className="flex gap-2.5 overflow-x-auto pl-4 pr-3 pt-2.5 pb-1.5 snap-x snap-proximity scroll-pl-4 sm:scroll-pl-5 scroll-pr-3 sm:scroll-pr-4"

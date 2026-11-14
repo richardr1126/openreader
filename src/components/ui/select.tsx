@@ -6,22 +6,22 @@ import { cn } from './cn';
 import { CheckIcon, ChevronUpDownIcon } from '@/components/icons/Icons';
 
 const listboxButtonClass =
-  'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
+  'relative w-full cursor-pointer rounded-md bg-surface-sunken border border-line py-1.5 pl-2.5 pr-9 text-left text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-accent-line hover:bg-accent-wash transition-colors duration-fast ease-standard';
 
 const listboxToolbarButtonClass =
   'inline-flex items-center rounded-md border border-line bg-surface px-2 py-1 text-xs text-foreground hover:border-accent-line hover:bg-accent-wash hover:text-accent transition-colors duration-fast ease-standard';
 
 const listboxPopoverButtonClass =
-  'inline-flex items-center rounded-md text-foreground hover:bg-accent-wash hover:text-accent focus:outline-none transition-colors duration-fast ease-standard';
+  'inline-flex items-center rounded-md text-foreground hover:bg-accent-wash hover:text-accent focus:outline-hidden transition-colors duration-fast ease-standard';
 
 const listboxPanelClass =
-  'z-50 max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none';
+  'z-50 max-h-60 overflow-y-auto overscroll-contain rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-hidden';
 
 const listboxOptionsClass =
-  cn(listboxPanelClass, 'w-[var(--button-width)] [--anchor-gap:0.25rem]');
+  cn(listboxPanelClass, 'w-(--button-width) [--anchor-gap:0.25rem]');
 
 const listboxCompactOptionsClass =
-  'z-50 min-w-[8rem] rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-none [--anchor-gap:0.25rem]';
+  'z-50 min-w-32 rounded-md bg-surface p-1 shadow-elev-2 ring-1 ring-line focus:outline-hidden [--anchor-gap:0.25rem]';
 
 const listboxOptionClass = (active: boolean, selected = false, inset: 'check' | 'none' = 'check') =>
   cn(

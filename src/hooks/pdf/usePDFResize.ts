@@ -1,4 +1,4 @@
-import { RefObject, useState, useEffect } from 'react';
+import { RefObject, useState, useLayoutEffect } from 'react';
 import { debounce } from '@/lib/client/pdf';
 
 interface UsePDFResizeResult {
@@ -13,8 +13,12 @@ export function usePDFResize(
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const [containerHeight, setContainerHeight] = useState<number>(0);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    // Measure before the first paint; the observer below is debounced.
+    setContainerWidth(container.clientWidth);
+    setContainerHeight(container.clientHeight);
 
     const debouncedResize = debounce((width: unknown) => {
       setContainerWidth(Number(width));
@@ -32,7 +36,7 @@ export function usePDFResize(
       if (height) debouncedResizeHeight(height);
     });
 
-    observer.observe(containerRef.current);
+    observer.observe(container);
     return () => {
       observer.disconnect();
     };

@@ -110,9 +110,9 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
     modelDownload,
   } = useTTSPlaybackProgress();
   // Keep the last download on screen while the popup animates out.
-  const lastModelDownloadRef = useRef(modelDownload);
-  if (modelDownload) lastModelDownloadRef.current = modelDownload;
-  const shownModelDownload = modelDownload ?? lastModelDownloadRef.current;
+  const [lastModelDownload, setLastModelDownload] = useState(modelDownload);
+  if (modelDownload && modelDownload !== lastModelDownload) setLastModelDownload(modelDownload);
+  const shownModelDownload = modelDownload ?? lastModelDownload;
   const [previewSec, setPreviewSec] = useState<number | null>(null);
   const shownSec = previewSec ?? playbackTimeSec;
   const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);
@@ -193,7 +193,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
       operationLabel={shownModelDownload?.label}
       statusMessage={shownModelDownload?.statusMessage}
     />
-    <section aria-label="Playback controls" className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-sm sm:shadow-none" data-app-ttsbar>
+    <section aria-label="Playback controls" className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-xs sm:shadow-none" data-app-ttsbar>
       {navigator ? (
         <div
           role="group"
@@ -211,7 +211,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         </div>
       ) : null}
       {/* Top Edge Scrubber bar */}
-      <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:-top-[5px] sm:h-2.5">
+      <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:top-[-5px] sm:h-2.5">
         {/* Rail: the whole document. Foreground-mixed so it stays visible in dark themes. */}
         <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--foreground)_16%,transparent)] transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]" />
 
@@ -268,15 +268,15 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           }}
           className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed disabled:opacity-40
             [&::-webkit-slider-runnable-track]:h-[2px] [&::-webkit-slider-runnable-track]:bg-transparent
-            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-1 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:-mt-[7px] [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-fast
+            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-1 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:mt-[-7px] [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:duration-fast
             [&::-webkit-slider-thumb]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--background)_70%,transparent),0_1px_6px_color-mix(in_srgb,var(--accent)_55%,transparent)]
-            group-hover/scrubber:[&::-webkit-slider-thumb]:scale-y-125 group-active/scrubber:[&::-webkit-slider-thumb]:scale-y-150
-            sm:[&::-webkit-slider-thumb]:h-3 sm:[&::-webkit-slider-thumb]:w-[3px] sm:[&::-webkit-slider-thumb]:-mt-[5px]
+            [&::-webkit-slider-thumb]:group-hover/scrubber:scale-y-125 [&::-webkit-slider-thumb]:group-active/scrubber:scale-y-150
+            sm:[&::-webkit-slider-thumb]:h-3 sm:[&::-webkit-slider-thumb]:w-[3px] sm:[&::-webkit-slider-thumb]:mt-[-5px]
             
             [&::-moz-range-track]:h-[3px] [&::-moz-range-track]:bg-transparent sm:[&::-moz-range-track]:h-[2px]
             [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-1 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:transition-transform [&::-moz-range-thumb]:duration-fast
             [&::-moz-range-thumb]:shadow-[0_0_0_1px_color-mix(in_srgb,var(--background)_70%,transparent),0_1px_6px_color-mix(in_srgb,var(--accent)_55%,transparent)]
-            group-hover/scrubber:[&::-moz-range-thumb]:scale-y-125 group-active/scrubber:[&::-moz-range-thumb]:scale-y-150
+            [&::-moz-range-thumb]:group-hover/scrubber:scale-y-125 [&::-moz-range-thumb]:group-active/scrubber:scale-y-150
             sm:[&::-moz-range-thumb]:h-3 sm:[&::-moz-range-thumb]:w-[3px]"
         />
         {/* Tooltip Popup */}

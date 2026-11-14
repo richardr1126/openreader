@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type ComponentType,
   type MouseEvent,
   type ReactNode,
 } from 'react';
@@ -44,11 +45,11 @@ export type ReaderRendererProps<T extends ReaderType> = {
 export function ReaderShell<T extends ReaderType>({
   documentId,
   readerType,
-  children,
+  renderer: Renderer,
 }: {
   documentId: string | undefined;
   readerType: T;
-  children: (props: ReaderRendererProps<T>) => ReactNode;
+  renderer: ComponentType<ReaderRendererProps<T>>;
 }) {
   const bootstrap = useReaderBootstrap(documentId);
   const { data: session } = useAuthSession();
@@ -293,16 +294,16 @@ export function ReaderShell<T extends ReaderType>({
       >
         <Fragment key={attemptKey}>
           <ReaderAppearanceProvider readerType={readerType} settings={payload.settings} update={bootstrap.updatePresentation}>
-          {children({
-            payload,
-            document: sourceDocument,
-            bootstrap,
-            rendererReady,
-            restartBootstrap,
-            onBackToDocuments: backToDocuments,
-            onReady: handleReady,
-            onError: handleError,
-          })}
+          <Renderer
+            payload={payload}
+            document={sourceDocument}
+            bootstrap={bootstrap}
+            rendererReady={rendererReady}
+            restartBootstrap={restartBootstrap}
+            onBackToDocuments={backToDocuments}
+            onReady={handleReady}
+            onError={handleError}
+          />
           </ReaderAppearanceProvider>
         </Fragment>
       </div>

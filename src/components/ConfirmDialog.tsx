@@ -25,7 +25,7 @@ export function ConfirmDialog({
     <ModalFrame open={isOpen} onClose={onClose} panelTestId="confirm-dialog-panel">
       <ModalTitle>{title}</ModalTitle>
       <div className="mt-2">
-        <p className="text-sm text-soft break-words">{message}</p>
+        <p className="text-sm text-soft wrap-break-word">{message}</p>
       </div>
 
       <div className="mt-6 flex justify-end space-x-3">

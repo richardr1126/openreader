@@ -20,7 +20,7 @@ const { version } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json
 const { productName } = JSON.parse(fs.readFileSync(path.join(desktopDir, 'package.json'), 'utf8'));
 
 if (!fs.existsSync(path.join(desktopDir, 'stage', 'runtime', 'app', 'server.js'))) {
-  console.error('[package] desktop/stage/runtime is missing: run `pnpm stage` first.');
+  console.error('[package] desktop/stage/runtime is missing: run `pnpm run stage` first.');
   process.exit(1);
 }
 // The runtime carries the bootstrap and worker as they were when staged, so a
@@ -30,7 +30,7 @@ const stagedTree = fs.existsSync(path.join(desktopDir, 'stage', 'source-tree'))
   : null;
 const currentTree = sourceTreeId(repoRoot);
 if (currentTree && stagedTree !== currentTree) {
-  console.error('[package] desktop/stage/runtime was staged from different source: run `pnpm build` and `pnpm stage` again.');
+  console.error('[package] desktop/stage/runtime was staged from different source: run `pnpm build` and `pnpm run stage` again.');
   process.exit(1);
 }
 

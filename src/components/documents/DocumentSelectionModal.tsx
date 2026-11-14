@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BaseDocument } from '@/types/documents';
 import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
@@ -32,15 +32,15 @@ export function DocumentSelectionModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    if (defaultSelected) {
-      setSelectedIds(new Set(files.map((f) => f.id)));
-    } else {
-      setSelectedIds(new Set());
+  // Opening the modal, or new files while open, restarts the selection.
+  const [selectionSource, setSelectionSource] = useState<{ isOpen: boolean; files: typeof files; defaultSelected: boolean } | null>(null);
+  if (selectionSource?.isOpen !== isOpen || selectionSource.files !== files || selectionSource.defaultSelected !== defaultSelected) {
+    setSelectionSource({ isOpen, files, defaultSelected });
+    if (isOpen) {
+      setSelectedIds(defaultSelected ? new Set(files.map((f) => f.id)) : new Set());
+      setLastSelectedId(null);
     }
-    setLastSelectedId(null);
-  }, [isOpen, files, defaultSelected]);
+  }
 
   const toggleSelection = (id: string, multiSelect: boolean, rangeSelect: boolean) => {
     const newSelected = new Set(multiSelect ? selectedIds : []);
@@ -114,7 +114,7 @@ export function DocumentSelectionModal({
 
   return (
     <ModalFrame open={isOpen} onClose={onClose} size="lg" panelClassName="flex h-[80vh] flex-col">
-      <ModalTitle className="mb-4 flex flex-shrink-0 items-center justify-between">
+      <ModalTitle className="mb-4 flex shrink-0 items-center justify-between">
         {title}
         {files.length > 0 && (
           <div className="flex items-center text-sm font-normal">
@@ -151,7 +151,7 @@ export function DocumentSelectionModal({
                     isSelected ? 'bg-accent-wash' : 'hover:bg-accent-wash'
                   }`}
                 >
-                  <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={isSelected}
                       onChange={(e) => handleCheckboxChange(file.id, e.target.checked)}
@@ -172,7 +172,7 @@ export function DocumentSelectionModal({
         )}
       </div>
 
-      <div className="mt-4 flex justify-end gap-3 flex-shrink-0">
+      <div className="mt-4 flex justify-end gap-3 shrink-0">
         <Button variant="outline" size="md" onClick={onClose}>
           Cancel
         </Button>

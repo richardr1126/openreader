@@ -5,11 +5,11 @@ RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
 
 FROM node:26 AS deploy-stage
 
-RUN npm install -g pnpm@10.34.7
+RUN npm install -g pnpm@12.18.0
 
 WORKDIR /workspace
 
-COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/compute-worker/package.json packages/compute-worker/package.json
 COPY packages/runtime-config/package.json packages/runtime-config/package.json
 COPY packages/tts/package.json packages/tts/package.json

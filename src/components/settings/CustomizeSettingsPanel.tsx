@@ -78,9 +78,11 @@ export function CustomizeSettingsPanel() {
   // A save still in flight decides instead: it keeps the theme, or restores it if it fails.
   const inFlightSave = useRef<Promise<void> | null>(null);
   const unappliedTheme = useRef<typeof themeBaseline>(null);
-  unappliedTheme.current = themeDirty ? themeBaseline : null;
   const restoreOnLeave = useRef(restoreTheme);
-  restoreOnLeave.current = restoreTheme;
+  useEffect(() => {
+    unappliedTheme.current = themeDirty ? themeBaseline : null;
+    restoreOnLeave.current = restoreTheme;
+  });
   useEffect(() => () => {
     const baseline = unappliedTheme.current;
     if (!baseline) return;
@@ -92,7 +94,7 @@ export function CustomizeSettingsPanel() {
     <p className="text-xs text-soft">Defaults for every book. Each book can override its display, typography and highlights.</p>
     {error && <p role="alert" className="text-sm text-warning">{error}</p>}
     <Section title="Theme" variant="group">
-      <div className="!py-3"><ThemePicker theme={theme} customColors={customColors} onSelect={selectTheme} onCustomColorsChange={changeCustomColors} /></div>
+      <div className="py-3!"><ThemePicker theme={theme} customColors={customColors} onSelect={selectTheme} onCustomColorsChange={changeCustomColors} /></div>
     </Section>
     <ReaderPresentationControls readerType={format} value={resolveReaderPresentation(reader, format)} onChange={changePresentation}
       action={<SegmentedControl ariaLabel="Document format" value={format} onChange={setFormat} options={formats} className="w-32 grid-cols-2 [&>button]:py-0.5" />} />

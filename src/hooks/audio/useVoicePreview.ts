@@ -79,6 +79,8 @@ export function useVoicePreview(input: { isPlaying: boolean; pausePlayback: () =
 
   // Document playback wins: a preview never plays over it.
   useEffect(() => {
+    // Stopping releases the preview's audio element, an external resource.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isPlaying) stop();
   }, [isPlaying, stop]);
 

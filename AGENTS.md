@@ -51,7 +51,7 @@ version or tag a release unless asked.
 - `installProfile` (`server` | `desktop`, see `v5/DESKTOP_SINGLE_OWNER.md`) is a
   derived, presentation-only fact. It must never take part in authorization;
   `pnpm check:install-profile` keeps it out of `src/app/api/**`,
-  `src/lib/server/auth/**` and `src/middleware.ts`.
+  `src/lib/server/auth/**` and `src/proxy.ts`.
 - Existing v4 provider ciphertext remains app-owned and encrypted with
   `AUTH_SECRET`; do not invent a second at-rest key without a complete migration.
 
@@ -209,7 +209,7 @@ caused conflicts, high CPU, misleading failures, and overheating.
 
 - `desktop/` is a separate pnpm project (Electron + electron-builder) outside the
   root workspace. It stages the Docker image's runtime layout for the host
-  platform (`pnpm --dir desktop stage`, after `pnpm build`) and packages it
+  platform (`pnpm --dir desktop run stage`, after `pnpm build`) and packages it
   (`pnpm --dir desktop package`). See `v5/DESKTOP_SHELL.md`.
 - The shell adds no server code and no environment variables beyond
   `DESKTOP_LAUNCH_TOKEN`; it configures the runtime through existing settings.

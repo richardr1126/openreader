@@ -193,7 +193,7 @@ export function DocumentTile({
           className={`flex items-center flex-1 min-w-0 rounded-md ${LINK_PADDING_CLASS} ${GAP_CLASSES[iconSize]}`}
           onClick={handleClick}
         >
-          <span className="flex-shrink-0 flex items-center">
+          <span className="shrink-0 flex items-center">
             {doc.type === 'pdf' ? (
               <PDFIcon className={`${FILE_ICON_CLASSES[iconSize]} text-danger`} />
             ) : doc.type === 'epub' ? (

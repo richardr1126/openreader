@@ -120,7 +120,7 @@ export function ReaderReplanStatus({
       <div
         role="status"
         aria-live="polite"
-        className="pointer-events-auto flex max-w-md items-center gap-2 rounded-full border border-line bg-background px-3 py-1.5 text-xs text-soft shadow-sm"
+        className="pointer-events-auto flex max-w-md items-center gap-2 rounded-full border border-line bg-background px-3 py-1.5 text-xs text-soft shadow-xs"
       >
         {error ? (
           <>

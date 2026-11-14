@@ -224,6 +224,7 @@ export function useTtsPlaybackSettings(input: UseTtsPlaybackSettingsInput) {
     onSettingsSaved,
     providerRef,
     providerType,
+    queryClient,
     readerSettings,
     restartAfterConfigUpdate,
     setReaderSettings,

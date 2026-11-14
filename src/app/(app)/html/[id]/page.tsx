@@ -28,9 +28,7 @@ export default function HTMLPage() {
   const routeDocumentId = typeof id === 'string' ? id : undefined;
 
   return (
-    <ReaderShell documentId={routeDocumentId} readerType="html">
-      {(props) => <HtmlReader {...props} />}
-    </ReaderShell>
+    <ReaderShell documentId={routeDocumentId} readerType="html" renderer={HtmlReader} />
   );
 }
 

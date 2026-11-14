@@ -2,10 +2,10 @@ import { describe, expect, test } from 'vitest';
 import { unstable_doesMiddlewareMatch } from 'next/experimental/testing/server.js';
 import { NextRequest } from 'next/server';
 
-import { config, middleware } from '../../src/middleware';
+import { config, proxy } from '../../src/proxy';
 
-describe('middleware matcher', () => {
-  test('leaves the authenticated raw blob upload outside middleware body buffering', () => {
+describe('proxy matcher', () => {
+  test('leaves the authenticated raw blob upload outside proxy body buffering', () => {
     expect(unstable_doesMiddlewareMatch({
       config,
       nextConfig: {},
@@ -24,7 +24,7 @@ describe('middleware matcher', () => {
   });
 
   test('sends signed-out visitors from session pages to sign-in, keeping reader links', () => {
-    const location = (pathname: string, cookie?: string) => middleware(new NextRequest(`http://localhost${pathname}`, {
+    const location = (pathname: string, cookie?: string) => proxy(new NextRequest(`http://localhost${pathname}`, {
       headers: cookie ? { cookie } : {},
     })).headers.get('location');
 
@@ -51,7 +51,7 @@ describe('middleware matcher', () => {
         '/api/internal/compute/limits/consume',
         '/api/internal/compute/limits/complete',
       ]) {
-        const response = middleware(new NextRequest(`http://localhost${path}`, { method: 'POST' }));
+        const response = proxy(new NextRequest(`http://localhost${path}`, { method: 'POST' }));
         expect(response.headers.get('x-middleware-next')).toBe('1');
       }
     } finally {
@@ -63,7 +63,7 @@ describe('middleware matcher', () => {
     const previous = process.env.RICHARDRDEV_PRODUCTION;
     process.env.RICHARDRDEV_PRODUCTION = 'true';
     try {
-      const gated = (pathname: string) => middleware(new NextRequest(`http://localhost${pathname}`, {
+      const gated = (pathname: string) => proxy(new NextRequest(`http://localhost${pathname}`, {
         headers: { 'x-vercel-ip-country': 'DE' },
       }));
       const v1 = gated('/api/v1/documents');
@@ -81,13 +81,13 @@ describe('middleware matcher', () => {
     process.env.RICHARDRDEV_PRODUCTION = 'true';
     try {
       for (const pathname of ['/ios-privacy', '/desktop-privacy', '/download']) {
-        const page = middleware(new NextRequest(`http://localhost${pathname}`, {
+        const page = proxy(new NextRequest(`http://localhost${pathname}`, {
           headers: { 'x-vercel-ip-country': 'DE' },
         }));
         expect(page.headers.get('x-middleware-next')).toBe('1');
       }
 
-      const webPolicy = middleware(new NextRequest('http://localhost/privacy', {
+      const webPolicy = proxy(new NextRequest('http://localhost/privacy', {
         headers: { 'x-vercel-ip-country': 'DE' },
       }));
       expect(webPolicy.status).toBe(451);

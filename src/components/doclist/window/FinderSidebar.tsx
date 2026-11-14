@@ -131,7 +131,7 @@ export function FinderSidebar({
   return (
     <SidebarShell
       style={{ '--sidebar-width': `${width}px` } as CSSProperties}
-      className="relative h-full w-full md:[width:var(--sidebar-width)] rounded-none border-y-0 border-l-0 border-r border-line-soft shadow-none shrink-0 flex flex-col"
+      className="relative h-full w-full md:w-(--sidebar-width) rounded-none border-y-0 border-l-0 border-r border-line-soft shadow-none shrink-0 flex flex-col"
     >
       <div className="min-h-0 flex-1 overflow-y-auto">
         <SidebarNav className="p-2">
@@ -213,7 +213,7 @@ export function FinderSidebar({
                 <MenuTransition>
                   <MenuItemsSurface
                     anchor="bottom start"
-                    className="z-50 mt-2 min-w-[180px] focus:outline-none normal-case tracking-normal font-normal"
+                    className="z-50 mt-2 min-w-[180px] focus:outline-hidden normal-case tracking-normal font-normal"
                   >
                     <MenuActionItem
                       onClick={() => {

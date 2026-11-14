@@ -41,7 +41,7 @@ export const VoicesControl = ({ disabled = false, onOpen }: {
         disabled={disabled}
         aria-label={`Voice: ${label}`}
         aria-haspopup="dialog"
-        className="inline-flex max-w-[11rem] items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-foreground transition-colors duration-fast hover:bg-accent-wash hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait disabled:opacity-60 sm:max-w-[16rem] sm:px-2 sm:py-1 sm:text-sm"
+        className="inline-flex max-w-44 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-foreground transition-colors duration-fast hover:bg-accent-wash hover:text-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-wait disabled:opacity-60 sm:max-w-[16rem] sm:px-2 sm:py-1 sm:text-sm"
       >
         <AudioWaveIcon className="h-3 w-3 shrink-0 sm:h-3.5 sm:w-3.5" />
         <span className="truncate">{label}</span>

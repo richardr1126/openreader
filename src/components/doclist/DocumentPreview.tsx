@@ -77,7 +77,8 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   // Guards a single re-resolve after an image load error (e.g. an expired
   // presigned URL), reset whenever the preview identity changes.
-  const previewErrorRetriedRef = useRef(false);
+  // The preview key whose broken image was already re-resolved once.
+  const previewErrorRetriedRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(false);
   const previewKey = useMemo(
@@ -106,20 +107,20 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       ? { ...previous, textPreview: value }
       : previous);
   }, [previewKey]);
-  const [isImageReady, setIsImageReady] = useState(false);
+  // The image that finished decoding; a new source is not ready until it loads.
+  const [loadedImage, setLoadedImage] = useState<string | null>(null);
+  const isImageReady = Boolean(imagePreview) && loadedImage === imagePreview;
   const [isGenerating, setIsGenerating] = useState(false);
 
-  useEffect(() => {
+  if (previewState.key !== previewKey) {
     const cached = queryClient.getQueryData<CachedPreview>(previewQueryKey);
     setPreviewState({
       key: previewKey,
       imagePreview: cached?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
       textPreview: cached?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
     });
-    setIsImageReady(false);
     setIsGenerating(false);
-    previewErrorRetriedRef.current = false;
-  }, [previewKey, previewQueryKey, queryClient]);
+  }
 
   useEffect(() => {
     if (previewState.key !== previewKey) return;
@@ -153,6 +154,8 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
 
     const cachedImage = getInMemoryDocumentPreviewUrl(previewKey);
     if (cachedImage) {
+      // A preview cached in this tab applies at once; generation below is async.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setImagePreview(cachedImage);
       setTextPreview(null);
       return;
@@ -300,10 +303,6 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     };
   }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey, setImagePreview, setTextPreview]);
 
-  useEffect(() => {
-    setIsImageReady(false);
-  }, [imagePreview]);
-
   // Cached blob/http sources can already be decoded before React's onLoad handler
   // runs on remount, leaving opacity at 0. Promote already-complete images.
   useEffect(() => {
@@ -311,7 +310,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     const img = imageRef.current;
     if (!img) return;
     if (img.complete && img.naturalWidth > 0) {
-      setIsImageReady(true);
+      setLoadedImage(imagePreview);
     }
   }, [imagePreview]);
 
@@ -340,11 +339,11 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-[3/4] overflow-hidden rounded-t-md bg-surface"
+      className="relative w-full aspect-3/4 overflow-hidden rounded-t-md bg-surface"
     >
       {imagePreview ? (
         <>
-          <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`} />
+          <div className={`absolute inset-0 bg-linear-to-br ${gradientClass}`} />
           {!isImageReady ? (
             <div className="relative z-10 flex flex-col items-center justify-center h-full gap-2 px-2 text-white">
               <Icon className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-md" />
@@ -362,15 +361,15 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
             draggable={false}
             loading="lazy"
             onLoad={() => {
-              setIsImageReady(true);
+              setLoadedImage(imagePreview);
             }}
             onError={() => {
               if (!imagePreview) return;
-              setIsImageReady(false);
+              setLoadedImage(null);
               // A cached presigned S3 URL may have expired; re-resolve it once
               // via the status endpoint rather than looping on the same URL.
-              if (previewErrorRetriedRef.current) return;
-              previewErrorRetriedRef.current = true;
+              if (previewErrorRetriedRef.current === previewKey) return;
+              previewErrorRetriedRef.current = previewKey;
               void getDocumentPreviewStatus(doc.id)
                 .then((status) => {
                   if (status.kind !== 'ready') return;
@@ -381,11 +380,11 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
                 .catch(() => { });
             }}
           />
-          {isImageReady ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/15" /> : null}
+          {isImageReady ? <div className="absolute inset-0 bg-linear-to-t from-black/35 via-black/0 to-black/15" /> : null}
         </>
       ) : textPreview ? (
         <>
-          <div className="absolute inset-0 bg-gradient-to-br from-surface-solid to-surface-sunken" />
+          <div className="absolute inset-0 bg-linear-to-br from-surface-solid to-surface-sunken" />
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
@@ -405,7 +404,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
                   {textPreview}
                 </pre>
               ) : (
-                <div className="text-[10px] sm:text-[11px] leading-snug text-foreground break-words [overflow-wrap:anywhere]">
+                <div className="text-[10px] sm:text-[11px] leading-snug text-foreground wrap-break-word wrap-anywhere">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -426,12 +425,12 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
                       ),
                       code: (props) => (
                         <code
-                          className="font-mono text-[10px] bg-surface-sunken rounded px-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                          className="font-mono text-[10px] bg-surface-sunken rounded px-1 whitespace-pre-wrap wrap-break-word wrap-anywhere"
                           {...props}
                         />
                       ),
                       pre: (props) => (
-                        <pre className="m-0 font-mono text-[10px] whitespace-pre-wrap break-words [overflow-wrap:anywhere]" {...props} />
+                        <pre className="m-0 font-mono text-[10px] whitespace-pre-wrap wrap-break-word wrap-anywhere" {...props} />
                       ),
                     }}
                   >
@@ -444,7 +443,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
         </>
       ) : (
         <>
-          <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`} />
+          <div className={`absolute inset-0 bg-linear-to-br ${gradientClass}`} />
           <div className="relative z-10 flex flex-col items-center justify-center h-full gap-2 px-2 text-white">
             <Icon className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-md" />
             <span className="text-[10px] sm:text-[11px] tracking-wide uppercase font-semibold opacity-90">
