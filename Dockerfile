@@ -41,8 +41,10 @@ COPY . .
 # Build the Next.js application
 RUN pnpm exec next telemetry disable
 RUN AUTH_SECRET=build-placeholder-secret-value-32chars!! BASE_URL=http://localhost:3003 pnpm build
-RUN pnpm --config.inject-workspace-packages=true --filter @openreader/bootstrap deploy /opt/openreader/bootstrap
-RUN pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3
+# One layer: pnpm's rebuild relinks the deployed packages, and overlayfs cannot
+# rename across the layer that `deploy` wrote.
+RUN pnpm --config.inject-workspace-packages=true --filter @openreader/bootstrap deploy /opt/openreader/bootstrap && \
+    pnpm --dir /opt/openreader/bootstrap rebuild better-sqlite3
 # `pnpm build` above also built the worker to plain JavaScript (dist/); the
 # production deploy ships that output without TypeScript tooling.
 RUN pnpm --config.inject-workspace-packages=true --filter @openreader/compute-worker deploy --prod /opt/openreader/embedded-compute-worker
