@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import { withTimeout } from '../infrastructure/config';
 import { DOCUMENT_PREVIEW_RENDERER_VERSION, type DocumentPreviewArtifactMetadata, type DocumentPreviewJobRequest, type DocumentPreviewJobResult } from '../operations/contracts';
-import { documentPreviewArtifactKey, documentPreviewMetadataArtifactKey } from '../storage/artifact-addressing';
+import { documentPreviewArtifactKey } from '../storage/artifact-addressing';
 import type { JobHandlerContext } from './context';
 import type { JobAttempt } from '../operations/types';
 import { prepareArtifactWrite } from '../storage/artifact-write';
-import { readDocumentPreviewMetadata } from '../storage/document-preview-metadata';
+import { documentPreviewObjectMetadata, readDocumentPreviewMetadata } from '../storage/document-preview-metadata';
 import { renderEpubCoverToJpeg, renderPdfFirstPageToJpeg } from './document-preview-render';
 
 const requestSchema = z.object({
@@ -24,11 +24,7 @@ export function createDocumentPreviewHandler(input: JobHandlerContext) {
     const parsed = requestSchema.parse(payload);
     const scope = { ...parsed, prefix: input.s3Prefix };
     const objectKey = documentPreviewArtifactKey(scope);
-    const metadataObjectKey = documentPreviewMetadataArtifactKey(scope);
-    const [writePreview, writeMetadata] = await Promise.all([
-      prepareArtifactWrite(input.storage, objectKey, attempt),
-      prepareArtifactWrite(input.storage, metadataObjectKey, attempt),
-    ]);
+    const writePreview = await prepareArtifactWrite(input.storage, objectKey, attempt);
     if (attempt && attempt.attempt > 1) {
       const existing = await readDocumentPreviewMetadata(input.storage, parsed, input.s3Prefix);
       if (existing) return { artifact: existing, timing: { queueWaitMs, computeMs: 0 } };
@@ -41,7 +37,6 @@ export function createDocumentPreviewHandler(input: JobHandlerContext) {
       ? await renderPdfFirstPageToJpeg(sourceBytes, parsed.targetWidth ?? 400)
       : await renderEpubCoverToJpeg(sourceBytes, parsed.targetWidth ?? 400);
     const computeMs = Date.now() - computeStartedAt;
-    await writePreview(rendered.bytes, 'image/jpeg');
     const artifact: DocumentPreviewArtifactMetadata = {
       schemaVersion: 1,
       documentId: parsed.documentId,
@@ -52,7 +47,7 @@ export function createDocumentPreviewHandler(input: JobHandlerContext) {
       previewKind: parsed.previewKind,
       rendererVersion: parsed.rendererVersion?.trim() || DOCUMENT_PREVIEW_RENDERER_VERSION,
       objectKey,
-      metadataObjectKey,
+      metadataObjectKey: objectKey,
       contentType: 'image/jpeg',
       width: rendered.width,
       height: rendered.height,
@@ -61,7 +56,7 @@ export function createDocumentPreviewHandler(input: JobHandlerContext) {
       status: 'ready',
       createdAt: Date.now(),
     };
-    await writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json');
+    await writePreview(rendered.bytes, 'image/jpeg', documentPreviewObjectMetadata(artifact));
     return { artifact, timing: { queueWaitMs, s3FetchMs, computeMs } };
   };
 }

@@ -119,7 +119,6 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
     }
     const cacheEpoch = await playbackStorage.artifacts.getScopeEpoch(parsed);
     const assertCurrentSource = async () => {
-      await hooks?.assertActive();
       const [current, epoch] = await Promise.all([
         playbackStorage.sessions.getSession(parsed.sessionId),
         playbackStorage.artifacts.getScopeEpoch(parsed),
@@ -287,8 +286,9 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         createdAt: Date.now(),
       };
       await writeMetadata(Buffer.from(JSON.stringify(metadata)), 'application/json');
-      committed = true;
       await assertCurrentSource();
+      committed = true;
+      await hooks?.assertActive();
       await deleteSupersededExportOutputs({
         storage: input.storage,
         objectKey,

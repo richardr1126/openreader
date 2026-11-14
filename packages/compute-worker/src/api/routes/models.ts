@@ -106,7 +106,8 @@ export function registerModelRoutes(context: ComputeWorkerRouteContext): void {
         }
       }
     }
-    return { cancelled: cancelled || cancelKokoroDownload() };
+    const cancelledLocally = cancelKokoroDownload();
+    return { cancelled: cancelled || cancelledLocally };
   });
 
   app.delete('/v1/models/:model', {

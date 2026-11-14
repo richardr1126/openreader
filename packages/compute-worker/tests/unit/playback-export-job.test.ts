@@ -341,6 +341,30 @@ describe('TTS playback export job', () => {
     expect([...storage.objects.keys()].some((key) => key.endsWith('metadata.json'))).toBe(false);
   });
 
+  test('a cache clear during metadata publication leaves no downloadable export', async () => {
+    const storage = pdfPlanStorage();
+    let epoch = 0;
+    let publishedObject: string | undefined;
+    const putObject = storage.putObject.bind(storage);
+    storage.putObject = async (key, body) => {
+      await putObject(key, body);
+      if (key.endsWith('metadata.json')) {
+        publishedObject = JSON.parse(Buffer.from(body).toString()).objectKey;
+        epoch += 1;
+      }
+    };
+    const run = createTtsPlaybackExportHandler({
+      storage, s3Prefix: 'test', playbackStorage: {
+        sessions: { getSession: async () => ({ ...request, status: 'succeeded' }) },
+        artifacts: { getScopeEpoch: async () => epoch,
+          readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecar(ordinal, 'completed', `audio/${ordinal}`) },
+      },
+    } as never);
+    await expect(run({ ...request, chapterIndex: 0 }, 0)).rejects.toThrow('sources were cleared');
+    expect(publishedObject).toBeDefined();
+    expect(storage.objects.has(publishedObject!)).toBe(false);
+  });
+
   test('refuses a whole-book export from a usage-limited run', async () => {
     const storage = pdfPlanStorage();
     const run = createTtsPlaybackExportHandler({
