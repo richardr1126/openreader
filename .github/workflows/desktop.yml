@@ -96,7 +96,7 @@ jobs:
       - name: Install desktop dependencies
         run: pnpm --dir desktop install --frozen-lockfile
       - name: Stage runtime
-        run: pnpm --dir desktop stage
+        run: pnpm --dir desktop run stage
       - name: Smoke test
         run: pnpm --dir desktop smoke
       - name: Package

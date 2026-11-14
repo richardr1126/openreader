@@ -209,7 +209,7 @@ caused conflicts, high CPU, misleading failures, and overheating.
 
 - `desktop/` is a separate pnpm project (Electron + electron-builder) outside the
   root workspace. It stages the Docker image's runtime layout for the host
-  platform (`pnpm --dir desktop stage`, after `pnpm build`) and packages it
+  platform (`pnpm --dir desktop run stage`, after `pnpm build`) and packages it
   (`pnpm --dir desktop package`). See `v5/DESKTOP_SHELL.md`.
 - The shell adds no server code and no environment variables beyond
   `DESKTOP_LAUNCH_TOKEN`; it configures the runtime through existing settings.

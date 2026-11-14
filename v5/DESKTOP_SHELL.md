@@ -259,7 +259,7 @@ not open a window.
 ```bash
 pnpm build
 pnpm --dir desktop install
-pnpm --dir desktop stage
+pnpm --dir desktop run stage
 pnpm --dir desktop smoke
 pnpm --dir desktop start
 pnpm --dir desktop package

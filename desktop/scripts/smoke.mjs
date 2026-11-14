@@ -2,7 +2,7 @@
 // Starts the staged runtime the way the shell does, in throwaway directories,
 // and checks the parts the window depends on: the app answers, the launch token
 // signs the owner in (and nothing else does), the token stays out of the log,
-// and the runtime stops cleanly. Run `pnpm stage` first.
+// and the runtime stops cleanly. Run `pnpm run stage` first.
 
 import fs from 'node:fs';
 import os from 'node:os';
