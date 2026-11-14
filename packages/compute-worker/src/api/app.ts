@@ -67,6 +67,7 @@ import { resolveTtsCredentialsFromBroker } from '../jobs/tts-credential-broker';
 import { generateTTSBuffer, registerLocalTtsSynthesizer } from '@openreader/tts/generate';
 import { synthesizeKokoro } from '../inference/kokoro/engine';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
+import { drainExhaustedJobs } from '../infrastructure/exhausted-jobs';
 import { listKvKeys } from '../infrastructure/kv-keys';
 import { createMaintenanceHandler } from '../jobs/maintenance';
 import {
@@ -542,9 +543,18 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       });
     },
     stopWorkers: () => workerLoops.stop(),
-    runReconciliation: async () => {
-      const [, pending] = await Promise.all([reconciler.run({ force: true }), terminalSettlement.drain()]);
-      return pending;
+    runReconciliation: async (session) => {
+      const [exhausted, pending] = await Promise.all([
+        drainExhaustedJobs({
+          consumer: session.exhaustedJobsConsumer,
+          streams: session.jsm.streams,
+          settle: (job) => defaultOrchestrator.failExhaustedDelivery(job),
+          logger: app.log,
+        }),
+        terminalSettlement.drain(),
+        reconciler.run({ force: true }),
+      ]);
+      return pending || exhausted;
     },
   });
 

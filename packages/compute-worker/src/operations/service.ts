@@ -214,6 +214,24 @@ export class OperationOrchestrator implements OperationExecution {
     return this.writeAttempt(input, outcome);
   }
 
+  async failExhaustedDelivery(input: { opId: string; jobId: string; deliveryAttempt: number }): Promise<void> {
+    for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
+      const record = await this.stateStore.getOpStateRecord(input.opId);
+      if (!record || record.state.jobId !== input.jobId || isTerminalStatus(record.state.status)
+        || (record.state.deliveryAttempt ?? 0) > input.deliveryAttempt) return;
+      const failed = await this.markFailedIfUnchanged({
+        current: record.state,
+        expectedRevision: record.revision,
+        error: {
+          code: 'WORKER_ORPHANED_OP',
+          message: 'The job did not finish before its delivery attempts ran out.',
+        },
+      });
+      if (failed) return;
+    }
+    throw new Error('Unable to close exhausted operation after repeated CAS conflicts');
+  }
+
   async markFailedIfUnchanged(input: {
     current: WorkerOperationState;
     expectedRevision: number;

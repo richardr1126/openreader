@@ -312,7 +312,7 @@ export class JetStreamOperationEventStream<Result = unknown> implements Operatio
       const consumer = await js.consumers.get(this.eventsStreamName, name);
       const output: OperationEvent<Result>[] = [];
       while (output.length < boundedLimit) {
-        const msg = await consumer.next({ expires: 250 });
+        const msg = await consumer.next({ expires: 1_000 });
         if (!msg) break;
         output.push({
           eventId: msg.seq,

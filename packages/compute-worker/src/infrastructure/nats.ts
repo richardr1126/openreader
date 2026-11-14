@@ -34,6 +34,9 @@ export const ACCOUNT_EXPORT_CONSUMER_NAME = 'compute_account_export';
 export const EMAIL_DELIVERY_CONSUMER_NAME = 'compute_email_delivery';
 export const MODEL_DOWNLOAD_CONSUMER_NAME = 'compute_model_download';
 export const EVENTS_STREAM_NAME = 'compute_events';
+export const EXHAUSTED_JOBS_STREAM_NAME = 'compute_exhausted_jobs';
+export const EXHAUSTED_JOBS_CONSUMER_NAME = 'compute_exhausted_jobs';
+const EXHAUSTED_JOB_SUBJECT = `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.${JOBS_STREAM_NAME}.*`;
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 export const NATS_API_TIMEOUT_MS = 60_000;
@@ -105,6 +108,27 @@ export async function ensureJetStreamResources(input: {
       num_replicas: input.natsReplicas,
     });
   }
+
+  // Capture the server advisory even when no worker is connected. It names
+  // the original stream sequence, which still contains the job envelope.
+  await input.jsm.streams.add({
+    name: EXHAUSTED_JOBS_STREAM_NAME,
+    subjects: [EXHAUSTED_JOB_SUBJECT],
+    retention: RetentionPolicy.Workqueue,
+    storage: StorageType.File,
+    max_age: nanos(COMPUTE_STATE_TTL_MS),
+    max_bytes: 16 * 1024 * 1024,
+    num_replicas: input.natsReplicas,
+  }).catch((error) => {
+    if (!isAlreadyExistsError(error)) throw error;
+  });
+  await input.jsm.consumers.add(EXHAUSTED_JOBS_STREAM_NAME, {
+    durable_name: EXHAUSTED_JOBS_CONSUMER_NAME,
+    ack_policy: AckPolicy.Explicit,
+    ack_wait: nanos(60_000),
+  }).catch((error) => {
+    if (!isAlreadyExistsError(error)) throw error;
+  });
 
   const ensureConsumer = async (name: string, subject: string, ackWaitMs: number, maxDeliver: number) => {
     const config = {

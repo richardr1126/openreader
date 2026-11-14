@@ -10,6 +10,8 @@ import {
   COMPUTE_STATE_TTL_MS,
   DOCUMENT_CONVERSION_CONSUMER_NAME,
   DOCUMENT_PREVIEW_CONSUMER_NAME,
+  EXHAUSTED_JOBS_CONSUMER_NAME,
+  EXHAUSTED_JOBS_STREAM_NAME,
   JOBS_STREAM_NAME,
   LAYOUT_CONSUMER_NAME,
   NATS_API_TIMEOUT_MS,
@@ -43,6 +45,7 @@ export interface NatsSession {
   emailDeliveryConsumer: Consumer;
   modelDownloadConsumer: Consumer;
   maintenanceConsumer: Consumer;
+  exhaustedJobsConsumer: Consumer;
 }
 
 interface NatsSessionLogger {
@@ -75,7 +78,7 @@ export function createNatsSessionManager(input: {
   markActivity: (reason: string) => void;
   startWorkers: (session: NatsSession) => Promise<void> | void;
   stopWorkers: () => Promise<void>;
-  runReconciliation: () => Promise<boolean>;
+  runReconciliation: (session: NatsSession) => Promise<boolean>;
 }) {
   let session: NatsSession | null = null;
   let connecting: Promise<NatsSession> | null = null;
@@ -142,7 +145,7 @@ export function createNatsSessionManager(input: {
       orphanSweepTimer = setInterval(() => {
         if (!session || input.isStopping() || reconciling) return;
         reconciling = true;
-        void input.runReconciliation()
+        void input.runReconciliation(session)
           .then((pending) => { hasPendingSettlement = pending; })
           .catch((error) => {
             input.logger.error({ error: toErrorMessage(error) }, 'periodic operation reconciliation failed');
@@ -192,6 +195,7 @@ export function createNatsSessionManager(input: {
         emailDeliveryConsumer: await js.consumers.get(JOBS_STREAM_NAME, EMAIL_DELIVERY_CONSUMER_NAME),
         modelDownloadConsumer: await js.consumers.get(JOBS_STREAM_NAME, MODEL_DOWNLOAD_CONSUMER_NAME),
         maintenanceConsumer: await js.consumers.get(JOBS_STREAM_NAME, MAINTENANCE_CONSUMER_NAME),
+        exhaustedJobsConsumer: await js.consumers.get(EXHAUSTED_JOBS_STREAM_NAME, EXHAUSTED_JOBS_CONSUMER_NAME),
       };
       session = next;
       generation += 1;

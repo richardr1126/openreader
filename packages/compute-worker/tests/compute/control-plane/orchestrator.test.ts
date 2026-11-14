@@ -207,4 +207,22 @@ describe('operation orchestrator', () => {
     await expect(nextWorker.claimAttempt({ ...redelivery, deliveryAttempt: 3 })).resolves.toBe('succeeded');
     expect(await store.getOpState(opId)).toMatchObject({ status: 'succeeded', deliveryAttempt: 2, result: { ok: true } });
   });
+
+  test('delivery exhaustion closes the matching operation once without overwriting a newer attempt', async () => {
+    const store = new InMemoryOperationStateStore();
+    const eventStream = new InMemoryOperationEventStream();
+    const orchestrator = new OperationOrchestrator({
+      queue: new InMemoryOperationQueue(), stateStore: store, eventStream, config: { opStaleMs: 2000 },
+    });
+    const { opId, jobId } = await orchestrator.enqueueOrReuse(buildRequest('exhausted'));
+    const latest = { opId, jobId, deliveryAttempt: 2, updatedAt: Date.now() };
+    await orchestrator.claimAttempt(latest);
+    await orchestrator.failExhaustedDelivery({ ...latest, jobId: 'different-job' });
+    await orchestrator.failExhaustedDelivery({ ...latest, deliveryAttempt: 1 });
+    expect((await store.getOpState(opId))?.status).toBe('running');
+
+    await Promise.all([orchestrator.failExhaustedDelivery(latest), orchestrator.failExhaustedDelivery(latest)]);
+    expect(await store.getOpState(opId)).toMatchObject({ status: 'failed', error: { code: 'WORKER_ORPHANED_OP' } });
+    expect((await eventStream.listSince(opId, 0)).filter((event) => event.snapshot.status === 'failed')).toHaveLength(1);
+  });
 });
