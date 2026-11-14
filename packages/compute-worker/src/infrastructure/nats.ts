@@ -41,6 +41,10 @@ export const EXHAUSTED_JOBS_CONSUMER_NAME = 'compute_exhausted_jobs';
 const EXHAUSTED_JOB_SUBJECT = `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.${JOBS_STREAM_NAME}.*`;
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
+// How long the jobs stream remembers a job ID, so a republished job is not
+// delivered twice. Hosted NATS accounts reject a window above 30 minutes, so
+// staged jobs are only republished within it.
+export const JOB_DEDUPE_WINDOW_MS = 30 * 60_000;
 export const NATS_API_TIMEOUT_MS = 60_000;
 
 function isAlreadyExistsError(error: unknown): boolean {
@@ -77,7 +81,7 @@ export async function ensureJetStreamResources(input: {
     // while bounding capacity held by an exhausted job whose advisory was lost.
     max_age: nanos(2 * COMPUTE_STATE_TTL_MS),
     discard: DiscardPolicy.New,
-    duplicate_window: nanos(COMPUTE_STATE_TTL_MS),
+    duplicate_window: nanos(JOB_DEDUPE_WINDOW_MS),
     num_replicas: input.natsReplicas,
   };
   try {
