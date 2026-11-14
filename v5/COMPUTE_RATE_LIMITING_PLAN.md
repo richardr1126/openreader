@@ -985,6 +985,41 @@ NATS remains durable, but durability is not permission for unbounded backlog.
 - A pulled message receives `working()` heartbeats while waiting and while
   legitimately executing.
 
+### Worker recovery
+
+The worker stages the job envelope in JetStream KV before claiming its operation
+key. The publication reconciler retries a missing publish under the same job
+ID. The jobs stream deduplicates that ID for the lifetime of the KV entry and
+rejects new jobs when full, preserving jobs it already accepted. Its delivery
+exhaustion advisories are persisted and processed in bounded batches.
+The jobs stream also expires messages after 48 hours so a lost advisory cannot
+hold queue capacity indefinitely. Workers stay connected by default to receive
+work published by another replica.
+
+Each delivery claims the operation before running. A newer delivery owns
+progress and completion, and terminal reconciliation retries the SSE event and
+admission broker callback until both succeed. The admission remains linked to
+one operation across worker attempts. If a terminal callback arrives while
+an admission for that action still awaits linkage, Next asks the worker to
+retry the callback. Next also checks for a terminal result after linking.
+Playback operations link to the matching session before publication, and
+redeliveries only bypass the queue deadline after execution has started.
+
+Age-based sweeping applies to records from older workers for one operation
+retention window. New operations close through delivery exhaustion,
+publication expiry, or a terminal execution result. PDF layout resumes from
+saved page batches when JetStream redelivers its job. Playback plans, audiobook
+exports, document previews, document conversions, and account exports can also
+recover across up to three deliveries. A replacement delivery reuses an
+available result or rebuilds it. Artifact publication checks the observed
+object revision to prevent a delayed write from replacing a newer result.
+Interactive playback and whole-document audio generation also recover in the
+same operation. The next delivery keeps the session and cursor, adopts cached
+audio, and repairs any segment metadata that the previous delivery left unfinished.
+Model download also redelivers to an available worker. Verified files are reused
+on that replica, and each replica still installs its own copy on demand. An
+admin cancellation settles the shared download operation so it cannot redeliver.
+
 ---
 
 ## Provider Throughput Limiting

@@ -154,6 +154,42 @@ describe('TTS playback storage', () => {
     expect(await artifacts.listSegmentOrdinals(scope)).toEqual([2, 9000]);
   });
 
+  test('only the latest delivery can update the active playback session', async () => {
+    const store = createTtsPlaybackKvStore({ getKv: async () => kv });
+    const kv = new MemoryKv();
+    const first = { opId: 'op', attempt: 1 };
+    const replacement = { opId: 'op', attempt: 2 };
+    await store.putSessionIfNewer({
+      schemaVersion: 1, sessionId: 'session', sessionInstanceId: 'instance', generationRunId: 'run',
+      userId: 'user', storageUserId: 'user', documentId: 'a'.repeat(64), documentVersion: 1,
+      readerType: 'pdf', status: 'running', settingsHash: 'settings', settingsJson: {},
+      generationStartOrdinal: 7, cursorOrdinal: 8, cursorUpdatedAt: 100,
+      planObjectKey: 'plan', expiresAt: 10_000, lastError: null, updatedAt: 100,
+      workerOpId: null, generationDelivery: first,
+    });
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      workerOpId: first.opId,
+    }, 'instance', { opId: first.opId, link: true })).resolves.toBe(true);
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      workerOpId: 'stale-op',
+    }, 'instance', { opId: 'stale-op', link: true })).resolves.toBe(false);
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      generationDelivery: replacement,
+    }, 'instance', { ...replacement, claim: true })).resolves.toBe(true);
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      status: 'failed',
+    }, 'instance', first)).resolves.toBe(false);
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      status: 'failed',
+    }, 'instance', { ...first, claim: true })).resolves.toBe(false);
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      status: 'succeeded',
+    }, 'instance', replacement)).resolves.toBe(true);
+    expect(await store.getSession('session')).toMatchObject({
+      status: 'succeeded', cursorOrdinal: 8, generationRunId: 'run',
+    });
+  });
+
   test('stores sessions and updates cursors in KV', async () => {
     const kv = new MemoryKv();
     const store = createTtsPlaybackKvStore({ getKv: async () => kv });

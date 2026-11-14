@@ -16,7 +16,6 @@ import type {
   DocumentPreviewJobResult,
   PdfLayoutJobRequest,
   PdfLayoutJobResult,
-  PdfLayoutProgress,
   TtsPlaybackExportArtifactRequest,
   TtsPlaybackExportArtifactResult,
   TtsPlaybackExportProgress,
@@ -26,11 +25,12 @@ import type {
   TtsPlaybackPlanJobResult,
   TtsPlaybackProgress,
 } from '../operations/contracts';
+import type { JobAttempt, JobExecution } from '../operations/types';
 import { createAccountExportHandler } from './account-export';
-import type { JobHandlerContext } from './context';
+import type { PdfLayoutJobContext } from './context';
 import { createDocumentConversionHandler } from './document-conversion';
 import { createDocumentPreviewHandler } from './document-preview';
-import { createPdfLayoutHandler } from './pdf-layout';
+import { createPdfLayoutHandler, type PdfLayoutExecution } from './pdf-layout';
 import { createTtsPlaybackExportHandler } from './playback/export-job';
 import { createTtsPlaybackHandler } from './playback/playback-job';
 import { createTtsPlaybackPlanHandler } from './playback/plan-job';
@@ -39,19 +39,19 @@ import { runModelDownload } from './model-download';
 import type { ModelDownloadProgress } from '../inference/model-download';
 
 export interface JobHandlers {
-  runMaintenance?(payload: MaintenanceJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: MaintenanceProgress) => Promise<void> }): Promise<MaintenanceJobResult>;
-  runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: PdfLayoutProgress) => Promise<void> }): Promise<PdfLayoutJobResult>;
-  runTtsPlayback(payload: TtsPlaybackJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: TtsPlaybackProgress) => Promise<void> }): Promise<TtsPlaybackJobResult>;
-  runTtsPlaybackPlan(payload: TtsPlaybackPlanJobRequest, queueWaitMs: number): Promise<TtsPlaybackPlanJobResult>;
-  runTtsPlaybackExportArtifact(payload: TtsPlaybackExportArtifactRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: TtsPlaybackExportProgress) => Promise<void> }): Promise<TtsPlaybackExportArtifactResult>;
-  runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number): Promise<DocumentPreviewJobResult>;
-  runDocumentConversion(payload: DocumentConversionJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: DocumentConversionProgress) => Promise<void> }): Promise<DocumentConversionJobResult>;
-  runAccountExport(payload: AccountExportJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: AccountExportProgress) => Promise<void> }): Promise<AccountExportJobResult>;
-  runEmailDelivery?(payload: EmailDeliveryJobRequest): Promise<EmailDeliveryJobResult>;
-  runModelDownload?(payload: ModelDownloadJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: ModelDownloadProgress) => Promise<void> }): Promise<ModelDownloadJobResult>;
+  runMaintenance?(payload: MaintenanceJobRequest, queueWaitMs: number, hooks?: JobExecution<MaintenanceProgress>): Promise<MaintenanceJobResult>;
+  runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks: PdfLayoutExecution): Promise<PdfLayoutJobResult>;
+  runTtsPlayback(payload: TtsPlaybackJobRequest, queueWaitMs: number, hooks?: JobExecution<TtsPlaybackProgress>): Promise<TtsPlaybackJobResult>;
+  runTtsPlaybackPlan(payload: TtsPlaybackPlanJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<TtsPlaybackPlanJobResult>;
+  runTtsPlaybackExportArtifact(payload: TtsPlaybackExportArtifactRequest, queueWaitMs: number, hooks?: JobExecution<TtsPlaybackExportProgress>): Promise<TtsPlaybackExportArtifactResult>;
+  runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<DocumentPreviewJobResult>;
+  runDocumentConversion(payload: DocumentConversionJobRequest, queueWaitMs: number, hooks?: JobExecution<DocumentConversionProgress>): Promise<DocumentConversionJobResult>;
+  runAccountExport(payload: AccountExportJobRequest, queueWaitMs: number, hooks?: JobExecution<AccountExportProgress>): Promise<AccountExportJobResult>;
+  runEmailDelivery?(payload: EmailDeliveryJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<EmailDeliveryJobResult>;
+  runModelDownload?(payload: ModelDownloadJobRequest, queueWaitMs: number, hooks?: JobExecution<ModelDownloadProgress>): Promise<ModelDownloadJobResult>;
 }
 
-export function createJobHandlers(input: JobHandlerContext): JobHandlers {
+export function createJobHandlers(input: PdfLayoutJobContext): JobHandlers {
   return {
     runPdfLayout: createPdfLayoutHandler(input),
     runTtsPlayback: createTtsPlaybackHandler(input),

@@ -50,13 +50,15 @@ import {
 } from '../infrastructure/nats-adapters';
 import { createJsonCodec } from '../infrastructure/json-codec';
 import { createOperationReconciler } from '../operations/reconciliation';
+import { createTerminalSettlement } from '../operations/terminal-settlement';
+import { createOperationPublication } from '../operations/publication';
 import {
   createArtifactStorage,
   createS3ClientFromEnv,
   normalizeS3Prefix,
-  type ArtifactStorage,
 } from '../infrastructure/storage';
 import { createTtsPlaybackStorage } from '../playback/storage';
+import { buildTtsPlaybackOperationKey, ttsPlaybackSubjectFromOperationKey } from '../operations/keys';
 import { createJobHandlers } from '../jobs/handlers';
 import { createWorkerLoopController, type QueuedJob } from '../jobs/worker-loop';
 import { fetchComputeLimitPolicy } from '../jobs/compute-limit-policy-broker';
@@ -67,6 +69,8 @@ import { resolveTtsCredentialsFromBroker } from '../jobs/tts-credential-broker';
 import { generateTTSBuffer, registerLocalTtsSynthesizer } from '@openreader/tts/generate';
 import { synthesizeKokoro } from '../inference/kokoro/engine';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
+import { drainExhaustedJobs } from '../infrastructure/exhausted-jobs';
+import { toErrorMessage } from '../infrastructure/errors';
 import { listKvKeys } from '../infrastructure/kv-keys';
 import { createMaintenanceHandler } from '../jobs/maintenance';
 import {
@@ -76,6 +80,7 @@ import {
   EVENTS_STREAM_NAME,
   DOCUMENT_PREVIEW_JOBS_SUBJECT,
   DOCUMENT_CONVERSION_JOBS_SUBJECT,
+  COMPUTE_STATE_TTL_MS,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
@@ -83,6 +88,7 @@ import {
   TTS_PLAYBACK_JOBS_SUBJECT,
   TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT,
 } from '../infrastructure/nats';
+import { WORKER_ACK_WAIT_MS } from '../operations/delivery-policy';
 import { registerHttpHooks } from './http-hooks';
 import {
   registerComputeWorkerRoutes,
@@ -174,7 +180,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const pdfTimeoutMs = timeoutConfig.pdfTimeoutMs;
   const pdfHardCapMs = timeoutConfig.pdfHardCapMs;
   const ttsPlaybackSegmentTimeoutMs = timeoutConfig.ttsPlaybackSegmentTimeoutMs;
-  const pdfAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
+  const pdfAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 3);
   const prewarmModels = readBoolEnv('COMPUTE_PREWARM_MODELS', false);
   const jobsStreamMaxBytes = readPositiveIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
   const eventsStreamMaxBytes = readPositiveIntEnv('COMPUTE_EVENTS_STREAM_MAX_BYTES', 128 * 1024 * 1024);
@@ -217,7 +223,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const storageDisabled = async (): Promise<never> => {
     throw new Error('S3 access is disabled for this worker app instance');
   };
-  const storage: ArtifactStorage = disableWorkers
+  const storage = disableWorkers
     ? {
       readObject: storageDisabled,
       objectExists: storageDisabled,
@@ -229,6 +235,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       listChildPrefixes: storageDisabled,
       putObject: storageDisabled,
       putFile: storageDisabled,
+      getParsedPdfRevision: storageDisabled,
       putParsedPdf: storageDisabled,
     }
     : createArtifactStorage({
@@ -340,11 +347,67 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     emailDeliverySubject: EMAIL_DELIVERY_JOBS_SUBJECT,
     modelDownloadSubject: MODEL_DOWNLOAD_JOBS_SUBJECT,
   });
+  const linkPlaybackOperation = async (job: { kind: string; opId: string; payload: unknown }) => {
+    if (job.kind !== 'tts_playback') return;
+    const payload = job.payload as TtsPlaybackJobRequest;
+    const session = await playbackStorage.sessions.getSession(payload.sessionId);
+    const generationRunId = payload.generationRunId ?? null;
+    if (!session || (session.generationRunId ?? null) !== generationRunId
+      || (session.status !== 'queued' && session.status !== 'running')
+      || session.workerOpId === job.opId) return;
+    await playbackStorage.sessions.patchSessionIfGenerationRun(
+      session.sessionId, generationRunId, { workerOpId: job.opId }, session.sessionInstanceId,
+      { opId: job.opId, link: true },
+    );
+  };
 
+  const terminalSettlement = createTerminalSettlement({
+    store: defaultOperationStateStore,
+    publish: async (state) => {
+      if (state.status === 'failed' && state.kind === 'tts_playback') {
+        const subject = ttsPlaybackSubjectFromOperationKey(state.opKey);
+        const session = subject ? await playbackStorage.sessions.getSession(subject.sessionId) : null;
+        // Publication expiry can win before the session link is written.
+        const unlinkedExpiredRun = session && session.workerOpId == null && session.planObjectKey
+          && state.error?.code === 'COMPUTE_WORK_NOT_STARTED'
+          && buildTtsPlaybackOperationKey({
+            ...session,
+            planObjectKey: session.planObjectKey,
+            generationRunId: session.generationRunId ?? undefined,
+            generationExtent: session.generationExtent ?? undefined,
+          }) === state.opKey
+          && (await defaultOperationStateStore.getOpIndex(state.opKey))?.opId === state.opId;
+        if (session && (session.workerOpId === state.opId || unlinkedExpiredRun)) {
+          await playbackStorage.sessions.patchSessionIfGenerationRun(session.sessionId, session.generationRunId ?? null, {
+            workerOpId: state.opId, status: 'failed', lastError: state.error?.message ?? 'Playback generation failed',
+          }, session.sessionInstanceId, { opId: state.opId, link: Boolean(unlinkedExpiredRun) });
+        }
+      }
+      await defaultOperationEventStream.append(state.opId, state);
+    },
+    notify: (result, snapshot) => {
+      const kind = snapshot.kind;
+      const admissionAction = kind === 'tts_playback'
+        ? snapshot.opKey.split('|')[7]?.startsWith('document:') ? 'tts_playback_document' : undefined
+        : kind === 'email_delivery' || kind === 'maintenance' || kind === 'model_download' ? undefined : kind;
+      return notifyComputeAdmissionTerminal(result, admissionAction, snapshot.updatedAt);
+    },
+    logger: app.log,
+  });
+  const publication: ReturnType<typeof createOperationPublication> = createOperationPublication({
+    store: defaultOperationStateStore,
+    queue: operationQueue,
+    beforePublish: linkPlaybackOperation,
+    logger: app.log,
+    maxAgeMs: Math.min(opStaleMs, 12 * 60 * 60 * 1000),
+    expire: (job) => defaultOrchestrator.failUnpublishedJob(job),
+  });
   const defaultOrchestrator = new OperationOrchestrator({
     queue: operationQueue,
     stateStore: defaultOperationStateStore,
     eventStream: defaultOperationEventStream,
+    terminalSettlement,
+    publication,
     config: {
       opStaleMs,
       maxCasRetries: 10,
@@ -359,9 +422,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     orchestrator,
     whisperTimeoutMs,
     pdfTimeoutMs,
+    pdfRecoveryMinMs: 2 * WORKER_ACK_WAIT_MS,
     opStaleMs,
     getGeneration: () => options.routeDeps ? 0 : sessionManager.getGeneration(),
     logger: app.log,
+    legacySweepUntilMs: options.routeDeps ? undefined : Date.now() + COMPUTE_STATE_TTL_MS,
+    ...(options.routeDeps ? {} : { onOperationTerminal: ({ operationId }) => terminalSettlement.flush(operationId) }),
   });
   const ensureOrphanedOpRecovery = () => reconciler.run();
   const getOpState = (opId: string) => reconciler.getOpState(opId);
@@ -427,7 +493,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   });
 
   const workerLoops = createWorkerLoopController({
-    orchestrator,
+    orchestrator: defaultOrchestrator,
     handlers: { ...jobHandlers, runMaintenance: createMaintenanceHandler({ storage, s3Prefix, cleanup, logger: app.log }) },
     logger: app.log,
     getComputePolicy: () => computePolicy,
@@ -448,7 +514,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     onInFlightJobsChanged: (delta) => {
       inFlightJobs = Math.max(0, inFlightJobs + delta);
     },
-    onOperationTerminal: notifyComputeAdmissionTerminal,
+    onOperationTerminal: ({ operationId }) => terminalSettlement.flush(operationId),
   });
 
   let computePolicyRefresh: Promise<void> | null = null;
@@ -492,14 +558,14 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   sessionManager = createNatsSessionManager({
     connectOptions: connectOpts,
     logger: app.log,
-    whisperTimeoutMs,
-    pdfTimeoutMs,
     pdfAttempts,
     jobsStreamMaxBytes,
     eventsStreamMaxBytes,
     jobStatesMaxBytes,
     natsReplicas,
     isStopping: () => stopping,
+    resumeQueuedWork: !disableWorkers,
+    disconnectWhenIdle: readBoolEnv('COMPUTE_NATS_DISCONNECT_WHEN_IDLE', false),
     getActivity: () => ({
       activeSse,
       inFlightHttp,
@@ -528,7 +594,20 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       });
     },
     stopWorkers: () => workerLoops.stop(),
-    runReconciliation: () => reconciler.run({ force: true }),
+    runReconciliation: async (session) => {
+      const [exhausted, pending, publishing] = await Promise.all([
+        drainExhaustedJobs({
+          consumer: session.exhaustedJobsConsumer,
+          streams: session.jsm.streams,
+          settle: (job) => defaultOrchestrator.failExhaustedDelivery(job),
+          logger: app.log,
+        }),
+        terminalSettlement.drain(),
+        publication.drain(),
+        reconciler.run({ force: true }),
+      ]);
+      return pending || exhausted || publishing;
+    },
   });
 
   const close = async (): Promise<void> => {
@@ -559,6 +638,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       }
       await app.listen({ host, port });
       app.log.info({ host, port }, 'compute worker listening');
+      sessionManager.connectForQueuedWork();
     },
     close,
   };

@@ -12,14 +12,24 @@ describe('worker loop policy', () => {
     expect(decideRetryAction({ kind: 'pdf_layout', deliveryCount: 3, pdfAttempts: 3 })).toBe('term_fail');
   });
 
-  test('retry policy: playback jobs use the configured attempt limit', () => {
-    expect(decideRetryAction({ kind: 'tts_playback', deliveryCount: 1, pdfAttempts: 2 })).toBe('nak_retry');
-    expect(decideRetryAction({ kind: 'tts_playback', deliveryCount: 2, pdfAttempts: 2 })).toBe('term_fail');
+  test('retry policy: the PDF delivery limit does not apply to playback jobs', () => {
+    expect(decideRetryAction({ kind: 'tts_playback', deliveryCount: 2, pdfAttempts: 2 })).toBe('nak_retry');
+  });
+
+  test.each([
+    'tts_playback_plan',
+    'tts_playback_export',
+    'document_preview',
+    'document_conversion',
+    'account_export',
+  ] as const)('%s can recover within three deliveries independently of the PDF limit', (kind) => {
+    expect(decideRetryAction({ kind, deliveryCount: 1, pdfAttempts: 1 })).toBe('nak_retry');
+    expect(decideRetryAction({ kind, deliveryCount: 3, pdfAttempts: 1 })).toBe('term_fail');
   });
 
   test('retry policy: explicit terminal errors are never redelivered', () => {
     expect(decideRetryAction({
-      kind: 'tts_playback',
+      kind: 'pdf_layout',
       deliveryCount: 1,
       pdfAttempts: 3,
       retryable: false,

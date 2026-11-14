@@ -150,6 +150,7 @@ export function createPlaybackSessionController(
       session.generationRunId ?? null,
       {
         generationRunId,
+        workerOpId: null,
         generationSatisfiedFromOrdinal: null,
         generationSatisfiedThroughOrdinal: null,
         updatedAt: now,
@@ -176,6 +177,7 @@ export function createPlaybackSessionController(
         updatedAt: now,
       },
       resolveTtsPlaybackSessionInstanceId(session),
+      isTerminalStatus(op.status) ? undefined : { opId: op.opId, link: true },
     ).catch((error) => {
       app.log.warn(
         { sessionId: session.sessionId, opId: op.opId, error: toErrorMessage(error) },

@@ -10,6 +10,8 @@ import type { TtsPlaybackExportArtifactMetadata, TtsPlaybackExportArtifactReques
 import type { TtsPlaybackSegmentMetadata } from '../../playback/storage';
 import { ttsPlaybackExportArtifactKey, ttsPlaybackExportMetadataArtifactKey } from '../../storage/artifact-addressing';
 import type { JobHandlerContext } from '../context';
+import type { JobExecution } from '../../operations/types';
+import { prepareArtifactWrite, publishOrAdoptArtifact } from '../../storage/artifact-write';
 import {
   buildExportChapters,
   buildExportFilename,
@@ -76,7 +78,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
   return async function runTtsPlaybackExportArtifact(
     payload: TtsPlaybackExportArtifactRequest,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: TtsPlaybackExportProgress) => Promise<void> },
+    hooks?: JobExecution<TtsPlaybackExportProgress>,
   ): Promise<TtsPlaybackExportArtifactResult> {
     const parsed = ttsPlaybackExportArtifactRequestSchema.parse(payload);
     const startedAt = Date.now();
@@ -103,6 +105,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       documentId: parsed.documentId,
       prefix: input.s3Prefix,
     });
+    const writeMetadata = await prepareArtifactWrite(input.storage, metadataKey, hooks);
     const session = await playbackStorage.sessions.getSession(parsed.sessionId);
     if (session && (session.storageUserId !== parsed.storageUserId || session.documentId !== parsed.documentId)) {
       throw new Error('TTS playback export session scope mismatch');
@@ -115,7 +118,8 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       throw new Error(`TTS playback export session is not complete: ${session.stopReason ?? session.status}`);
     }
     const cacheEpoch = await playbackStorage.artifacts.getScopeEpoch(parsed);
-    const assertCurrentSource = async () => {
+    const assertCurrentSource = async (afterPublication = false) => {
+      if (!afterPublication) await hooks?.assertActive();
       const [current, epoch] = await Promise.all([
         playbackStorage.sessions.getSession(parsed.sessionId),
         playbackStorage.artifacts.getScopeEpoch(parsed),
@@ -177,17 +181,18 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
     // Artifact ids are deterministic per scope, so a ready artifact is reused
     // only while it still describes the current sidecars. Retrying skipped
     // segments changes the counts and rebuilds the file without its silence.
-    const existingMetadata = await input.storage.readObject(metadataKey)
+    const readMetadata = () => input.storage.readObject(metadataKey)
       .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata)
       .catch((error) => { if (isNotFound(error)) return null; throw error; });
-    if (
-      existingMetadata?.schemaVersion === 1
-      && existingMetadata.status === 'ready'
-      && existingMetadata.generatedSegments === generatedSegments
-      && existingMetadata.skippedSegments === skippedSegments
-      && await input.storage.objectExists(existingMetadata.objectKey)
-    ) {
-      return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
+    const reusable = async (metadata: TtsPlaybackExportArtifactMetadata | null) =>
+      metadata?.schemaVersion === 1 && metadata.status === 'ready'
+      && metadata.artifactId === parsed.artifactId
+      && metadata.generatedSegments === generatedSegments && metadata.skippedSegments === skippedSegments
+      && await input.storage.objectExists(metadata.objectKey) ? metadata : null;
+    const existingMetadata = await readMetadata();
+    const existingArtifact = await reusable(existingMetadata);
+    if (existingArtifact) {
+      return { artifact: existingArtifact, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     }
 
     const buildStartedAt = Date.now();
@@ -250,7 +255,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       await reportProgress({ phase: 'uploading', completedSegments: plannedSegments.length,
         plannedSegments: plannedSegments.length, skippedSegments });
       const { size: byteLength } = await stat(outputPath);
-      await input.storage.putFile(objectKey, outputPath, contentTypeForExportFormat(parsed.format));
+      await input.storage.putFile(objectKey, outputPath, contentTypeForExportFormat(parsed.format), hooks?.signal);
       await assertCurrentSource();
       const metadata: TtsPlaybackExportArtifactMetadata = {
         schemaVersion: 1,
@@ -282,9 +287,17 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         status: 'ready',
         createdAt: Date.now(),
       };
-      await input.storage.putObject(metadataKey, Buffer.from(JSON.stringify(metadata)), 'application/json');
-      await assertCurrentSource();
-      committed = true;
+      const winner = await publishOrAdoptArtifact(
+        () => writeMetadata(Buffer.from(JSON.stringify(metadata)), 'application/json'),
+        async () => reusable(await readMetadata()),
+        hooks,
+      );
+      // Source invalidation must discard this build even if it also revoked
+      // the job. A delivery takeover alone can reuse the published file.
+      await assertCurrentSource(true);
+      committed = !winner || winner.objectKey === objectKey;
+      if (winner) return { artifact: winner, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
+      await hooks?.assertActive();
       await deleteSupersededExportOutputs({
         storage: input.storage,
         objectKey,

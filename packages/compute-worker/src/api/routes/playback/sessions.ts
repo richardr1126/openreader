@@ -328,6 +328,8 @@ export function registerPlaybackJobRoutes(
         lastError: op.status === 'failed' ? op.error?.message ?? 'Failed to enqueue playback operation' : null,
         updatedAt: Date.now(),
       },
+      undefined,
+      isInflightStatus(op.status) ? { opId: op.opId, link: true } : undefined,
     ).catch((error) => {
       app.log.warn(
         { sessionId: parsed.data.sessionId, opId: op.opId, error: toErrorMessage(error) },

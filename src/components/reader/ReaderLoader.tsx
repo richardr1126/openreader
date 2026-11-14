@@ -81,9 +81,11 @@ export function ReaderLoader({ progress }: { progress?: ReaderBootstrapProgress 
 export function ReaderError({
   error,
   onRetry,
+  retrying = false,
 }: {
   error: Error;
   onRetry?: () => void;
+  retrying?: boolean;
 }) {
   return (
     <div className={styles.root}>
@@ -95,8 +97,8 @@ export function ReaderError({
           <p>{error.message}</p>
         </div>
         {onRetry ? (
-          <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
-            Try again
+          <Button type="button" variant="secondary" size="sm" onClick={onRetry} disabled={retrying}>
+            {retrying ? 'Trying again…' : 'Try again'}
           </Button>
         ) : null}
       </div>

@@ -145,7 +145,7 @@ test('a reader that cannot prepare keeps the way back to the library', async ({ 
   test.setTimeout(45_000);
   await enterAnonymousLibrary(page);
   await uploadLibraryFiles(page, resolve('tests/files/sample.md'));
-  await page.route('**/api/documents/*/reader-bootstrap', (route) => route.fulfill({
+  await page.route(/\/api\/documents\/[^/]+\/reader-bootstrap(?:\?|$)/, (route) => route.fulfill({
     status: 500,
     contentType: 'application/json',
     body: JSON.stringify({ error: 'We encountered an internal error, please try again.' }),
@@ -157,6 +157,12 @@ test('a reader that cannot prepare keeps the way back to the library', async ({ 
   // The header keeps the ready layout, with reading controls disabled.
   await expect(page.getByRole('button', { name: 'Open contents', exact: true })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Menu', exact: true })).toBeDisabled();
+
+  const retry = page.waitForResponse((response) => new URL(response.url()).searchParams.get('retry') === 'true'
+    && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Try again', exact: true }).click();
+  await retry;
+  await expect(page.getByRole('button', { name: 'Try again', exact: true })).toBeEnabled();
 
   await page.getByRole('link', { name: 'Back to documents', exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);

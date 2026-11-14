@@ -39,18 +39,26 @@ export function createOperationReconciler(input: {
   orchestrator: ReconciliationOrchestrator;
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
+  pdfRecoveryMinMs?: number;
   opStaleMs: number;
   getGeneration: () => number;
   logger: ReconciliationLogger;
+  onOperationTerminal?: (input: { operationId: string; state: 'failed' }) => Promise<void>;
+  legacySweepUntilMs?: number;
 }) {
   let recoveryPromise: Promise<void> | null = null;
   let recoveredGeneration = -1;
+  let lastLegacySweep = Number.NEGATIVE_INFINITY;
 
   const run = async (options?: { force?: boolean }): Promise<void> => {
+    const now = Date.now();
+    if (input.legacySweepUntilMs !== undefined
+      && (now >= input.legacySweepUntilMs || now - lastLegacySweep < 60_000)) return;
     if (!supportsRecovery(input.stateStore, input.orchestrator)) return;
     const generation = input.getGeneration();
     if (!options?.force && recoveredGeneration === generation) return;
     if (recoveryPromise) return await recoveryPromise;
+    lastLegacySweep = now;
 
     recoveryPromise = (async () => {
       const recoveredStates = await recoverOrphanedOperations({
@@ -61,11 +69,16 @@ export function createOperationReconciler(input: {
         orchestrator: {
           markFailedIfUnchanged: async (request) => {
             const result = await input.orchestrator.markFailedIfUnchanged!(request);
+            if (result) {
+              await input.onOperationTerminal?.({ operationId: request.current.opId, state: 'failed' })
+                .catch((error) => input.logger.warn({ opId: request.current.opId, error }, 'compute admission completion callback failed'));
+            }
             return result as StreamedOperationState | null;
           },
         },
         whisperTimeoutMs: input.whisperTimeoutMs,
         pdfTimeoutMs: input.pdfTimeoutMs,
+        pdfRecoveryMinMs: input.pdfRecoveryMinMs,
         opStaleMs: input.opStaleMs,
       });
       if (recoveredStates.length > 0) {

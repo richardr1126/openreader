@@ -4,6 +4,8 @@ import type { ArtifactStorage } from '../infrastructure/storage';
 import { createJsonCodec } from '../infrastructure/json-codec';
 import { isKvCasConflictError, type KvStoreLike } from '../infrastructure/nats-adapters';
 import { ttsPlaybackSegmentSidecarArtifactKey } from '../storage/artifact-addressing';
+import { prepareArtifactWrite } from '../storage/artifact-write';
+import type { JobAttempt } from '../operations/types';
 
 export type TtsPlaybackSessionStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 export type TtsPlaybackSegmentStatus = 'generating' | 'completed' | 'error';
@@ -27,6 +29,7 @@ export interface TtsPlaybackSessionState {
   playbackActive?: boolean;
   /** Identifies the generation run that currently owns this canonical session. */
   generationRunId?: string | null;
+  generationDelivery?: { opId: string; attempt: number };
   /** Stable identity for one canonical-session incarnation; unlike expiresAt it never rolls. */
   sessionInstanceId?: string;
   generationSatisfiedFromOrdinal?: number | null;
@@ -89,6 +92,7 @@ export interface TtsPlaybackSessionStore {
     expectedGenerationRunId: string | null,
     patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>,
     expectedSessionInstanceId?: string,
+    delivery?: { opId: string; attempt?: number; claim?: boolean; link?: boolean },
   ): Promise<boolean>;
   updateCursor(
     sessionId: string,
@@ -110,8 +114,8 @@ export interface TtsPlaybackSegmentArtifactStore {
   sidecarKey(input: TtsPlaybackSegmentScope & { ordinal: number }): string;
   /** Discover stored ordinals without issuing an object-store miss for every ungenerated segment. */
   listSegmentOrdinals(scope: TtsPlaybackSegmentScope): Promise<number[]>;
-  /** Write one segment's sidecar (plain put to its own key — race-free). */
-  putSegmentMetadata(metadata: TtsPlaybackSegmentMetadata): Promise<string>;
+  /** Write one segment's sidecar. */
+  putSegmentMetadata(metadata: TtsPlaybackSegmentMetadata, attempt?: JobAttempt): Promise<string>;
   /** Read one segment's sidecar by ordinal. Returns null when not yet generated. */
   readSegmentMetadata(
     input: TtsPlaybackSegmentScope & { ordinal: number },
@@ -226,6 +230,7 @@ export function createTtsPlaybackKvStore(input: {
     recordPatch: Partial<TtsPlaybackSessionState>,
     expectedGenerationRunId?: string | null,
     expectedSessionInstanceId?: string,
+    delivery?: { opId: string; attempt?: number; claim?: boolean; link?: boolean },
   ): Promise<boolean> => {
     const kv = await input.getKv();
     const key = sessionKvKey(sessionId);
@@ -239,6 +244,17 @@ export function createTtsPlaybackKvStore(input: {
         expectedGenerationRunId !== undefined
         && (current.generationRunId ?? null) !== expectedGenerationRunId
       ) return false;
+      if (delivery) {
+        if (current.status !== 'queued' && current.status !== 'running') return false;
+        const previous = current.generationDelivery;
+        if (delivery.link) {
+          if (current.workerOpId != null && current.workerOpId !== delivery.opId) return false;
+        } else if (delivery.attempt === undefined) {
+          if (current.workerOpId !== delivery.opId) return false;
+        } else if (delivery.claim) {
+          if (previous?.opId === delivery.opId && previous.attempt > delivery.attempt) return false;
+        } else if (previous?.opId !== delivery.opId || previous.attempt !== delivery.attempt) return false;
+      }
       const next: TtsPlaybackSessionState = {
         ...current,
         ...recordPatch,
@@ -415,6 +431,7 @@ export function createTtsPlaybackKvStore(input: {
       expectedGenerationRunId,
       patch,
       expectedSessionInstanceId,
+      delivery,
     ) {
       const recordPatch: Partial<TtsPlaybackSessionState> = { ...patch };
       delete recordPatch.cursorOrdinal;
@@ -425,6 +442,7 @@ export function createTtsPlaybackKvStore(input: {
         recordPatch,
         expectedGenerationRunId,
         expectedSessionInstanceId,
+        delivery,
       );
     },
 
@@ -588,16 +606,10 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
       }))].sort((a, b) => a - b);
     },
 
-    async putSegmentMetadata(metadata) {
-      // One segment → one immutable object at its own key. Plain put, no shared
-      // aggregate to read-merge-write, so there is no lost-update race and
-      // concurrent workers stay correct.
+    async putSegmentMetadata(metadata, attempt) {
       const key = sidecarKey(metadata);
-      await input.storage.putObject(
-        key,
-        Buffer.from(JSON.stringify(metadata)),
-        'application/json',
-      );
+      const write = await prepareArtifactWrite(input.storage, key, attempt);
+      await write(Buffer.from(JSON.stringify(metadata)), 'application/json');
       return key;
     },
 

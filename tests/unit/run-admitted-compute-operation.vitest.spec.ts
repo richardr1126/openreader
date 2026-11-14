@@ -6,6 +6,11 @@ const admissionMocks = vi.hoisted(() => ({
   reserve: vi.fn(),
   activate: vi.fn(),
   finish: vi.fn(),
+  getOperation: vi.fn(),
+}));
+
+vi.mock('@/lib/server/compute-worker/client', () => ({
+  getComputeWorkerClient: () => ({ getOperation: admissionMocks.getOperation }),
 }));
 
 vi.mock('@/lib/server/compute-limits/admission', () => ({
@@ -32,6 +37,7 @@ describe('admitted compute operation creation', () => {
     });
     admissionMocks.activate.mockReset().mockResolvedValue(undefined);
     admissionMocks.finish.mockReset().mockResolvedValue(undefined);
+    admissionMocks.getOperation.mockReset().mockResolvedValue(operation);
   });
 
   test('keeps the admission active when operation linkage fails after creation', async () => {
@@ -72,5 +78,19 @@ describe('admitted compute operation creation', () => {
       admissionId: 'admission-1',
       state: 'cancelled',
     });
+  });
+
+  test('releases the slot when the job completed before its admission was linked', async () => {
+    admissionMocks.getOperation.mockResolvedValue({ ...operation, status: 'succeeded' });
+    await createAdmittedComputeOperation({
+      policy: cloneComputeLimitPolicyDocument(),
+      action: 'pdf_layout',
+      requestKey: 'request-3',
+      subject: { userId: 'user-1', isAnonymous: false },
+      create: async () => operation,
+    });
+    expect(admissionMocks.activate).toHaveBeenLastCalledWith(expect.objectContaining({ operationId: operation.opId }));
+    expect(admissionMocks.getOperation).toHaveBeenCalledWith(operation.opId, expect.anything());
+    expect(admissionMocks.finish).toHaveBeenCalledWith({ admissionId: 'admission-1', state: 'finished' });
   });
 });

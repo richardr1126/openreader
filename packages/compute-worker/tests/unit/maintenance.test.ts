@@ -111,6 +111,20 @@ describe('durable maintenance execution', () => {
     expect(step).toHaveBeenCalledTimes(2);
   });
 
+  test('a replacement delivery can complete deletion after the first loses ownership', async () => {
+    const { run, step, cleanup } = setup();
+    const controller = new AbortController();
+    vi.mocked(cleanup.cleanupUserStorage).mockImplementationOnce(async () => {
+      controller.abort(new Error('Delivery superseded'));
+      return { deletedObjects: 1, deletedDocumentArtifacts: 0 };
+    });
+    const request = { task: 'delete-users' as const, runId: 'run', userIds: ['u1'] };
+    await expect(run(request, 0, { signal: controller.signal })).rejects.toThrow('Delivery superseded');
+    expect(step).not.toHaveBeenCalled();
+    await expect(run(request, 0)).resolves.toMatchObject({ completed: 1, failed: 0 });
+    expect(step).toHaveBeenCalledExactlyOnceWith({ action: 'finalize-user', userId: 'u1' });
+  });
+
   test('reaper preserves young and owned blobs and deletes source objects last', async () => {
     const now = Date.now();
     const young = 'c'.repeat(64);

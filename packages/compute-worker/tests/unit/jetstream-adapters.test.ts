@@ -1,7 +1,11 @@
 import { describe, expect, test, vi } from 'vitest';
 import { DeliverPolicy } from '@nats-io/jetstream';
 import { OperationOrchestrator } from '../../src/operations/service';
-import type { WorkerOperationRequest } from '../../src/operations/contracts';
+import { createTerminalSettlement } from '../../src/operations/terminal-settlement';
+import { createOperationPublication } from '../../src/operations/publication';
+import { drainExhaustedJobs } from '../../src/infrastructure/exhausted-jobs';
+import { JOBS_STREAM_NAME } from '../../src/infrastructure/nats';
+import type { WorkerOperationRequest, WorkerOperationState } from '../../src/operations/contracts';
 import {
   JetStreamOperationEventStream,
   JetStreamOperationQueue,
@@ -48,7 +52,8 @@ class FakeKvStore implements KvStoreLike {
   }
 
   async keys(_filter?: string | string[]): Promise<AsyncIterable<string>> {
-    const keys = Array.from(this.data.keys());
+    const prefix = typeof _filter === 'string' ? _filter.replace(/\*$/, '') : '';
+    const keys = Array.from(this.data.keys()).filter((key) => key.startsWith(prefix));
     return {
       async *[Symbol.asyncIterator]() {
         for (const key of keys) {
@@ -56,6 +61,11 @@ class FakeKvStore implements KvStoreLike {
         }
       }
     };
+  }
+
+  async delete(key: string, options?: { previousSeq: number }): Promise<void> {
+    if (this.data.get(key)?.revision !== options?.previousSeq) throw new Error('wrong last sequence');
+    this.data.delete(key);
   }
 }
 
@@ -89,6 +99,177 @@ function buildPdfRequest(opKey: string): WorkerOperationRequest {
 }
 
 describe('jetstream adapters', () => {
+  test('keeps the source job when a retained exhaustion advisory predates its active delivery', async () => {
+    const ack = vi.fn();
+    const deleteMessage = vi.fn();
+    const advisory = { json: () => ({ stream: JOBS_STREAM_NAME, stream_seq: 10, deliveries: 1 }), ack };
+    const settle = vi.fn(async () => false);
+    await drainExhaustedJobs({
+      consumer: { fetch: async () => ({
+        async *[Symbol.asyncIterator]() { yield advisory; },
+        close: async () => undefined,
+      }) } as never,
+      streams: {
+        getMessage: async () => ({ json: () => ({ opId: crypto.randomUUID(), jobId: crypto.randomUUID() }) }),
+        deleteMessage,
+      } as never,
+      settle,
+      logger: { warn: vi.fn() },
+    });
+    expect(settle).toHaveBeenCalledWith(expect.objectContaining({ deliveryAttempt: 1 }));
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledOnce();
+  });
+
+  test('returns a terminal operation if its publication expires before its producer claims the index', async () => {
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const kv = new FakeKvStore();
+    const stateCas = stateStore.compareAndSetOpIndex.bind(stateStore);
+    const queue = { enqueue: vi.fn() };
+    const publication = createOperationPublication({
+      store: stateStore, queue, logger: { warn: vi.fn() }, maxAgeMs: 1_000,
+      expire: (job) => orchestrator.failUnpublishedJob(job),
+    });
+    const orchestrator = new OperationOrchestrator({
+      queue: { ...queue, claimNext: async () => null, size: () => 0 },
+      stateStore, eventStream: { append: vi.fn(), listSince: vi.fn(), subscribe: vi.fn() },
+      config: { opStaleMs: 1_000 }, clock: { now: () => Date.now() - 61_000 }, publication,
+    });
+    vi.spyOn(stateStore, 'compareAndSetOpIndex').mockImplementationOnce(async (input) => {
+      await publication.drain();
+      return stateCas(input);
+    });
+    const result = await orchestrator.enqueueOrReuse(buildPdfRequest('slow-reservation'));
+    expect(result).toMatchObject({ status: 'failed', error: { code: 'COMPUTE_WORK_NOT_STARTED' } });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    expect(await stateStore.getPublication(result.opId)).toBeNull();
+  });
+
+  test('expires claimed work even if the prepublication dependency never recovers', async () => {
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const kv = new FakeKvStore();
+    const queue = { enqueue: vi.fn(), claimNext: async () => null, size: () => 0 };
+    const beforePublish = vi.fn(async () => { throw new Error('link unavailable'); });
+    const publication = createOperationPublication({
+      store: stateStore, queue, beforePublish, logger: { warn: vi.fn() }, maxAgeMs: 1_000,
+      expire: (job) => orchestrator.failUnpublishedJob(job),
+    });
+    const now = Date.now();
+    const orchestrator = new OperationOrchestrator({
+      queue, stateStore, eventStream: { append: vi.fn(), listSince: vi.fn(), subscribe: vi.fn() },
+      config: { opStaleMs: 1_000 }, clock: { now: () => now }, publication,
+    });
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      const operation = await orchestrator.enqueueOrReuse(buildPdfRequest('blocked-publication'));
+      expect(operation.status).toBe('queued');
+      dateNow.mockReturnValue(now + 1_000);
+      await publication.drain();
+      expect(beforePublish).toHaveBeenCalledOnce();
+      expect(queue.enqueue).not.toHaveBeenCalled();
+      expect(await stateStore.getOpState(operation.opId)).toMatchObject({ status: 'failed' });
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
+  test('retries a failed queue publication in a new process under the original job ID', async () => {
+    const kv = new FakeKvStore();
+    const js = new FakeJetStream();
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const queue = new JetStreamOperationQueue({
+      getJs: async () => js, layoutSubject: 'jobs.layout', ttsPlaybackSubject: 'jobs.tts_playback',
+    });
+    const enqueue = vi.spyOn(queue, 'enqueue').mockRejectedValueOnce(new Error('publish ack unavailable'));
+    const beforePublish = vi.fn(async () => undefined).mockRejectedValueOnce(new Error('session link unavailable'));
+    const deps = { store: stateStore, queue, beforePublish, logger: { warn: vi.fn() }, maxAgeMs: 30_000, expire: vi.fn() };
+    const orchestrator = new OperationOrchestrator({
+      queue,
+      stateStore,
+      eventStream: new JetStreamOperationEventStream({
+        getJs: async () => js as never,
+        getJsm: async () => ({ consumers: {} }) as never,
+        eventsStreamName: 'events',
+      }),
+      config: { opStaleMs: 30_000 },
+      publication: createOperationPublication(deps),
+    });
+    const request = buildPdfRequest('durable-publication');
+    const operation = await orchestrator.enqueueOrReuse(request);
+    expect(await orchestrator.enqueueOrReuse(request)).toEqual(operation);
+    expect(js.published).toHaveLength(0);
+    expect(enqueue).not.toHaveBeenCalled();
+
+    const replacement = createOperationPublication(deps);
+    await expect(replacement.drain()).resolves.toBe(true);
+    expect(js.published).toHaveLength(0);
+    await expect(replacement.drain()).resolves.toBe(true);
+    expect(beforePublish).toHaveBeenCalledTimes(3);
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(js.published[0]?.payload).toMatchObject({ opId: operation.opId, jobId: operation.jobId });
+    expect(await stateStore.getPublication(operation.opId)).toBeNull();
+    await expect(replacement.drain()).resolves.toBe(false);
+  });
+
+  test('a new process retries terminal settlement after the broker was unavailable', async () => {
+    const kv = new FakeKvStore();
+    const js = new FakeJetStream();
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const eventStream = new JetStreamOperationEventStream({
+      getJs: async () => js as never,
+      getJsm: async () => ({ consumers: {} }) as never,
+      eventsStreamName: 'events',
+    });
+    const notify = vi.fn()
+      .mockRejectedValueOnce(new Error('broker unavailable'))
+      .mockResolvedValue(undefined);
+    const deps = {
+      store: stateStore,
+      publish: (state: WorkerOperationState) => eventStream.append(state.opId, state),
+      notify,
+      logger: { warn: vi.fn() },
+    };
+    const first = createTerminalSettlement(deps);
+    const orchestrator = new OperationOrchestrator({
+      queue: new JetStreamOperationQueue({
+        getJs: async () => js, layoutSubject: 'jobs.layout', ttsPlaybackSubject: 'jobs.tts_playback',
+      }),
+      stateStore,
+      eventStream,
+      config: { opStaleMs: 30_000 },
+      terminalSettlement: first,
+    });
+    const { opId, jobId } = await orchestrator.enqueueOrReuse(buildPdfRequest('durable-completion'));
+    const attempt = { opId, jobId, deliveryAttempt: 1, updatedAt: Date.now() };
+    await orchestrator.claimAttempt(attempt);
+    await orchestrator.settleAttempt({ ...attempt, status: 'succeeded', result: { parsedObjectKey: 'parsed.json' } });
+
+    await expect(first.flush(opId)).rejects.toThrow('broker unavailable');
+    expect(await stateStore.getTerminalSettlement(opId)).not.toBeNull();
+    expect((await stateStore.getOpState(opId))?.status).toBe('succeeded');
+
+    const replacement = createTerminalSettlement(deps);
+    await expect(replacement.drain()).resolves.toBe(true);
+    expect(notify).toHaveBeenLastCalledWith({ operationId: opId, state: 'succeeded' }, expect.objectContaining({ opId }));
+    expect(await stateStore.getTerminalSettlement(opId)).toBeNull();
+    await expect(replacement.drain()).resolves.toBe(false);
+
+    // Another worker can drain the marker before the cache invalidation CAS.
+    const previous = (await stateStore.getOpStateRecord(opId))!;
+    await first.track(opId, previous.revision);
+    await replacement.flush(opId);
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(await stateStore.getTerminalSettlement(opId)).not.toBeNull();
+    // The process can also stop after recording the replacement intent.
+    await first.track(opId, previous.revision, {
+      ...previous.state, status: 'failed', updatedAt: previous.state.updatedAt + 1,
+      error: { message: 'Playback cache cleared' },
+    });
+    await replacement.flush(opId);
+    expect(notify).toHaveBeenLastCalledWith({ operationId: opId, state: 'failed' }, expect.objectContaining({ opId }));
+    expect(await stateStore.getTerminalSettlement(opId)).toBeNull();
+  });
+
   test('replays a completion published between the initial state read and subscription', async () => {
     let policy: unknown;
     const terminal = { opId: 'op-gap', status: 'succeeded', updatedAt: 2 };

@@ -3,6 +3,8 @@ import type { AccountExportArtifactMetadata, AccountExportJobRequest, AccountExp
 import { accountExportArtifactKey, accountExportMetadataArtifactKey } from '../storage/artifact-addressing';
 import { buildAccountExportArchive, type SupportedAccountExportManifest } from './account-export-archive';
 import type { JobHandlerContext } from './context';
+import type { JobExecution } from '../operations/types';
+import { prepareArtifactWrite, publishOrAdoptArtifact } from '../storage/artifact-write';
 
 const requestSchema = z.object({
   artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
@@ -18,33 +20,39 @@ export function createAccountExportHandler(input: JobHandlerContext) {
   return async function runAccountExport(
     payload: AccountExportJobRequest,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: AccountExportProgress) => Promise<void> },
+    hooks?: JobExecution<AccountExportProgress>,
   ): Promise<AccountExportJobResult> {
     const parsed = requestSchema.parse(payload);
     const startedAt = Date.now();
     const metadataObjectKey = accountExportMetadataArtifactKey({ artifactId: parsed.artifactId, storageUserId: parsed.storageUserId, namespace: parsed.namespace, prefix: input.s3Prefix });
-    const existingMetadata = await input.storage.readObject(metadataObjectKey)
-      .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as AccountExportArtifactMetadata)
-      .catch(() => null);
-    if (
-      existingMetadata?.schemaVersion === 1
-      && existingMetadata.status === 'ready'
-      && existingMetadata.userId === parsed.userId
-      && existingMetadata.storageUserId === parsed.storageUserId
-      && existingMetadata.namespace === parsed.namespace
-      && existingMetadata.exportSchemaVersion === parsed.schemaVersion
-      && existingMetadata.manifestHash === parsed.manifestHash
-      && await input.storage.objectExists(existingMetadata.objectKey).catch(() => false)
-    ) {
-      return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
-    }
+    const writeMetadata = await prepareArtifactWrite(input.storage, metadataObjectKey, hooks);
+    const readReadyArtifact = async () => {
+      const existingMetadata = await input.storage.readObject(metadataObjectKey)
+        .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as AccountExportArtifactMetadata)
+        .catch(() => null);
+      return existingMetadata?.schemaVersion === 1
+        && existingMetadata.artifactId === parsed.artifactId
+        && existingMetadata.status === 'ready'
+        && existingMetadata.userId === parsed.userId
+        && existingMetadata.storageUserId === parsed.storageUserId
+        && existingMetadata.namespace === parsed.namespace
+        && existingMetadata.exportSchemaVersion === parsed.schemaVersion
+        && existingMetadata.manifestHash === parsed.manifestHash
+        && await input.storage.objectExists(existingMetadata.objectKey).catch(() => false)
+        ? existingMetadata : null;
+    };
+    const existingMetadata = await readReadyArtifact();
+    if (existingMetadata) return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     const manifest = JSON.parse(Buffer.from(await input.storage.readObject(parsed.manifestObjectKey)).toString('utf8')) as SupportedAccountExportManifest;
     if (manifest.userId !== parsed.userId || manifest.storageUserId !== parsed.storageUserId || manifest.namespace !== parsed.namespace || manifest.schemaVersion !== parsed.schemaVersion) {
       throw new Error('Account export manifest scope mismatch');
     }
     const archive = await buildAccountExportArchive({ manifest, readObject: input.storage.readObject, onProgress: hooks?.onProgress });
-    const objectKey = accountExportArtifactKey({ artifactId: parsed.artifactId, storageUserId: parsed.storageUserId, namespace: parsed.namespace, prefix: input.s3Prefix });
-    await input.storage.putObject(objectKey, archive, 'application/zip');
+    const objectKey = accountExportArtifactKey({
+      ...parsed, prefix: input.s3Prefix, buildId: hooks && `${hooks.opId}-${hooks.attempt}`,
+    });
+    await hooks?.assertActive();
+    await input.storage.putObject(objectKey, archive, 'application/zip', hooks?.signal);
     const artifact: AccountExportArtifactMetadata = {
       schemaVersion: 1,
       artifactId: parsed.artifactId,
@@ -61,8 +69,11 @@ export function createAccountExportHandler(input: JobHandlerContext) {
       status: 'ready',
       createdAt: Date.now(),
     };
-    await input.storage.putObject(metadataObjectKey, Buffer.from(JSON.stringify(artifact)), 'application/json');
+    const winner = await publishOrAdoptArtifact(
+      () => writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json'), readReadyArtifact, hooks,
+    );
+    if (winner && winner.objectKey !== objectKey) await input.storage.deleteObject(objectKey).catch(() => undefined);
     await hooks?.onProgress?.({ phase: 'uploading', completedFiles: manifest.files.length, plannedFiles: manifest.files.length });
-    return { artifact, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
+    return { artifact: winner ?? artifact, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
   };
 }

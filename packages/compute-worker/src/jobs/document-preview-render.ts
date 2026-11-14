@@ -3,6 +3,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import JSZip from 'jszip';
 import { XMLParser } from 'fast-xml-parser';
 import { renderPage } from '../inference/pdf/render';
+import { documentPreviewWidth } from '../operations/keys';
 
 export type RenderedDocumentPreview = {
   bytes: Buffer;
@@ -11,11 +12,6 @@ export type RenderedDocumentPreview = {
 };
 
 const PREVIEW_JPEG_QUALITY = 82;
-
-function normalizeTargetWidth(targetWidth: number): number {
-  if (!Number.isFinite(targetWidth) || targetWidth <= 0) return 400;
-  return Math.max(64, Math.min(2048, Math.round(targetWidth)));
-}
 
 function asArray<T>(value: T | T[] | undefined): T[] {
   if (!value) return [];
@@ -70,7 +66,7 @@ async function renderImageBytesToJpeg(imageBytes: Buffer, targetWidth: number): 
     throw new Error('Invalid source image dimensions');
   }
 
-  const width = normalizeTargetWidth(targetWidth);
+  const width = documentPreviewWidth(targetWidth);
   const scale = width / sourceWidth;
   const height = Math.max(1, Math.round(sourceHeight * scale));
   const canvas = createCanvas(width, height);
@@ -119,7 +115,7 @@ export async function renderEpubCoverToJpeg(sourceBytes: Buffer, targetWidth: nu
 }
 
 export async function renderPdfFirstPageToJpeg(sourceBytes: Buffer, targetWidth: number): Promise<RenderedDocumentPreview> {
-  const width = normalizeTargetWidth(targetWidth);
+  const width = documentPreviewWidth(targetWidth);
   const isolatedBytes = Uint8Array.from(sourceBytes);
   const rendered = await renderPage({
     pdfBytes: isolatedBytes.buffer as ArrayBuffer,

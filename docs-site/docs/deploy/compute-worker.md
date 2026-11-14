@@ -75,7 +75,7 @@ If the app is served over HTTPS, the worker's public address must be HTTPS too, 
 2. Set the [worker settings](#worker-settings) above, with `NATS_URL=tls://connect.ngs.global:4222` and your Synadia user credentials in `NATS_CREDS` (or a mounted file in `NATS_CREDS_FILE`).
 3. Set `COMPUTE_WORKER_URL=https://<railway-worker-domain>` on the app.
 
-The worker disconnects from NATS after two minutes with nothing to do, so Railway can put the service to sleep. The first request after that takes longer.
+Workers stay connected to NATS so they can pick up work queued by another replica. To let a worker on Railway sleep, set `COMPUTE_NATS_DISCONNECT_WHEN_IDLE=true`. It disconnects after two idle minutes and reconnects on the next incoming request. Keep at least one worker connected if jobs must recover without an incoming request.
 
 ## Health checks
 

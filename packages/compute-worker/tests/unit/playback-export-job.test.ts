@@ -129,7 +129,10 @@ describe('TTS playback export job', () => {
       s3Prefix: 'test',
     } as never);
 
-    const result = await run(request, 0, { onProgress });
+    const result = await run(request, 0, {
+      onProgress, opId: 'export', operationKey: 'export', attempt: 1,
+      signal: new AbortController().signal, assertActive: async () => {},
+    });
 
     expect(result.artifact).toMatchObject({
       status: 'ready', generatedSegments: 2, skippedSegments: 1, plannedSegments: 3,
@@ -336,6 +339,33 @@ describe('TTS playback export job', () => {
     expect(uploadedKey).not.toBeNull();
     expect(storage.objects.has(uploadedKey!)).toBe(false);
     expect([...storage.objects.keys()].some((key) => key.endsWith('metadata.json'))).toBe(false);
+  });
+
+  test.each([false, true])('rechecks the source after adopting its committed upload (cache cleared: %s)', async (cleared) => {
+    const storage = pdfPlanStorage();
+    let epoch = 0;
+    let publishedObject: string | undefined;
+    const putObject = storage.putObject.bind(storage);
+    storage.putObject = async (key, body) => {
+      await putObject(key, body);
+      if (key.endsWith('metadata.json')) {
+        publishedObject = JSON.parse(Buffer.from(body).toString()).objectKey;
+        if (cleared) epoch += 1;
+        throw Object.assign(new Error('write already committed'), { name: 'PreconditionFailed' });
+      }
+    };
+    const run = createTtsPlaybackExportHandler({
+      storage, s3Prefix: 'test', playbackStorage: {
+        sessions: { getSession: async () => ({ ...request, status: 'succeeded' }) },
+        artifacts: { getScopeEpoch: async () => epoch,
+          readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecar(ordinal, 'completed', `audio/${ordinal}`) },
+      },
+    } as never);
+    const result = run({ ...request, chapterIndex: 0 }, 0);
+    if (cleared) await expect(result).rejects.toThrow('sources were cleared');
+    else await expect(result).resolves.toMatchObject({ artifact: { status: 'ready' } });
+    expect(publishedObject).toBeDefined();
+    expect(storage.objects.has(publishedObject!)).toBe(!cleared);
   });
 
   test('refuses a whole-book export from a usage-limited run', async () => {

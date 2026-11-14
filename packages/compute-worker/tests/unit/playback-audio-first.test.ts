@@ -44,9 +44,10 @@ describe('playback audio-first segment generation', () => {
     vi.clearAllMocks();
   });
 
-  test('settles audiobook audio without invoking blocked word alignment', async () => {
+  test.each([false, true])('settles audiobook audio without invoking alignment (upload collision: %s)', async (collision) => {
     mocks.runAlignment.mockImplementation(() => new Promise(() => undefined));
     let sidecar: TtsPlaybackSegmentMetadata | null = null;
+    const readAudioObject = vi.fn(async () => Buffer.from('winning audio'));
     const { generateExplicitTtsPlaybackSegments } = await import('../../src/jobs/playback/segment-generation');
     await generateExplicitTtsPlaybackSegments({
       request: {
@@ -58,7 +59,15 @@ describe('playback audio-first segment generation', () => {
       },
       sessionInstanceId: 'instance-1', s3Prefix: 'openreader',
       segments: [{ ordinal: 0, text: 'An audiobook does not need word timing.', locator: { readerType: 'html', location: '1' } }],
-      putAudioObject: vi.fn(async () => undefined), audioObjectExists: vi.fn(async () => false),
+      putAudioObject: vi.fn(async () => {
+        if (collision) throw Object.assign(new Error('already published'), { name: 'PreconditionFailed' });
+      }),
+      audioObjectExists: vi.fn(async () => false),
+      readAudioObject,
+      attempt: {
+        opId: 'op', operationKey: 'key', attempt: 3,
+        signal: new AbortController().signal, assertActive: async () => undefined,
+      },
       playbackStorage: { artifacts: {
         readSegmentMetadata: async () => sidecar,
         putSegmentMetadata: async (metadata: TtsPlaybackSegmentMetadata) => { sidecar = metadata; return 'sidecar'; },
@@ -67,6 +76,7 @@ describe('playback audio-first segment generation', () => {
       synthesisTimeoutMs: 30_000,
     });
     expect(sidecar).toMatchObject({ status: 'completed', durationMs: 12000, alignment: null });
+    expect(readAudioObject).toHaveBeenCalledTimes(collision ? 1 : 0);
     expect(mocks.runAlignment).not.toHaveBeenCalled();
     mocks.runAlignment.mockReset();
   });

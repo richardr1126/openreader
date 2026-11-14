@@ -1,6 +1,7 @@
 import {
   AckPolicy,
   DeliverPolicy,
+  DiscardPolicy,
   ReplayPolicy,
   RetentionPolicy,
   StorageType,
@@ -8,6 +9,7 @@ import {
 } from '@nats-io/jetstream';
 import { nanos } from '@nats-io/transport-node';
 import { OP_EVENTS_SUBJECT_WILDCARD } from './nats-adapters';
+import { operationDeliveryLimits, WORKER_ACK_WAIT_MS } from '../operations/delivery-policy';
 
 export const JOBS_STREAM_NAME = 'compute_jobs';
 export const LAYOUT_JOBS_SUBJECT = 'jobs.layout';
@@ -34,6 +36,9 @@ export const ACCOUNT_EXPORT_CONSUMER_NAME = 'compute_account_export';
 export const EMAIL_DELIVERY_CONSUMER_NAME = 'compute_email_delivery';
 export const MODEL_DOWNLOAD_CONSUMER_NAME = 'compute_model_download';
 export const EVENTS_STREAM_NAME = 'compute_events';
+export const EXHAUSTED_JOBS_STREAM_NAME = 'compute_exhausted_jobs';
+export const EXHAUSTED_JOBS_CONSUMER_NAME = 'compute_exhausted_jobs';
+const EXHAUSTED_JOB_SUBJECT = `$JS.EVENT.ADVISORY.CONSUMER.MAX_DELIVERIES.${JOBS_STREAM_NAME}.*`;
 export const COMPUTE_STATE_BUCKET = 'compute_state';
 export const COMPUTE_STATE_TTL_MS = 24 * 60 * 60 * 1000;
 export const NATS_API_TIMEOUT_MS = 60_000;
@@ -45,8 +50,6 @@ function isAlreadyExistsError(error: unknown): boolean {
 
 export async function ensureJetStreamResources(input: {
   jsm: JetStreamManager;
-  whisperTimeoutMs: number;
-  pdfTimeoutMs: number;
   pdfAttempts: number;
   jobsMaxBytes: number;
   eventsMaxBytes: number;
@@ -70,6 +73,11 @@ export async function ensureJetStreamResources(input: {
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
     max_bytes: input.jobsMaxBytes,
+    // Give active work longer than the operation and advisory retention window,
+    // while bounding capacity held by an exhausted job whose advisory was lost.
+    max_age: nanos(2 * COMPUTE_STATE_TTL_MS),
+    discard: DiscardPolicy.New,
+    duplicate_window: nanos(COMPUTE_STATE_TTL_MS),
     num_replicas: input.natsReplicas,
   };
   try {
@@ -79,6 +87,9 @@ export async function ensureJetStreamResources(input: {
     await input.jsm.streams.update(JOBS_STREAM_NAME, {
       subjects: streamConfig.subjects,
       max_bytes: input.jobsMaxBytes,
+      max_age: streamConfig.max_age,
+      discard: streamConfig.discard,
+      duplicate_window: streamConfig.duplicate_window,
       num_replicas: input.natsReplicas,
     });
   }
@@ -104,6 +115,27 @@ export async function ensureJetStreamResources(input: {
     });
   }
 
+  // Capture the server advisory even when no worker is connected. It names
+  // the original stream sequence, which still contains the job envelope.
+  await input.jsm.streams.add({
+    name: EXHAUSTED_JOBS_STREAM_NAME,
+    subjects: [EXHAUSTED_JOB_SUBJECT],
+    retention: RetentionPolicy.Workqueue,
+    storage: StorageType.File,
+    max_age: nanos(COMPUTE_STATE_TTL_MS),
+    max_bytes: 16 * 1024 * 1024,
+    num_replicas: input.natsReplicas,
+  }).catch((error) => {
+    if (!isAlreadyExistsError(error)) throw error;
+  });
+  await input.jsm.consumers.add(EXHAUSTED_JOBS_STREAM_NAME, {
+    durable_name: EXHAUSTED_JOBS_CONSUMER_NAME,
+    ack_policy: AckPolicy.Explicit,
+    ack_wait: nanos(60_000),
+  }).catch((error) => {
+    if (!isAlreadyExistsError(error)) throw error;
+  });
+
   const ensureConsumer = async (name: string, subject: string, ackWaitMs: number, maxDeliver: number) => {
     const config = {
       durable_name: name,
@@ -126,18 +158,18 @@ export async function ensureJetStreamResources(input: {
     }
   };
 
+  const limits = operationDeliveryLimits(input.pdfAttempts);
   await Promise.all([
-    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
-    ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
-    ensureConsumer(TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME, TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
-    ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, 1),
-    ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
-    ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
-    ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, input.pdfAttempts),
-    ensureConsumer(ACCOUNT_EXPORT_CONSUMER_NAME, ACCOUNT_EXPORT_JOBS_SUBJECT, input.pdfTimeoutMs + 15_000, 1),
-    ensureConsumer(EMAIL_DELIVERY_CONSUMER_NAME, EMAIL_DELIVERY_JOBS_SUBJECT, 60_000, 3),
-    // The running job extends the ack as it goes; a failed download is retried by the admin.
-    ensureConsumer(MODEL_DOWNLOAD_CONSUMER_NAME, MODEL_DOWNLOAD_JOBS_SUBJECT, 60_000, 1),
-    ensureConsumer(MAINTENANCE_CONSUMER_NAME, MAINTENANCE_JOBS_SUBJECT, 60_000, 3),
+    ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.pdf_layout),
+    ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback),
+    ensureConsumer(TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME, TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback),
+    ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback_plan),
+    ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback_export),
+    ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.document_preview),
+    ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.document_conversion),
+    ensureConsumer(ACCOUNT_EXPORT_CONSUMER_NAME, ACCOUNT_EXPORT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.account_export),
+    ensureConsumer(EMAIL_DELIVERY_CONSUMER_NAME, EMAIL_DELIVERY_JOBS_SUBJECT, 60_000, limits.email_delivery),
+    ensureConsumer(MODEL_DOWNLOAD_CONSUMER_NAME, MODEL_DOWNLOAD_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.model_download),
+    ensureConsumer(MAINTENANCE_CONSUMER_NAME, MAINTENANCE_JOBS_SUBJECT, 60_000, limits.maintenance),
   ]);
 }

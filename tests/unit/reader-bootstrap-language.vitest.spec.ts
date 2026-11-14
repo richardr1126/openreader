@@ -6,6 +6,7 @@ import type { ParsedPdfDocument } from '@/types/parsed-pdf';
 
 const mocks = vi.hoisted(() => ({
   limit: vi.fn(), set: vi.fn(), playback: vi.fn(), pdf: vi.fn(), object: vi.fn(), scope: vi.fn(),
+  createPdf: vi.fn(),
 }));
 vi.mock('@openreader/database', () => ({ db: {
   select: () => ({ from: () => ({ where: () => ({ limit: mocks.limit }) }) }),
@@ -14,7 +15,17 @@ vi.mock('@openreader/database', () => ({ db: {
 vi.mock('@/lib/server/tts/segments-auth', () => ({
   resolveSegmentDocumentScope: mocks.scope,
 }));
-vi.mock('@/lib/server/pdf-parse/operation', () => ({ resolveCurrentPdfParse: mocks.pdf }));
+vi.mock('@/lib/server/pdf-parse/operation', () => ({
+  resolveCurrentPdfParse: mocks.pdf,
+  createOrReuseCurrentPdfParseOperation: mocks.createPdf,
+}));
+vi.mock('@/lib/server/compute-limits/run-admitted', () => ({
+  createAdmittedComputeOperation: ({ create }: { create: () => Promise<unknown> }) => create(),
+  ComputeAdmissionLimitedError: class extends Error {},
+}));
+vi.mock('@/lib/server/runtime-config', () => ({
+  getResolvedRuntimeConfig: async () => ({ computeLimitPolicies: {} }),
+}));
 vi.mock('@/lib/server/storage/s3', () => ({
   getS3InternalClient: () => ({ send: mocks.object }), getS3Config: () => ({ bucket: 'test' }),
 }));
@@ -52,6 +63,30 @@ beforeEach(() => {
 });
 
 describe('document language in reader bootstrap', () => {
+  test('starts a replacement only on an explicit retry of a retryable PDF failure', async () => {
+    rows();
+    const operation = { opId: 'original', status: 'failed', error: { code: 'WORKER_ORPHANED_OP' } };
+    mocks.pdf.mockResolvedValue({ artifact: null, operation });
+    mocks.createPdf.mockResolvedValue({ opId: 'replacement', status: 'queued' });
+
+    await expect(resolveReaderBootstrapState(request, 'book')).resolves.toMatchObject({
+      result: { status: 'error', retryable: true },
+    });
+    expect(mocks.createPdf).not.toHaveBeenCalled();
+    await expect(resolveReaderBootstrapState(request, 'book', { retryPdf: true })).resolves.toMatchObject({
+      result: { status: 'pending' }, operationId: 'replacement',
+    });
+    expect(mocks.createPdf).toHaveBeenCalledOnce();
+
+    mocks.pdf.mockResolvedValue({ artifact: null, operation: {
+      ...operation, error: { code: 'PDF_PASSWORD_REQUIRED' },
+    } });
+    await expect(resolveReaderBootstrapState(request, 'book', { retryPdf: true })).resolves.toMatchObject({
+      result: { status: 'error', retryable: false, message: expect.stringContaining('Upload an unlocked copy') },
+    });
+    expect(mocks.createPdf).toHaveBeenCalledOnce();
+  });
+
   test('detects a PDF without metadata before planning, returns it, and persists it', async () => {
     rows();
     const result = await resolveReaderBootstrapState(request, 'book');

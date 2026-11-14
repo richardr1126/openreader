@@ -571,6 +571,10 @@ export interface WorkerOperationState<Result = unknown> {
   queuedAt: number;
   updatedAt: number;
   startedAt?: number;
+  /** JetStream delivery that most recently claimed execution of this job. */
+  deliveryAttempt?: number;
+  /** New operations are reconciled from durable publication/delivery evidence. */
+  durableDelivery?: true;
   result?: Result;
   error?: WorkerJobErrorShape;
   timing?: WorkerJobTiming;

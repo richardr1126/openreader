@@ -43,16 +43,17 @@ export function useReaderBootstrap(documentId: string | undefined) {
       typography: commit.settings.typography, highlightAppearance: commit.settings.highlightAppearance,
       presentation: commit.settings.presentation } } };
   }, [surfaceOwner]);
+  const loadBootstrap = useCallback(async (retryPdf = false) => {
+    const atStart = lastSettingsCommit.current;
+    bootstrapSettingsAtStart.current = atStart;
+    return preserveNewerPresentation(await getReaderBootstrap(documentId!, { retryPdf }), atStart);
+  }, [documentId, preserveNewerPresentation]);
   const query = useQuery({
     queryKey: key,
     // Bootstrap ensures durable server work. Development Strict Mode may
     // briefly remove every observer, but that must not abort the request that
     // creates/reconnects the operation or surface an ECONNRESET on the server.
-    queryFn: async () => {
-      const atStart = lastSettingsCommit.current;
-      bootstrapSettingsAtStart.current = atStart;
-      return preserveNewerPresentation(await getReaderBootstrap(documentId!), atStart);
-    },
+    queryFn: () => loadBootstrap(),
     enabled: !sessionPending && Boolean(documentId),
     retry: false,
     gcTime: 0,
@@ -177,9 +178,24 @@ export function useReaderBootstrap(documentId: string | undefined) {
     bootstrapSettingsAtStart.current = lastSettingsCommit.current;
     queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
   }, [key, queryClient]);
+  const { mutateAsync: retryBootstrap, isPending: retrying, error: retryError, variables: retryOwner } = useMutation({
+    mutationFn: (_request: { owner: string; key: typeof key; dataUpdateCount: number }) => loadBootstrap(true),
+    onSuccess: (snapshot, request) => {
+      const state = queryClient.getQueryState(request.key);
+      if ((state?.dataUpdateCount ?? 0) === request.dataUpdateCount) {
+        queryClient.setQueryData<ReaderBootstrapResult>(request.key, snapshot);
+      }
+    },
+  });
   const retry = useCallback(async () => {
-    await query.refetch();
-  }, [query]);
+    if (!documentId) return;
+    if (currentResult.status === 'error') {
+      await retryBootstrap({ owner: surfaceOwner, key, dataUpdateCount: queryClient.getQueryState(key)?.dataUpdateCount ?? 0 })
+        .catch(() => undefined);
+    } else {
+      await query.refetch();
+    }
+  }, [currentResult.status, documentId, key, query, queryClient, retryBootstrap, surfaceOwner]);
   const retryDocumentSource = useCallback(async () => {
     await sourceQuery.refetch();
   }, [sourceQuery]);
@@ -226,6 +242,8 @@ export function useReaderBootstrap(documentId: string | undefined) {
     documentSource,
     restart,
     retry,
+    retrying: retryOwner?.owner === surfaceOwner && retrying,
+    retryError: retryOwner?.owner === surfaceOwner ? retryError : null,
     retryDocumentSource,
     updateSettings,
     updatePresentation,

@@ -13,6 +13,10 @@ const databasePath = join(databaseDirectory, 'limits.db');
 let consumeComputeUsage: typeof import('@/lib/server/compute-limits/usage').consumeComputeUsage;
 let reserveComputeAdmission: typeof import('@/lib/server/compute-limits/admission').reserveComputeAdmission;
 let finishComputeAdmission: typeof import('@/lib/server/compute-limits/admission').finishComputeAdmission;
+let activateComputeAdmission: typeof import('@/lib/server/compute-limits/admission').activateComputeAdmission;
+let completeOperation: typeof import('@/app/api/internal/compute/limits/complete/route').POST;
+
+vi.mock('@/lib/server/audiobooks/audiobooks', () => ({ advanceAudiobooksAfterOperation: vi.fn() }));
 
 function policy(boundary: 'strict' | 'soft_unit'): ComputeLimitPolicyDocument {
   const value = cloneComputeLimitPolicyDocument();
@@ -31,6 +35,7 @@ function policy(boundary: 'strict' | 'soft_unit'): ComputeLimitPolicyDocument {
 beforeAll(async () => {
   process.env.SQLITE_DB_PATH = databasePath;
   process.env.AUTH_SECRET = 'compute-limit-test-secret';
+  process.env.COMPUTE_CREDENTIAL_BROKER_TOKEN = 'compute-limit-test-broker-token';
   const sqlite = new Database(databasePath);
   sqlite.pragma('foreign_keys = ON');
   sqlite.exec(`
@@ -77,7 +82,8 @@ beforeAll(async () => {
   sqlite.close();
   vi.resetModules();
   ({ consumeComputeUsage } = await import('@/lib/server/compute-limits/usage'));
-  ({ reserveComputeAdmission, finishComputeAdmission } = await import('@/lib/server/compute-limits/admission'));
+  ({ reserveComputeAdmission, finishComputeAdmission, activateComputeAdmission } = await import('@/lib/server/compute-limits/admission'));
+  ({ POST: completeOperation } = await import('@/app/api/internal/compute/limits/complete/route'));
 });
 
 afterAll(() => {
@@ -87,6 +93,42 @@ afterAll(() => {
 describe('compute usage limits', () => {
   const subject = { userId: 'user-1', isAnonymous: false };
   const nowMs = Date.UTC(2026, 8, 8, 12);
+
+  test('a replayed terminal callback releases a linked PDF slot exactly once', async () => {
+    const enforced = cloneComputeLimitPolicyDocument();
+    enforced.actions.pdf_layout = {
+      ...enforced.actions.pdf_layout,
+      enabled: true,
+      admission: { windows: [], active: [{ scope: 'user', limit: 1, leaseSeconds: 60 }] },
+    };
+    const reserve = (requestKey: string) => reserveComputeAdmission({
+      policy: enforced, action: 'pdf_layout', requestKey, subject,
+    });
+    const first = await reserve('restart-first');
+    expect(first.allowed).toBe(true);
+    await activateComputeAdmission({ admissionId: first.admissionId!, leaseSeconds: 60 });
+    await expect(reserve('restart-blocked')).resolves.toMatchObject({ allowed: false });
+
+    const finishedAt = Date.now();
+    const callback = () => completeOperation(new Request('http://localhost/api/internal/compute/limits/complete', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer compute-limit-test-broker-token', 'Content-Type': 'application/json',
+        'x-openreader-compute-admission-action': 'pdf_layout',
+        'x-openreader-compute-admission-finished-at': String(finishedAt) },
+      body: JSON.stringify({ operationId: 'recovered-pdf', state: 'succeeded' }),
+    }) as Parameters<typeof completeOperation>[0]);
+    expect((await callback()).status).toBe(503);
+    await activateComputeAdmission({ admissionId: first.admissionId!, operationId: 'recovered-pdf', leaseSeconds: 60 });
+    // An idempotent pre-creation activation must preserve the linkage.
+    await activateComputeAdmission({ admissionId: first.admissionId!, leaseSeconds: 60 });
+    expect((await callback()).status).toBe(204);
+    const second = await reserve('restart-second');
+    expect(second.allowed).toBe(true);
+    await activateComputeAdmission({ admissionId: second.admissionId!, leaseSeconds: 60, nowMs: finishedAt + 1 });
+    expect((await callback()).status).toBe(204);
+    await expect(reserve('restart-still-blocked')).resolves.toMatchObject({ allowed: false });
+    await finishComputeAdmission({ admissionId: second.admissionId!, state: 'finished' });
+  });
 
   test('soft segment thresholds admit one complete overshooting segment, then stop', async () => {
     const first = await consumeComputeUsage({

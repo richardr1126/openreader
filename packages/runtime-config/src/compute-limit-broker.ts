@@ -1,3 +1,5 @@
+import { COMPUTE_ACTIONS, type WorkerOperationAction } from './compute-limits';
+
 /** Stable storage cap codes and their text, shared by the app, worker and browser. */
 export const STORAGE_LIMIT_MESSAGES = {
   ACCOUNT_STORAGE_LIMIT_REACHED: 'Account storage limit reached.',
@@ -38,6 +40,15 @@ export interface ComputeLimitPolicyBrokerResponse {
 export interface ComputeAdmissionTerminalRequest {
   operationId: string;
   state: 'succeeded' | 'failed' | 'cancelled';
+}
+
+export const COMPUTE_ADMISSION_ACTION_HEADER = 'x-openreader-compute-admission-action';
+export const COMPUTE_ADMISSION_FINISHED_AT_HEADER = 'x-openreader-compute-admission-finished-at';
+export type ComputeTerminalAdmissionAction = Exclude<WorkerOperationAction, 'tts_playback'>;
+
+export function isComputeTerminalAdmissionAction(value: unknown): value is ComputeTerminalAdmissionAction {
+  return COMPUTE_ACTIONS.some((action) => action === value
+    && action !== 'tts_playback' && action !== 'tts_synthesis' && action !== 'document_intake');
 }
 
 function isNonemptyBoundedString(value: unknown, maxLength: number): value is string {

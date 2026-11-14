@@ -10,9 +10,27 @@ import { renderPage } from './render';
 import { normalizeTextItemsForLayout } from './normalize-text';
 import type { ModelDownloadProgressHandler } from '../model-download';
 
-interface ParsePdfInput {
+export interface PdfPageCheckpoint {
+  totalPages: number;
+  sawText: boolean;
+  pages: ParsedPdfPage[];
+}
+
+export const PDF_CHECKPOINT_BATCH_SIZE = 8;
+
+export function pdfInputErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof Error)) return undefined;
+  if (error.name === 'PasswordException') return 'PDF_PASSWORD_REQUIRED';
+  if (error.name === 'InvalidPDFException') return 'PDF_INVALID';
+  if (error.message === 'no-text-layer') return 'PDF_NO_TEXT_LAYER';
+  return undefined;
+}
+
+export interface ParsePdfInput {
   documentId: string;
   pdfBytes: ArrayBuffer;
+  resume?: PdfPageCheckpoint | null;
+  onPagesCompleted?: (checkpoint: PdfPageCheckpoint) => Promise<void>;
   onPageStarted?: (input: {
     pageNumber: number;
     totalPages: number;
@@ -28,8 +46,6 @@ interface ParsePdfInput {
 const LAYOUT_RENDER_SCALE = 1.5;
 
 export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument> {
-  await ensureModel({ onProgress: input.onModelDownloadProgress });
-
   // Keep independent byte copies for text extraction and page rendering. pdf.js
   // can detach buffers passed to getDocument().
   const pdfBytesForText = new Uint8Array(input.pdfBytes).slice();
@@ -47,14 +63,18 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
     standardFontDataUrl,
     isEvalSupported: false,
   });
-  const pdf = await loadingTask.promise;
-
   try {
-    const pages: ParsedPdfPage[] = [];
-    let nextBlockId = 1;
-    let sawText = false;
+    const pdf = await loadingTask.promise;
+    const resume = input.resume?.totalPages === pdf.numPages ? input.resume : null;
+    const pages = [...(resume?.pages ?? [])];
+    let nextBlockId = pages.reduce((next, page) => next + page.blocks.length, 1);
+    let sawText = resume?.sawText ?? false;
+    let firstUnsavedPage = pages.length + 1;
 
-    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    if (firstUnsavedPage <= pdf.numPages) {
+      await ensureModel({ onProgress: input.onModelDownloadProgress });
+    }
+    for (let pageNumber = firstUnsavedPage; pageNumber <= pdf.numPages; pageNumber += 1) {
       const pageStartedAt = Date.now();
       if (input.onPageStarted) {
         await input.onPageStarted({
@@ -127,6 +147,16 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
         blocks,
       });
 
+      if (input.onPagesCompleted && (pageNumber - firstUnsavedPage + 1 === PDF_CHECKPOINT_BATCH_SIZE
+        || pageNumber === pdf.numPages)) {
+        await input.onPagesCompleted({
+          totalPages: pdf.numPages,
+          sawText,
+          pages: pages.slice(firstUnsavedPage - 1),
+        });
+        firstUnsavedPage = pageNumber + 1;
+      }
+
       if (input.onPageParsed) {
         await input.onPageParsed({
           pageNumber,
@@ -150,7 +180,6 @@ export async function parsePdf(input: ParsePdfInput): Promise<ParsedPdfDocument>
 
     return stitchCrossPageBlocks(doc);
   } finally {
-    await pdf.destroy().catch(() => undefined);
     await loadingTask.destroy().catch(() => undefined);
   }
 }

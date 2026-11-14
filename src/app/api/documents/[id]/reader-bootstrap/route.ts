@@ -24,7 +24,9 @@ export async function POST(
         { status: 400 },
       );
     }
-    const result = await resolveReaderBootstrap(request, documentId);
+    const result = await resolveReaderBootstrap(request, documentId, {
+      retryPdf: request.nextUrl.searchParams.get('retry') === 'true',
+    });
     return result instanceof Response ? result : NextResponse.json(result, {
       status: result.status === 'pending' ? 202 : 200,
       headers: {

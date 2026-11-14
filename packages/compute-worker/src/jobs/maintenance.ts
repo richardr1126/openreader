@@ -1,6 +1,7 @@
 import { getTtsCredentialBrokerConfig } from '../infrastructure/credential-broker-config';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import type { MaintenanceJobRequest, MaintenanceJobResult, MaintenanceProgress } from '../operations/contracts';
+import type { JobExecution } from '../operations/types';
 import { expireArtifactFoldersUnderRoot } from '../storage/artifact-retention';
 import { clearDocumentPreviewArtifacts, clearPdfLayoutArtifacts, clearTtsPlaybackPlanArtifacts, listDocumentDerivedIds } from '../storage/document-derived-cleanup';
 import { createDocumentAudioReporter, userAudioDocumentRoots } from '../storage/audio-usage';
@@ -30,18 +31,22 @@ export function createMaintenanceHandler(input: {
   const { storage, s3Prefix, cleanup } = input;
   const database = input.databaseStep ?? maintenanceDatabaseStep;
   const clearUserStorage = (userId: string) => cleanup.cleanupUserStorage({ storageUserId: userId, namespace: null, documentIds: [] });
-  return async (request: MaintenanceJobRequest, _queueWaitMs: number, hooks?: {
-    onProgress?: (progress: MaintenanceProgress) => Promise<void>;
-  }): Promise<MaintenanceJobResult> => {
+  return async (request: MaintenanceJobRequest, _queueWaitMs: number, hooks?: Partial<JobExecution<MaintenanceProgress>>): Promise<MaintenanceJobResult> => {
     let completed = 0;
     let failed = 0;
     const report = async (phase: string) => hooks?.onProgress?.({ phase, completed, failed });
+    const assertActive = async () => {
+      await hooks?.assertActive?.();
+      hooks?.signal?.throwIfAborted();
+    };
     const attempt = async (run: () => Promise<void>, phase: string): Promise<boolean> => {
       // Object deletion and the SQL completions are idempotent. Short transient
       // outages should not turn an entire selected page into stranded accounts.
       for (let retry = 0; ; retry++) {
+        await assertActive();
         try { await run(); return true; }
         catch (error) {
+          hooks?.signal?.throwIfAborted();
           if (retry < 2) { await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** retry)); continue; }
           failed++;
           input.logger.warn({ task: request.task, phase, error: String(error) }, 'maintenance.item_failed');
@@ -84,6 +89,7 @@ export function createMaintenanceHandler(input: {
     const deleteAccounts = async (claim: boolean) => {
       let after: string | null = null;
       do {
+        await assertActive();
         const { userIds }: { userIds: string[] } = claim
           ? await database<{ userIds: string[] }>({ action: 'claim-users', after, idleBefore: request.idleBefore })
           : { userIds: request.userIds ?? [] };
@@ -91,6 +97,7 @@ export function createMaintenanceHandler(input: {
         for (const userId of userIds) {
           if (await attempt(async () => {
             await clearUserStorage(userId);
+            await assertActive();
             await database({ action: 'finalize-user', userId });
           }, 'Deleting accounts')) completed++;
           await report('Deleting accounts');
@@ -109,6 +116,7 @@ export function createMaintenanceHandler(input: {
       // deletion. A failed claim must not keep queued storage cleanup waiting.
       try { await deleteAccounts(true); }
       catch (error) {
+        await assertActive();
         failed++;
         // The cleanup loop's next progress report carries this failure.
         input.logger.warn({ task: request.task, phase: 'Deleting accounts', error: String(error) }, 'maintenance.item_failed');
@@ -122,10 +130,14 @@ export function createMaintenanceHandler(input: {
           const ok = await attempt(async () => {
             if (row.documentId === null) await clearUserStorage(row.userId);
             else await cleanup.clearPlaybackScope({ storageUserId: row.userId, documentId: row.documentId });
+            await assertActive();
             await database({ action: 'cleanup-settle', row });
           }, 'Clearing queued storage');
           if (ok) completed++;
-          else await database({ action: 'cleanup-settle', row, failed: true });
+          else {
+            await assertActive();
+            await database({ action: 'cleanup-settle', row, failed: true });
+          }
           await report('Clearing queued storage');
         }
         after = page.after;
@@ -186,12 +198,13 @@ export function createMaintenanceHandler(input: {
           }, 30_000);
           try {
             // Uploads wait on this lease, so a lost lease stops deletion mid-prefix.
-            const scope = { storage, s3Prefix, documentId, namespace: null, shouldStop: () => lostLease };
+            const scope = { storage, s3Prefix, documentId, namespace: null, shouldStop: () => lostLease || hooks?.signal?.aborted === true };
             await Promise.all([clearPdfLayoutArtifacts(scope), clearDocumentPreviewArtifacts(scope), clearTtsPlaybackPlanArtifacts(scope)]);
             await renewal;
             if (lostLease) throw new Error('Document cleanup lease was lost');
             await renew();
             if (lostLease) throw new Error('Document cleanup lease was lost');
+            await assertActive();
             if (sources.has(documentId)) await storage.deleteObject(`${root}${documentId}`);
             completed++;
           } finally {

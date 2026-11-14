@@ -7,13 +7,12 @@ import {
 } from '../../operations/keys';
 import {
   documentConversionMetadataArtifactKey,
-  documentPreviewMetadataArtifactKey,
   parsedPdfArtifactKey,
 } from '../../storage/artifact-addressing';
 import type {
   DocumentConversionArtifactMetadata,
-  DocumentPreviewArtifactMetadata,
 } from '../../operations/contracts';
+import { readDocumentPreviewMetadata } from '../../storage/document-preview-metadata';
 import { toComputeOperation } from '../compute-operation';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
@@ -32,33 +31,6 @@ import {
 } from '../schemas';
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
-
-async function readPreviewMetadata(
-  context: ComputeWorkerRouteContext,
-  input: typeof documentPreviewResolveSchema._output,
-): Promise<DocumentPreviewArtifactMetadata | null> {
-  const key = documentPreviewMetadataArtifactKey({
-    documentId: input.documentId,
-    namespace: input.namespace,
-    prefix: context.s3Prefix,
-  });
-  try {
-    const parsed = JSON.parse(Buffer.from(await context.storage.readObject(key)).toString('utf8')) as DocumentPreviewArtifactMetadata;
-    if (
-      parsed.schemaVersion !== 1
-      || parsed.documentId !== input.documentId
-      || parsed.namespace !== input.namespace
-      || parsed.documentType !== input.documentType
-      || parsed.sourceObjectKey !== input.sourceObjectKey
-      || parsed.sourceLastModifiedMs !== input.sourceLastModifiedMs
-      || parsed.previewKind !== input.previewKind
-      || parsed.status !== 'ready'
-    ) return null;
-    return await context.storage.objectExists(parsed.objectKey).catch(() => false) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
 
 async function readConversionMetadata(
   context: ComputeWorkerRouteContext,
@@ -214,7 +186,7 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
     await ensureOrphanedOpRecovery();
-    const artifact = await readPreviewMetadata(context, parsed.data);
+    const artifact = await readDocumentPreviewMetadata(context.storage, parsed.data, context.s3Prefix);
     const index = await deps.operationStateStore.getOpIndex?.(buildDocumentPreviewOperationKey(parsed.data));
     const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
     return { artifact, operation: operation ? toComputeOperation(operation) : null };

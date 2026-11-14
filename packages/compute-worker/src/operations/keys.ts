@@ -33,6 +33,11 @@ export function buildPdfOperationKey(input: {
   ].join('|');
 }
 
+export function documentPreviewWidth(targetWidth = 400): number {
+  if (!Number.isFinite(targetWidth) || targetWidth <= 0) return 400;
+  return Math.max(64, Math.min(2048, Math.round(targetWidth)));
+}
+
 export function buildDocumentPreviewOperationKey(input: {
   documentId: string;
   namespace: string | null;
@@ -41,7 +46,9 @@ export function buildDocumentPreviewOperationKey(input: {
   sourceLastModifiedMs: number;
   previewKind: 'card';
   rendererVersion?: string;
+  targetWidth?: number;
 }): string {
+  const width = documentPreviewWidth(input.targetWidth);
   return [
     'document_preview',
     'v1',
@@ -52,6 +59,7 @@ export function buildDocumentPreviewOperationKey(input: {
     input.previewKind,
     input.sourceObjectKey,
     String(Math.max(0, Math.floor(input.sourceLastModifiedMs))),
+    ...(width === 400 ? [] : [`width=${width}`]),
   ].join('|');
 }
 

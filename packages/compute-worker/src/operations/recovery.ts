@@ -39,6 +39,7 @@ export interface RecoverOrphanedOperationsInput {
   orchestrator: OrphanRecoveryOrchestrator;
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
+  pdfRecoveryMinMs?: number;
   opStaleMs: number;
   nowMs?: number;
 }
@@ -51,13 +52,15 @@ export function getOrphanRecoveryThresholdMs(input: {
   state: StreamedOperationState;
   whisperTimeoutMs: number;
   pdfTimeoutMs: number;
+  pdfRecoveryMinMs?: number;
   opStaleMs: number;
 }): number | null {
   if (!isInflightStatus(input.state.status)) return null;
+  if (input.state.durableDelivery) return null;
   if (input.state.status === 'queued' && !WORKER_OPERATION_KIND_POLICY[input.state.kind].enforcesQueueDeadline) return null;
   if (input.state.status === 'running') {
-    return input.state.kind === 'pdf_layout'
-      || input.state.kind === 'tts_playback_export'
+    if (input.state.kind === 'pdf_layout') return Math.max(input.pdfTimeoutMs, input.pdfRecoveryMinMs ?? 0);
+    return input.state.kind === 'tts_playback_export'
       || input.state.kind === 'document_preview'
       || input.state.kind === 'document_conversion'
       || input.state.kind === 'account_export'
@@ -88,6 +91,7 @@ export async function recoverOrphanedOperations(
       state,
       whisperTimeoutMs: input.whisperTimeoutMs,
       pdfTimeoutMs: input.pdfTimeoutMs,
+      pdfRecoveryMinMs: input.pdfRecoveryMinMs,
       opStaleMs: input.opStaleMs,
     }) !== null
   ));
@@ -100,6 +104,7 @@ export async function recoverOrphanedOperations(
       state: record.state,
       whisperTimeoutMs: input.whisperTimeoutMs,
       pdfTimeoutMs: input.pdfTimeoutMs,
+      pdfRecoveryMinMs: input.pdfRecoveryMinMs,
       opStaleMs: input.opStaleMs,
     });
     if (staleAfterMs === null) continue;

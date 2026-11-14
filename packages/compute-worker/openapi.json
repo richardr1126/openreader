@@ -8839,7 +8839,7 @@
                   },
                   "targetWidth": {
                     "type": "integer",
-                    "exclusiveMinimum": 0,
+                    "minimum": 1,
                     "maximum": 2048
                   }
                 },
@@ -19030,6 +19030,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 256
+                  },
+                  "targetWidth": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2048
                   }
                 },
                 "required": [

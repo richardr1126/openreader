@@ -17,11 +17,22 @@ export interface StoredObjectSummary {
   lastModifiedMs: number;
 }
 
+export interface ParsedPdfArtifactRevision {
+  etag: string;
+  operationId?: string;
+}
+
+export interface ParsedPdfArtifactStorage extends ArtifactStorage {
+  getParsedPdfRevision(documentId: string, namespace: string | null, signal: AbortSignal): Promise<ParsedPdfArtifactRevision | null>;
+}
+
 export interface ArtifactStorage {
-  readObject(key: string): Promise<ArrayBuffer>;
-  objectExists(key: string): Promise<boolean>;
-  deleteObject(key: string): Promise<void>;
-  listPrefix(prefix: string): Promise<string[]>;
+  readObject(key: string, signal?: AbortSignal): Promise<ArrayBuffer>;
+  getObjectEtag?(key: string, signal?: AbortSignal): Promise<string | null>;
+  headObject?(key: string, signal?: AbortSignal): Promise<{ etag: string; metadata: Record<string, string>; size?: number } | null>;
+  objectExists(key: string, signal?: AbortSignal): Promise<boolean>;
+  deleteObject(key: string, signal?: AbortSignal): Promise<void>;
+  listPrefix(prefix: string, signal?: AbortSignal): Promise<string[]>;
   /**
    * Page through a prefix with object sizes, one ListObjectsV2 page at a time,
    * so size aggregation never holds a whole prefix listing in memory.
@@ -33,10 +44,14 @@ export interface ArtifactStorage {
    * name returned as `startAfter` to continue.
    */
   listChildPrefixes(prefix: string, options?: { startAfter?: string; limit?: number }): Promise<string[]>;
-  putObject(key: string, body: Buffer | Uint8Array, contentType?: string): Promise<void>;
+  putObject(key: string, body: Buffer | Uint8Array, contentType?: string, signal?: AbortSignal, expectedEtag?: string | null, metadata?: Record<string, string>): Promise<void>;
   /** Upload a derived file without materializing the entire artifact in memory. */
-  putFile(key: string, path: string, contentType: string): Promise<void>;
-  putParsedPdf(documentId: string, namespace: string | null, parsed: unknown): Promise<string>;
+  putFile(key: string, path: string, contentType: string, signal?: AbortSignal): Promise<void>;
+  putParsedPdf(documentId: string, namespace: string | null, parsed: unknown, options: {
+    operationId: string;
+    expected: ParsedPdfArtifactRevision | null;
+    signal: AbortSignal;
+  }): Promise<string>;
 }
 
 export interface ArtifactStorageConfig {
@@ -85,6 +100,11 @@ export function isNotFound(error: unknown): boolean {
     || maybe.Code === 'NoSuchKey';
 }
 
+export function isPreconditionFailed(error: unknown): boolean {
+  const response = error as { name?: string; $metadata?: { httpStatusCode?: number } } | null;
+  return response?.$metadata?.httpStatusCode === 412 || response?.name === 'PreconditionFailed';
+}
+
 export function normalizeS3Prefix(prefix: string | undefined): string {
   const value = (prefix || 'openreader').trim();
   return value ? value.replace(/^\/+|\/+$/g, '') : 'openreader';
@@ -105,40 +125,56 @@ export function createS3ClientFromEnv(requireEnv: (name: string) => string): S3C
   });
 }
 
-export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactStorage {
+export function createArtifactStorage(config: ArtifactStorageConfig): ParsedPdfArtifactStorage {
   const safeKey = (key: string): string => {
     const trimmed = key.trim();
     if (!trimmed.startsWith(`${config.prefix}/`)) throw new Error('Object key prefix mismatch');
     return trimmed;
   };
 
+  const headObject: NonNullable<ArtifactStorage['headObject']> = async (key, signal) => {
+    try {
+      const response = await config.client.send(new HeadObjectCommand({
+        Bucket: config.bucket, Key: safeKey(key),
+      }), { abortSignal: signal });
+      if (!response.ETag) throw new Error('Stored object is missing its ETag');
+      return { etag: response.ETag, metadata: response.Metadata ?? {}, size: response.ContentLength };
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  };
   return {
-    async readObject(key) {
+    headObject,
+    async getObjectEtag(key, signal) {
+      return (await headObject(key, signal))?.etag ?? null;
+    },
+    async readObject(key, signal) {
       const response = await config.client.send(new GetObjectCommand({
         Bucket: config.bucket,
         Key: safeKey(key),
-      }));
+      }), { abortSignal: signal });
       return toArrayBuffer(new Uint8Array(await bodyToBuffer(response.Body)));
     },
-    async objectExists(key) {
+    async objectExists(key, signal) {
       try {
         await config.client.send(new HeadObjectCommand({
           Bucket: config.bucket,
           Key: safeKey(key),
-        }));
+        }), { abortSignal: signal });
         return true;
       } catch (error) {
         if (isNotFound(error)) return false;
         throw error;
       }
     },
-    async deleteObject(key) {
+    async deleteObject(key, signal) {
       await config.client.send(new DeleteObjectCommand({
         Bucket: config.bucket,
         Key: safeKey(key),
-      }));
+      }), { abortSignal: signal });
     },
-    async listPrefix(prefix) {
+    async listPrefix(prefix, signal) {
       const safePrefix = safeKey(prefix);
       const keys: string[] = [];
       let continuationToken: string | undefined;
@@ -147,7 +183,7 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
           Bucket: config.bucket,
           Prefix: safePrefix,
           ContinuationToken: continuationToken,
-        }));
+        }), { abortSignal: signal });
         for (const item of response.Contents ?? []) {
           if (typeof item.Key === 'string') keys.push(item.Key);
         }
@@ -207,28 +243,43 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
       } while (continuationToken);
       return names;
     },
-    async putObject(key, body, contentType) {
+    async putObject(key, body, contentType, signal, expectedEtag, metadata) {
       await config.client.send(new PutObjectCommand({
         Bucket: config.bucket,
         Key: safeKey(key),
         Body: Buffer.from(body),
         ContentType: contentType,
+        ...(metadata ? { Metadata: metadata } : {}),
         ServerSideEncryption: 'AES256',
-      }));
+        ...(expectedEtag === null ? { IfNoneMatch: '*' } : expectedEtag ? { IfMatch: expectedEtag } : {}),
+      }), { abortSignal: signal });
     },
-    async putFile(key, path, contentType) {
+    async putFile(key, path, contentType, signal) {
       const { size } = await stat(path);
       const body = createReadStream(path);
       try {
         await config.client.send(new PutObjectCommand({
           Bucket: config.bucket, Key: safeKey(key), Body: body,
           ContentLength: size, ContentType: contentType, ServerSideEncryption: 'AES256',
-        }));
+        }), { abortSignal: signal });
       } finally {
         body.destroy();
       }
     },
-    async putParsedPdf(documentId, namespace, parsed) {
+    async getParsedPdfRevision(documentId, namespace, signal) {
+      const key = parsedPdfArtifactKey({ documentId, namespace, prefix: config.prefix });
+      try {
+        const response = await config.client.send(new HeadObjectCommand({
+          Bucket: config.bucket, Key: key,
+        }), { abortSignal: signal });
+        if (!response.ETag) throw new Error('Parsed PDF artifact is missing its ETag');
+        return { etag: response.ETag, operationId: response.Metadata?.['operation-id'] };
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
+    async putParsedPdf(documentId, namespace, parsed, options) {
       const key = parsedPdfArtifactKey({ documentId, namespace, prefix: config.prefix });
       await config.client.send(new PutObjectCommand({
         Bucket: config.bucket,
@@ -236,7 +287,9 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ArtifactSt
         Body: Buffer.from(JSON.stringify(parsed)),
         ContentType: 'application/json',
         ServerSideEncryption: 'AES256',
-      }));
+        Metadata: { 'operation-id': options.operationId },
+        ...(options.expected ? { IfMatch: options.expected.etag } : { IfNoneMatch: '*' }),
+      }), { abortSignal: options.signal });
       return key;
     },
   };

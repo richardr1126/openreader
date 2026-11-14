@@ -1,5 +1,6 @@
 import { PDF_PARSER_VERSION } from '../operations/contracts';
 import { encodeParserVersion } from '../operations/contracts';
+import { documentPreviewWidth } from '../operations/keys';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
@@ -198,8 +199,9 @@ export function documentPreviewArtifactKey(input: {
   documentId: string;
   namespace: string | null;
   prefix: string;
+  targetWidth?: number;
 }): string {
-  return `${documentPreviewArtifactPrefix(input)}card-400.jpg`;
+  return `${documentPreviewArtifactPrefix(input)}card-${documentPreviewWidth(input.targetWidth)}.jpg`;
 }
 
 export function documentPreviewMetadataArtifactKey(input: {
@@ -229,8 +231,9 @@ export function documentConversionArtifactKey(input: {
   conversionId: string;
   namespace: string | null;
   prefix: string;
+  buildId?: string;
 }): string {
-  return `${documentConversionArtifactPrefix(input)}artifact.pdf`;
+  return `${documentConversionArtifactPrefix(input)}artifact${input.buildId ? `-${encodeURIComponent(input.buildId)}` : ''}.pdf`;
 }
 
 export function documentConversionMetadataArtifactKey(input: {
@@ -261,8 +264,9 @@ export function accountExportArtifactKey(input: {
   storageUserId: string;
   namespace: string | null;
   prefix: string;
+  buildId?: string;
 }): string {
-  return `${accountExportArtifactPrefix(input)}artifact.zip`;
+  return `${accountExportArtifactPrefix(input)}artifact${input.buildId ? `-${encodeURIComponent(input.buildId)}` : ''}.zip`;
 }
 
 export function accountExportMetadataArtifactKey(input: {
