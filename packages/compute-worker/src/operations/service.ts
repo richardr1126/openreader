@@ -39,7 +39,7 @@ export interface OperationOrchestratorDeps {
   config: OperationLifecycleConfig;
   clock?: OperationClock;
   idFactory?: OperationIdFactory;
-  terminalSettlement?: { track(opId: string): Promise<void> };
+  terminalSettlement?: { track(opId: string, previousStateRevision?: number): Promise<void> };
   publication?: {
     stage(job: QueuedOperation): Promise<void>;
     flush(opId: string): Promise<void>;
@@ -153,23 +153,25 @@ export class OperationOrchestrator implements OperationExecution {
     return this.stateStore.getOpState(opId);
   }
 
-  async claimAttempt(input: OperationAttemptUpdate & { jobId: string }): ReturnType<OperationExecution['claimAttempt']> {
+  async claimAttempt(input: Parameters<OperationExecution['claimAttempt']>[0]): ReturnType<OperationExecution['claimAttempt']> {
     for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
       const record = await this.stateStore.getOpStateRecord(input.opId);
       if (!record || record.state.jobId !== input.jobId) return 'missing';
       const current = record.state;
       if (current.status === 'succeeded' || current.status === 'failed') return current.status;
       if (input.deliveryAttempt <= (current.deliveryAttempt ?? 0)) return 'superseded';
+      const expired = current.startedAt === undefined && input.queueDeadline !== undefined
+        && input.updatedAt > input.queueDeadline;
 
       const next: WorkerOperationState = {
         ...current,
         status: 'running',
         deliveryAttempt: input.deliveryAttempt,
-        startedAt: current.startedAt ?? input.updatedAt,
+        ...(expired || input.willRun === false ? {} : { startedAt: current.startedAt ?? input.updatedAt }),
         updatedAt: Math.max(current.updatedAt + 1, input.updatedAt),
         ...(input.timing ? { timing: input.timing } : {}),
       };
-      if (await this.persistStateIfUnchanged(next, record.revision)) return 'claimed';
+      if (await this.persistStateIfUnchanged(next, record.revision)) return expired ? 'expired' : 'claimed';
     }
     throw new Error('Unable to claim operation attempt after repeated CAS conflicts');
   }
@@ -271,7 +273,7 @@ export class OperationOrchestrator implements OperationExecution {
     // Record the unfinished side effects before committing terminal state so a
     // crash between the compare-and-set and event publication is recoverable.
     const pendingTerminal = isTerminalStatus(state.status) && this.terminalSettlement;
-    if (pendingTerminal) await pendingTerminal.track(state.opId);
+    if (pendingTerminal) await pendingTerminal.track(state.opId, expectedRevision);
     const updated = await this.stateStore.compareAndSetOpState({
       opId: state.opId,
       expectedRevision,

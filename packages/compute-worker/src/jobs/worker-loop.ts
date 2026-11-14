@@ -220,23 +220,23 @@ export function createWorkerLoopController(input: {
       const claim = await input.orchestrator.claimAttempt({
         ...attemptUpdate(delivery, startedAt),
         jobId: decoded.jobId,
+        ...(work.notStarted ? { willRun: false } : {}),
+        ...(WORKER_OPERATION_KIND_POLICY[decoded.kind].enforcesQueueDeadline
+          ? { queueDeadline: decoded.queuedAt + maxQueueAgeMs } : {}),
       });
       if (claim === 'superseded') return;
       if (claim === 'missing') {
         work.msg.term('Operation is no longer available');
         return;
       }
-      if (claim !== 'claimed') {
+      if (claim !== 'claimed' && claim !== 'expired') {
         await notifyTerminal(decoded.opId, claim);
         work.msg.ack();
         return;
       }
       context = delivery;
       if (work.notStarted) throw work.notStarted;
-      if (delivery.deliveryAttempt === 1 && WORKER_OPERATION_KIND_POLICY[decoded.kind].enforcesQueueDeadline
-        && startedAt - decoded.queuedAt > maxQueueAgeMs) {
-        throw new ComputeQueueExpiredError();
-      }
+      if (claim === 'expired') throw new ComputeQueueExpiredError();
       input.logger.info({
         worker: work.workerLabel,
         kind: decoded.kind,

@@ -105,7 +105,8 @@ describe('jetstream adapters', () => {
       getJs: async () => js, layoutSubject: 'jobs.layout', ttsPlaybackSubject: 'jobs.tts_playback',
     });
     const enqueue = vi.spyOn(queue, 'enqueue').mockRejectedValueOnce(new Error('publish ack unavailable'));
-    const deps = { store: stateStore, queue, logger: { warn: vi.fn() }, maxAgeMs: 30_000, expire: vi.fn() };
+    const beforePublish = vi.fn(async () => undefined).mockRejectedValueOnce(new Error('session link unavailable'));
+    const deps = { store: stateStore, queue, beforePublish, logger: { warn: vi.fn() }, maxAgeMs: 30_000, expire: vi.fn() };
     const orchestrator = new OperationOrchestrator({
       queue,
       stateStore,
@@ -121,9 +122,13 @@ describe('jetstream adapters', () => {
     const operation = await orchestrator.enqueueOrReuse(request);
     expect(await orchestrator.enqueueOrReuse(request)).toEqual(operation);
     expect(js.published).toHaveLength(0);
+    expect(enqueue).not.toHaveBeenCalled();
 
     const replacement = createOperationPublication(deps);
     await expect(replacement.drain()).resolves.toBe(true);
+    expect(js.published).toHaveLength(0);
+    await expect(replacement.drain()).resolves.toBe(true);
+    expect(beforePublish).toHaveBeenCalledTimes(3);
     expect(enqueue).toHaveBeenCalledTimes(2);
     expect(js.published[0]?.payload).toMatchObject({ opId: operation.opId, jobId: operation.jobId });
     expect(await stateStore.getPublication(operation.opId)).toBeNull();
@@ -169,9 +174,22 @@ describe('jetstream adapters', () => {
 
     const replacement = createTerminalSettlement(deps);
     await expect(replacement.drain()).resolves.toBe(true);
-    expect(notify).toHaveBeenLastCalledWith({ operationId: opId, state: 'succeeded' });
+    expect(notify).toHaveBeenLastCalledWith({ operationId: opId, state: 'succeeded' }, expect.objectContaining({ opId }));
     expect(await stateStore.getTerminalSettlement(opId)).toBeNull();
     await expect(replacement.drain()).resolves.toBe(false);
+
+    // Another worker can drain the marker before the cache invalidation CAS.
+    const previous = (await stateStore.getOpStateRecord(opId))!;
+    await first.track(opId, previous.revision);
+    await replacement.flush(opId);
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(await stateStore.getTerminalSettlement(opId)).not.toBeNull();
+    await orchestrator.markFailedIfUnchanged({
+      current: previous.state, expectedRevision: previous.revision, error: 'Playback cache cleared',
+    });
+    await replacement.flush(opId);
+    expect(notify).toHaveBeenLastCalledWith({ operationId: opId, state: 'failed' }, expect.objectContaining({ opId }));
+    expect(await stateStore.getTerminalSettlement(opId)).toBeNull();
   });
 
   test('replays a completion published between the initial state read and subscription', async () => {

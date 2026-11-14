@@ -208,6 +208,21 @@ describe('operation orchestrator', () => {
     expect(await store.getOpState(opId)).toMatchObject({ status: 'succeeded', deliveryAttempt: 2, result: { ok: true } });
   });
 
+  test('a delayed redelivery is eligible only if execution already started before the queue deadline', async () => {
+    const stateStore = new InMemoryOperationStateStore();
+    const orchestrator = new OperationOrchestrator({
+      queue: new InMemoryOperationQueue(), stateStore, eventStream: new InMemoryOperationEventStream(),
+      config: { opStaleMs: 2000 },
+    });
+    const queued = await orchestrator.enqueueOrReuse(buildRequest('queued'));
+    const running = await orchestrator.enqueueOrReuse(buildRequest('running'));
+    const queueDeadline = 2_000;
+    await expect(orchestrator.claimAttempt({ ...running, deliveryAttempt: 1, updatedAt: 1_999, queueDeadline })).resolves.toBe('claimed');
+    await expect(orchestrator.claimAttempt({ ...queued, deliveryAttempt: 2, updatedAt: 2_001, queueDeadline })).resolves.toBe('expired');
+    expect((await stateStore.getOpState(queued.opId))?.startedAt).toBeUndefined();
+    await expect(orchestrator.claimAttempt({ ...running, deliveryAttempt: 2, updatedAt: 2_001, queueDeadline })).resolves.toBe('claimed');
+  });
+
   test('delivery exhaustion closes the matching operation once without overwriting a newer attempt', async () => {
     const store = new InMemoryOperationStateStore();
     const eventStream = new InMemoryOperationEventStream();

@@ -1,6 +1,8 @@
 import {
+  COMPUTE_ADMISSION_ACTION_HEADER,
   parseTtsSynthesisConsumeResponse,
   type ComputeAdmissionTerminalRequest,
+  type ComputeTerminalAdmissionAction,
   type TtsSynthesisConsumeRequest,
   type TtsSynthesisConsumeResponse,
 } from '@openreader/runtime-config/compute-limit-broker';
@@ -44,6 +46,7 @@ export async function consumeTtsSynthesisUsage(
 
 export async function notifyComputeAdmissionTerminal(
   request: ComputeAdmissionTerminalRequest,
+  admissionAction?: ComputeTerminalAdmissionAction,
 ): Promise<void> {
   const config = getComputeLimitCompletionBrokerConfig();
   const response = await fetch(config.url, {
@@ -51,6 +54,7 @@ export async function notifyComputeAdmissionTerminal(
     headers: {
       Authorization: `Bearer ${config.token}`,
       'Content-Type': 'application/json',
+      ...(admissionAction ? { [COMPUTE_ADMISSION_ACTION_HEADER]: admissionAction } : {}),
     },
     body: JSON.stringify(request),
     cache: 'no-store',

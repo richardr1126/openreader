@@ -118,7 +118,8 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       throw new Error(`TTS playback export session is not complete: ${session.stopReason ?? session.status}`);
     }
     const cacheEpoch = await playbackStorage.artifacts.getScopeEpoch(parsed);
-    const assertCurrentSource = async () => {
+    const assertCurrentSource = async (afterPublication = false) => {
+      if (!afterPublication) await hooks?.assertActive();
       const [current, epoch] = await Promise.all([
         playbackStorage.sessions.getSession(parsed.sessionId),
         playbackStorage.artifacts.getScopeEpoch(parsed),
@@ -286,7 +287,9 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         createdAt: Date.now(),
       };
       await writeMetadata(Buffer.from(JSON.stringify(metadata)), 'application/json');
-      await assertCurrentSource();
+      // Source invalidation must discard this build even if it also revoked
+      // the job. A delivery takeover alone can reuse the published file.
+      await assertCurrentSource(true);
       committed = true;
       await hooks?.assertActive();
       await deleteSupersededExportOutputs({

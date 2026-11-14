@@ -15,6 +15,7 @@ export function createOperationPublication(input: {
     deferPublication(pending: PendingOperationPublication): Promise<void>;
   };
   queue: Pick<OperationQueue, 'enqueue'>;
+  beforePublish?: (job: QueuedOperation) => Promise<void>;
   expire: (job: QueuedOperation) => Promise<void>;
   maxAgeMs: number;
   logger: { warn(data: unknown, message: string): void };
@@ -34,6 +35,7 @@ export function createOperationPublication(input: {
             return;
           }
         } else {
+          await input.beforePublish?.(job);
           if (Date.now() - job.queuedAt >= input.maxAgeMs) await input.expire(job);
           else await input.queue.enqueue(job);
         }

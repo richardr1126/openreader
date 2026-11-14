@@ -92,7 +92,7 @@ export interface TtsPlaybackSessionStore {
     expectedGenerationRunId: string | null,
     patch: Partial<Omit<TtsPlaybackSessionState, 'schemaVersion' | 'sessionId'>>,
     expectedSessionInstanceId?: string,
-    delivery?: { opId: string; attempt?: number; claim?: boolean },
+    delivery?: { opId: string; attempt?: number; claim?: boolean; link?: boolean },
   ): Promise<boolean>;
   updateCursor(
     sessionId: string,
@@ -230,7 +230,7 @@ export function createTtsPlaybackKvStore(input: {
     recordPatch: Partial<TtsPlaybackSessionState>,
     expectedGenerationRunId?: string | null,
     expectedSessionInstanceId?: string,
-    delivery?: { opId: string; attempt?: number; claim?: boolean },
+    delivery?: { opId: string; attempt?: number; claim?: boolean; link?: boolean },
   ): Promise<boolean> => {
     const kv = await input.getKv();
     const key = sessionKvKey(sessionId);
@@ -247,7 +247,9 @@ export function createTtsPlaybackKvStore(input: {
       if (delivery) {
         if (current.status !== 'queued' && current.status !== 'running') return false;
         const previous = current.generationDelivery;
-        if (delivery.attempt === undefined) {
+        if (delivery.link) {
+          if (current.workerOpId != null && current.workerOpId !== delivery.opId) return false;
+        } else if (delivery.attempt === undefined) {
           if (current.workerOpId !== delivery.opId) return false;
         } else if (delivery.claim) {
           if (previous?.opId === delivery.opId && previous.attempt > delivery.attempt) return false;

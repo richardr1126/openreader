@@ -1,8 +1,8 @@
 import { after, NextRequest, NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, gt, isNull } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { computeLimitAdmissions } from '@openreader/database/schema';
-import { parseComputeAdmissionTerminalRequest } from '@openreader/runtime-config/compute-limit-broker';
+import { COMPUTE_ADMISSION_ACTION_HEADER, isComputeTerminalAdmissionAction, parseComputeAdmissionTerminalRequest } from '@openreader/runtime-config/compute-limit-broker';
 import { authenticateCredentialBrokerRequest } from '@/lib/server/compute-worker/credential-broker-auth';
 import { advanceAudiobooksAfterOperation } from '@/lib/server/audiobooks/audiobooks';
 import { finishComputeAdmission } from '@/lib/server/compute-limits/admission';
@@ -27,6 +27,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (auth !== 'authorized') return error(401, 'BROKER_UNAUTHORIZED');
   const parsed = parseComputeAdmissionTerminalRequest(await request.json().catch(() => null));
   if (!parsed) return error(400, 'REQUEST_INVALID');
+  const admissionAction = request.headers.get(COMPUTE_ADMISSION_ACTION_HEADER);
+  if (admissionAction !== null && !isComputeTerminalAdmissionAction(admissionAction)) return error(400, 'REQUEST_INVALID');
+  // Read unlinked admissions first so a link racing this request is seen in
+  // at least one query. An active admission is reserved before publishing.
+  const awaitingLink = admissionAction === null ? [] : await db.select({ id: computeLimitAdmissions.id })
+    .from(computeLimitAdmissions).where(and(
+      eq(computeLimitAdmissions.action, admissionAction),
+      eq(computeLimitAdmissions.state, 'active'),
+      isNull(computeLimitAdmissions.operationId),
+      gt(computeLimitAdmissions.leaseExpiresAt, Date.now()),
+    )).limit(1);
   const rows = await db.select({
     id: computeLimitAdmissions.id,
     userId: computeLimitAdmissions.userId,
@@ -55,5 +66,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }));
   }
-  return new NextResponse(null, { status: 204, headers: NO_STORE_HEADERS });
+  return awaitingLink.length > 0
+    ? error(503, 'ADMISSION_LINK_PENDING')
+    : new NextResponse(null, { status: 204, headers: NO_STORE_HEADERS });
 }

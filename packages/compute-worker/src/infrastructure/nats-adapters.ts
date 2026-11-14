@@ -75,7 +75,11 @@ export function opStateKvKey(opId: string): string {
 
 const TERMINAL_SETTLEMENT_PREFIX = 'op_terminal_pending.';
 const OP_PUBLICATION_PREFIX = 'op_publication.';
-const terminalSettlementMarker = new Uint8Array();
+const terminalSettlementCodec = createJsonCodec<{ previousStateRevision?: number }>();
+
+function decodeTerminalSettlementMarker(value: Uint8Array): { previousStateRevision?: number } {
+  return value.length ? terminalSettlementCodec.decode(value) : {};
+}
 
 export function opEventsSubject(opId: string): string {
   return `${OP_EVENTS_SUBJECT_PREFIX}.${opId}`;
@@ -156,18 +160,31 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
   }
 
 
-  async trackTerminalSettlement(opId: string): Promise<void> {
+  async trackTerminalSettlement(opId: string, previousStateRevision?: number): Promise<void> {
     const kv = await this.getKv();
-    try {
-      await kv.create(TERMINAL_SETTLEMENT_PREFIX + opId, terminalSettlementMarker);
-    } catch (error) {
-      if (!isKvCasConflictError(error)) throw error;
+    const key = TERMINAL_SETTLEMENT_PREFIX + opId;
+    const marker = terminalSettlementCodec.encode({ previousStateRevision });
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const current = await kv.get(key);
+      try {
+        if (isPut(current)) {
+          const previous = decodeTerminalSettlementMarker(current.value).previousStateRevision;
+          if (previousStateRevision === undefined || (previous ?? -1) >= previousStateRevision) return;
+          await kv.update(key, marker, current.revision);
+        } else {
+          await kv.create(key, marker);
+        }
+        return;
+      } catch (error) {
+        if (!isKvCasConflictError(error)) throw error;
+      }
     }
+    throw new Error('Unable to track terminal operation settlement after repeated conflicts');
   }
 
   async getTerminalSettlement(opId: string): Promise<PendingTerminalSettlement | null> {
     const entry = await (await this.getKv()).get(TERMINAL_SETTLEMENT_PREFIX + opId);
-    return isPut(entry) ? { opId, revision: entry.revision } : null;
+    return isPut(entry) ? { opId, revision: entry.revision, ...decodeTerminalSettlementMarker(entry.value) } : null;
   }
 
   async listTerminalSettlements(limit: number): Promise<PendingTerminalSettlement[]> {
@@ -229,7 +246,8 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
     const kv = await this.getKv();
     try {
       // Updating the marker moves it behind the other pending settlements.
-      await kv.update(TERMINAL_SETTLEMENT_PREFIX + pending.opId, terminalSettlementMarker, pending.revision);
+      const marker = terminalSettlementCodec.encode({ previousStateRevision: pending.previousStateRevision });
+      await kv.update(TERMINAL_SETTLEMENT_PREFIX + pending.opId, marker, pending.revision);
     } catch (error) {
       if (!isKvCasConflictError(error)) throw error;
     }

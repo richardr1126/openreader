@@ -996,8 +996,11 @@ exhaustion advisories are persisted and processed in bounded batches.
 Each delivery claims the operation before running. A newer delivery owns
 progress and completion, and terminal reconciliation retries the SSE event and
 admission broker callback until both succeed. The admission remains linked to
-one operation across worker attempts. Next checks for a terminal result after
-linking the admission to cover completion that arrived before linkage.
+one operation across worker attempts. If a terminal callback arrives while
+an admission for that action still awaits linkage, Next asks the worker to
+retry the callback. Next also checks for a terminal result after linking.
+Playback operations link to the matching session before publication, and
+redeliveries only bypass the queue deadline after execution has started.
 
 Age-based sweeping applies to records from older workers for one operation
 retention window. New operations close through delivery exhaustion,

@@ -6,19 +6,20 @@ const SETTLEMENT_BATCH_SIZE = 16;
 export interface PendingTerminalSettlement {
   opId: string;
   revision: number;
+  previousStateRevision?: number;
 }
 
 export function createTerminalSettlement<Result>(input: {
   store: {
-    trackTerminalSettlement(opId: string): Promise<void>;
+    trackTerminalSettlement(opId: string, previousStateRevision?: number): Promise<void>;
     getTerminalSettlement(opId: string): Promise<PendingTerminalSettlement | null>;
     listTerminalSettlements(limit: number): Promise<PendingTerminalSettlement[]>;
     finishTerminalSettlement(pending: PendingTerminalSettlement): Promise<void>;
     deferTerminalSettlement(pending: PendingTerminalSettlement): Promise<void>;
-    getOpState(opId: string): Promise<WorkerOperationState<Result> | null>;
+    getOpStateRecord(opId: string): Promise<{ state: WorkerOperationState<Result>; revision: number } | null>;
   };
   publish: (state: WorkerOperationState<Result>) => Promise<unknown>;
-  notify: (result: { operationId: string; state: 'succeeded' | 'failed' }) => Promise<void>;
+  notify: (result: { operationId: string; state: 'succeeded' | 'failed' }, snapshot: WorkerOperationState<Result>) => Promise<void>;
   logger: { warn(data: unknown, message: string): void };
 }) {
   const { store } = input;
@@ -29,18 +30,20 @@ export function createTerminalSettlement<Result>(input: {
     const inProgress = active.get(pending.opId);
     if (inProgress) return inProgress;
     const task = (async () => {
-      const state = await store.getOpState(pending.opId);
-      if (!state) {
+      const record = await store.getOpStateRecord(pending.opId);
+      if (!record) {
         await store.finishTerminalSettlement(pending);
         return;
       }
-      if (state.status !== 'succeeded' && state.status !== 'failed') {
+      const { state } = record;
+      if (record.revision <= (pending.previousStateRevision ?? -1)
+        || (state.status !== 'succeeded' && state.status !== 'failed')) {
         await store.deferTerminalSettlement(pending);
         return;
       }
       const results = await Promise.allSettled([
         input.publish(state),
-        input.notify({ operationId: pending.opId, state: state.status }),
+        input.notify({ operationId: pending.opId, state: state.status }, state),
       ]);
       for (const result of results) {
         if (result.status === 'rejected') throw result.reason;
@@ -52,7 +55,7 @@ export function createTerminalSettlement<Result>(input: {
   }
 
   return {
-    track: (opId: string) => store.trackTerminalSettlement(opId),
+    track: (opId: string, previousStateRevision?: number) => store.trackTerminalSettlement(opId, previousStateRevision),
     async flush(opId: string): Promise<void> {
       const pending = await store.getTerminalSettlement(opId);
       if (pending) await settle(pending);

@@ -106,17 +106,19 @@ describe('compute usage limits', () => {
     });
     const first = await reserve('restart-first');
     expect(first.allowed).toBe(true);
-    await activateComputeAdmission({ admissionId: first.admissionId!, operationId: 'recovered-pdf', leaseSeconds: 60 });
-    // An idempotent request can renew the admission while the worker is
-    // recovering. Its pre-creation activation must preserve the linkage.
     await activateComputeAdmission({ admissionId: first.admissionId!, leaseSeconds: 60 });
     await expect(reserve('restart-blocked')).resolves.toMatchObject({ allowed: false });
 
     const callback = () => completeOperation(new Request('http://localhost/api/internal/compute/limits/complete', {
       method: 'POST',
-      headers: { Authorization: 'Bearer compute-limit-test-broker-token', 'Content-Type': 'application/json' },
+      headers: { Authorization: 'Bearer compute-limit-test-broker-token', 'Content-Type': 'application/json',
+        'x-openreader-compute-admission-action': 'pdf_layout' },
       body: JSON.stringify({ operationId: 'recovered-pdf', state: 'succeeded' }),
     }) as Parameters<typeof completeOperation>[0]);
+    expect((await callback()).status).toBe(503);
+    await activateComputeAdmission({ admissionId: first.admissionId!, operationId: 'recovered-pdf', leaseSeconds: 60 });
+    // An idempotent pre-creation activation must preserve the linkage.
+    await activateComputeAdmission({ admissionId: first.admissionId!, leaseSeconds: 60 });
     expect((await callback()).status).toBe(204);
     const second = await reserve('restart-second');
     expect(second.allowed).toBe(true);

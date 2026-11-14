@@ -28,6 +28,8 @@ const IDLE_DISCONNECT_MS = 120_000;
 const IDLE_CHECK_INTERVAL_MS = 5_000;
 const IDLE_STATUS_LOG_INTERVAL_MS = 60_000;
 const RECOVERY_INTERVAL_MS = 15_000;
+const INITIAL_RECONNECT_DELAY_MS = 1_000;
+const MAX_RECONNECT_DELAY_MS = 30_000;
 
 export interface NatsSession {
   nc: NatsConnection;
@@ -71,6 +73,7 @@ export function createNatsSessionManager(input: {
   jobStatesMaxBytes: number;
   natsReplicas: number;
   isStopping: () => boolean;
+  resumeQueuedWork: boolean;
   getActivity: () => NatsActivitySnapshot;
   markActivity: (reason: string) => void;
   startWorkers: (session: NatsSession) => Promise<void> | void;
@@ -81,10 +84,29 @@ export function createNatsSessionManager(input: {
   let connecting: Promise<NatsSession> | null = null;
   let idleTimer: NodeJS.Timeout | null = null;
   let recoveryTimer: NodeJS.Timeout | null = null;
+  let reconnectTimer: NodeJS.Timeout | null = null;
+  let reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
   let lastIdleStatusLogAt = 0;
   let generation = -1;
   let reconciling = false;
   let hasPendingRecovery = false;
+
+  const connectForQueuedWork = (): void => {
+    if (!input.resumeQueuedWork || input.isStopping()) return;
+    void ensureConnected().catch((error: unknown) => {
+      input.logger.error({ error: toErrorMessage(error) }, 'compute queue connection failed');
+    });
+  };
+
+  const scheduleReconnect = (): void => {
+    if (!input.resumeQueuedWork || input.isStopping() || reconnectTimer || session) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      connectForQueuedWork();
+    }, reconnectDelayMs);
+    reconnectTimer.unref?.();
+    reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+  };
 
   const clearTimers = () => {
     if (idleTimer) clearInterval(idleTimer);
@@ -158,52 +180,68 @@ export function createNatsSessionManager(input: {
     if (session) return session;
     connecting = (async () => {
       const nc = await connect(input.connectOptions);
-      const js = jetstream(nc, { timeout: NATS_API_TIMEOUT_MS });
-      const jsm = await jetstreamManager(nc, { timeout: NATS_API_TIMEOUT_MS });
-      await ensureJetStreamResources({
-        jsm,
-        pdfAttempts: input.pdfAttempts,
-        jobsMaxBytes: input.jobsStreamMaxBytes,
-        eventsMaxBytes: input.eventsStreamMaxBytes,
-        natsReplicas: input.natsReplicas,
-      });
-      const kv = await new Kvm(js).create(COMPUTE_STATE_BUCKET, {
-        replicas: input.natsReplicas,
-        history: 1,
-        ttl: COMPUTE_STATE_TTL_MS,
-        max_bytes: input.jobStatesMaxBytes,
-      });
-      const next: NatsSession = {
-        nc,
-        js,
-        jsm,
-        kv,
-        layoutConsumer: await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME),
-        ttsPlaybackConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_CONSUMER_NAME),
-        ttsPlaybackDocumentConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME),
-        ttsPlaybackPlanConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_PLAN_CONSUMER_NAME),
-        ttsPlaybackExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_EXPORT_CONSUMER_NAME),
-        documentPreviewConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_PREVIEW_CONSUMER_NAME),
-        documentConversionConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_CONVERSION_CONSUMER_NAME),
-        accountExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, ACCOUNT_EXPORT_CONSUMER_NAME),
-        emailDeliveryConsumer: await js.consumers.get(JOBS_STREAM_NAME, EMAIL_DELIVERY_CONSUMER_NAME),
-        modelDownloadConsumer: await js.consumers.get(JOBS_STREAM_NAME, MODEL_DOWNLOAD_CONSUMER_NAME),
-        maintenanceConsumer: await js.consumers.get(JOBS_STREAM_NAME, MAINTENANCE_CONSUMER_NAME),
-        exhaustedJobsConsumer: await js.consumers.get(EXHAUSTED_JOBS_STREAM_NAME, EXHAUSTED_JOBS_CONSUMER_NAME),
-      };
-      session = next;
-      generation += 1;
-      input.markActivity('nats_connected');
-      await input.startWorkers(next);
-      startTimers();
-      void nc.closed().then(() => {
+      try {
+        const js = jetstream(nc, { timeout: NATS_API_TIMEOUT_MS });
+        const jsm = await jetstreamManager(nc, { timeout: NATS_API_TIMEOUT_MS });
+        await ensureJetStreamResources({
+          jsm,
+          pdfAttempts: input.pdfAttempts,
+          jobsMaxBytes: input.jobsStreamMaxBytes,
+          eventsMaxBytes: input.eventsStreamMaxBytes,
+          natsReplicas: input.natsReplicas,
+        });
+        const kv = await new Kvm(js).create(COMPUTE_STATE_BUCKET, {
+          replicas: input.natsReplicas,
+          history: 1,
+          ttl: COMPUTE_STATE_TTL_MS,
+          max_bytes: input.jobStatesMaxBytes,
+        });
+        const next: NatsSession = {
+          nc,
+          js,
+          jsm,
+          kv,
+          layoutConsumer: await js.consumers.get(JOBS_STREAM_NAME, LAYOUT_CONSUMER_NAME),
+          ttsPlaybackConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_CONSUMER_NAME),
+          ttsPlaybackDocumentConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME),
+          ttsPlaybackPlanConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_PLAN_CONSUMER_NAME),
+          ttsPlaybackExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, TTS_PLAYBACK_EXPORT_CONSUMER_NAME),
+          documentPreviewConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_PREVIEW_CONSUMER_NAME),
+          documentConversionConsumer: await js.consumers.get(JOBS_STREAM_NAME, DOCUMENT_CONVERSION_CONSUMER_NAME),
+          accountExportConsumer: await js.consumers.get(JOBS_STREAM_NAME, ACCOUNT_EXPORT_CONSUMER_NAME),
+          emailDeliveryConsumer: await js.consumers.get(JOBS_STREAM_NAME, EMAIL_DELIVERY_CONSUMER_NAME),
+          modelDownloadConsumer: await js.consumers.get(JOBS_STREAM_NAME, MODEL_DOWNLOAD_CONSUMER_NAME),
+          maintenanceConsumer: await js.consumers.get(JOBS_STREAM_NAME, MAINTENANCE_CONSUMER_NAME),
+          exhaustedJobsConsumer: await js.consumers.get(EXHAUSTED_JOBS_STREAM_NAME, EXHAUSTED_JOBS_CONSUMER_NAME),
+        };
+        if (input.isStopping()) throw new Error('Compute worker is stopping');
+        session = next;
+        generation += 1;
+        input.markActivity('nats_connected');
+        await input.startWorkers(next);
+        startTimers();
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
+        void nc.closed().then(() => {
+          if (session?.nc !== nc) return;
+          session = null;
+          clearTimers();
+          scheduleReconnect();
+        });
+        input.logger.info('nats connected');
+        return next;
+      } catch (error) {
         if (session?.nc === nc) session = null;
-      });
-      input.logger.info('nats connected');
-      return next;
+        await nc.close().catch(() => undefined);
+        throw error;
+      }
     })();
     try {
       return await connecting;
+    } catch (error) {
+      scheduleReconnect();
+      throw error;
     } finally {
       connecting = null;
     }
@@ -211,11 +249,14 @@ export function createNatsSessionManager(input: {
 
   return {
     ensureConnected,
+    connectForQueuedWork,
     disconnect,
     isConnected: () => session !== null,
     isOwnerActive: (owner: object) => session === owner,
     getGeneration: () => generation,
     async close(): Promise<void> {
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectTimer = null;
       clearTimers();
       await input.stopWorkers();
       const current = session;

@@ -43,8 +43,8 @@ export type OperationAttemptOutcome =
   | { status: 'failed'; error: WorkerJobErrorShape };
 
 export interface OperationExecution {
-  claimAttempt(input: OperationAttemptUpdate & { jobId: string }): Promise<
-    'claimed' | 'superseded' | 'missing' | 'succeeded' | 'failed'
+  claimAttempt(input: OperationAttemptUpdate & { jobId: string; queueDeadline?: number; willRun?: boolean }): Promise<
+    'claimed' | 'expired' | 'superseded' | 'missing' | 'succeeded' | 'failed'
   >;
   updateAttempt(input: OperationAttemptUpdate & { progress?: WorkerOperationProgress }): Promise<boolean>;
   settleAttempt(input: OperationAttemptUpdate & OperationAttemptOutcome): Promise<boolean>;

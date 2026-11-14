@@ -165,8 +165,14 @@ describe('TTS playback storage', () => {
       readerType: 'pdf', status: 'running', settingsHash: 'settings', settingsJson: {},
       generationStartOrdinal: 7, cursorOrdinal: 8, cursorUpdatedAt: 100,
       planObjectKey: 'plan', expiresAt: 10_000, lastError: null, updatedAt: 100,
-      workerOpId: first.opId, generationDelivery: first,
+      workerOpId: null, generationDelivery: first,
     });
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      workerOpId: first.opId,
+    }, 'instance', { opId: first.opId, link: true })).resolves.toBe(true);
+    await expect(store.patchSessionIfGenerationRun('session', 'run', {
+      workerOpId: 'stale-op',
+    }, 'instance', { opId: 'stale-op', link: true })).resolves.toBe(false);
     await expect(store.patchSessionIfGenerationRun('session', 'run', {
       generationDelivery: replacement,
     }, 'instance', { ...replacement, claim: true })).resolves.toBe(true);

@@ -26,6 +26,7 @@ export async function readDocumentPreviewMetadata(
     const key = documentPreviewMetadataArtifactKey({ ...input, prefix });
     const objectKey = documentPreviewArtifactKey({ ...input, prefix });
     const head = await storage.headObject?.(objectKey);
+    if (head === null) return null;
     if (head?.metadata['preview-scope'] !== undefined) {
       const width = Number(head.metadata['preview-width']);
       const height = Number(head.metadata['preview-height']);

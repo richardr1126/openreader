@@ -347,6 +347,19 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     emailDeliverySubject: EMAIL_DELIVERY_JOBS_SUBJECT,
     modelDownloadSubject: MODEL_DOWNLOAD_JOBS_SUBJECT,
   });
+  const linkPlaybackOperation = async (job: { kind: string; opId: string; payload: unknown }) => {
+    if (job.kind !== 'tts_playback') return;
+    const payload = job.payload as TtsPlaybackJobRequest;
+    const session = await playbackStorage.sessions.getSession(payload.sessionId);
+    const generationRunId = payload.generationRunId ?? null;
+    if (!session || (session.generationRunId ?? null) !== generationRunId
+      || (session.status !== 'queued' && session.status !== 'running')
+      || session.workerOpId === job.opId) return;
+    await playbackStorage.sessions.patchSessionIfGenerationRun(
+      session.sessionId, generationRunId, { workerOpId: job.opId }, session.sessionInstanceId,
+      { opId: job.opId, link: true },
+    );
+  };
 
   const terminalSettlement = createTerminalSettlement({
     store: defaultOperationStateStore,
@@ -362,12 +375,19 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       }
       await defaultOperationEventStream.append(state.opId, state);
     },
-    notify: notifyComputeAdmissionTerminal,
+    notify: (result, snapshot) => {
+      const kind = snapshot.kind;
+      const admissionAction = kind === 'tts_playback'
+        ? snapshot.opKey.split('|')[7]?.startsWith('document:') ? 'tts_playback_document' : undefined
+        : kind === 'email_delivery' || kind === 'maintenance' || kind === 'model_download' ? undefined : kind;
+      return notifyComputeAdmissionTerminal(result, admissionAction);
+    },
     logger: app.log,
   });
   const publication: ReturnType<typeof createOperationPublication> = createOperationPublication({
     store: defaultOperationStateStore,
     queue: operationQueue,
+    beforePublish: linkPlaybackOperation,
     logger: app.log,
     maxAgeMs: Math.min(opStaleMs, 12 * 60 * 60 * 1000),
     expire: (job) => defaultOrchestrator.failUnpublishedJob(job),
@@ -534,6 +554,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     jobStatesMaxBytes,
     natsReplicas,
     isStopping: () => stopping,
+    resumeQueuedWork: !disableWorkers,
     getActivity: () => ({
       activeSse,
       inFlightHttp,
@@ -606,12 +627,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       }
       await app.listen({ host, port });
       app.log.info({ host, port }, 'compute worker listening');
-      if (!disableWorkers) {
-        // Resume queued work even when no reader is open after a restart.
-        void ensureConnected().catch((error: unknown) => {
-          app.log.warn({ error: toErrorMessage(error) }, 'initial compute queue connection failed');
-        });
-      }
+      sessionManager.connectForQueuedWork();
     },
     close,
   };
