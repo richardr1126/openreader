@@ -400,7 +400,9 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     queue: operationQueue,
     beforePublish: linkPlaybackOperation,
     logger: app.log,
-    maxAgeMs: Math.min(opStaleMs, JOB_DEDUPE_WINDOW_MS),
+    // A publish that starts within this age is acknowledged, or times out,
+    // before the stream forgets the job ID.
+    maxAgeMs: Math.min(opStaleMs, JOB_DEDUPE_WINDOW_MS - NATS_API_TIMEOUT_MS),
     expire: (job) => defaultOrchestrator.failUnpublishedJob(job),
   });
   const defaultOrchestrator = new OperationOrchestrator({

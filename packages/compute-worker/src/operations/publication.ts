@@ -38,10 +38,14 @@ export function createOperationPublication(input: {
           // that arrives after this point can only expose a terminal operation.
           await input.expire(job);
         } else {
-          if (Date.now() - job.queuedAt >= input.maxAgeMs) await input.expire(job);
+          const expired = () => Date.now() - job.queuedAt >= input.maxAgeMs;
+          if (expired()) await input.expire(job);
           else {
             await input.beforePublish?.(job);
-            await input.queue.enqueue(job);
+            // Check again just before publishing, so a republished job reaches
+            // the stream while it still remembers the job ID.
+            if (expired()) await input.expire(job);
+            else await input.queue.enqueue(job);
           }
         }
       }

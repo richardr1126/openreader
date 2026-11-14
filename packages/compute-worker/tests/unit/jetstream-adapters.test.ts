@@ -173,6 +173,31 @@ describe('jetstream adapters', () => {
     }
   });
 
+  test('expires claimed work that ages out while the prepublication step runs', async () => {
+    const kv = new FakeKvStore();
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const queue = { enqueue: vi.fn(), claimNext: async () => null, size: () => 0 };
+    const now = Date.now();
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    const beforePublish = vi.fn(async () => { dateNow.mockReturnValue(now + 1_000); });
+    const publication = createOperationPublication({
+      store: stateStore, queue, beforePublish, logger: { warn: vi.fn() }, maxAgeMs: 1_000,
+      expire: (job) => orchestrator.failUnpublishedJob(job),
+    });
+    const orchestrator = new OperationOrchestrator({
+      queue, stateStore, eventStream: { append: vi.fn(), listSince: vi.fn(), subscribe: vi.fn() },
+      config: { opStaleMs: 1_000 }, clock: { now: () => now }, publication,
+    });
+    try {
+      const operation = await orchestrator.enqueueOrReuse(buildPdfRequest('slow-prepublication'));
+      expect(beforePublish).toHaveBeenCalledOnce();
+      expect(queue.enqueue).not.toHaveBeenCalled();
+      expect(await stateStore.getOpState(operation.opId)).toMatchObject({ status: 'failed' });
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
   test('retries a failed queue publication in a new process under the original job ID', async () => {
     const kv = new FakeKvStore();
     const js = new FakeJetStream();
