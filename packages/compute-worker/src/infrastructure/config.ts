@@ -11,7 +11,7 @@ export type ComputeTimeoutConfig = {
 };
 
 export type IdleTimeoutAndHardCapInput<T> = {
-  run: (touchProgress: () => void) => Promise<T>;
+  run: (touchProgress: () => void, withIdleTimerPaused: <R>(work: () => Promise<R>) => Promise<R>) => Promise<T>;
   idleTimeoutMs: number;
   hardCapMs: number;
   label: string;
@@ -102,6 +102,7 @@ export async function withIdleTimeoutAndHardCap<T>(input: IdleTimeoutAndHardCapI
   let idleTimer: NodeJS.Timeout | null = null;
   let hardCapTimer: NodeJS.Timeout | null = null;
   let settled = false;
+  let idlePaused = false;
   let rejectTimeout!: (reason: unknown) => void;
 
   const clearTimers = () => {
@@ -123,9 +124,21 @@ export async function withIdleTimeoutAndHardCap<T>(input: IdleTimeoutAndHardCapI
   };
 
   const touchProgress = () => {
-    if (settled) return;
+    if (settled || idlePaused) return;
     if (idleTimer) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => failTimeout('idle', input.idleTimeoutMs), input.idleTimeoutMs);
+  };
+
+  const withIdleTimerPaused = async <R>(work: () => Promise<R>): Promise<R> => {
+    idlePaused = true;
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = null;
+    try {
+      return await work();
+    } finally {
+      idlePaused = false;
+      touchProgress();
+    }
   };
 
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -135,7 +148,7 @@ export async function withIdleTimeoutAndHardCap<T>(input: IdleTimeoutAndHardCapI
   });
 
   try {
-    const result = await Promise.race([input.run(touchProgress), timeoutPromise]);
+    const result = await Promise.race([input.run(touchProgress, withIdleTimerPaused), timeoutPromise]);
     settled = true;
     clearTimers();
     return result as T;

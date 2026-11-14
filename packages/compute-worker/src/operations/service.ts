@@ -127,7 +127,7 @@ export class OperationOrchestrator implements OperationExecution {
       if (this.publication) {
         // A failed or ambiguous publish is replayed by the durable outbox.
         await this.publication.flush(created.opId);
-        return created;
+        return await this.stateStore.getOpState(created.opId).catch(() => null) ?? created;
       }
 
       await this.persistState(created);
@@ -187,11 +187,11 @@ export class OperationOrchestrator implements OperationExecution {
     return this.writeAttempt(input, outcome);
   }
 
-  async failExhaustedDelivery(input: { opId: string; jobId: string; deliveryAttempt: number }): Promise<void> {
+  async failExhaustedDelivery(input: { opId: string; jobId: string; deliveryAttempt: number }): Promise<boolean> {
     for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
       const record = await this.stateStore.getOpStateRecord(input.opId);
-      if (!record || record.state.jobId !== input.jobId || isTerminalStatus(record.state.status)
-        || (record.state.deliveryAttempt ?? 0) > input.deliveryAttempt) return;
+      if (!record || record.state.jobId !== input.jobId || isTerminalStatus(record.state.status)) return true;
+      if ((record.state.deliveryAttempt ?? 0) > input.deliveryAttempt) return false;
       const failed = await this.markFailedIfUnchanged({
         current: record.state,
         expectedRevision: record.revision,
@@ -200,7 +200,7 @@ export class OperationOrchestrator implements OperationExecution {
           message: 'The job did not finish before its delivery attempts ran out.',
         },
       });
-      if (failed) return;
+      if (failed) return true;
     }
     throw new Error('Unable to close exhausted operation after repeated CAS conflicts');
   }

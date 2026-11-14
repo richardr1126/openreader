@@ -21,7 +21,7 @@ function decodeJson(message: { json(): unknown }): unknown {
 export async function drainExhaustedJobs(input: {
   consumer: Consumer;
   streams: Pick<JetStreamManager['streams'], 'getMessage' | 'deleteMessage'>;
-  settle: (job: { opId: string; jobId: string; deliveryAttempt: number }) => Promise<void>;
+  settle: (job: { opId: string; jobId: string; deliveryAttempt: number }) => Promise<boolean>;
   logger: { warn(data: unknown, message: string): void };
 }): Promise<boolean> {
   const settle = async (message: JsMsg): Promise<void> => {
@@ -35,10 +35,9 @@ export async function drainExhaustedJobs(input: {
       const job = await input.streams.getMessage(JOBS_STREAM_NAME, { seq: advisory.stream_seq });
       if (job) {
         const envelope = envelopeSchema.safeParse(decodeJson(job));
-        if (envelope.success) {
-          await input.settle({ ...envelope.data, deliveryAttempt: advisory.deliveries });
+        if (!envelope.success || await input.settle({ ...envelope.data, deliveryAttempt: advisory.deliveries })) {
+          await input.streams.deleteMessage(JOBS_STREAM_NAME, advisory.stream_seq);
         }
-        await input.streams.deleteMessage(JOBS_STREAM_NAME, advisory.stream_seq);
       }
       message.ack();
     } catch (error) {

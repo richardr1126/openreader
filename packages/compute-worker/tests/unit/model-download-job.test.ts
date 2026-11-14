@@ -54,4 +54,24 @@ describe('model download job', () => {
     expect(cancelKokoroDownload()).toBe(true);
     await playbackCanceled;
   });
+
+  test('a new caller starts a fresh transfer while a canceled one drains', async () => {
+    let finishFirst!: () => void;
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    })).mockImplementationOnce((_input, init) => new Promise<Response>((_resolve, reject) => {
+      finishFirst = () => reject(init?.signal?.reason);
+    }));
+    vi.stubGlobal('fetch', fetchImpl);
+    const first = expect(ensureKokoroAssets()).rejects.toThrow('canceled');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    expect(cancelKokoroDownload()).toBe(true);
+    const next = expect(ensureKokoroAssets()).rejects.toThrow('canceled');
+    finishFirst();
+    await first;
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(2));
+    expect(fetchImpl.mock.calls[1][1]?.signal?.aborted).toBe(false);
+    expect(cancelKokoroDownload()).toBe(true);
+    await next;
+  });
 });

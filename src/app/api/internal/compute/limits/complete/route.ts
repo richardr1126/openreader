@@ -1,8 +1,8 @@
 import { after, NextRequest, NextResponse } from 'next/server';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, lte } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { computeLimitAdmissions } from '@openreader/database/schema';
-import { COMPUTE_ADMISSION_ACTION_HEADER, isComputeTerminalAdmissionAction, parseComputeAdmissionTerminalRequest } from '@openreader/runtime-config/compute-limit-broker';
+import { COMPUTE_ADMISSION_ACTION_HEADER, COMPUTE_ADMISSION_FINISHED_AT_HEADER, isComputeTerminalAdmissionAction, parseComputeAdmissionTerminalRequest } from '@openreader/runtime-config/compute-limit-broker';
 import { authenticateCredentialBrokerRequest } from '@/lib/server/compute-worker/credential-broker-auth';
 import { advanceAudiobooksAfterOperation } from '@/lib/server/audiobooks/audiobooks';
 import { finishComputeAdmission } from '@/lib/server/compute-limits/admission';
@@ -29,6 +29,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!parsed) return error(400, 'REQUEST_INVALID');
   const admissionAction = request.headers.get(COMPUTE_ADMISSION_ACTION_HEADER);
   if (admissionAction !== null && !isComputeTerminalAdmissionAction(admissionAction)) return error(400, 'REQUEST_INVALID');
+  const finishedAtHeader = request.headers.get(COMPUTE_ADMISSION_FINISHED_AT_HEADER);
+  const finishedAt = finishedAtHeader === null ? undefined : Number(finishedAtHeader);
+  if (finishedAt !== undefined && (!Number.isSafeInteger(finishedAt) || finishedAt <= 0)) return error(400, 'REQUEST_INVALID');
   // Read unlinked admissions first so a link racing this request is seen in
   // at least one query. An active admission is reserved before publishing.
   const awaitingLink = admissionAction === null ? [] : await db.select({ id: computeLimitAdmissions.id })
@@ -37,6 +40,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       eq(computeLimitAdmissions.state, 'active'),
       isNull(computeLimitAdmissions.operationId),
       gt(computeLimitAdmissions.leaseExpiresAt, Date.now()),
+      // Admissions created after completion can discover the terminal state
+      // directly if they reuse this operation.
+      finishedAt === undefined ? undefined : lte(computeLimitAdmissions.activatedAt, finishedAt),
     )).limit(1);
   const rows = await db.select({
     id: computeLimitAdmissions.id,

@@ -397,6 +397,13 @@ export async function ensureKokoroAssets(
     });
   };
   try {
+    const waitForCancelledDownload = async () => {
+      while (download?.signal.aborted) {
+        await waitForDownload(downloadTail.catch(() => undefined));
+      }
+      signal?.throwIfAborted();
+    };
+    if (download?.signal.aborted) await waitForCancelledDownload();
     let components: readonly KokoroComponent[];
     if (selection === undefined) {
       if (download) {
@@ -407,6 +414,7 @@ export async function ensureKokoroAssets(
       // integrity. Send that baseline through normal checksum verification.
       components = (await readKokoroAssetInventory(KOKORO_MODEL_DIR)).baseline;
       signal?.throwIfAborted();
+      await waitForCancelledDownload();
       // A demand request may have started while disk status was being read.
       if (download) {
         await waitForDownload(downloadTail);

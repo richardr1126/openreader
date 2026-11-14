@@ -59,11 +59,11 @@ export function createPdfLayoutHandler(input: PdfLayoutJobContext) {
       idleTimeoutMs: Math.max(input.pdfTimeoutMs, 1_000),
       hardCapMs: input.pdfHardCapMs,
       label: 'pdf layout job',
-      run: async (touchProgress) => runPdfLayoutFromPdfBuffer({
+      run: async (touchProgress, withIdleTimerPaused) => runPdfLayoutFromPdfBuffer({
         documentId: parsed.documentId,
         pdfBytes,
         resume,
-        onPagesCompleted: async (chunk) => {
+        onPagesCompleted: (chunk) => withIdleTimerPaused(async () => {
           parseLifetime.signal.throwIfAborted();
           await execution.assertActive();
           const signal = AbortSignal.any([parseLifetime.signal, storageSignal()]);
@@ -77,7 +77,7 @@ export function createPdfLayoutHandler(input: PdfLayoutJobContext) {
           } catch (error) {
             input.logger?.warn({ documentId: parsed.documentId, error: String(error) }, 'PDF checkpoint write failed');
           }
-        },
+        }),
         onModelDownloadProgress: createModelDownloadProgressReporter({
           onObserved: touchProgress,
           publish: async ({ downloadedBytes, totalBytes }) => {

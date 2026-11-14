@@ -109,10 +109,12 @@ describe('compute usage limits', () => {
     await activateComputeAdmission({ admissionId: first.admissionId!, leaseSeconds: 60 });
     await expect(reserve('restart-blocked')).resolves.toMatchObject({ allowed: false });
 
+    const finishedAt = Date.now();
     const callback = () => completeOperation(new Request('http://localhost/api/internal/compute/limits/complete', {
       method: 'POST',
       headers: { Authorization: 'Bearer compute-limit-test-broker-token', 'Content-Type': 'application/json',
-        'x-openreader-compute-admission-action': 'pdf_layout' },
+        'x-openreader-compute-admission-action': 'pdf_layout',
+        'x-openreader-compute-admission-finished-at': String(finishedAt) },
       body: JSON.stringify({ operationId: 'recovered-pdf', state: 'succeeded' }),
     }) as Parameters<typeof completeOperation>[0]);
     expect((await callback()).status).toBe(503);
@@ -122,6 +124,7 @@ describe('compute usage limits', () => {
     expect((await callback()).status).toBe(204);
     const second = await reserve('restart-second');
     expect(second.allowed).toBe(true);
+    await activateComputeAdmission({ admissionId: second.admissionId!, leaseSeconds: 60, nowMs: finishedAt + 1 });
     expect((await callback()).status).toBe(204);
     await expect(reserve('restart-still-blocked')).resolves.toMatchObject({ allowed: false });
     await finishComputeAdmission({ admissionId: second.admissionId!, state: 'finished' });

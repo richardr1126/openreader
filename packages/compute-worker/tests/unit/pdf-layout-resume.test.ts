@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 import { createPdfLayoutHandler, type PdfLayoutExecution } from '../../src/jobs/pdf-layout';
 import type { ParsedPdfArtifactRevision, ParsedPdfArtifactStorage } from '../../src/infrastructure/storage';
 import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
+import { withIdleTimeoutAndHardCap } from '../../src/infrastructure/config';
 
 vi.mock('../../src/inference/pdf/model', () => ({ ensureModel: vi.fn() }));
 vi.mock('../../src/inference/pdf/layout-model', () => ({
@@ -11,6 +12,27 @@ vi.mock('../../src/inference/pdf/layout-model', () => ({
 vi.mock('../../src/inference/pdf/render', () => ({
   renderPage: async () => ({ width: 612, height: 792, image: new Uint8Array(4) }),
 }));
+
+test('checkpoint I/O pauses the parser idle timeout while the hard cap still applies', async () => {
+  vi.useFakeTimers();
+  try {
+    const run = (checkpointMs: number) => withIdleTimeoutAndHardCap({
+      idleTimeoutMs: 5_000, hardCapMs: 20_000, label: 'PDF layout',
+      run: async (_touchProgress, withIdleTimerPaused) => {
+        await withIdleTimerPaused(() => new Promise<void>((resolve) => setTimeout(resolve, checkpointMs)));
+        return 'done';
+      },
+    });
+    const slow = expect(run(6_000)).resolves.toBe('done');
+    await vi.advanceTimersByTimeAsync(6_000);
+    await slow;
+    const capped = expect(run(21_000)).rejects.toThrow('hard cap');
+    await vi.advanceTimersByTimeAsync(21_000);
+    await capped;
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 test('an interrupted PDF resumes from saved pages and recovers an already-published artifact', async () => {
   const bytes = await readFile(new URL('../../../../tests/files/cover-first.pdf', import.meta.url));

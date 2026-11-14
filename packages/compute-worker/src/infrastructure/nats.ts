@@ -73,6 +73,9 @@ export async function ensureJetStreamResources(input: {
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
     max_bytes: input.jobsMaxBytes,
+    // Give active work longer than the operation and advisory retention window,
+    // while bounding capacity held by an exhausted job whose advisory was lost.
+    max_age: nanos(2 * COMPUTE_STATE_TTL_MS),
     discard: DiscardPolicy.New,
     duplicate_window: nanos(COMPUTE_STATE_TTL_MS),
     num_replicas: input.natsReplicas,
@@ -84,6 +87,7 @@ export async function ensureJetStreamResources(input: {
     await input.jsm.streams.update(JOBS_STREAM_NAME, {
       subjects: streamConfig.subjects,
       max_bytes: input.jobsMaxBytes,
+      max_age: streamConfig.max_age,
       discard: streamConfig.discard,
       duplicate_window: streamConfig.duplicate_window,
       num_replicas: input.natsReplicas,

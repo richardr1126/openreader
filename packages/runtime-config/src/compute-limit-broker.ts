@@ -43,6 +43,7 @@ export interface ComputeAdmissionTerminalRequest {
 }
 
 export const COMPUTE_ADMISSION_ACTION_HEADER = 'x-openreader-compute-admission-action';
+export const COMPUTE_ADMISSION_FINISHED_AT_HEADER = 'x-openreader-compute-admission-finished-at';
 export type ComputeTerminalAdmissionAction = Exclude<WorkerOperationAction, 'tts_playback'>;
 
 export function isComputeTerminalAdmissionAction(value: unknown): value is ComputeTerminalAdmissionAction {

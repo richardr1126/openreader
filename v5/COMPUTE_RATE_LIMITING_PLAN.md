@@ -992,6 +992,9 @@ key. The publication reconciler retries a missing publish under the same job
 ID. The jobs stream deduplicates that ID for the lifetime of the KV entry and
 rejects new jobs when full, preserving jobs it already accepted. Its delivery
 exhaustion advisories are persisted and processed in bounded batches.
+The jobs stream also expires messages after 48 hours so a lost advisory cannot
+hold queue capacity indefinitely. Workers stay connected by default to receive
+work published by another replica.
 
 Each delivery claims the operation before running. A newer delivery owns
 progress and completion, and terminal reconciliation retries the SSE event and

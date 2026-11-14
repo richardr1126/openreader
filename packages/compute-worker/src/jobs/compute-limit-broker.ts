@@ -1,5 +1,6 @@
 import {
   COMPUTE_ADMISSION_ACTION_HEADER,
+  COMPUTE_ADMISSION_FINISHED_AT_HEADER,
   parseTtsSynthesisConsumeResponse,
   type ComputeAdmissionTerminalRequest,
   type ComputeTerminalAdmissionAction,
@@ -47,6 +48,7 @@ export async function consumeTtsSynthesisUsage(
 export async function notifyComputeAdmissionTerminal(
   request: ComputeAdmissionTerminalRequest,
   admissionAction?: ComputeTerminalAdmissionAction,
+  finishedAt?: number,
 ): Promise<void> {
   const config = getComputeLimitCompletionBrokerConfig();
   const response = await fetch(config.url, {
@@ -55,6 +57,7 @@ export async function notifyComputeAdmissionTerminal(
       Authorization: `Bearer ${config.token}`,
       'Content-Type': 'application/json',
       ...(admissionAction ? { [COMPUTE_ADMISSION_ACTION_HEADER]: admissionAction } : {}),
+      ...(finishedAt === undefined ? {} : { [COMPUTE_ADMISSION_FINISHED_AT_HEADER]: String(finishedAt) }),
     },
     body: JSON.stringify(request),
     cache: 'no-store',

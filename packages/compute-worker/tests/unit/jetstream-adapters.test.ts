@@ -3,6 +3,8 @@ import { DeliverPolicy } from '@nats-io/jetstream';
 import { OperationOrchestrator } from '../../src/operations/service';
 import { createTerminalSettlement } from '../../src/operations/terminal-settlement';
 import { createOperationPublication } from '../../src/operations/publication';
+import { drainExhaustedJobs } from '../../src/infrastructure/exhausted-jobs';
+import { JOBS_STREAM_NAME } from '../../src/infrastructure/nats';
 import type { WorkerOperationRequest, WorkerOperationState } from '../../src/operations/contracts';
 import {
   JetStreamOperationEventStream,
@@ -97,6 +99,52 @@ function buildPdfRequest(opKey: string): WorkerOperationRequest {
 }
 
 describe('jetstream adapters', () => {
+  test('keeps the source job when a retained exhaustion advisory predates its active delivery', async () => {
+    const ack = vi.fn();
+    const deleteMessage = vi.fn();
+    const advisory = { json: () => ({ stream: JOBS_STREAM_NAME, stream_seq: 10, deliveries: 1 }), ack };
+    const settle = vi.fn(async () => false);
+    await drainExhaustedJobs({
+      consumer: { fetch: async () => ({
+        async *[Symbol.asyncIterator]() { yield advisory; },
+        close: async () => undefined,
+      }) } as never,
+      streams: {
+        getMessage: async () => ({ json: () => ({ opId: crypto.randomUUID(), jobId: crypto.randomUUID() }) }),
+        deleteMessage,
+      } as never,
+      settle,
+      logger: { warn: vi.fn() },
+    });
+    expect(settle).toHaveBeenCalledWith(expect.objectContaining({ deliveryAttempt: 1 }));
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(ack).toHaveBeenCalledOnce();
+  });
+
+  test('returns a terminal operation if its publication expires before its producer claims the index', async () => {
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const kv = new FakeKvStore();
+    const stateCas = stateStore.compareAndSetOpIndex.bind(stateStore);
+    const queue = { enqueue: vi.fn() };
+    const publication = createOperationPublication({
+      store: stateStore, queue, logger: { warn: vi.fn() }, maxAgeMs: 1_000,
+      expire: (job) => orchestrator.failUnpublishedJob(job),
+    });
+    const orchestrator = new OperationOrchestrator({
+      queue: { ...queue, claimNext: async () => null, size: () => 0 },
+      stateStore, eventStream: { append: vi.fn(), listSince: vi.fn(), subscribe: vi.fn() },
+      config: { opStaleMs: 1_000 }, clock: { now: () => Date.now() - 61_000 }, publication,
+    });
+    vi.spyOn(stateStore, 'compareAndSetOpIndex').mockImplementationOnce(async (input) => {
+      await publication.drain();
+      return stateCas(input);
+    });
+    const result = await orchestrator.enqueueOrReuse(buildPdfRequest('slow-reservation'));
+    expect(result).toMatchObject({ status: 'failed', error: { code: 'COMPUTE_WORK_NOT_STARTED' } });
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    expect(await stateStore.getPublication(result.opId)).toBeNull();
+  });
+
   test('retries a failed queue publication in a new process under the original job ID', async () => {
     const kv = new FakeKvStore();
     const js = new FakeJetStream();

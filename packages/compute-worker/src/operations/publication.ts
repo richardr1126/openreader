@@ -34,6 +34,9 @@ export function createOperationPublication(input: {
             await store.deferPublication(pending);
             return;
           }
+          // Close the queued state before deleting its marker. An index CAS
+          // that arrives after this point can only expose a terminal operation.
+          await input.expire(job);
         } else {
           await input.beforePublish?.(job);
           if (Date.now() - job.queuedAt >= input.maxAgeMs) await input.expire(job);

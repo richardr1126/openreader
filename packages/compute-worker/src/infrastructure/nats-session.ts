@@ -74,6 +74,7 @@ export function createNatsSessionManager(input: {
   natsReplicas: number;
   isStopping: () => boolean;
   resumeQueuedWork: boolean;
+  disconnectWhenIdle: boolean;
   getActivity: () => NatsActivitySnapshot;
   markActivity: (reason: string) => void;
   startWorkers: (session: NatsSession) => Promise<void> | void;
@@ -128,17 +129,13 @@ export function createNatsSessionManager(input: {
     }, 'nats dropping connection');
     session = null;
     clearTimers();
-    try {
-      await current.nc.close();
-    } catch {
-      // Closing an already-closed session is harmless.
-    }
+    await current.nc.close().catch(() => undefined);
     await input.stopWorkers();
     input.logger.info({ reason }, 'nats disconnected');
   };
 
   const startTimers = () => {
-    if (!idleTimer) {
+    if (input.disconnectWhenIdle && !idleTimer) {
       idleTimer = setInterval(() => {
         if (!session || input.isStopping()) return;
         const activity = input.getActivity();

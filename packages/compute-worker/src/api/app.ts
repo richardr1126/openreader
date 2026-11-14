@@ -380,7 +380,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       const admissionAction = kind === 'tts_playback'
         ? snapshot.opKey.split('|')[7]?.startsWith('document:') ? 'tts_playback_document' : undefined
         : kind === 'email_delivery' || kind === 'maintenance' || kind === 'model_download' ? undefined : kind;
-      return notifyComputeAdmissionTerminal(result, admissionAction);
+      return notifyComputeAdmissionTerminal(result, admissionAction, snapshot.updatedAt);
     },
     logger: app.log,
   });
@@ -555,6 +555,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     natsReplicas,
     isStopping: () => stopping,
     resumeQueuedWork: !disableWorkers,
+    disconnectWhenIdle: readBoolEnv('COMPUTE_NATS_DISCONNECT_WHEN_IDLE', false),
     getActivity: () => ({
       activeSse,
       inFlightHttp,

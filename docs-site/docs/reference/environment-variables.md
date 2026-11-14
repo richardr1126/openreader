@@ -120,6 +120,7 @@ These have sensible defaults. With the embedded worker, set them in the app's `.
 | `COMPUTE_EVENTS_STREAM_MAX_BYTES` | `134217728` | JetStream events stream size. |
 | `COMPUTE_JOB_STATES_MAX_BYTES` | `67108864` | JetStream job-state store size. |
 | `COMPUTE_NATS_REPLICAS` | `1` | JetStream replicas: `1`, `3` or `5` for a NATS cluster. Other values become `1`. |
+| `COMPUTE_NATS_DISCONNECT_WHEN_IDLE` | `false` | Disconnect after two idle minutes to allow scale to zero. An incoming request reconnects the worker. |
 | `FFMPEG_BIN` | see below | The ffmpeg used for audio conversion, timing and audiobook export. |
 
 `FFMPEG_BIN` is set to a pinned LGPL build in the published images and the desktop app, and to the `ffmpeg-static` dependency by `pnpm dev`/`pnpm start`. Otherwise `ffmpeg` is taken from `PATH`.
