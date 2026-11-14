@@ -17,6 +17,7 @@ import {
   createContext,
   useContext,
   useState,
+  useEffect,
   useCallback,
   useRef,
   useMemo,
@@ -468,12 +469,13 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     syncPlaybackLocator,
   });
 
-  // The saved speed replaces the local one whenever the loaded config changes it.
-  const [configuredSpeed, setConfiguredSpeed] = useState(audioPlayerSpeed);
-  if (!configIsLoading && configuredSpeed !== audioPlayerSpeed) {
-    setConfiguredSpeed(audioPlayerSpeed);
+  // Each completed config load re-applies the saved speed, replacing any local
+  // speed change. This syncs from the config store after it settles.
+  useEffect(() => {
+    if (configIsLoading) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAudioSpeed(audioPlayerSpeed);
-  }
+  }, [configIsLoading, audioPlayerSpeed]);
 
   /**
    * Stops the current audio playback and resets all state
