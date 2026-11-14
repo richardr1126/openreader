@@ -13,7 +13,7 @@ export function operationDeliveryLimits(pdfAttempts: number): Record<WorkerOpera
     document_conversion: 3,
     account_export: 3,
     email_delivery: 3,
-    model_download: 1,
+    model_download: 3,
     maintenance: 3,
   };
 }

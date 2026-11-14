@@ -1010,6 +1010,9 @@ object revision to prevent a delayed write from replacing a newer result.
 Interactive playback and whole-document audio generation also recover in the
 same operation. The next delivery keeps the session and cursor, adopts cached
 audio, and repairs any segment metadata that the previous delivery left unfinished.
+Model download also redelivers to an available worker. Verified files are reused
+on that replica, and each replica still installs its own copy on demand. An
+admin cancellation settles the shared download operation so it cannot redeliver.
 
 ---
 

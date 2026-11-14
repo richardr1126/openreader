@@ -48,7 +48,7 @@ export interface JobHandlers {
   runDocumentConversion(payload: DocumentConversionJobRequest, queueWaitMs: number, hooks?: JobExecution<DocumentConversionProgress>): Promise<DocumentConversionJobResult>;
   runAccountExport(payload: AccountExportJobRequest, queueWaitMs: number, hooks?: JobExecution<AccountExportProgress>): Promise<AccountExportJobResult>;
   runEmailDelivery?(payload: EmailDeliveryJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<EmailDeliveryJobResult>;
-  runModelDownload?(payload: ModelDownloadJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: ModelDownloadProgress) => Promise<void> }): Promise<ModelDownloadJobResult>;
+  runModelDownload?(payload: ModelDownloadJobRequest, queueWaitMs: number, hooks?: JobExecution<ModelDownloadProgress>): Promise<ModelDownloadJobResult>;
 }
 
 export function createJobHandlers(input: PdfLayoutJobContext): JobHandlers {

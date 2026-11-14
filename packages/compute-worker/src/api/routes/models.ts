@@ -23,8 +23,8 @@ const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
 
 /**
  * Models this worker downloads on first use, managed ahead of time from the
- * Local voices card. Each worker replica keeps its own copy, so these describe
- * and change only the replica that answers.
+ * Local voices card. A shared download can run on any available worker. The
+ * installed components are local to the replica that answers.
  */
 export function registerModelRoutes(context: ComputeWorkerRouteContext): void {
   const { app, deps, ensureOrphanedOpRecovery } = context;
@@ -90,7 +90,23 @@ export function registerModelRoutes(context: ComputeWorkerRouteContext): void {
       reply.code(400);
       return { error: 'Unknown model' };
     }
-    return { cancelled: cancelKokoroDownload() };
+    const index = await deps.operationStateStore.getOpIndex?.(buildModelDownloadOperationKey(params.data.model));
+    let cancelled = false;
+    if (index?.opId && deps.orchestrator.markFailedIfUnchanged && deps.operationStateStore.getOpStateRecord) {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const current = await deps.operationStateStore.getOpStateRecord(index.opId);
+        if (!current || (current.state.status !== 'queued' && current.state.status !== 'running')) break;
+        const settled = await deps.orchestrator.markFailedIfUnchanged({
+          current: current.state, expectedRevision: current.revision,
+          error: { code: 'MODEL_DOWNLOAD_CANCELLED', message: 'The Kokoro download was canceled.' },
+        });
+        if (settled) {
+          cancelled = true;
+          break;
+        }
+      }
+    }
+    return { cancelled: cancelled || cancelKokoroDownload() };
   });
 
   app.delete('/v1/models/:model', {

@@ -229,7 +229,12 @@ describe('compute worker API routes', () => {
 
     const unknown = await runtime.app.inject({ method: 'GET', url: '/v1/models/other', headers: AUTH });
     expect(unknown.statusCode).toBe(400);
-    const idle = await runtime.app.inject({ method: 'POST', url: '/v1/models/kokoro-82m/cancel', headers: AUTH });
+    const cancel = () => runtime.app.inject({ method: 'POST', url: '/v1/models/kokoro-82m/cancel', headers: AUTH });
+    expect((await cancel()).json()).toEqual({ cancelled: true });
+    expect(fake.getState(response.json().opId)).toMatchObject({
+      status: 'failed', error: { code: 'MODEL_DOWNLOAD_CANCELLED' },
+    });
+    const idle = await cancel();
     expect(idle.json()).toEqual({ cancelled: false });
   });
 

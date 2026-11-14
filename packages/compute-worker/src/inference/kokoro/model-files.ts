@@ -365,6 +365,7 @@ async function downloadKokoroAssetFiles(
 const verifiedAssets = new Set<string>();
 let downloadTail: Promise<void> = Promise.resolve();
 let waitingDownloads = 0;
+let waitingCallers = 0;
 let download: AbortController | null = null;
 const listeners = new Set<ModelDownloadProgressHandler>();
 
@@ -379,24 +380,36 @@ const listeners = new Set<ModelDownloadProgressHandler>();
 export async function ensureKokoroAssets(
   onProgress?: ModelDownloadProgressHandler,
   selection?: KokoroAssetSelection,
+  signal?: AbortSignal,
 ): Promise<void> {
+  signal?.throwIfAborted();
+  waitingCallers += 1;
   // Separate registrations even when two callers pass the same callback.
   const listener: ModelDownloadProgressHandler | undefined = onProgress ? (progress) => onProgress(progress) : undefined;
   if (listener) listeners.add(listener);
-  let enqueued = false;
+  const waitForDownload = (pending: Promise<void>) => {
+    if (!signal) return pending;
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason);
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+      void pending.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+    });
+  };
   try {
     let components: readonly KokoroComponent[];
     if (selection === undefined) {
       if (download) {
-        await downloadTail;
+        await waitForDownload(downloadTail);
         return;
       }
       // Size-based inventory chooses a usable baseline but cannot prove file
       // integrity. Send that baseline through normal checksum verification.
       components = (await readKokoroAssetInventory(KOKORO_MODEL_DIR)).baseline;
+      signal?.throwIfAborted();
       // A demand request may have started while disk status was being read.
       if (download) {
-        await downloadTail;
+        await waitForDownload(downloadTail);
         return;
       }
     } else {
@@ -405,7 +418,6 @@ export async function ensureKokoroAssets(
     if (components.every((component) => component.files.every((file) => verifiedAssets.has(file.path)))) return;
     const controller = download ??= new AbortController();
     waitingDownloads += 1;
-    enqueued = true;
     // A failed selection must not prevent a different request from trying. A
     // shared cancel keeps this controller aborted until the queue drains.
     const pending = downloadTail.catch(() => undefined).then(async () => {
@@ -417,15 +429,16 @@ export async function ensureKokoroAssets(
           await Promise.all([...listeners].map((listener) => listener(progress)));
         },
       }, verifiedAssets);
-    });
-    downloadTail = pending;
-    await pending;
-  } finally {
-    if (listener) listeners.delete(listener);
-    if (enqueued) {
+    }).finally(() => {
       waitingDownloads -= 1;
       if (waitingDownloads === 0) download = null;
-    }
+    });
+    downloadTail = pending;
+    await waitForDownload(pending);
+  } finally {
+    if (listener) listeners.delete(listener);
+    waitingCallers -= 1;
+    if (signal?.aborted && waitingCallers === 0) download?.abort(signal.reason);
   }
 }
 

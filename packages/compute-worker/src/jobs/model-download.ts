@@ -1,6 +1,7 @@
 import { ensureKokoroAssets } from '../inference/kokoro/model-files';
 import type { ModelDownloadProgress } from '../inference/model-download';
 import type { ModelDownloadJobRequest, ModelDownloadJobResult } from '../operations/contracts';
+import type { JobExecution } from '../operations/types';
 import { createModelDownloadProgressReporter } from './model-download-progress';
 
 /**
@@ -11,10 +12,16 @@ import { createModelDownloadProgressReporter } from './model-download-progress';
 export async function runModelDownload(
   payload: ModelDownloadJobRequest,
   _queueWaitMs: number,
-  hooks?: { onProgress?: (progress: ModelDownloadProgress) => Promise<void> },
+  hooks?: Partial<JobExecution<ModelDownloadProgress>>,
 ): Promise<ModelDownloadJobResult> {
+  await hooks?.assertActive?.();
   await ensureKokoroAssets(createModelDownloadProgressReporter({
-    publish: async (progress) => { await hooks?.onProgress?.(progress); },
-  }));
+    publish: async (progress) => {
+      // This observer can lose its delivery while playback is still waiting
+      // on the same download. Keep operation-state errors local to the job.
+      await hooks?.onProgress?.(progress).catch(() => undefined);
+    },
+  }), undefined, hooks?.signal);
+  await hooks?.assertActive?.();
   return { model: payload.model };
 }

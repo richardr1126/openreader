@@ -165,8 +165,7 @@ export async function ensureJetStreamResources(input: {
     ensureConsumer(DOCUMENT_CONVERSION_CONSUMER_NAME, DOCUMENT_CONVERSION_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.document_conversion),
     ensureConsumer(ACCOUNT_EXPORT_CONSUMER_NAME, ACCOUNT_EXPORT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.account_export),
     ensureConsumer(EMAIL_DELIVERY_CONSUMER_NAME, EMAIL_DELIVERY_JOBS_SUBJECT, 60_000, limits.email_delivery),
-    // The running job extends the ack as it goes; a failed download is retried by the admin.
-    ensureConsumer(MODEL_DOWNLOAD_CONSUMER_NAME, MODEL_DOWNLOAD_JOBS_SUBJECT, 60_000, limits.model_download),
+    ensureConsumer(MODEL_DOWNLOAD_CONSUMER_NAME, MODEL_DOWNLOAD_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.model_download),
     ensureConsumer(MAINTENANCE_CONSUMER_NAME, MAINTENANCE_JOBS_SUBJECT, 60_000, limits.maintenance),
   ]);
 }
