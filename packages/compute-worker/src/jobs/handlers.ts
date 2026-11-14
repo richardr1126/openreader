@@ -41,7 +41,7 @@ import type { ModelDownloadProgress } from '../inference/model-download';
 export interface JobHandlers {
   runMaintenance?(payload: MaintenanceJobRequest, queueWaitMs: number, hooks?: JobExecution<MaintenanceProgress>): Promise<MaintenanceJobResult>;
   runPdfLayout(payload: PdfLayoutJobRequest, queueWaitMs: number, hooks: PdfLayoutExecution): Promise<PdfLayoutJobResult>;
-  runTtsPlayback(payload: TtsPlaybackJobRequest, queueWaitMs: number, hooks?: { onProgress?: (progress: TtsPlaybackProgress) => Promise<void> }): Promise<TtsPlaybackJobResult>;
+  runTtsPlayback(payload: TtsPlaybackJobRequest, queueWaitMs: number, hooks?: JobExecution<TtsPlaybackProgress>): Promise<TtsPlaybackJobResult>;
   runTtsPlaybackPlan(payload: TtsPlaybackPlanJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<TtsPlaybackPlanJobResult>;
   runTtsPlaybackExportArtifact(payload: TtsPlaybackExportArtifactRequest, queueWaitMs: number, hooks?: JobExecution<TtsPlaybackExportProgress>): Promise<TtsPlaybackExportArtifactResult>;
   runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<DocumentPreviewJobResult>;

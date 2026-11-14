@@ -1007,6 +1007,9 @@ exports, document previews, document conversions, and account exports can also
 recover across up to three deliveries. A replacement delivery reuses an
 available result or rebuilds it. Artifact publication checks the observed
 object revision to prevent a delayed write from replacing a newer result.
+Interactive playback and whole-document audio generation also recover in the
+same operation. The next delivery keeps the session and cursor, adopts cached
+audio, and repairs any segment metadata that the previous delivery left unfinished.
 
 ---
 

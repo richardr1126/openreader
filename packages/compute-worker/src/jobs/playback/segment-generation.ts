@@ -17,6 +17,7 @@ import { runWhisperAlignmentFromAudioBuffer } from '../../inference/runtime';
 import { mapWordsToSentenceOffsets } from '../../inference/whisper/timestamps';
 import { withTimeout } from '../../infrastructure/config';
 import type { TtsPlaybackStorage } from '../../playback/storage';
+import type { JobAttempt } from '../../operations/types';
 import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
 import { parseTtsSettings, type TtsPlaybackSegmentInput } from './plan';
 import { resolveEffectiveTtsSettings } from './provider-settings';
@@ -41,6 +42,12 @@ const TTS_SYNTHESIS_PIPELINE_DEPTH = 3;
 const GENERATION_LEASE_MIN_MS = 60_000;
 const GENERATION_LEASE_GRACE_MS = 30_000;
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+class SegmentPublicationError extends Error {
+  constructor(cause: unknown) {
+    super('Unable to publish playback segment metadata', { cause });
+  }
+}
 
 export class TtsPlaybackSegmentTimeoutError extends Error {
   readonly code = 'UPSTREAM_TIMEOUT';
@@ -135,16 +142,18 @@ export function classifySegmentError(error: unknown): { info: SegmentErrorInfo; 
  */
 export function leaseReclaimableByRun(
   ownerId: string,
-  run: { sessionId: string; sessionInstanceId: string; generationRunId: string },
+  run: { sessionId: string; sessionInstanceId: string; generationRunId: string; attempt?: number },
 ): boolean {
   try {
     const parsed = JSON.parse(ownerId) as {
       sessionId?: unknown;
       sessionInstanceId?: unknown;
       generationRunId?: unknown;
+      attempt?: number;
     };
     if (parsed.sessionId !== run.sessionId) return false;
-    return parsed.sessionInstanceId === run.sessionInstanceId
+    return (parsed.sessionInstanceId === run.sessionInstanceId
+      && (parsed.generationRunId !== run.generationRunId || (parsed.attempt ?? 0) <= (run.attempt ?? 0)))
       || (typeof parsed.generationRunId === 'string' && parsed.generationRunId !== run.generationRunId);
   } catch {
     // Legacy owner ids cannot prove which incarnation wrote them. Treat them
@@ -169,6 +178,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
   getCurrentCacheEpoch?: () => Promise<number>;
   synthesisTimeoutMs: number;
   signal?: AbortSignal;
+  attempt?: JobAttempt;
   /** Regenerate terminal error sidecars instead of keeping their silence. */
   retryErroredSegments?: boolean;
   onBeforeSegment?: (planOrdinal: number) => Promise<'continue' | 'stop'>;
@@ -402,7 +412,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       if (await input.getCurrentCacheEpoch() !== input.cacheEpoch) return;
     }
     const updatedAt = metadata.updatedAt ?? Date.now();
-    await playbackStorage.artifacts.putSegmentMetadata({
+    const write = playbackStorage.artifacts.putSegmentMetadata({
       schemaVersion: 1,
       ...(input.cacheEpoch === undefined ? {} : { cacheEpoch: input.cacheEpoch }),
       status,
@@ -423,7 +433,9 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       leaseOwnerId: metadata.leaseOwnerId ?? null,
       leaseUpdatedAt: status === 'generating' ? updatedAt : null,
       updatedAt,
-    });
+    }, input.attempt);
+    if (input.attempt) await write;
+    else await write.catch(() => undefined);
   };
 
   const shouldContinueWrites = async (planOrdinal: number): Promise<boolean> => {
@@ -439,12 +451,14 @@ export async function generateExplicitTtsPlaybackSegments(input: {
     sessionId: input.request.sessionId,
     sessionInstanceId: input.sessionInstanceId,
     generationRunId: input.request.generationRunId ?? 'initial',
+    attempt: input.attempt?.attempt,
   };
   const leaseOwnerId = JSON.stringify({
     sessionId: leaseRun.sessionId,
     sessionInstanceId: leaseRun.sessionInstanceId,
     generationExtent: input.request.generationExtent ?? 'window',
     generationRunId: leaseRun.generationRunId,
+    attempt: leaseRun.attempt,
   });
   const leaseStaleMs = Math.max(GENERATION_LEASE_MIN_MS, input.synthesisTimeoutMs + GENERATION_LEASE_GRACE_MS);
   const minCacheEpoch = Math.max(0, Math.floor(Number(input.cacheEpoch ?? 0)));
@@ -557,7 +571,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           durationMs: Math.max(1, Number(durationMs ?? 1000)),
           alignment,
           updatedAt: Date.now(),
-        }).catch(() => undefined);
+        });
       }
       await input.onSegmentCompleted?.(planOrdinal);
       if (!alignment && storedAudio) {
@@ -614,8 +628,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       stopScheduling = true;
       return null;
     }
-    await persistSegmentMetadata(segment, 'generating', { audioKey, leaseOwnerId, updatedAt: Date.now() })
-      .catch(() => undefined);
+    await persistSegmentMetadata(segment, 'generating', { audioKey, leaseOwnerId, updatedAt: Date.now() });
     // Every path below either settles this segment (completed or error) or
     // abandons it because the run stopped. An abandoned lease is released so a
     // resumed run can claim the segment immediately instead of waiting for it
@@ -690,7 +703,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
             durationMs,
             alignment,
             updatedAt: Date.now(),
-          }).catch(() => undefined);
+          }).catch((error) => { throw new SegmentPublicationError(error); });
           leaseSettled = true;
           // Audio that came with its timings needs no Whisper pass.
           completedAlignment = alignment ? null : {
@@ -703,6 +716,10 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           break;
         } catch (error) {
           if (input.signal?.aborted) return null;
+          // A competing publisher won the immutable audio key. A later
+          // delivery adopts those bytes and repairs the segment sidecar.
+          if (error instanceof SegmentPublicationError
+            || (input.attempt && (error as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata?.httpStatusCode === 412)) throw error;
           if (error instanceof ProviderCapacityWaitTimeoutError || slotLost.signal.aborted) {
             // Saturated shared capacity is back-pressure, not a failed segment.
             // Keep waiting while this run still owns the segment.
@@ -748,7 +765,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
         audioKey,
         error: lastErrorInfo ?? { message: lastError instanceof Error ? lastError.message : String(lastError) },
         updatedAt: Date.now(),
-      }).catch(() => undefined);
+      });
       leaseSettled = true;
       await input.onSegmentErrored?.(planOrdinal);
       const position = runPosition.get(segment)!;

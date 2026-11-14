@@ -233,7 +233,8 @@ export function createWorkerLoopController(input: {
       }
       context = delivery;
       if (work.notStarted) throw work.notStarted;
-      if (WORKER_OPERATION_KIND_POLICY[decoded.kind].enforcesQueueDeadline && startedAt - decoded.queuedAt > maxQueueAgeMs) {
+      if (delivery.deliveryAttempt === 1 && WORKER_OPERATION_KIND_POLICY[decoded.kind].enforcesQueueDeadline
+        && startedAt - decoded.queuedAt > maxQueueAgeMs) {
         throw new ComputeQueueExpiredError();
       }
       input.logger.info({

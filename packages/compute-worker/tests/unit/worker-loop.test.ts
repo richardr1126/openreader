@@ -606,14 +606,14 @@ describe('worker loop controller', () => {
     await controller.stop();
   });
 
-  test('fails queued playback work that a stopping worker cannot redeliver', async () => {
-    const job = (id: string) => createMessage({
+  test.each([1, 3])('settles queued playback on shutdown according to delivery %s', async (deliveryCount) => {
+    const job = (id: string, attempt = 1) => createMessage({
       jobId: `job-${id}`, opId: `op-${id}`, opKey: `key-${id}`, kind: 'tts_playback',
       queuedAt: Date.now(),
       payload: { sessionId: `session-${id}` },
-    });
+    }, attempt);
     const running = job('running');
-    const queued = job('queued');
+    const queued = job('queued', deliveryCount);
     const messages = [running.msg, queued.msg];
     let nextMessage = 0;
     const consumer = {
@@ -659,6 +659,11 @@ describe('worker loop controller', () => {
     release();
     await stopping;
 
+    if (deliveryCount === 1) {
+      expect(queued.nak).toHaveBeenCalledOnce();
+      expect(queued.term).not.toHaveBeenCalled();
+      return;
+    }
     expect(queued.term).toHaveBeenCalledOnce();
     expect(queued.nak).not.toHaveBeenCalled();
     expect(calls).toContainEqual(expect.objectContaining({

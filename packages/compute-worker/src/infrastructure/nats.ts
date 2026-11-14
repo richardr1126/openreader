@@ -50,7 +50,6 @@ function isAlreadyExistsError(error: unknown): boolean {
 
 export async function ensureJetStreamResources(input: {
   jsm: JetStreamManager;
-  whisperTimeoutMs: number;
   pdfAttempts: number;
   jobsMaxBytes: number;
   eventsMaxBytes: number;
@@ -158,8 +157,8 @@ export async function ensureJetStreamResources(input: {
   const limits = operationDeliveryLimits(input.pdfAttempts);
   await Promise.all([
     ensureConsumer(LAYOUT_CONSUMER_NAME, LAYOUT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.pdf_layout),
-    ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, limits.tts_playback),
-    ensureConsumer(TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME, TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT, input.whisperTimeoutMs + 15_000, limits.tts_playback),
+    ensureConsumer(TTS_PLAYBACK_CONSUMER_NAME, TTS_PLAYBACK_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback),
+    ensureConsumer(TTS_PLAYBACK_DOCUMENT_CONSUMER_NAME, TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback),
     ensureConsumer(TTS_PLAYBACK_PLAN_CONSUMER_NAME, TTS_PLAYBACK_PLAN_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback_plan),
     ensureConsumer(TTS_PLAYBACK_EXPORT_CONSUMER_NAME, TTS_PLAYBACK_EXPORT_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.tts_playback_export),
     ensureConsumer(DOCUMENT_PREVIEW_CONSUMER_NAME, DOCUMENT_PREVIEW_JOBS_SUBJECT, WORKER_ACK_WAIT_MS, limits.document_preview),

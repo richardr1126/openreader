@@ -58,6 +58,7 @@ import {
   normalizeS3Prefix,
 } from '../infrastructure/storage';
 import { createTtsPlaybackStorage } from '../playback/storage';
+import { ttsPlaybackSubjectFromOperationKey } from '../operations/keys';
 import { createJobHandlers } from '../jobs/handlers';
 import { createWorkerLoopController, type QueuedJob } from '../jobs/worker-loop';
 import { fetchComputeLimitPolicy } from '../jobs/compute-limit-policy-broker';
@@ -349,7 +350,18 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
 
   const terminalSettlement = createTerminalSettlement({
     store: defaultOperationStateStore,
-    publish: (state) => defaultOperationEventStream.append(state.opId, state),
+    publish: async (state) => {
+      if (state.status === 'failed' && state.kind === 'tts_playback') {
+        const subject = ttsPlaybackSubjectFromOperationKey(state.opKey);
+        const session = subject ? await playbackStorage.sessions.getSession(subject.sessionId) : null;
+        if (session?.workerOpId === state.opId) {
+          await playbackStorage.sessions.patchSessionIfGenerationRun(session.sessionId, session.generationRunId ?? null, {
+            status: 'failed', lastError: state.error?.message ?? 'Playback generation failed',
+          }, session.sessionInstanceId, { opId: state.opId });
+        }
+      }
+      await defaultOperationEventStream.append(state.opId, state);
+    },
     notify: notifyComputeAdmissionTerminal,
     logger: app.log,
   });
@@ -516,7 +528,6 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   sessionManager = createNatsSessionManager({
     connectOptions: connectOpts,
     logger: app.log,
-    whisperTimeoutMs,
     pdfAttempts,
     jobsStreamMaxBytes,
     eventsStreamMaxBytes,

@@ -65,7 +65,6 @@ export interface NatsActivitySnapshot {
 export function createNatsSessionManager(input: {
   connectOptions: ConnectionOptions;
   logger: NatsSessionLogger;
-  whisperTimeoutMs: number;
   pdfAttempts: number;
   jobsStreamMaxBytes: number;
   eventsStreamMaxBytes: number;
@@ -163,7 +162,6 @@ export function createNatsSessionManager(input: {
       const jsm = await jetstreamManager(nc, { timeout: NATS_API_TIMEOUT_MS });
       await ensureJetStreamResources({
         jsm,
-        whisperTimeoutMs: input.whisperTimeoutMs,
         pdfAttempts: input.pdfAttempts,
         jobsMaxBytes: input.jobsStreamMaxBytes,
         eventsMaxBytes: input.eventsStreamMaxBytes,

@@ -6,7 +6,7 @@ export const WORKER_ACK_WAIT_MS = 30_000;
 export function operationDeliveryLimits(pdfAttempts: number): Record<WorkerOperationKind, number> {
   return {
     pdf_layout: pdfAttempts,
-    tts_playback: 1,
+    tts_playback: 3,
     tts_playback_plan: 3,
     tts_playback_export: 3,
     document_preview: 3,

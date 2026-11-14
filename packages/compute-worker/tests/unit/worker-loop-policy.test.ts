@@ -13,7 +13,7 @@ describe('worker loop policy', () => {
   });
 
   test('retry policy: the PDF delivery limit does not apply to playback jobs', () => {
-    expect(decideRetryAction({ kind: 'tts_playback', deliveryCount: 1, pdfAttempts: 2 })).toBe('term_fail');
+    expect(decideRetryAction({ kind: 'tts_playback', deliveryCount: 2, pdfAttempts: 2 })).toBe('nak_retry');
   });
 
   test.each([

@@ -150,6 +150,7 @@ export function createPlaybackSessionController(
       session.generationRunId ?? null,
       {
         generationRunId,
+        workerOpId: null,
         generationSatisfiedFromOrdinal: null,
         generationSatisfiedThroughOrdinal: null,
         updatedAt: now,
