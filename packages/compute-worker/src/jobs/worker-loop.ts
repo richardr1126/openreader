@@ -24,7 +24,7 @@ import type {
   WorkerOperationKind,
   WorkerOperationProgress,
 } from '../operations/contracts';
-import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
+import { RUNNING_HEARTBEAT_MS, WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
@@ -42,7 +42,6 @@ import {
 } from './execution-scheduler';
 
 const LOOP_ERROR_BACKOFF_MS = 500;
-const RUNNING_HEARTBEAT_MS = 5000;
 const PULL_EXPIRES_MS = 5_000;
 
 class ComputeQueueExpiredError extends Error {

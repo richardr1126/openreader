@@ -2,6 +2,13 @@ import type { ComputeOperation, PdfLayoutResult } from '@/lib/server/compute-wor
 import { pdfParseSnapshotFromWorkerState } from '@/lib/server/pdf-parse/snapshot';
 import type { ReaderBootstrapResolution } from './bootstrap';
 
+/**
+ * Worker code for an operation whose worker stopped before it finished. The
+ * worker's own diagnostic text names thresholds and reconciliation, which say
+ * nothing to a reader waiting on a document.
+ */
+const ORPHANED_OPERATION_ERROR_CODE = 'WORKER_ORPHANED_OP';
+
 /** Project an already-authorized worker snapshot without re-reading the database or worker. */
 export function resolvePdfOperationReadiness(
   operation: ComputeOperation<PdfLayoutResult>,
@@ -9,11 +16,16 @@ export function resolvePdfOperationReadiness(
   const snapshot = pdfParseSnapshotFromWorkerState(operation);
   if (snapshot.parseStatus === 'ready') return null;
   if (snapshot.parseStatus === 'failed') {
+    const abandoned = operation.error?.code === ORPHANED_OPERATION_ERROR_CODE;
     return {
       result: {
         status: 'error',
-        message: snapshot.error || 'PDF structure could not be prepared.',
+        message: abandoned
+          ? 'PDF preparation stopped before it finished, because the app or its compute worker restarted.'
+          : snapshot.error || 'PDF structure could not be prepared.',
         retryable: true,
+        failedPdfOperationId: operation.opId,
+        ...(abandoned ? { abandoned: true } : {}),
       },
     };
   }
@@ -21,6 +33,7 @@ export function resolvePdfOperationReadiness(
   return {
     result: {
       status: 'pending',
+      operationId: operation.opId,
       progress: {
         kind: 'pdf-parse',
         phase: snapshot.parseStatus === 'pending'
@@ -36,6 +49,5 @@ export function resolvePdfOperationReadiness(
         } : {}),
       },
     },
-    operationId: operation.opId,
   };
 }

@@ -1,53 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import type { ArtifactStorage } from '../../src/infrastructure/storage';
-import { listMemoryChildPrefixes } from '../fixtures/memory-storage';
+import { MemoryArtifactStorage as MemoryStorage } from '../fixtures/memory-storage';
 import {
   clearDocumentPreviewArtifacts,
   clearPdfLayoutArtifacts,
   clearTtsPlaybackPlanArtifacts,
 } from '../../src/storage/document-derived-cleanup';
-
-class MemoryStorage implements ArtifactStorage {
-  async putFile(): Promise<void> { throw new Error('not implemented'); }
-  readonly objects = new Map<string, Buffer>();
-  readonly modifiedAt = new Map<string, number>();
-
-  async listChildPrefixes(prefix: string, options?: { startAfter?: string; limit?: number }) {
-    return listMemoryChildPrefixes(this.objects.keys(), prefix, options);
-  }
-
-  async readObject(key: string): Promise<ArrayBuffer> {
-    const value = this.objects.get(key);
-    if (!value) throw new Error('not found');
-    return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
-  }
-
-  async objectExists(key: string): Promise<boolean> {
-    return this.objects.has(key);
-  }
-
-  async deleteObject(key: string): Promise<void> {
-    this.objects.delete(key);
-  }
-
-  async listPrefix(prefix: string): Promise<string[]> {
-    return [...this.objects.keys()].filter((key) => key.startsWith(prefix));
-  }
-
-  async *listPrefixPages(prefix: string) {
-    yield [...this.objects.entries()]
-      .filter(([key]) => key.startsWith(prefix))
-      .map(([key, value]) => ({ key, size: value.byteLength, lastModifiedMs: this.modifiedAt.get(key) ?? 0 }));
-  }
-
-  async putObject(key: string, body: Buffer | Uint8Array): Promise<void> {
-    this.objects.set(key, Buffer.from(body));
-  }
-
-  async putParsedPdf(): Promise<string> {
-    throw new Error('not implemented');
-  }
-}
 
 describe('document derived-artifact cleanup', () => {
   test('deletes the current parsed, preview, and playback-plan prefixes for one document', async () => {

@@ -2,6 +2,7 @@ import { ensureWhisperModel } from './whisper/model';
 import { alignAudioWithText } from './whisper/align';
 import { ensureModel as ensurePdfLayoutModel } from './pdf/model';
 import { parsePdf } from './pdf/parse';
+import type { ParsedPdfPage } from '../api/types';
 import type { ModelDownloadProgressHandler } from './model-download';
 
 export async function ensureComputeModels(): Promise<void> {
@@ -45,6 +46,13 @@ export async function runPdfLayoutFromPdfBuffer(input: {
     pageMs: number;
   }) => void | Promise<void>;
   onModelDownloadProgress?: ModelDownloadProgressHandler;
+  resume?: { pages: ParsedPdfPage[]; sawText: boolean } | null;
+  onPagesCompleted?: (input: {
+    pages: ParsedPdfPage[];
+    startPage: number;
+    totalPages: number;
+    sawText: boolean;
+  }) => void | Promise<void>;
 }) {
   const parsed = await parsePdf({
     documentId: input.documentId,
@@ -52,6 +60,8 @@ export async function runPdfLayoutFromPdfBuffer(input: {
     onPageStarted: input.onPageStarted,
     onPageParsed: input.onPageParsed,
     onModelDownloadProgress: input.onModelDownloadProgress,
+    resume: input.resume,
+    onPagesCompleted: input.onPagesCompleted,
   });
   return { parsed };
 }

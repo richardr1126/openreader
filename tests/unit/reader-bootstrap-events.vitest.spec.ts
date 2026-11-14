@@ -32,10 +32,9 @@ describe('reader bootstrap aggregate event stream', () => {
 
   test('forwards download progress and keepalives without a readiness round trip', async () => {
     const initial: ReaderBootstrapResolution = {
-      result: { status: 'pending', progress: {
+      result: { status: 'pending', operationId: 'parse-op', progress: {
         kind: 'pdf-parse', phase: 'queued', pagesParsed: 0, totalPages: 0,
       } },
-      operationId: 'parse-op',
     };
     const snapshot = (opId: string, downloadedBytes: number) => (
       `event: snapshot\ndata: ${JSON.stringify({ snapshot: {
@@ -65,10 +64,52 @@ describe('reader bootstrap aggregate event stream', () => {
     expect(hoisted.resolveReaderBootstrapState).not.toHaveBeenCalled();
   });
 
+  test('re-resolves an operation that goes silent instead of waiting on a stream that will never report', async () => {
+    vi.useFakeTimers();
+    try {
+      const initial: ReaderBootstrapResolution = {
+        result: { status: 'pending', operationId: 'parse-op', progress: {
+          kind: 'pdf-parse', phase: 'parsing', pagesParsed: 3, totalPages: 40,
+        } },
+      };
+      // A worker that was stopped mid-parse leaves the operation running and
+      // reports nothing further, so the stream stays open and silent.
+      hoisted.openOperationEvents.mockResolvedValue(new Response(
+        new ReadableStream<Uint8Array>({ start() {} }),
+      ));
+      hoisted.resolveReaderBootstrapState.mockResolvedValue({
+        result: {
+          status: 'error',
+          message: 'PDF preparation stopped before it finished.',
+          retryable: true,
+          failedPdfOperationId: 'parse-op',
+        },
+      } satisfies ReaderBootstrapResolution);
+      const { createReaderBootstrapEventStream } = await import('@/lib/server/reader/bootstrap-events');
+      const body = new Response(createReaderBootstrapEventStream(
+        new NextRequest('http://localhost/events'), 'doc-1', initial,
+      )).text();
+
+      await vi.advanceTimersByTimeAsync(80_000);
+      const snapshots = (await body).split('\n').filter((line) => line.startsWith('data: '))
+        .map((line) => JSON.parse(line.slice(6)));
+
+      expect(hoisted.resolveReaderBootstrapState).toHaveBeenCalledTimes(1);
+      expect(snapshots.at(-1)).toMatchObject({
+        status: 'error',
+        retryable: true,
+        failedPdfOperationId: 'parse-op',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('moves from PDF parse observation to plan observation and emits full snapshots', async () => {
     const initial: ReaderBootstrapResolution = {
       result: {
         status: 'pending',
+        operationId: 'parse-op',
         progress: {
           kind: 'pdf-parse',
           phase: 'parsing',
@@ -76,11 +117,9 @@ describe('reader bootstrap aggregate event stream', () => {
           totalPages: 10,
         },
       },
-      operationId: 'parse-op',
     };
     const planPending: ReaderBootstrapResolution = {
-      result: { status: 'pending' },
-      operationId: 'plan-op',
+      result: { status: 'pending', operationId: 'plan-op' },
     };
     const ready: ReaderBootstrapResolution = {
       result: {

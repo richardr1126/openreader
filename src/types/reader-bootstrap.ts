@@ -49,4 +49,16 @@ export type ReaderPayload =
 export type ReaderBootstrapResult =
   | { status: 'pending'; progress?: ReaderBootstrapProgress; operationId?: string }
   | { status: 'ready'; payload: ReaderPayload }
-  | { status: 'error'; message: string; retryable: boolean; notFound?: boolean };
+  | {
+    status: 'error';
+    message: string;
+    retryable: boolean;
+    notFound?: boolean;
+    failedPdfOperationId?: string;
+    /**
+     * The work was abandoned when its worker stopped, rather than judged and
+     * found wanting. Nothing was learned about the document, so the reader may
+     * start the preparation again on its own.
+     */
+    abandoned?: boolean;
+  };

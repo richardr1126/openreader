@@ -174,6 +174,40 @@ For serverless connection limits, EventSource reconnect is the recovery path.
 The reconnect starts from the current durable snapshot rather than depending on
 an in-memory event history.
 
+## Abandoned Preparation
+
+A worker that stops mid-job leaves its operation `running`. Nothing resumes it:
+the layout consumer allows one delivery, so the interrupted message is not
+redelivered. Until the operation is settled the bootstrap keeps reporting
+`pending`, and the reader watches progress that cannot move.
+
+Liveness is the worker's to decide, not the reader's. A running job rewrites its
+operation state every five seconds, so heartbeat age, not the job's duration
+budget, says whether a worker is still on it. Two rules settle it:
+
+- a worker stamps each running operation with its own process identity, so after
+  a restart it recognises the operations its predecessor was running and fails
+  them at once, with no window to wait out;
+- otherwise an in-flight operation whose state has been silent for longer than
+  the heartbeat window has no worker and is failed as well.
+
+Both run when an operation is read, not only in the periodic sweep, because a
+sweep that runs once per control-plane generation can pass before an operation
+has gone stale and then never look again.
+
+The reader surfaces the result as a retryable `error` carrying
+`failedPdfOperationId`, with a message that says the preparation stopped rather
+than that the document is unreadable. Restarting posts that operation id back;
+the server supersedes exactly that operation and starts a replacement under the
+same operation key, so the next resolve reports the replacement rather than the
+operation it replaced. Naming the operation keeps a restart from superseding
+work that someone else started in the meantime.
+
+A pending snapshot carries the `operationId` it is waiting on, which is also
+what the SSE stream follows. An open stream that goes silent for longer than the
+worker's liveness window re-resolves instead of waiting on an operation that
+will never report again.
+
 ## One Client Hook
 
 There is one public orchestration hook:
