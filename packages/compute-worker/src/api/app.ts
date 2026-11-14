@@ -81,6 +81,7 @@ import {
   DOCUMENT_PREVIEW_JOBS_SUBJECT,
   DOCUMENT_CONVERSION_JOBS_SUBJECT,
   COMPUTE_STATE_TTL_MS,
+  JOB_DEDUPE_WINDOW_MS,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
@@ -399,7 +400,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     queue: operationQueue,
     beforePublish: linkPlaybackOperation,
     logger: app.log,
-    maxAgeMs: Math.min(opStaleMs, 12 * 60 * 60 * 1000),
+    maxAgeMs: Math.min(opStaleMs, JOB_DEDUPE_WINDOW_MS),
     expire: (job) => defaultOrchestrator.failUnpublishedJob(job),
   });
   const defaultOrchestrator = new OperationOrchestrator({
