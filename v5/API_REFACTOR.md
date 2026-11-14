@@ -1,6 +1,6 @@
 # Public API refactor
 
-Status: accepted; phases 1–5 are implemented. Phase 6 remains planned.
+Status: accepted; phases 1–5.5 are implemented and on `main`. Phase 6 remains planned.
 
 Migration numbers 0028 to 0031 in the history below were combined into `0027_public_api`
 by phase 4.9.
