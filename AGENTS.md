@@ -134,7 +134,7 @@ Current Playwright policy:
   per enabled browser. It exercises every accepted document type.
 - True playback cases do not run in GitHub CI because CI lacks the external TTS
   service; ordinary browser journeys still run there.
-- As of 2026-11-08 the expected clean result is 1798 Vitest tests and 103 local
+- As of 2026-11-12 the expected clean result is 1828 Vitest tests and 105 local
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.
@@ -238,16 +238,23 @@ caused conflicts, high CPU, misleading failures, and overheating.
 
 ## Current State
 
-- Public API progress is tracked in `v5/API_REFACTOR.md`. Phases 1 to 5.2 merged
-  in #210 (MCP at `/api/mcp`, download links and access pages, no automatic
-  guests); production has migration 0027.
-- Phases 5.3 and 5.4 on `refactor/mcp-cli`: the MCP is four `gh`-style command
-  tools (one per scope, plus `openreader_docs_delete`, the only destructive one);
-  links keep PDF/EPUB/DOCX/TXT/MD files; `docs upload` gives an `/app/upload`
-  page link or a signed one-time transfer URL; documents rename, move and delete,
-  and folders are managed. Cached voices are listable and offered in the reader
-  and export panels; a stopped audiobook stays as `cancelled`. Migration 0028
-  (`cancelled_at`) is unshipped and needs the owner's production migration before deploy.
+- Public API phases 1 to 5.5 are on `main` (#210, #212, #216; history in
+  `v5/API_REFACTOR.md`), and production has every migration through 0028
+  (`cancelled_at`). Phase 6, the Chrome extension, is still only planned.
+- The MCP at `/api/mcp` is four `gh`-style command tools, one per scope, plus
+  `openreader_delete`, the only destructive one. It never shipped in a release
+  before this shape, so no older tool names need keeping.
+- Audiobooks are listed with `GET /documents/{id}/audiobooks`, stopped with
+  `POST .../{audiobookId}/cancel`, and deleted (request and file, never the cached
+  segment audio) with `DELETE .../{audiobookId}`.
+- Admin settings are the Users, Access, Providers, Features, Limits and
+  Maintenance sections (#215); desktop shows Providers under General and
+  Features and Maintenance under Advanced.
+- Modals are native `<dialog>` elements through `ModalFrame` and `DrawerFrame` in
+  `src/components/ui/dialog.tsx`; do not reintroduce Headless UI `Dialog`, z-index
+  stacking or `afterLeave` sequencing. An open modal makes the page inert, so
+  errors a user must act on show inside the dialog. Toasts stay visible above
+  modals through `AboveModals` (`src/components/ui/top-layer.tsx`).
 - Open follow-ups for the owner: whether the full Compose files should require
   worker/broker/playback secrets instead of shipping known defaults, and whether
   to bump the pinned `kokoro-fastapi-cpu:v0.2.4` image in the Compose examples.

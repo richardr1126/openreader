@@ -154,19 +154,18 @@ type SettingsSection = {
 | Surface | Desktop | Why |
 | --- | --- | --- |
 | Admin → Users | hidden | one owner |
-| Instance → New account sign-ups, Guest sessions | hidden | closed/off at first exchange |
-| Instance → Account email (Resend) | hidden | no inbox to verify |
+| Admin → Access (new account sign-ups, guest sessions, account email) | hidden | sign-ups closed and guests off at first exchange; no inbox to verify |
 | Account → Email, verification, password | hidden | the owner has no credential |
 | User menu (account link and Sign out), Account panel sign-out | hidden | the shell would sign straight back in; Settings lists Profile |
 | Sign-in, sign-up, forgot/reset password pages | unreachable | the shell intercepts `/signin` |
 | Public landing page at `/` | skipped | the window opens `/app` |
-| Compute → per-user limits | hidden | limits protect a multi-user instance |
+| Admin → Limits (storage, allowances, capacity) | hidden | limits protect a multi-user instance |
 | Privacy notice (first-run modal, Settings link) | hidden | it describes a hosted instance and its operator |
 | Cookie banner and Vercel Analytics | not rendered | a local app has nothing to consent to |
 
-Everything else stays: Appearance, Storage, Providers, Instance (TTS defaults,
-features, Gutenberg), Compute generation settings, Maintenance/System check,
-Acknowledgements and the tip link.
+Everything else stays: Customize, Model & Voice, Providers (with reader choices
+and generation settings), Library and storage, Features (documents, Gutenberg),
+Maintenance/System check, Acknowledgements and the tip link.
 
 The Account section becomes a small **Profile** section: display name and Export My Data. Delete account stays hidden: removing the only owner leaves nothing to sign in as.
 
@@ -174,8 +173,9 @@ The Account section becomes a small **Profile** section: display name and Export
 
 - **Settings layout.** On desktop, Admin and General merge into one sidebar
   (there is only one person, so the "Admin" label means nothing): *General*
-  (Appearance, Voices, Library and storage, Profile), *Advanced* (Instance,
-  Compute, Maintenance), *About* (Acknowledgements, Support). Section ids stay
+  (Customize, Model & Voice, Providers, Library and storage, Profile),
+  *Advanced* (Features, Maintenance), *About* (Acknowledgements, Support). The
+  layout lives in `src/components/settings/settings-sections.ts`. Section ids stay
   the same, so links and tests keep working; only grouping and labels change by
   profile.
 - **Voices section** replaces the two provider tabs on desktop: one list of
@@ -200,8 +200,8 @@ offers no way in. That is intended.
 
 ## Local voices (model download UX)
 
-Shared by both profiles. It is the top of Admin → Providers (on desktop, the
-Voices group), shown on desktop always and on a server once a `kokoro-local`
+Shared by both profiles. It is the top of Admin → Providers (on desktop,
+Providers under General), shown on desktop always and on a server once a `kokoro-local`
 provider exists.
 
 Card: **Kokoro on this device** (server: **Kokoro on the compute worker**).
