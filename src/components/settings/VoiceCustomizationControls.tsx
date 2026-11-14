@@ -32,7 +32,7 @@ export function VoiceCustomizationControls({ value, local, onChange, overrides, 
       controlClassName="w-40 max-w-[48%]">
       <div className="space-y-2">
         <Select aria-label={label} value={options.find(option => option.value === current) ?? options.at(-1)} options={options}
-          buttonClassName="!pl-2 !pr-6" chevronClassName="h-4 w-4 text-soft"
+          buttonClassName="pl-2! pr-6!" chevronClassName="h-4 w-4 text-soft"
           renderValue={option => length && option.value === null ? 'Automatic' : option.label}
           renderOption={option => option.label}
           onChange={({ value: next }) => {

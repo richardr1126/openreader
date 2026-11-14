@@ -41,7 +41,7 @@ function TtsUsageCard() {
   return (
     <section className="overflow-hidden rounded-lg border border-line bg-background" aria-labelledby="tts-usage-heading">
       <div className="flex items-start gap-3 p-4">
-        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-accent-wash text-accent">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-wash text-accent">
           <SpeedometerIcon className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
@@ -115,7 +115,7 @@ function ExportDataTile() {
       disabled={isExporting}
       className="w-full rounded-lg bg-background p-4 text-left hover:bg-accent-wash"
     >
-      <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center">
+      <div className="shrink-0 w-10 h-10 rounded-lg bg-surface-sunken flex items-center justify-center">
         <DownloadIcon className="w-5 h-5 text-accent" />
       </div>
       <div className="flex-1 min-w-0">

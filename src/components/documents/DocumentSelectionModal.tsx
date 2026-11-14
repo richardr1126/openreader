@@ -114,7 +114,7 @@ export function DocumentSelectionModal({
 
   return (
     <ModalFrame open={isOpen} onClose={onClose} size="lg" panelClassName="flex h-[80vh] flex-col">
-      <ModalTitle className="mb-4 flex flex-shrink-0 items-center justify-between">
+      <ModalTitle className="mb-4 flex shrink-0 items-center justify-between">
         {title}
         {files.length > 0 && (
           <div className="flex items-center text-sm font-normal">
@@ -151,7 +151,7 @@ export function DocumentSelectionModal({
                     isSelected ? 'bg-accent-wash' : 'hover:bg-accent-wash'
                   }`}
                 >
-                  <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Checkbox
                       checked={isSelected}
                       onChange={(e) => handleCheckboxChange(file.id, e.target.checked)}
@@ -172,7 +172,7 @@ export function DocumentSelectionModal({
         )}
       </div>
 
-      <div className="mt-4 flex justify-end gap-3 flex-shrink-0">
+      <div className="mt-4 flex justify-end gap-3 shrink-0">
         <Button variant="outline" size="md" onClick={onClose}>
           Cancel
         </Button>

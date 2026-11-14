@@ -340,11 +340,11 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   return (
     <div
       ref={containerRef}
-      className="relative w-full aspect-[3/4] overflow-hidden rounded-t-md bg-surface"
+      className="relative w-full aspect-3/4 overflow-hidden rounded-t-md bg-surface"
     >
       {imagePreview ? (
         <>
-          <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`} />
+          <div className={`absolute inset-0 bg-linear-to-br ${gradientClass}`} />
           {!isImageReady ? (
             <div className="relative z-10 flex flex-col items-center justify-center h-full gap-2 px-2 text-white">
               <Icon className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-md" />
@@ -381,11 +381,11 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
                 .catch(() => { });
             }}
           />
-          {isImageReady ? <div className="absolute inset-0 bg-gradient-to-t from-black/35 via-black/0 to-black/15" /> : null}
+          {isImageReady ? <div className="absolute inset-0 bg-linear-to-t from-black/35 via-black/0 to-black/15" /> : null}
         </>
       ) : textPreview ? (
         <>
-          <div className="absolute inset-0 bg-gradient-to-br from-surface-solid to-surface-sunken" />
+          <div className="absolute inset-0 bg-linear-to-br from-surface-solid to-surface-sunken" />
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0"
@@ -405,7 +405,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
                   {textPreview}
                 </pre>
               ) : (
-                <div className="text-[10px] sm:text-[11px] leading-snug text-foreground break-words [overflow-wrap:anywhere]">
+                <div className="text-[10px] sm:text-[11px] leading-snug text-foreground wrap-break-word wrap-anywhere">
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
@@ -426,12 +426,12 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
                       ),
                       code: (props) => (
                         <code
-                          className="font-mono text-[10px] bg-surface-sunken rounded px-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]"
+                          className="font-mono text-[10px] bg-surface-sunken rounded px-1 whitespace-pre-wrap wrap-break-word wrap-anywhere"
                           {...props}
                         />
                       ),
                       pre: (props) => (
-                        <pre className="m-0 font-mono text-[10px] whitespace-pre-wrap break-words [overflow-wrap:anywhere]" {...props} />
+                        <pre className="m-0 font-mono text-[10px] whitespace-pre-wrap wrap-break-word wrap-anywhere" {...props} />
                       ),
                     }}
                   >
@@ -444,7 +444,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
         </>
       ) : (
         <>
-          <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass}`} />
+          <div className={`absolute inset-0 bg-linear-to-br ${gradientClass}`} />
           <div className="relative z-10 flex flex-col items-center justify-center h-full gap-2 px-2 text-white">
             <Icon className="w-10 h-10 sm:w-12 sm:h-12 drop-shadow-md" />
             <span className="text-[10px] sm:text-[11px] tracking-wide uppercase font-semibold opacity-90">

@@ -68,7 +68,7 @@ export function SelectionActionBar({ actions }: { actions: DocumentActions }) {
             Move
           </MenuTrigger>
           <MenuTransition>
-            <MenuItemsSurface anchor="top" className="z-50 mb-2 min-w-[200px] max-w-[260px] focus:outline-none">
+            <MenuItemsSurface anchor="top" className="z-50 mb-2 min-w-[200px] max-w-[260px] focus:outline-hidden">
               <MoveToFolderItems
                 docs={docs}
                 folders={actions.folders}

@@ -4,13 +4,13 @@ import { cn } from './cn';
 import { IconButton } from './icon-button';
 
 const popoverPanelClass = cn(
-  'z-50 rounded-md border border-line bg-surface shadow-elev-2 focus:outline-none',
+  'z-50 rounded-md border border-line bg-surface shadow-elev-2 focus:outline-hidden',
 );
 
 export const PopoverRoot = Popover;
 
 const popoverTriggerClass = cn(
-  'inline-flex items-center rounded-md text-foreground hover:bg-accent-wash hover:text-accent focus:outline-none transition-colors duration-fast ease-standard',
+  'inline-flex items-center rounded-md text-foreground hover:bg-accent-wash hover:text-accent focus:outline-hidden transition-colors duration-fast ease-standard',
 );
 
 export const PopoverTrigger = forwardRef<

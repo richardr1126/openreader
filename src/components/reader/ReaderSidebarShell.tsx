@@ -82,7 +82,7 @@ export function ReaderSidebarShell({
             tabIndex={-1}
             aria-label="Close"
             onClick={onClose}
-            className="sm:hidden absolute inset-0 overlay-dim backdrop-blur-sm pointer-events-auto"
+            className="sm:hidden absolute inset-0 overlay-dim backdrop-blur-xs pointer-events-auto"
           />
         </Transition.Child>
 

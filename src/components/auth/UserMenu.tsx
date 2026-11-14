@@ -104,7 +104,7 @@ export function UserMenu({
       <Link
         href="/app/settings?section=account"
         aria-label="Open account settings"
-        className="group flex min-w-0 items-center gap-1.5 px-2 text-[11px] font-medium text-foreground transition-colors duration-base hover:bg-accent-wash hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+        className="group flex min-w-0 items-center gap-1.5 px-2 text-[11px] font-medium text-foreground transition-colors duration-base hover:bg-accent-wash hover:text-accent focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
       >
         <UserIcon className="h-3.5 w-3.5 shrink-0 text-soft transition-colors duration-base group-hover:text-accent" />
         <span className="hidden max-w-[150px] truncate sm:block">

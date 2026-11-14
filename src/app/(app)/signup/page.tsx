@@ -162,7 +162,7 @@ function SignUpContent() {
     return (
       <AuthCard
         title="Check your email"
-        description={<>If <span className="break-words font-medium text-foreground">{email.trim()}</span> can be registered, a one-hour verification link is on its way. If you already have an account, sign in or reset your password.</>}
+        description={<>If <span className="wrap-break-word font-medium text-foreground">{email.trim()}</span> can be registered, a one-hour verification link is on its way. If you already have an account, sign in or reset your password.</>}
       >
         <div className="space-y-2">
           <ButtonLink href={signInHref} variant="primary" className="w-full">Sign in</ButtonLink>

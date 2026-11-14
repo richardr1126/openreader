@@ -188,7 +188,7 @@ function NativeModal({
     >
       {/* Always present: Headless UI portals (listboxes, menus) mount into the
           dialog, and remove their container once it has no children left. */}
-      <div data-modal-backdrop className={cn('fixed inset-0 overlay-dim backdrop-blur-sm', shown && 'animate-fade-in')} />
+      <div data-modal-backdrop className={cn('fixed inset-0 overlay-dim backdrop-blur-xs', shown && 'animate-fade-in')} />
       {shown ? (
         <Portal.Group target={ref}>
           <div data-modal-backdrop className={overlayClassName}>

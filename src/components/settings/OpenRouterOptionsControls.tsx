@@ -38,7 +38,7 @@ export function OpenRouterOptionsEditor({ model, modelName, value, providerDefau
     </p>
     <Textarea aria-label="Model options" value={value} onChange={event => onChange(event.target.value)}
       placeholder={template} aria-invalid={!!error} aria-describedby={error ? errorId : undefined}
-      className={cn('min-h-28 font-mono text-xs', error && '!border-danger focus:!ring-danger')} maxLength={16000} spellCheck={false} />
+      className={cn('min-h-28 font-mono text-xs', error && 'border-danger! focus:ring-danger!')} maxLength={16000} spellCheck={false} />
     <div className="flex items-center gap-2">
       {error ? <p id={errorId} role="alert" className="flex-1 text-xs text-danger">{error}</p> : <span className="flex-1" />}
       {providerDefault
@@ -60,7 +60,7 @@ export function OpenRouterOptionsControls(props: Parameters<typeof OpenRouterOpt
     : 'None';
   return <div>
     <button type="button" aria-label="Advanced model options" aria-expanded={open} aria-controls={id} onClick={() => setOpen(current => !current)}
-      className="flex w-full items-center gap-3 rounded-md text-left text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      className="flex w-full items-center gap-3 rounded-md text-left text-sm text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
       <RowIcon><WrenchIcon /></RowIcon>
       <span className="min-w-0 flex-1 space-y-0.5">
         <span className="block font-medium">Advanced model options</span>

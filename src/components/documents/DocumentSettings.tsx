@@ -79,7 +79,7 @@ export function DocumentSettings({ isOpen, setIsOpen, documentId, epub, html, la
       ariaLabel="Document settings"
       title="Reader Settings"
       bodyClassName="flex-1 overflow-y-auto px-4 py-4 bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent),transparent_92%),transparent_35%)]"
-      panelClassName="w-full sm:w-[30rem]"
+      panelClassName="w-full sm:w-120"
     >
       <div className="space-y-5">
         {language && onLanguageChange ? (

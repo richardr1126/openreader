@@ -56,7 +56,7 @@ export function DocumentDragLayer() {
   const extra = docs.length - 1;
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[100]">
+    <div className="pointer-events-none fixed inset-0 z-100">
       <div
         className="absolute flex items-center gap-2 max-w-[220px] rounded-md border border-accent-line bg-surface px-2.5 py-1.5 shadow-elev-2"
         style={{ transform: `translate(${pos.x + 12}px, ${pos.y - 28}px)`, willChange: 'transform' }}

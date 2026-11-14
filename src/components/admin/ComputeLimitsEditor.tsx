@@ -214,7 +214,7 @@ export const COMPUTE_ACTION_GROUPS: ReadonlyArray<{ title: string; footer?: stri
 export function ComputeActionRows({ policy, onChange, actions }: PolicyEditorProps & { actions: readonly ComputeAction[] }) {
   const update = policyUpdater({ policy, onChange });
   return (
-    <div className="divide-y divide-line-soft !p-0">
+    <div className="divide-y divide-line-soft p-0!">
       {actions.map((action) => {
         const actionPolicy = policy.actions[action];
         const detail = ACTION_DETAILS[action];
@@ -222,7 +222,7 @@ export function ComputeActionRows({ policy, onChange, actions }: PolicyEditorPro
         const dailyUnit = DAILY_QUOTA_UNITS[action];
         return (
           <details key={action} className="group">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
               <span className="flex min-w-0 items-center gap-3">
                 <RowIcon><Icon /></RowIcon>
                 <span className="truncate text-sm font-medium text-foreground">{detail.label}</span>
@@ -383,8 +383,8 @@ export function WorkerCapacityRow({ policy, onChange }: PolicyEditorProps) {
   );
   return (
 
-    <details className="group !p-0">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+    <details className="group p-0!">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
         <span className="flex min-w-0 items-center gap-3">
           <RowIcon><CpuChipIcon /></RowIcon>
           <span className="truncate text-sm font-medium text-foreground">Worker capacity</span>
@@ -442,8 +442,8 @@ export function ProviderCapacityRow({ policy, onChange, providers }: PolicyEdito
   const addableProviders = providers.filter(({ slug }) => !(slug in policy.providers.overrides));
   return (
 
-    <details className="group !p-0">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
+    <details className="group p-0!">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 transition-colors marker:content-none hover:bg-accent-wash focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-line">
         <span className="flex min-w-0 items-center gap-3">
           <RowIcon><ServerStackIcon /></RowIcon>
           <span className="truncate text-sm font-medium text-foreground">TTS provider capacity</span>

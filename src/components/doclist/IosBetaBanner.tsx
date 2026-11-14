@@ -44,7 +44,7 @@ export function IosBetaBanner({ show, onDismiss }: { show: boolean; onDismiss: (
             href={TESTFLIGHT_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-accent-line bg-surface px-2.5 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-accent-line bg-surface px-2.5 text-xs font-semibold text-accent transition-colors hover:bg-accent hover:text-background focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <span className="sm:hidden">Join beta</span>
             <span className="hidden sm:inline">Join the beta</span>

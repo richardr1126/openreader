@@ -29,7 +29,7 @@ export function ExpandableSettingsCard({ label, header, children }: { label: str
   const id = useId();
   return <section className="overflow-clip rounded-lg border border-line-soft bg-surface-solid">
     <button type="button" aria-label={label} aria-expanded={open} aria-controls={id} onClick={() => setOpen(current => !current)}
-      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
+      className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm font-medium text-foreground hover:bg-surface-hover focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent">
       {header}<DisclosureIcon className={`h-4 w-4 shrink-0 text-faint transition-transform duration-300 motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} aria-hidden />
     </button>
     {/* Animate disclosure only. Resizing the open card as its save bar

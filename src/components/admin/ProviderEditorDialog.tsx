@@ -288,7 +288,7 @@ function ProviderPicker({ onPick, onCancel }: { onPick: (providerType: TtsProvid
               <button
                 type="button"
                 onClick={() => onPick(providerType)}
-                className="flex h-full w-full items-start gap-3 rounded-lg border border-line bg-surface-solid p-3 text-left transition-colors duration-base hover:border-accent-line hover:bg-accent-wash focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                className="flex h-full w-full items-start gap-3 rounded-lg border border-line bg-surface-solid p-3 text-left transition-colors duration-base hover:border-accent-line hover:bg-accent-wash focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <ProviderLogo providerType={providerType} size="lg" />
                 <span className="min-w-0">
@@ -445,7 +445,7 @@ function ProviderForm({
       </div>
 
       <details className="group rounded-lg border border-line-soft bg-surface-solid">
-        <summary className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <summary className="cursor-pointer select-none rounded-lg px-3 py-2 text-sm font-medium text-muted hover:text-foreground focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
           Advanced
         </summary>
         <div className="space-y-2.5 border-t border-line-soft px-3 py-3">

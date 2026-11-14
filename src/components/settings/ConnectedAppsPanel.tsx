@@ -35,11 +35,11 @@ export function ConnectedAppsPanel() {
                 <div className="mt-1 space-y-1 text-xs text-soft">
                   {app.verifiedDomain
                     ? <>
-                      <div className="flex items-center gap-1 text-foreground"><CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" /><span className="min-w-0 break-words">Verified as {app.verifiedDomain}</span></div>
+                      <div className="flex items-center gap-1 text-foreground"><CheckIcon className="h-3.5 w-3.5 shrink-0 text-accent" /><span className="min-w-0 wrap-break-word">Verified as {app.verifiedDomain}</span></div>
                       <div className="break-all">{app.id}</div>
                     </>
                     : <Badge tone="foreground">Unverified app</Badge>}
-                  {elsewhere.length > 0 && <div className="break-words">Returns to <span className="font-medium text-foreground">{elsewhere.join(', ')}</span></div>}
+                  {elsewhere.length > 0 && <div className="wrap-break-word">Returns to <span className="font-medium text-foreground">{elsewhere.join(', ')}</span></div>}
                 </div>
                 <ul className="mt-3 space-y-1 text-xs text-soft">{app.scopes.map(scope => <li key={scope}>{API_SCOPE_LABELS[scope] || scope}</li>)}</ul>
               </div>

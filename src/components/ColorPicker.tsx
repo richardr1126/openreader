@@ -91,7 +91,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
       <PopoverSurface
         anchor="bottom start"
         transition
-        className="z-[60] mt-2 w-56 bg-background space-y-3 transition duration-fast ease-standard data-[closed]:opacity-0 data-[closed]:scale-95"
+        className="z-60 mt-2 w-56 bg-background space-y-3 transition duration-fast ease-standard data-closed:opacity-0 data-closed:scale-95"
       >
         {/* Label */}
         <div className="flex items-center justify-between">
@@ -129,7 +129,7 @@ export function ColorPicker({ value, field, label, onChange }: ColorPickerProps)
                 key={color}
                 type="button"
                 onClick={() => onChange(color)}
-                className="group/swatch relative w-full aspect-square rounded-full transition-transform duration-fast focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1"
+                className="group/swatch relative w-full aspect-square rounded-full transition-transform duration-fast focus:outline-hidden focus-visible:ring-2 focus-visible:ring-offset-1"
                 style={{
                   backgroundColor: color,
                   boxShadow: selected ? '0 0 0 2px var(--background), 0 0 0 4px var(--foreground)' : undefined,

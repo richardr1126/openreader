@@ -1,7 +1,141 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss' source('../');
+
 @plugin "@tailwindcss/typography";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-base: var(--base);
+  --color-offbase: var(--offbase);
+  --color-accent: var(--accent);
+  --color-secondary-accent: var(--secondary-accent);
+  --color-muted: var(--muted);
+  --color-surface: var(--surface);
+  --color-surface-solid: var(--surface-solid);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-soft: var(--soft);
+  --color-faint: var(--faint);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-line: var(--accent-line);
+  --color-accent-strong: var(--accent-strong);
+  --color-danger: var(--danger);
+  --color-danger-strong: var(--danger-strong);
+  --color-danger-wash: var(--danger-wash);
+
+  --shadow-elev-1: var(--elev-1);
+  --shadow-elev-2: var(--elev-2);
+  --shadow-elev-3: var(--elev-3);
+
+  --ease-standard: var(--ease);
+}
+
+@theme {
+  --breakpoint-xs: 410px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  --animate-spin-slow: spin 2s linear infinite;
+  --animate-fade-in: fadeIn 200ms ease-in;
+  --animate-fade-out: fadeOut 200ms ease-out;
+  --animate-scale-in: scaleIn 200ms ease-in;
+  --animate-scale-out: scaleOut 200ms ease-out;
+  --animate-slide-in-left: slideInLeft var(--dur-base) var(--ease);
+  --animate-slide-in-right: slideInRight var(--dur-base) var(--ease);
+  --animate-rise-in: riseIn 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-nudge-down: nudgeDown 1.6s ease-in-out infinite;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes fadeOut {
+    0% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+  @keyframes scaleIn {
+    0% { transform: scale(0.95); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes scaleOut {
+    0% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0; }
+  }
+  @keyframes slideInLeft {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(0); }
+  }
+  @keyframes slideInRight {
+    0% { transform: translateX(100%); }
+    100% { transform: translateX(0); }
+  }
+  @keyframes riseIn {
+    0% { transform: translateY(8px); opacity: 0; filter: blur(2px); }
+    100% { transform: translateY(0); opacity: 1; filter: blur(0); }
+  }
+  @keyframes nudgeDown {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(2px); }
+  }
+}
+
+/* Tailwind has no theme namespace for durations. Set --tw-duration too so
+   transition utilities pick the value up regardless of class order. */
+@utility duration-fast {
+  --tw-duration: var(--dur-fast);
+  transition-duration: var(--dur-fast);
+}
+@utility duration-base {
+  --tw-duration: var(--dur-base);
+  transition-duration: var(--dur-base);
+}
+@utility duration-slow {
+  --tw-duration: var(--dur-slow);
+  transition-duration: var(--dur-slow);
+}
+
+@layer base {
+  /* Tailwind 4 defaults borders to currentcolor; keep the v3 default. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  /* Tailwind 4 preflight dropped the pointer cursor on buttons. */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
+/* Typography colors follow the active theme. Unlayered, so it wins over the
+   plugin's own .prose variables. */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-lead: var(--muted);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-counters: var(--muted);
+  --tw-prose-bullets: var(--muted);
+  --tw-prose-hr: var(--offbase);
+  --tw-prose-quotes: var(--foreground);
+  --tw-prose-quote-borders: var(--offbase);
+  --tw-prose-captions: var(--muted);
+  --tw-prose-code: var(--foreground);
+  --tw-prose-pre-code: var(--foreground);
+  --tw-prose-pre-bg: var(--base);
+  --tw-prose-th-borders: var(--offbase);
+  --tw-prose-td-borders: var(--offbase);
+}
 
 /* Cover native links and controls as well as the shared UI components. Text
    entry is exempt: it matches :focus-visible on every focus, and the shared

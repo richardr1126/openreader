@@ -30,7 +30,7 @@ export function PdfBlockKindControls({ value, onChange, onReset }: {
       <RowIcon><DocumentIcon /></RowIcon>
       <span className="flex min-w-0 flex-1 items-center gap-1">
         <button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(current => !current)}
-          className="rounded text-sm font-medium leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          className="rounded text-sm font-medium leading-5 text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
           PDF block kinds
         </button>
         {onReset && <ResetButton label="Use app default for PDF block kinds" onClick={onReset} />}

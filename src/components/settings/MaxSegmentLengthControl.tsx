@@ -22,7 +22,7 @@ export function MaxSegmentLengthControl({ value, onChange, overridden = false, o
       labelAction={overridden && onReset ? <ResetButton label="Use app default for max segment length" onClick={onReset} /> : null}>
       <div className="space-y-2">
         <Select aria-label="Max segment length" value={options.find(option => option.value === value) ?? options.at(-1)} options={options}
-          buttonClassName="!pl-2 !pr-6" chevronClassName="h-4 w-4 text-soft"
+          buttonClassName="pl-2! pr-6!" chevronClassName="h-4 w-4 text-soft"
           onChange={option => { setEditingCustom(option.value === 'custom'); if (option.value !== 'custom') onChange(option.value); }} />
         {(editingCustom || !presets.includes(value)) && <RangeInput aria-label="Adjust max segment length"
           min={TTS_SEGMENT_MAX_BLOCK_LENGTH_MIN} max={TTS_SEGMENT_MAX_BLOCK_LENGTH_MAX} step={TTS_SEGMENT_MAX_BLOCK_LENGTH_STEP}

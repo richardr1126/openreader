@@ -57,7 +57,7 @@ export function ClonedVoiceLibrary({ cloning, value, onChange, preview, favorite
       <VoicePickerRow key={v.id} voice={v.id} name={v.name} note="Your voice" selected={value === v.id}
         onSelect={() => { preview.stop(); onChange(v.id); }} preview={preview} favorites={favorites} onError={setVoiceError}
         actions={<MenuRoot><MenuTrigger as={IconButton} size="sm" aria-label={`More for ${v.name}`}><DotsHorizontalIcon className="h-4 w-4" /></MenuTrigger>
-          <MenuItemsSurface anchor="bottom end" portal className="z-[60] min-w-40">
+          <MenuItemsSurface anchor="bottom end" portal className="z-60 min-w-40">
             <MenuActionItem onClick={() => { setVoiceName(v.name); setVoiceError(''); setManaging({ voice: v, action: 'rename' }); }}><PencilIcon className="h-4 w-4" />Rename</MenuActionItem>
             <MenuActionItem tone="danger" onClick={() => { setVoiceError(''); setManaging({ voice: v, action: 'delete' }); }}><TrashIcon className="h-4 w-4" />Delete</MenuActionItem>
           </MenuItemsSurface></MenuRoot>} />)}

@@ -100,11 +100,11 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
     <div className="min-w-0 space-y-1">
       {info.verifiedDomain
         ? <>
-          <div className="flex items-center gap-1 text-foreground"><CheckIcon className="h-4 w-4 shrink-0 text-accent" /><span className="min-w-0 break-words">Verified as {info.verifiedDomain}</span></div>
+          <div className="flex items-center gap-1 text-foreground"><CheckIcon className="h-4 w-4 shrink-0 text-accent" /><span className="min-w-0 wrap-break-word">Verified as {info.verifiedDomain}</span></div>
           <div className="break-all text-xs">{info.clientId}</div>
         </>
         : <Badge tone="foreground">Unverified app</Badge>}
-      {returnsElsewhere && <div>Returns to <span className="break-words font-medium text-foreground">{info.destination}</span></div>}
+      {returnsElsewhere && <div>Returns to <span className="wrap-break-word font-medium text-foreground">{info.destination}</span></div>}
     </div>
   </div>}>
         {isPending ? <LoadingSpinner className="mx-auto h-6 w-6 text-soft" /> : !accountReady ? <>
@@ -118,7 +118,7 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
           {loading && <div role="status" aria-label="Reading connection request" className="flex justify-center py-2"><LoadingSpinner className="h-6 w-6 text-soft" /></div>}
           {info && <>
             {device && <div className="flex items-center justify-between gap-3 rounded-md border border-line bg-surface-sunken px-3 py-2 text-sm">
-              <span className="min-w-0"><span className="text-soft">Code </span><span className="break-words font-mono font-medium text-foreground">{checkedCode}</span></span>
+              <span className="min-w-0"><span className="text-soft">Code </span><span className="wrap-break-word font-mono font-medium text-foreground">{checkedCode}</span></span>
               <InlineButton className="shrink-0 whitespace-nowrap" disabled={busy} onClick={clearCode}>Use a different code</InlineButton>
             </div>}
             {warning && <p className="text-sm text-soft">{warning}</p>}
@@ -130,7 +130,7 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
             </div>
             <p className="text-xs leading-relaxed text-soft">It can’t see your provider keys or administer this instance. Disconnect it anytime in Settings → Account → Connected apps.</p>
             {installProfile !== 'desktop' && session?.user && <div className="flex items-center justify-between gap-3 border-t border-line pt-4 text-sm">
-              <span className="min-w-0 text-soft">Signed in as <span className="break-words font-medium text-foreground">{session.user.name || session.user.email}</span>
+              <span className="min-w-0 text-soft">Signed in as <span className="wrap-break-word font-medium text-foreground">{session.user.name || session.user.email}</span>
                 {session.user.name && session.user.email && <span className="block break-all text-xs">{session.user.email}</span>}</span>
               <InlineButton className="shrink-0 whitespace-nowrap" disabled={busy} onClick={() => void switchAccount()}>Switch account</InlineButton>
             </div>}

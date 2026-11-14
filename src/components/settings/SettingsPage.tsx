@@ -33,7 +33,7 @@ function CloseSettingsLink() {
     <Link
       href="/app"
       aria-label="Close settings"
-      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-soft transition-colors duration-base hover:bg-accent-wash hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-soft transition-colors duration-base hover:bg-accent-wash hover:text-accent focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
     >
       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -80,7 +80,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
           type="button"
           onClick={openChangelog}
           aria-label="Changelog"
-          className="h-7 rounded-md px-2 text-xs font-medium text-soft transition-colors hover:bg-accent-wash hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden"
+          className="h-7 rounded-md px-2 text-xs font-medium text-soft transition-colors hover:bg-accent-wash hover:text-accent focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent md:hidden"
         >
           Changelog
         </button>
@@ -141,7 +141,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
         <div className="flex min-w-0 flex-1 flex-col">
           <nav
             aria-label="Settings sections"
-            className="shrink-0 overflow-x-auto border-b border-line-soft bg-surface px-2 py-1.5 md:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="shrink-0 overflow-x-auto border-b border-line-soft bg-surface px-2 py-1.5 md:hidden scrollbar-none [&::-webkit-scrollbar]:hidden"
           >
             <div className="flex min-w-max gap-1">
               {navGroups.map((group, index) => [
@@ -156,7 +156,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
                       onClick={() => selectSection(section.id)}
                       aria-label={section.label}
                       aria-current={active ? 'page' : undefined}
-                      className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-base focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                      className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-base focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent ${
                         active
                           ? 'border-accent-line bg-surface-sunken text-accent'
                           : 'border-transparent text-foreground hover:bg-accent-wash hover:text-accent'
@@ -171,7 +171,7 @@ export function SettingsPage({ initialSection }: { initialSection?: SettingsSect
             </div>
           </nav>
 
-          <section id="main-content" tabIndex={-1} aria-label={currentSection?.label ?? 'Settings'} className="relative min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable_both-edges]">
+          <section id="main-content" tabIndex={-1} aria-label={currentSection?.label ?? 'Settings'} className="relative min-h-0 flex-1 overflow-y-auto scrollbar-gutter-both">
             {currentSection ? (
               <div className={`mx-auto w-full p-3 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-5 lg:p-8 ${currentSection.group === 'admin' ? 'max-w-6xl' : 'max-w-4xl'}`}>
                 <h2 className="mb-4 text-lg font-semibold tracking-tight text-foreground sm:mb-5">

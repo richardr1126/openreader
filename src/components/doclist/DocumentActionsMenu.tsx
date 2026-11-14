@@ -50,7 +50,7 @@ export function DocumentActionsMenu({
         <DotsHorizontalIcon className={iconClassName} />
       </MenuTrigger>
       <MenuTransition>
-        <MenuItemsSurface anchor="bottom end" className="z-50 mt-1 min-w-[200px] max-w-[260px] focus:outline-none">
+        <MenuItemsSurface anchor="bottom end" className="z-50 mt-1 min-w-[200px] max-w-[260px] focus:outline-hidden">
           <MoveToFolderItems
             docs={targets}
             folders={actions.folders}

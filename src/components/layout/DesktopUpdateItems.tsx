@@ -79,7 +79,7 @@ export function DesktopUpdateToolbarButton({ className }: { className?: string }
       onClick={control.onClick}
       disabled={control.disabled}
       aria-label={control.label}
-      className={`h-7 rounded-md px-2 text-xs font-medium transition-colors hover:bg-accent-wash hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60 disabled:hover:bg-transparent ${control.ready ? 'text-accent' : 'text-soft'} ${className ?? ''}`}
+      className={`h-7 rounded-md px-2 text-xs font-medium transition-colors hover:bg-accent-wash hover:text-accent focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60 disabled:hover:bg-transparent ${control.ready ? 'text-accent' : 'text-soft'} ${className ?? ''}`}
     >
       {control.shortLabel}
     </button>

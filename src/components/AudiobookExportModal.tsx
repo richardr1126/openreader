@@ -486,7 +486,7 @@ export function AudiobookExportModal({
             >
               <ul
                 aria-label="Audiobook chapters"
-                className="max-h-72 divide-y divide-line-soft overflow-y-auto !p-0"
+                className="max-h-72 divide-y divide-line-soft overflow-y-auto p-0!"
               >
                 {chapters.map((chapter) => (
                   <ChapterRow

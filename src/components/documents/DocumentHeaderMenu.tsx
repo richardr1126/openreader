@@ -74,7 +74,7 @@ function PanelRow({
       disabled={disabled}
       aria-pressed={active || undefined}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors duration-fast ease-standard focus:outline-none focus-visible:bg-accent-wash focus-visible:text-accent',
+        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors duration-fast ease-standard focus:outline-hidden focus-visible:bg-accent-wash focus-visible:text-accent',
         active ? 'bg-accent-wash text-accent' : 'text-foreground hover:bg-accent-wash hover:text-accent',
         'disabled:cursor-not-allowed disabled:bg-transparent disabled:text-faint',
         className,

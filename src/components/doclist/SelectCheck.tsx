@@ -34,7 +34,7 @@ export function SelectCheck({
       }}
       className={cn(
         'inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition duration-fast ease-standard',
-        'focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+        'focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent',
         checked
           ? 'border-accent bg-accent text-background opacity-100'
           : 'border-line bg-surface-solid text-transparent hover:border-accent-line hover:text-accent',
