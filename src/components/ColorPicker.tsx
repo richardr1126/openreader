@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { isLightColor, type CustomThemeColors } from '@/contexts/ThemeContext';
 import { PaletteIcon } from '@/components/icons/Icons';
 import { IconButton, Input, PopoverIconTrigger, PopoverRoot, PopoverSurface } from '@/components/ui';
@@ -57,11 +57,12 @@ interface ColorPickerProps {
 
 export function ColorPicker({ value, field, label, onChange }: ColorPickerProps) {
   const [hexInput, setHexInput] = useState(value);
-  const nativeRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
+  const [committedValue, setCommittedValue] = useState(value);
+  if (committedValue !== value) {
+    setCommittedValue(value);
     setHexInput(value);
-  }, [value]);
+  }
+  const nativeRef = useRef<HTMLInputElement>(null);
 
   const handleHexCommit = useCallback((raw: string) => {
     let hex = raw.trim();

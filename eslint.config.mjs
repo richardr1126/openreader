@@ -113,19 +113,6 @@ const eslintConfig = [
     ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"],
   },
   {
-    // eslint-plugin-react-hooks 7 (via eslint-config-next 16) adds React
-    // Compiler rules. The app does not use the compiler, and adopting them
-    // means restructuring the playback controller and reader contexts, so
-    // they stay off until that work is done on its own.
-    rules: {
-      "react-hooks/refs": "off",
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/immutability": "off",
-      "react-hooks/preserve-manual-memoization": "off",
-      "react-hooks/globals": "off",
-    },
-  },
-  {
     rules: {
       "no-restricted-imports": [
         "error",

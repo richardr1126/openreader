@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ChevronRightIcon } from '@/components/icons/Icons';
@@ -24,17 +24,14 @@ export function SettingsChangelogPanel({
     ? (manifestError instanceof Error ? manifestError.message : 'Failed to load changelog')
     : null;
   const bodies = useChangelogReleaseBodies(manifestUrl, manifest, expanded);
-  const didInitExpandRef = useRef(false);
-
-  useEffect(() => {
-    if (didInitExpandRef.current || manifest.length === 0) return;
-    const initialIndex = findCurrentVersionIndex(manifest, normalizedAppVersion);
-    if (initialIndex >= 0) {
-      didInitExpandRef.current = true;
-      const entry = manifest[initialIndex];
-      setExpanded((previous) => ({ ...previous, [entry.tag_name]: true }));
-    }
-  }, [manifest, normalizedAppVersion]);
+  // The running version's entry opens once, when the manifest first lists it.
+  const [expandedCurrent, setExpandedCurrent] = useState(false);
+  const currentIndex = expandedCurrent ? -1 : findCurrentVersionIndex(manifest, normalizedAppVersion);
+  if (currentIndex >= 0) {
+    setExpandedCurrent(true);
+    const entry = manifest[currentIndex];
+    setExpanded((previous) => ({ ...previous, [entry.tag_name]: true }));
+  }
 
   return (
     <div className="flex h-[min(680px,calc(100dvh-3rem))] flex-col bg-surface sm:h-[490px]">

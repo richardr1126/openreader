@@ -21,25 +21,24 @@ export function useAudioContext() {
   const [audioContext, setAudioContext] = useState<AudioContextType>();
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && !audioContext) {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-      if (AudioContextClass) {
-        try {
-          setAudioContext(new AudioContextClass());
-        } catch (error) {
-          console.error('Failed to initialize AudioContext:', error);
-        }
-      }
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    let context: AudioContextType;
+    try {
+      context = new AudioContextClass();
+    } catch (error) {
+      console.error('Failed to initialize AudioContext:', error);
+      return;
     }
-
+    // The context is a browser resource this effect creates and closes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAudioContext(context);
     return () => {
-      if (audioContext) {
-        audioContext.close().catch((error) => {
-          console.error('Error closing AudioContext:', error);
-        });
-      }
+      context.close().catch((error) => {
+        console.error('Error closing AudioContext:', error);
+      });
     };
-  }, [audioContext]);
+  }, []);
 
   return audioContext;
 }

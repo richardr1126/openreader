@@ -184,10 +184,10 @@ export function GalleryView({
     setVisibleOrder(documents);
   }, [documents, setVisibleOrder]);
 
-  useEffect(() => {
-    if (!activeDocumentKey || documentKeys.includes(activeDocumentKey)) return;
+  // A removed active document hands focus to the first one.
+  if (activeDocumentKey && !documentKeys.includes(activeDocumentKey)) {
     setActiveDocumentKey(documentKeys[0] ?? null);
-  }, [activeDocumentKey, documentKeys]);
+  }
 
   useEffect(() => {
     const rail = railRef.current;

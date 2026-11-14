@@ -6,6 +6,31 @@ export interface TimeEstimation {
   estimatedTimeRemaining: string | null;
 }
 
+function getSecondsFromEstimate(estimate: string | null): number | null {
+  if (!estimate) return null;
+  
+  let seconds = 0;
+  
+  if (estimate.includes('h')) {
+    const hours = parseInt(estimate.split('h')[0], 10);
+    seconds += hours * 3600;
+    estimate = estimate.split('h')[1];
+  }
+  
+  if (estimate?.includes('m')) {
+    const minutes = parseInt(estimate.split('m')[0], 10);
+    seconds += minutes * 60;
+    estimate = estimate.split('m')[1];
+  }
+  
+  if (estimate?.includes('s')) {
+    const secs = parseInt(estimate.split('s')[0], 10);
+    seconds += secs;
+  }
+  
+  return seconds;
+}
+
 export function useTimeEstimation(): TimeEstimation {
   const [progress, setProgressState] = useState(0);
   const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string | null>(null);
@@ -135,31 +160,6 @@ export function useTimeEstimation(): TimeEstimation {
     }
   }, [estimatedTimeRemaining, formatTimeRemaining, resetState, calculateMovingAverage]);
   
-  const getSecondsFromEstimate = (estimate: string | null): number | null => {
-    if (!estimate) return null;
-    
-    let seconds = 0;
-    
-    if (estimate.includes('h')) {
-      const hours = parseInt(estimate.split('h')[0], 10);
-      seconds += hours * 3600;
-      estimate = estimate.split('h')[1];
-    }
-    
-    if (estimate?.includes('m')) {
-      const minutes = parseInt(estimate.split('m')[0], 10);
-      seconds += minutes * 60;
-      estimate = estimate.split('m')[1];
-    }
-    
-    if (estimate?.includes('s')) {
-      const secs = parseInt(estimate.split('s')[0], 10);
-      seconds += secs;
-    }
-    
-    return seconds;
-  };
-
   const updateProgress = useCallback((newProgress: number) => {
     const currentTime = Date.now();
     const clampedProgress = Math.max(0, Math.min(100, newProgress));

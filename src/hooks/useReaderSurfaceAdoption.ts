@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 type ReaderSurfaceAdoptionState = {
   adoptedAttemptKey: string | null;
@@ -9,16 +9,15 @@ type ReaderSurfaceAdoptionState = {
 
 /**
  * Runs one synchronous adoption command for each explicit reader surface
- * attempt. Callback/object identity changes are intentionally isolated behind
- * refs so provider rerenders cannot repeat the transaction.
+ * attempt. The adopt callback is an effect event, so its identity changes
+ * cannot repeat the transaction when the provider rerenders.
  */
 export function useReaderSurfaceAdoption(input: {
   attemptKey: string;
   enabled: boolean;
   adopt: () => void;
 }): ReaderSurfaceAdoptionState {
-  const adoptRef = useRef(input.adopt);
-  adoptRef.current = input.adopt;
+  const adopt = useEffectEvent(input.adopt);
   const claimedAttemptKeyRef = useRef<string | null>(null);
   const [state, setState] = useState<ReaderSurfaceAdoptionState>({
     adoptedAttemptKey: null,
@@ -32,7 +31,9 @@ export function useReaderSurfaceAdoption(input: {
     // and rerenders caused by the mutation both observe the claimed key.
     claimedAttemptKeyRef.current = input.attemptKey;
     try {
-      adoptRef.current();
+      adopt();
+      // The state records the outcome of the external command this effect ran.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState({ adoptedAttemptKey: input.attemptKey, failure: null });
     } catch (error) {
       setState({

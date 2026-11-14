@@ -93,6 +93,8 @@ export function useLocalVoices({ enabled = true }: { enabled?: boolean } = {}) {
   // one playback started (joining it gives it a progress stream).
   useEffect(() => {
     if (!status || sourceRef.current) return;
+    // Joining a running download opens its progress stream.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isActive(status.operation)) follow(status.operation!);
     else if (status.downloading) void start();
     else if (status.operation && !operation) setOperation(status.operation);

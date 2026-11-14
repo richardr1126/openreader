@@ -46,9 +46,7 @@ export default function PDFViewerPage() {
   const routeDocumentId = typeof id === 'string' ? id : undefined;
 
   return (
-    <ReaderShell documentId={routeDocumentId} readerType="pdf">
-      {(props) => <PdfReader {...props} />}
-    </ReaderShell>
+    <ReaderShell documentId={routeDocumentId} readerType="pdf" renderer={PdfReader} />
   );
 }
 

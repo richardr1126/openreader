@@ -94,12 +94,15 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
     onClose();
   }, [discard, onClose, stopPreview]);
 
+  // Closing the panel discards the draft and silences any preview.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    if (!isOpen) discard();
+  }
   useEffect(() => {
-    if (!isOpen) {
-      stopPreview();
-      discard();
-    }
-  }, [discard, isOpen, stopPreview]);
+    if (!isOpen) stopPreview();
+  }, [isOpen, stopPreview]);
 
   const pickCached = (entry: CachedVoiceResource) => {
     if (entry.provider === providerRef && entry.model === ttsModel) {
@@ -124,7 +127,7 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
   });
   const providerName = providers.find((entry) => entry.slug === providerRef)?.displayName || providerRef;
 
-  const playPreview = useCallback((key: string, voice: string) => {
+  const playPreview = (key: string, voice: string) => {
     void preview.play(key, {
       settings: {
         providerRef,
@@ -139,21 +142,7 @@ export function VoiceSidebar({ isOpen, onClose, pdf = false }: { isOpen: boolean
       },
       text: buildVoicePreviewText({ currentSentence, documentLanguage: documentLanguage === 'auto' ? detectedDocumentLanguage : documentLanguage, voice }),
     });
-  }, [
-    currentSentence,
-    documentLanguage,
-    detectedDocumentLanguage,
-    draft.nativeSpeed,
-    policy.supportsInstructions,
-    preview,
-    providerRef,
-    providerType,
-    ttsInstructions,
-    ttsModelOptions,
-    ttsModel,
-    voiceCustomization,
-    bookSpeechSettings.voiceCustomization,
-  ]);
+  };
 
   const pickerPreview: VoicePickerPreview = { state: preview.state, play: playPreview, stop: stopPreview };
 

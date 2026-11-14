@@ -49,7 +49,6 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const scrollFrameRef = useRef<number | null>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
   const [textLayerReadyLayoutKey, setTextLayerReadyLayoutKey] = useState('');
-  const scaleRef = useRef<number>(1);
   const { containerWidth, containerHeight } = usePDFResize(containerRef);
   const sentenceHighlightSeqRef = useRef(0);
   const wordHighlightSeqRef = useRef(0);
@@ -134,12 +133,8 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
 
   const calculateScale = useCallback((width = pageWidth, height = pageHeight): number => {
     const margin = viewType === 'dual' ? 48 : 24;
-    const effectiveContainerWidth = containerWidth
-      || containerRef.current?.clientWidth
-      || width + margin;
-    const effectiveContainerHeight = containerHeight
-      || containerRef.current?.clientHeight
-      || window.innerHeight;
+    const effectiveContainerWidth = containerWidth || width + margin;
+    const effectiveContainerHeight = containerHeight || window.innerHeight;
     const targetWidth = viewType === 'dual'
       ? (effectiveContainerWidth - margin) / 2
       : effectiveContainerWidth - margin;
@@ -154,13 +149,10 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     return Math.min(scaleByWidth, scaleByHeight) * (zoomLevel / 100);
   }, [containerWidth, containerHeight, zoomLevel, pageWidth, pageHeight, viewType]);
 
-  const renderScale = useMemo(() => {
-    const nextScale = calculateScale();
-    if (Math.abs(nextScale - scaleRef.current) > 0.01) {
-      scaleRef.current = nextScale;
-    }
-    return scaleRef.current;
-  }, [calculateScale]);
+  // Sub-percent changes keep the rendered scale so the canvas does not repaint.
+  const nextScale = calculateScale();
+  const [renderScale, setRenderScale] = useState(nextScale);
+  if (Math.abs(nextScale - renderScale) > 0.01) setRenderScale(nextScale);
 
   // Renderer readiness follows the props that can actually make React-PDF
   // repaint. Raw container dimensions are deliberately excluded: if they
@@ -174,13 +166,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const surfaceKey = currDocId && playbackPlanReady && selectedSegmentKey
     ? `${currDocId}:${layoutKey}:${selectedSegmentKey}`
     : null;
-  const activeSurfaceKeyRef = useRef<string | null>(surfaceKey);
+  const activeSurfaceKeyRef = useLatestRef(surfaceKey);
   const committedSurfacePartsRef = useRef(new Map<string, Set<'canvas' | 'text' | 'highlight'>>());
   const readySurfaceKeyRef = useRef<string | null>(null);
   const failedSurfaceKeyRef = useRef<string | null>(null);
-  const activeLayoutKeyRef = useRef(layoutKey);
-  activeSurfaceKeyRef.current = surfaceKey;
-  activeLayoutKeyRef.current = layoutKey;
+  const activeLayoutKeyRef = useLatestRef(layoutKey);
 
   const commitSurfacePart = useCallback((
     key: string | null,
@@ -193,14 +183,14 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     if (!parts.has('canvas') || !parts.has('text') || !parts.has('highlight')) return;
     readySurfaceKeyRef.current = key;
     onReady?.();
-  }, [onReady]);
+  }, [activeSurfaceKeyRef, onReady]);
 
   const reportSurfaceCommitError = useCallback((error: Error) => {
     const key = activeSurfaceKeyRef.current;
     if (!key || readySurfaceKeyRef.current || failedSurfaceKeyRef.current === key) return;
     failedSurfaceKeyRef.current = key;
     onError?.(error);
-  }, [onError]);
+  }, [activeSurfaceKeyRef, onError]);
 
   // Track page turns so we can keep the previous canvas visible until the new one paints.
   const lastRenderedLayoutKeyRef = useRef<string>('');
@@ -217,7 +207,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     lastRenderedLayoutKeyRef.current = activeLayoutKeyRef.current;
     setIsPageRendering(false);
     commitSurfacePart(activeSurfaceKeyRef.current, 'canvas');
-  }, [commitSurfacePart]);
+  }, [activeLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart]);
 
   const handleTextLayerRenderSuccess = useCallback(() => {
     const readyLayoutKey = activeLayoutKeyRef.current;
@@ -225,7 +215,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       currentKey === readyLayoutKey ? currentKey : readyLayoutKey
     ));
     commitSurfacePart(activeSurfaceKeyRef.current, 'text');
-  }, [commitSurfacePart]);
+  }, [activeLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart]);
 
   useEffect(() => {
     committedSurfacePartsRef.current.clear();
@@ -332,6 +322,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       );
     }
   }, [
+    activeSurfaceKeyRef,
     currDocText,
     followingNarration,
     readerNavigationRevision,

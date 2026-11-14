@@ -78,9 +78,11 @@ export function CustomizeSettingsPanel() {
   // A save still in flight decides instead: it keeps the theme, or restores it if it fails.
   const inFlightSave = useRef<Promise<void> | null>(null);
   const unappliedTheme = useRef<typeof themeBaseline>(null);
-  unappliedTheme.current = themeDirty ? themeBaseline : null;
   const restoreOnLeave = useRef(restoreTheme);
-  restoreOnLeave.current = restoreTheme;
+  useEffect(() => {
+    unappliedTheme.current = themeDirty ? themeBaseline : null;
+    restoreOnLeave.current = restoreTheme;
+  });
   useEffect(() => () => {
     const baseline = unappliedTheme.current;
     if (!baseline) return;

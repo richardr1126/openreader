@@ -110,9 +110,9 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
     modelDownload,
   } = useTTSPlaybackProgress();
   // Keep the last download on screen while the popup animates out.
-  const lastModelDownloadRef = useRef(modelDownload);
-  if (modelDownload) lastModelDownloadRef.current = modelDownload;
-  const shownModelDownload = modelDownload ?? lastModelDownloadRef.current;
+  const [lastModelDownload, setLastModelDownload] = useState(modelDownload);
+  if (modelDownload && modelDownload !== lastModelDownload) setLastModelDownload(modelDownload);
+  const shownModelDownload = modelDownload ?? lastModelDownload;
   const [previewSec, setPreviewSec] = useState<number | null>(null);
   const shownSec = previewSec ?? playbackTimeSec;
   const canSeek = playbackDurationSec > 0 && Boolean(playbackSeekLayout);

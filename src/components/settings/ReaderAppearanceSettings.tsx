@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Section, Select, SegmentedControl, SaveBar, RowIcon, InfoTip, ResetButton } from '@/components/ui';
 import { ColorPicker } from '@/components/ColorPicker';
 import { BookIcon, DisclosureIcon, DocumentIcon, HighlighterIcon, MinusIcon, PaletteIcon, PlusIcon, TextCursorIcon, ZoomIcon } from '@/components/icons/Icons';
@@ -53,7 +53,11 @@ function Stepper({ label, value, min, max, step, suffix = '', onChange }: {
   label: string; value: number; min: number; max: number; step: number; suffix?: string; onChange: (value: number) => void;
 }) {
   const [text, setText] = useState(String(value));
-  useEffect(() => setText(String(value)), [value]);
+  const [shownValue, setShownValue] = useState(value);
+  if (shownValue !== value) {
+    setShownValue(value);
+    setText(String(value));
+  }
   const commit = (raw: number) => {
     if (!Number.isFinite(raw)) { setText(String(value)); return; }
     const next = Number(Math.min(max, Math.max(min, Math.round(raw / step) * step)).toFixed(2));

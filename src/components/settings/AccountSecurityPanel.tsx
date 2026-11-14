@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { PrivateEmail } from '@/components/auth/PrivateEmail';
 import { LockIcon, MailIcon, PencilIcon, UserIcon, XIcon } from '@/components/icons/Icons';
@@ -58,7 +58,12 @@ export function AccountSecurityPanel({ nameOnly = false }: { nameOnly?: boolean 
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditSection | null>(null);
 
-  useEffect(() => { setName(user?.name ?? ''); }, [user?.id, user?.name]);
+  // The name field follows the account's saved name.
+  const [nameSource, setNameSource] = useState<{ id?: string; name?: string } | null>(null);
+  if (nameSource?.id !== user?.id || nameSource?.name !== user?.name) {
+    setNameSource({ id: user?.id, name: user?.name });
+    setName(user?.name ?? '');
+  }
 
   // A role grant always wins over stale bootstrap-source metadata. The setup
   // prompt is for the one narrow state that has not received admin access yet.
@@ -66,7 +71,11 @@ export function AccountSecurityPanel({ nameOnly = false }: { nameOnly?: boolean 
   const bootstrapPending = authUser?.adminSource === 'bootstrap' && !authUser?.isAdmin;
 
   // The bootstrap account must change its password to activate; open that row.
-  useEffect(() => { if (bootstrapPending) setEditing('password'); }, [bootstrapPending]);
+  const [openedForBootstrap, setOpenedForBootstrap] = useState(false);
+  if (openedForBootstrap !== bootstrapPending) {
+    setOpenedForBootstrap(bootstrapPending);
+    if (bootstrapPending) setEditing('password');
+  }
 
   if (!user || user.isAnonymous) return null;
   const authClient = getAuthClient(baseUrl);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useCallback, useState } from 'react';
 import type { Book, NavItem, Rendition } from 'epubjs';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
@@ -23,7 +23,7 @@ interface EPUBViewerProps {
     | 'handleLocationChanged'
     | 'bookRef'
     | 'renditionRef'
-    | 'tocRef'
+    | 'setToc'
     | 'setRendition'
     | 'refreshRenderedPlacement'
     | 'highlightSegment'
@@ -45,8 +45,9 @@ function EpubRenditionHost({
   onToc: (toc: NavItem[]) => void;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
-  const callbacksRef = useRef({ onError, onRendition, onToc });
-  callbacksRef.current = { onError, onRendition, onToc };
+  const reportToc = useEffectEvent(onToc);
+  const reportRendition = useEffectEvent(onRendition);
+  const reportError = useEffectEvent((error: Error) => onError?.(error));
 
   useEffect(() => {
     let active = true;
@@ -59,7 +60,7 @@ function EpubRenditionHost({
         const [, navigation] = await Promise.all([book.opened, book.loaded.navigation]);
         if (!active || !hostRef.current || !book.isOpen) return;
 
-        callbacksRef.current.onToc(navigation.toc);
+        reportToc(navigation.toc);
         // Sections are stripped of script so the frame can allow scripts:
         // WebKit only dispatches the reader's listeners in a frame that does.
         book.spine.hooks.content.register(hardenEpubSection);
@@ -69,14 +70,14 @@ function EpubRenditionHost({
           allowScriptedContent: true,
         });
         rendition.on('keydown', relayEpubKeyDown);
-        callbacksRef.current.onRendition(rendition);
+        reportRendition(rendition);
         // Deliberately do not call display here. The document controller waits
         // for the authoritative plan, resolves its stable locator to one CFI,
         // and owns the single startup display command.
       })
       .catch((error) => {
         if (!active) return;
-        callbacksRef.current.onError?.(
+        reportError(
           error instanceof Error ? error : new Error('Failed to render EPUB'),
         );
       });
@@ -108,7 +109,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     handleLocationChanged,
     bookRef,
     renditionRef,
-    tocRef,
+    setToc,
     setRendition,
     refreshRenderedPlacement,
     highlightSegment,
@@ -138,10 +139,6 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     setActiveRendition(rendition);
     setRendition(rendition);
   }, [setRendition]);
-
-  const handleToc = useCallback((toc: NavItem[]) => {
-    tocRef.current = toc;
-  }, [tocRef]);
 
   const checkResize = useCallback(() => {
     if (isResizing && dimensions && bookRef.current?.isOpen && renditionRef.current) {
@@ -244,7 +241,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
           data={currDocData}
           onError={onError}
           onRendition={handleRendition}
-          onToc={handleToc}
+          onToc={setToc}
         />
       </div>
     </div>

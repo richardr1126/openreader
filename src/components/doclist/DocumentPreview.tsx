@@ -77,7 +77,8 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   // Guards a single re-resolve after an image load error (e.g. an expired
   // presigned URL), reset whenever the preview identity changes.
-  const previewErrorRetriedRef = useRef(false);
+  // The preview key whose broken image was already re-resolved once.
+  const previewErrorRetriedRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const [isVisible, setIsVisible] = useState(false);
   const previewKey = useMemo(
@@ -106,20 +107,20 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
       ? { ...previous, textPreview: value }
       : previous);
   }, [previewKey]);
-  const [isImageReady, setIsImageReady] = useState(false);
+  // The image that finished decoding; a new source is not ready until it loads.
+  const [loadedImage, setLoadedImage] = useState<string | null>(null);
+  const isImageReady = Boolean(imagePreview) && loadedImage === imagePreview;
   const [isGenerating, setIsGenerating] = useState(false);
 
-  useEffect(() => {
+  if (previewState.key !== previewKey) {
     const cached = queryClient.getQueryData<CachedPreview>(previewQueryKey);
     setPreviewState({
       key: previewKey,
       imagePreview: cached?.imagePreview ?? getInMemoryDocumentPreviewUrl(previewKey),
       textPreview: cached?.textPreview ?? textPreviewCacheGet(previewKey) ?? null,
     });
-    setIsImageReady(false);
     setIsGenerating(false);
-    previewErrorRetriedRef.current = false;
-  }, [previewKey, previewQueryKey, queryClient]);
+  }
 
   useEffect(() => {
     if (previewState.key !== previewKey) return;
@@ -153,6 +154,8 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
 
     const cachedImage = getInMemoryDocumentPreviewUrl(previewKey);
     if (cachedImage) {
+      // A preview cached in this tab applies at once; generation below is async.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setImagePreview(cachedImage);
       setTextPreview(null);
       return;
@@ -300,10 +303,6 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     };
   }, [doc.id, doc.lastModified, doc.type, isVisible, previewKey, setImagePreview, setTextPreview]);
 
-  useEffect(() => {
-    setIsImageReady(false);
-  }, [imagePreview]);
-
   // Cached blob/http sources can already be decoded before React's onLoad handler
   // runs on remount, leaving opacity at 0. Promote already-complete images.
   useEffect(() => {
@@ -311,7 +310,7 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
     const img = imageRef.current;
     if (!img) return;
     if (img.complete && img.naturalWidth > 0) {
-      setIsImageReady(true);
+      setLoadedImage(imagePreview);
     }
   }, [imagePreview]);
 
@@ -362,15 +361,15 @@ export function DocumentPreview({ doc }: DocumentPreviewProps) {
             draggable={false}
             loading="lazy"
             onLoad={() => {
-              setIsImageReady(true);
+              setLoadedImage(imagePreview);
             }}
             onError={() => {
               if (!imagePreview) return;
-              setIsImageReady(false);
+              setLoadedImage(null);
               // A cached presigned S3 URL may have expired; re-resolve it once
               // via the status endpoint rather than looping on the same URL.
-              if (previewErrorRetriedRef.current) return;
-              previewErrorRetriedRef.current = true;
+              if (previewErrorRetriedRef.current === previewKey) return;
+              previewErrorRetriedRef.current = previewKey;
               void getDocumentPreviewStatus(doc.id)
                 .then((status) => {
                   if (status.kind !== 'ready') return;

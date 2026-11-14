@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState, type MutableRefObject } from 'react';
 
 import type { TtsPlaybackSeekLayout } from '@/lib/client/api/tts';
 import { createPlaybackReadinessDeadline, isPlaybackStartBufferReady } from '@/lib/client/tts/playback-control';
@@ -51,8 +51,7 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
   } = input;
   const [pendingSeek, setPendingSeekState] = useState<PendingSeek | null>(null);
   const pendingSeekRef = useRef<PendingSeek | null>(null);
-  const latestLayoutRef = useRef(playbackSeekLayout);
-  latestLayoutRef.current = playbackSeekLayout;
+  const readLatestLayout = useEffectEvent(() => playbackSeekLayout);
   const applyingSeekRef = useRef<PendingSeek | null>(null);
   const seekSequenceRef = useRef(0);
 
@@ -103,6 +102,8 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
     const layout = playbackSeekLayout;
     const slot = layout?.segments.find((segment) => segment.ordinal === pendingSeek.ordinal);
     if (layout?.status === 'failed') {
+      // The SSE read model reported the layout failed, so the seek expires.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPendingSeek(null);
       onPendingSeekExpired();
       return;
@@ -125,7 +126,7 @@ export function usePlaybackSeek(input: UsePlaybackSeekInput) {
         if (!positioned || pendingSeekRef.current !== pendingSeek) return;
         setPendingSeek(null);
         const sequence = seekSequenceRef.current;
-        const currentSlot = latestLayoutRef.current?.segments.find((segment) => segment.ordinal === pendingSeek.ordinal);
+        const currentSlot = readLatestLayout()?.segments.find((segment) => segment.ordinal === pendingSeek.ordinal);
         const currentTargetSec = (currentSlot?.startMs ?? slot.startMs) / 1000 + pendingSeek.offsetSec;
         publishPlaybackTimeSec(currentTargetSec, { force: true });
         projectPlaybackTime(currentTargetSec);

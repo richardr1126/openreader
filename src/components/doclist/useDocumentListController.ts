@@ -139,9 +139,12 @@ export function useDocumentListController({ uploadTo }: { uploadTo?: UploadReque
     persistLatestListStateOnUnmount();
   }, [persistLatestListStateOnUnmount]);
 
-  useEffect(() => {
+  // Narrowing the window closes the mobile sidebar.
+  const [wasNarrow, setWasNarrow] = useState(isNarrow);
+  if (wasNarrow !== isNarrow) {
+    setWasNarrow(isNarrow);
     if (isNarrow) setMobileSidebarOpen(false);
-  }, [isNarrow]);
+  }
 
   const model = useMemo(() => deriveDocumentListModel({
     pdfDocuments: pdfDocs,
@@ -280,6 +283,8 @@ export function useDocumentListController({ uploadTo }: { uploadTo?: UploadReque
   const preferencesReady = preferencesQuery.data !== undefined;
   useEffect(() => {
     if (!uploadRequest || !preferencesReady || !folders) return;
+    // The upload link is consumed once, together with the URL rewrite below.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setUploadRequest(undefined);
     // A link to the library, or to a folder that is gone, files into the library itself.
     const folderId = uploadRequest.folderId;

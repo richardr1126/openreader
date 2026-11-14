@@ -120,6 +120,8 @@ function NativeModal({
         dialog.showModal();
         raiseAboveModals();
       }
+      // Content mounts only after showModal(), so autoFocus lands inside it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShown(true);
     } else {
       if (dialog.open) closeModal(dialog, returnFocusRef.current);

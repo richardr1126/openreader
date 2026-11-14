@@ -155,8 +155,13 @@ export function AdminUsersPanel() {
   const [deletionOperationId, setDeletionOperationId] = useState<string | null>(null);
   const deletionStorageKey = session?.user?.id ? `admin-user-deletion:${session.user.id}` : null;
   useEffect(() => {
+    // Browser storage is only readable after mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (deletionStorageKey) setDeletionOperationId(sessionStorage.getItem(deletionStorageKey));
   }, [deletionStorageKey]);
+  const refreshUsers = async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.adminRoot(session?.user?.id ?? 'no-session') });
+  };
   const trackDeletion = (operation: MaintenanceOperation) => {
     if (deletionStorageKey) sessionStorage.setItem(deletionStorageKey, operation.opId);
     setDeletionOperationId(operation.opId);
@@ -187,9 +192,6 @@ export function AdminUsersPanel() {
     enabled: Boolean(session?.user?.id),
     placeholderData: keepPreviousData,
   });
-  const refreshUsers = async () => {
-    await queryClient.invalidateQueries({ queryKey: queryKeys.adminRoot(session?.user?.id ?? 'no-session') });
-  };
   const updateMutation = useMutation({
     mutationFn: ({ id, changes }: { id: string; changes: Partial<Pick<ManagedUser, 'isAdmin' | 'accessStatus'>> }) => updateUser(id, changes),
     onSuccess: async () => {
@@ -250,7 +252,13 @@ export function AdminUsersPanel() {
     delete: selectedUsers,
   };
 
-  useEffect(() => { setSelectedIds(new Set()); }, [page, kind, status, deferredSearch]);
+  // Changing the page or filters clears the selection.
+  const selectionScope = `${page}:${kind}:${status}:${deferredSearch}`;
+  const [selectedScope, setSelectedScope] = useState(selectionScope);
+  if (selectedScope !== selectionScope) {
+    setSelectedScope(selectionScope);
+    setSelectedIds(new Set());
+  }
 
   const toggleOne = (id: string, checked: boolean) => setSelectedIds((current) => {
     const next = new Set(current);

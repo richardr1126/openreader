@@ -31,9 +31,7 @@ export default function EPUBPage() {
   const routeDocumentId = typeof id === 'string' ? id : undefined;
 
   return (
-    <ReaderShell documentId={routeDocumentId} readerType="epub">
-      {(props) => <EpubReader {...props} />}
-    </ReaderShell>
+    <ReaderShell documentId={routeDocumentId} readerType="epub" renderer={EpubReader} />
   );
 }
 
@@ -54,13 +52,13 @@ function EpubReader({
     isPlaybackReady,
     failPlacement,
     metadataLanguage,
-    tocRef,
+    toc,
   } = epubState;
   const resolveChapterTitle = useCallback(
     (chapter: TtsExportChapterProgress) => (
-      chapter.spineHref ? findEpubTocTitle(tocRef.current ?? [], chapter.spineHref) : null
+      chapter.spineHref ? findEpubTocTitle(toc, chapter.spineHref) : null
     ),
-    [tocRef],
+    [toc],
   );
   const { sentences } = useTTS();
   const documentSettings = mergeDocumentSettings(
@@ -217,7 +215,7 @@ function EpubReader({
       <ReaderNavigationSidebars
         open={rendererReady ? navigationPanel : null}
         onClose={() => setActiveSidebar(null)}
-        outline={navigationPanel === 'contents' ? epubTocOutline(tocRef.current ?? []) : []}
+        outline={navigationPanel === 'contents' ? epubTocOutline(toc) : []}
         documentTitle={currDocName || payload.document.name}
         documentId={routeDocumentId}
       />

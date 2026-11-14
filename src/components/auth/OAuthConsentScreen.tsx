@@ -37,6 +37,8 @@ export function OAuthConsentScreen({ device = false }: { device?: boolean }) {
   useEffect(() => {
     if (!accountReady || (device && !checkedCode)) return;
     const controller = new AbortController();
+    // The request below owns these fields while it runs.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true); setInfo(null); setError(null);
     const params = new URLSearchParams(device ? { user_code: checkedCode } : { query });
     void requestJson<RequestInfo>(`/api/oauth/request?${params}`, { signal: controller.signal }, 'Unable to read this request')

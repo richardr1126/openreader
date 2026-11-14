@@ -9,7 +9,10 @@ class MockMessageEvent extends Event {
 }
 
 class MockEventSource {
+  static readonly CLOSED = 2;
   static instances: MockEventSource[] = [];
+
+  readyState = 0;
 
   readonly listeners = new Map<string, EventListener[]>();
   closed = false;
@@ -27,8 +30,14 @@ class MockEventSource {
     for (const listener of this.listeners.get(type) ?? []) listener(event);
   }
 
+  fail(): void {
+    this.readyState = MockEventSource.CLOSED;
+    for (const listener of this.listeners.get('error') ?? []) listener(new Event('error'));
+  }
+
   close(): void {
     this.closed = true;
+    this.readyState = MockEventSource.CLOSED;
   }
 }
 
@@ -92,5 +101,43 @@ describe('reader bootstrap restart client', () => {
     expect(source?.closed).toBe(true);
 
     unsubscribe();
+  });
+
+  test('reopens a stream the browser closed and settles after repeated failures', async () => {
+    vi.useFakeTimers();
+    try {
+      const { subscribeReaderBootstrap } = await import('@/lib/client/api/reader-bootstrap');
+      const snapshots: unknown[] = [];
+      const unsubscribe = subscribeReaderBootstrap('doc-1', (snapshot) => {
+        snapshots.push(snapshot);
+      });
+
+      // A non-200 reconnect (an upstream 502) closes the browser's source.
+      MockEventSource.instances[0]?.fail();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(MockEventSource.instances).toHaveLength(2);
+      MockEventSource.instances[1]?.emit('snapshot', { status: 'ready', payload: {} });
+      expect(snapshots).toEqual([{ status: 'ready', payload: {} }]);
+      unsubscribe();
+
+      snapshots.length = 0;
+      MockEventSource.instances = [];
+      const stop = subscribeReaderBootstrap('doc-2', (snapshot) => {
+        snapshots.push(snapshot);
+      });
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        MockEventSource.instances.at(-1)?.fail();
+        await vi.advanceTimersByTimeAsync(2_000);
+      }
+      expect(MockEventSource.instances).toHaveLength(6);
+      expect(snapshots).toEqual([{
+        status: 'error',
+        message: 'Lost connection while preparing the reader.',
+        retryable: true,
+      }]);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

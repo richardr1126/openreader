@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { useOnboardingState } from '@/hooks/useOnboardingState';
 import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
@@ -46,23 +46,23 @@ function PrivacyModalBody({ origin }: { origin: string }) {
   );
 }
 
+const subscribeToNothing = () => () => {};
+const readOrigin = () => window.location.origin;
+
 export function PrivacyModal({ isOpen, onDismiss }: PrivacyModalProps) {
   const { mutation } = useOnboardingState();
-  const [origin, setOrigin] = useState('');
+  const origin = useSyncExternalStore(subscribeToNothing, readOrigin, () => '');
   const [agreed, setAgreed] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    setOrigin(window.location.origin);
-  }, []);
-
-  useEffect(() => {
+  // Each opening starts unchecked.
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
     if (isOpen) {
       setAgreed(false);
       setSaveFailed(false);
     }
-  }, [isOpen]);
+  }
 
   const handleAccept = async () => {
     setSaveFailed(false);

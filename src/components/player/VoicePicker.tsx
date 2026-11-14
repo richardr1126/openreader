@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ClonedVoiceLibrary } from './ClonedVoiceLibrary';
 import type { VoiceCloningContext } from './CloneVoiceEditor';
 import { CheckIcon, DisclosureIcon, HeartIcon, PauseIcon, PlayIcon } from '@/components/icons/Icons';
@@ -163,13 +163,12 @@ export function VoicePicker({
     setRevealFrom(shownLimit);
     setLimit(Math.min(total, shownLimit + VOICE_BATCH));
   };
-  const revealMoreRef = useRef(revealMore);
-  revealMoreRef.current = revealMore;
+  const revealMoreOnScroll = useEffectEvent(revealMore);
   useEffect(() => {
     const element = sentinel.current;
     if (!endless || !hidden || !element) return;
     const observer = new IntersectionObserver(entries => {
-      if (entries.some(entry => entry.isIntersecting)) revealMoreRef.current();
+      if (entries.some(entry => entry.isIntersecting)) revealMoreOnScroll();
     }, { rootMargin: '0px 0px 160px 0px' });
     // Wait for the last batch to finish growing, or the fade would still be
     // in view and every batch would load at once.

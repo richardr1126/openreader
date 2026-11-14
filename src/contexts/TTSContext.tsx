@@ -18,7 +18,6 @@ import {
   useContext,
   useState,
   useCallback,
-  useEffect,
   useRef,
   useMemo,
   ReactNode,
@@ -305,7 +304,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const isPlayingRef = useRef(false);
   const pauseEpochRef = useRef(0);
   const playbackAnchorRef = useRef<PlaybackAnchor | null>(null);
-  const [, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
+  const [playbackAnchor, setPlaybackAnchor] = useState<PlaybackAnchor | null>(null);
   const [followingNarration, setFollowing] = useState(true);
   const followingNarrationRef = useRef(true);
   const [readerNavigationRevision, setReaderNavigationRevision] = useState(0);
@@ -403,7 +402,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   } = useTtsPlayback({
     audioContext: audioContext ?? null,
     audioSpeed,
-    canStartPlayback: isPlaying && (Boolean(sentences[currentIndex]) || Boolean(playbackAnchorRef.current?.hasContent || playbackAnchorRef.current?.text.trim())),
+    canStartPlayback: isPlaying && (Boolean(sentences[currentIndex]) || Boolean(playbackAnchor?.hasContent || playbackAnchor?.text.trim())),
     isPlaying,
     isPlayingRef,
     playbackSegmentsRef,
@@ -469,10 +468,12 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     syncPlaybackLocator,
   });
 
-  useEffect(() => {
-    if (configIsLoading) return;
+  // The saved speed replaces the local one whenever the loaded config changes it.
+  const [configuredSpeed, setConfiguredSpeed] = useState(audioPlayerSpeed);
+  if (!configIsLoading && configuredSpeed !== audioPlayerSpeed) {
+    setConfiguredSpeed(audioPlayerSpeed);
     setAudioSpeed(audioPlayerSpeed);
-  }, [configIsLoading, audioPlayerSpeed]);
+  }
 
   /**
    * Stops the current audio playback and resets all state

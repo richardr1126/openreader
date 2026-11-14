@@ -226,7 +226,9 @@ export function useAudiobookExport(input: {
 
   // A different voice/format/speed is a different export: drop everything
   // tied to the previous one and hydrate the new one when visible.
-  useEffect(() => {
+  const [stateExportKey, setStateExportKey] = useState(exportKey);
+  if (stateExportKey !== exportKey) {
+    setStateExportKey(exportKey);
     setSnapshot(null);
     setLiveCounts(null);
     setArtifactProgress(null);
@@ -235,6 +237,8 @@ export function useAudiobookExport(input: {
     setRequestError(null);
     setRefreshError(null);
     setChapterDownloads({});
+  }
+  useEffect(() => {
     const chapterSubscriptions = chapterSubscriptionsRef.current;
     const chapterRetryTimers = chapterRetryTimersRef.current;
     return () => {
@@ -254,6 +258,8 @@ export function useAudiobookExport(input: {
   }, [exportKey]);
 
   useEffect(() => {
+    // run owns the resolve request's pending and result state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isOpen && exportKey) void run('resolve', { quiet: true, includeProgress: false });
   }, [exportKey, isOpen, run]);
 
@@ -280,12 +286,13 @@ export function useAudiobookExport(input: {
 
   const artifactState = snapshot?.artifact.state ?? null;
   const artifactOperationId = snapshot?.artifact.operationId ?? null;
+  const artifactBuilding = artifactState === 'building' && Boolean(artifactOperationId);
+  if (!artifactBuilding && (artifactProgress !== null || artifactPhase !== null)) {
+    setArtifactProgress(null);
+    setArtifactPhase(null);
+  }
   useEffect(() => {
-    if (artifactState !== 'building' || !artifactOperationId) {
-      setArtifactProgress(null);
-      setArtifactPhase(null);
-      return;
-    }
+    if (!artifactBuilding || !artifactOperationId) return;
     return subscribeTtsExportArtifactEvents({ opId: artifactOperationId, documentId }, {
       onSnapshot: (event) => {
         setArtifactPhase(event.phase);
@@ -295,7 +302,7 @@ export function useAudiobookExport(input: {
       },
       onError: reconnectIfClosed,
     });
-  }, [artifactOperationId, artifactState, documentId, reconnectIfClosed, refresh, streamEpoch]);
+  }, [artifactBuilding, artifactOperationId, documentId, reconnectIfClosed, refresh, streamEpoch]);
 
   // A build held back by a compute limit is retried when the limit says it can
   // be; the lookup advances it on the server.

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { ChevronLeftIcon, ExternalLinkIcon } from '@/components/icons/Icons';
@@ -194,12 +194,16 @@ export function ProviderEditorDialog({
   // Results belong to the exact form they checked; any edit hides them.
   const [checkResult, setCheckResult] = useState<{ key: string; items: ProviderCheckItem[] } | null>(null);
 
-  useEffect(() => {
-    if (!target) return;
-    setForm(target.kind === 'edit' ? formFromProvider(target.provider) : null);
-    setSlugEdited(false);
-    setCheckResult(null);
-  }, [target]);
+  // Each new target starts from a fresh form.
+  const [formTarget, setFormTarget] = useState<typeof target>(null);
+  if (formTarget !== target) {
+    setFormTarget(target);
+    if (target) {
+      setForm(target.kind === 'edit' ? formFromProvider(target.provider) : null);
+      setSlugEdited(false);
+      setCheckResult(null);
+    }
+  }
 
   const editingId = editing?.id ?? null;
   const checkKey = JSON.stringify({ editingId, form });

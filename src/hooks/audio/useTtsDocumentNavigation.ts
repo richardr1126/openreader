@@ -119,7 +119,9 @@ export function useTtsDocumentNavigation(input: UseTtsDocumentNavigationInput) {
     sentences.length,
     setIsPlaying,
   ]);
-  advanceRef.current = advance;
+  useEffect(() => {
+    advanceRef.current = advance;
+  }, [advance, advanceRef]);
 
   const setDocumentPlaybackAnchor = useCallback((
     location: TTSLocation,

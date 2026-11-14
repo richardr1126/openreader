@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { BaseDocument } from '@/types/documents';
 import { Button, Checkbox, ModalFrame, ModalTitle } from '@/components/ui';
 
@@ -32,15 +32,15 @@ export function DocumentSelectionModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    if (defaultSelected) {
-      setSelectedIds(new Set(files.map((f) => f.id)));
-    } else {
-      setSelectedIds(new Set());
+  // Opening the modal, or new files while open, restarts the selection.
+  const [selectionSource, setSelectionSource] = useState<{ isOpen: boolean; files: typeof files; defaultSelected: boolean } | null>(null);
+  if (selectionSource?.isOpen !== isOpen || selectionSource.files !== files || selectionSource.defaultSelected !== defaultSelected) {
+    setSelectionSource({ isOpen, files, defaultSelected });
+    if (isOpen) {
+      setSelectedIds(defaultSelected ? new Set(files.map((f) => f.id)) : new Set());
+      setLastSelectedId(null);
     }
-    setLastSelectedId(null);
-  }, [isOpen, files, defaultSelected]);
+  }
 
   const toggleSelection = (id: string, multiSelect: boolean, rangeSelect: boolean) => {
     const newSelected = new Set(multiSelect ? selectedIds : []);

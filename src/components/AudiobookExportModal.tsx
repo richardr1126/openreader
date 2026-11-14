@@ -168,10 +168,11 @@ export function AudiobookExportModal({
   const { providers } = useSharedProviders();
   const [exportFormat, setExportFormat] = useState<ExportFormat>('mp3');
   const [localAudioPlayerSpeed, setLocalAudioPlayerSpeed] = useState(audioPlayerSpeed);
-
-  useEffect(() => {
+  const [savedAudioPlayerSpeed, setSavedAudioPlayerSpeed] = useState(audioPlayerSpeed);
+  if (savedAudioPlayerSpeed !== audioPlayerSpeed) {
+    setSavedAudioPlayerSpeed(audioPlayerSpeed);
     setLocalAudioPlayerSpeed(audioPlayerSpeed);
-  }, [audioPlayerSpeed]);
+  }
 
   const exportState = useAudiobookExport({
     documentId,

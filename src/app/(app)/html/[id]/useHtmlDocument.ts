@@ -41,17 +41,15 @@ export function useHtmlDocument(document: HTMLDocument): HtmlDocumentState {
     if (!currDocText) {
       lastFedDocRef.current = null;
       setDocumentPlaybackAnchor(1, false);
-      setIsPlaybackReady(true);
-      return;
+    } else {
+      const key = `${currDocName ?? ''}::${currDocData ?? ''}::${currDocText.length}`;
+      if (lastFedDocRef.current !== key) {
+        lastFedDocRef.current = key;
+        setDocumentPlaybackAnchor(1, true, { readerType: 'html', location: '1' });
+      }
     }
-    const key = `${currDocName ?? ''}::${currDocData ?? ''}::${currDocText.length}`;
-    if (lastFedDocRef.current === key) {
-      setIsPlaybackReady(true);
-      return;
-    }
-    setIsPlaybackReady(false);
-    lastFedDocRef.current = key;
-    setDocumentPlaybackAnchor(1, true, { readerType: 'html', location: '1' });
+    // Readiness follows the playback anchor command above.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsPlaybackReady(true);
   }, [currDocName, currDocText, currDocData, setDocumentPlaybackAnchor]);
 
