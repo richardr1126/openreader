@@ -110,3 +110,15 @@
   .mark[data-parsing='true'] .scan { top: 52%; opacity: 0.65; }
   .track[data-indeterminate='true'] span { width: 46%; transform: none; opacity: 0.72; }
 }
+
+.aside {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+}
+
+.aside p {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--soft);
+}

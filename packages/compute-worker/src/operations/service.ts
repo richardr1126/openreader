@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  WorkerRunner,
   WorkerJobErrorShape,
   WorkerJobTiming,
   WorkerOperationKind,
@@ -13,6 +14,11 @@ import {
   isTerminalStatus,
   shouldReuseExistingOperation,
 } from './state-machine';
+import {
+  WORKER_RUNNER_IDENTITY,
+  outlivedItsRunner,
+  type RunnerIdentity,
+} from './runner-identity';
 import type {
   OperationClock,
   OperationEventStream,
@@ -36,6 +42,7 @@ export interface OperationOrchestratorDeps {
   config: OperationLifecycleConfig;
   clock?: OperationClock;
   idFactory?: OperationIdFactory;
+  runnerIdentity?: RunnerIdentity;
 }
 
 export class OperationOrchestrator {
@@ -46,6 +53,8 @@ export class OperationOrchestrator {
   private readonly maxCasRetries: number;
   private readonly clock: OperationClock;
   private readonly ids: OperationIdFactory;
+  private readonly runnerIdentity: RunnerIdentity;
+  private readonly runner: WorkerRunner;
 
   constructor(deps: OperationOrchestratorDeps) {
     this.queue = deps.queue;
@@ -54,6 +63,11 @@ export class OperationOrchestrator {
     this.opStaleMs = deps.config.opStaleMs;
     this.maxCasRetries = Math.max(1, Math.floor(deps.config.maxCasRetries ?? 10));
     this.clock = deps.clock ?? { now: () => Date.now() };
+    this.runnerIdentity = deps.runnerIdentity ?? WORKER_RUNNER_IDENTITY;
+    this.runner = {
+      workerId: this.runnerIdentity.workerId,
+      incarnationId: this.runnerIdentity.incarnationId,
+    };
     this.ids = deps.idFactory ?? {
       opId: () => randomUUID(),
       jobId: () => randomUUID(),
@@ -76,8 +90,12 @@ export class OperationOrchestrator {
     };
   }
 
-  async enqueueOrReuse(request: WorkerOperationRequest): Promise<WorkerOperationState> {
+  async enqueueOrReuse(
+    request: WorkerOperationRequest,
+    options?: { supersedeOpId?: string },
+  ): Promise<WorkerOperationState> {
     const opKey = request.opKey.trim();
+    const supersedeOpId = options?.supersedeOpId?.trim() || null;
 
     for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
       const indexEntry = await this.stateStore.getOpIndex(opKey);
@@ -89,7 +107,16 @@ export class OperationOrchestrator {
         }
 
         const now = this.clock.now();
-        if (shouldReuseExistingOperation({
+        // An explicit supersede names the operation the caller already saw, so
+        // it replaces that one operation and nothing a later caller started.
+        // An operation this process's predecessor was running is nobody's work
+        // now, however recently it last reported.
+        const abandoned = outlivedItsRunner({
+          runner: current.runner,
+          updatedAt: current.updatedAt,
+          identity: this.runnerIdentity,
+        });
+        if (!abandoned && supersedeOpId !== current.opId && shouldReuseExistingOperation({
           current,
           requestKind: request.kind,
           now,
@@ -187,6 +214,7 @@ export class OperationOrchestrator {
         status: 'running',
         startedAt: input.startedAt ?? current.startedAt ?? now,
         updatedAt: now,
+        runner: this.runner,
         ...(input.timing ? { timing: input.timing } : {}),
       };
     });
@@ -205,6 +233,7 @@ export class OperationOrchestrator {
         status: 'running',
         startedAt: current.startedAt ?? now,
         updatedAt: now,
+        runner: this.runner,
         progress: input.progress,
         ...(input.timing ? { timing: input.timing } : {}),
       };

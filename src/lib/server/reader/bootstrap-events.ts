@@ -10,6 +10,20 @@ import {
 
 const encoder = new TextEncoder();
 
+/**
+ * A running compute operation rewrites its state every few seconds, so its
+ * event stream reports at least that often. Longer silence than the worker's
+ * own liveness window means nothing is working on the operation: the stream
+ * will never report again, and only a fresh resolve can say so. Comfortably
+ * above that window so the worker, not this reader, decides liveness.
+ */
+const OPERATION_SILENCE_LIMIT_MS = 45_000;
+
+/** The operation a pending resolution is waiting on, which its stream follows. */
+function pendingOperationId(resolution: ReaderBootstrapResolution): string | undefined {
+  return resolution.result.status === 'pending' ? resolution.result.operationId : undefined;
+}
+
 function frame(result: ReaderBootstrapResolution['result']): Uint8Array {
   return encoder.encode(`event: snapshot\ndata: ${JSON.stringify(result)}\n\n`);
 }
@@ -34,7 +48,12 @@ export function createReaderBootstrapEventStream(
   resolveOptions: ReaderBootstrapResolveOptions = {},
 ): ReadableStream<Uint8Array> {
   let activeReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+  let silenceTimer: ReturnType<typeof setTimeout> | null = null;
   let cancelled = false;
+  const stopSilenceTimer = (): void => {
+    if (silenceTimer) clearTimeout(silenceTimer);
+    silenceTimer = null;
+  };
 
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -49,9 +68,8 @@ export function createReaderBootstrapEventStream(
             signature = nextSignature;
           }
           if (resolution.result.status !== 'pending') break;
-          if (!resolution.operationId) throw new Error('Pending reader bootstrap has no operation');
-
-          const operationId = resolution.operationId;
+          const operationId = pendingOperationId(resolution);
+          if (!operationId) throw new Error('Pending reader bootstrap has no operation');
           const upstream = await getComputeWorkerClient().openOperationEvents(operationId, {
             signal: request.signal,
           });
@@ -59,12 +77,24 @@ export function createReaderBootstrapEventStream(
             throw new Error(await upstream.text().catch(() => 'Failed to observe reader bootstrap'));
           }
 
-          activeReader = upstream.body.getReader();
+          const reader = upstream.body.getReader();
+          activeReader = reader;
           const decoder = new TextDecoder();
           let buffer = '';
           let advanced = false;
+          let silent = false;
+          // Ending the read is what wakes this loop back up; a pending read
+          // cannot be raced away without leaking it.
+          const heard = (): void => {
+            stopSilenceTimer();
+            silenceTimer = setTimeout(() => {
+              silent = true;
+              void reader.cancel().catch(() => undefined);
+            }, OPERATION_SILENCE_LIMIT_MS);
+          };
+          heard();
           while (!cancelled) {
-            const { done, value } = await activeReader.read();
+            const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
             buffer = buffer.replaceAll('\r\n', '\n');
@@ -81,6 +111,7 @@ export function createReaderBootstrapEventStream(
                   boundary = buffer.indexOf('\n\n');
                   continue;
                 }
+                heard();
                 if (snapshot.status === 'queued' || snapshot.status === 'running') {
                   // The stream was authorized at entry. Progress is already in
                   // this snapshot: do not turn every download checkpoint into
@@ -109,7 +140,7 @@ export function createReaderBootstrapEventStream(
                 );
                 if (next instanceof Response) throw new Error('Reader bootstrap authorization changed');
                 resolution = next;
-                const changedOperation = resolution.operationId !== operationId;
+                const changedOperation = pendingOperationId(resolution) !== operationId;
                 if (resolution.result.status !== 'pending' || changedOperation) {
                   advanced = true;
                   break;
@@ -124,8 +155,19 @@ export function createReaderBootstrapEventStream(
             }
             if (advanced) break;
           }
-          await activeReader.cancel().catch(() => undefined);
+          stopSilenceTimer();
+          await reader.cancel().catch(() => undefined);
           activeReader = null;
+          if (silent) {
+            const next = await resolveReaderBootstrapState(request, documentId, resolveOptions);
+            if (next instanceof Response) throw new Error('Reader bootstrap authorization changed');
+            // A resolve settles an abandoned operation, so an unchanged pending
+            // result means the operation is alive and this stream was merely
+            // reopened; either way the outer loop reports what resolve says.
+            if (pendingOperationId(next) === operationId && next.result.status === 'pending') break;
+            resolution = next;
+            continue;
+          }
           if (!advanced) break;
         }
         if (!cancelled) controller.close();
@@ -138,12 +180,14 @@ export function createReaderBootstrapEventStream(
           }
         }
       }).finally(() => {
+        stopSilenceTimer();
         void activeReader?.cancel().catch(() => undefined);
         activeReader = null;
       });
     },
     cancel() {
       cancelled = true;
+      stopSilenceTimer();
       void activeReader?.cancel().catch(() => undefined);
       activeReader = null;
     },

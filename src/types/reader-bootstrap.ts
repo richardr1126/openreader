@@ -49,4 +49,10 @@ export type ReaderPayload =
 export type ReaderBootstrapResult =
   | { status: 'pending'; progress?: ReaderBootstrapProgress; operationId?: string }
   | { status: 'ready'; payload: ReaderPayload }
-  | { status: 'error'; message: string; retryable: boolean; notFound?: boolean };
+  | {
+    status: 'error';
+    message: string;
+    retryable: boolean;
+    notFound?: boolean;
+    failedPdfOperationId?: string;
+  };

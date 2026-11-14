@@ -48,7 +48,10 @@ export interface OperationEventStreamLike {
 export interface OperationStateStoreLike extends ReconciliationStateStore {}
 
 export interface OrchestratorLike {
-  enqueueOrReuse(request: WorkerOperationRequest): Promise<WorkerOperationState>;
+  enqueueOrReuse(
+    request: WorkerOperationRequest,
+    options?: { supersedeOpId?: string },
+  ): Promise<WorkerOperationState>;
   markRunning(input: {
     opId: string;
     startedAt?: number;

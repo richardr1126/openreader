@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { RUNNING_OPERATION_STALE_MS } from '../../../src/operations/contracts';
 import type { WorkerOperationState } from '../../../src/operations/contracts';
 import {
   explainReplacementReason,
@@ -41,29 +42,45 @@ describe('state-machine decisions', () => {
     expect(isInflightStatus('failed')).toBe(false);
   });
 
-  test('reuses fresh inflight operation and rejects stale inflight operation', () => {
+  test('judges a running operation on its heartbeat, not on the queue stale window', () => {
     const current = runningState();
+    const decide = (now: number) => shouldReuseExistingOperation({
+      current,
+      requestKind: 'pdf_layout',
+      now,
+      opStaleMs: 1_800_000,
+    });
+
+    // A heartbeating job keeps its operation however long the work takes.
+    expect(decide(current.updatedAt + RUNNING_OPERATION_STALE_MS)).toBe(true);
+    // Silence past that window means no worker is executing it, whatever the
+    // much longer queue window would allow.
+    expect(decide(current.updatedAt + RUNNING_OPERATION_STALE_MS + 1)).toBe(false);
+
+    expect(explainReplacementReason({
+      current,
+      requestKind: 'pdf_layout',
+      now: current.updatedAt + RUNNING_OPERATION_STALE_MS + 1,
+      opStaleMs: 1_800_000,
+    })).toBe('stale_running');
+  });
+
+  test('keeps a queued operation for the whole queue stale window', () => {
+    const current = runningState({ status: 'queued' });
 
     expect(shouldReuseExistingOperation({
       current,
       requestKind: 'pdf_layout',
-      now: 2_900,
-      opStaleMs: 1_000,
+      now: current.updatedAt + RUNNING_OPERATION_STALE_MS + 1,
+      opStaleMs: 1_800_000,
     })).toBe(true);
 
     expect(shouldReuseExistingOperation({
       current,
       requestKind: 'pdf_layout',
-      now: 3_100,
-      opStaleMs: 1_000,
+      now: current.updatedAt + 1_800_001,
+      opStaleMs: 1_800_000,
     })).toBe(false);
-
-    expect(explainReplacementReason({
-      current,
-      requestKind: 'pdf_layout',
-      now: 3_100,
-      opStaleMs: 1_000,
-    })).toBe('stale_running');
   });
 
   test('never reuses kind-mismatched operation', () => {

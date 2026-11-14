@@ -14,6 +14,7 @@ import type {
   DocumentConversionArtifactMetadata,
   DocumentPreviewArtifactMetadata,
 } from '../../operations/contracts';
+import type { StreamedOperationState } from '../../operations/recovery';
 import { toComputeOperation } from '../compute-operation';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
@@ -30,6 +31,19 @@ import {
   pdfOperationCreateSchema,
   pdfResolveSchema,
 } from '../schemas';
+
+/**
+ * The operation currently registered for an operation key, read through the
+ * reconciler so an operation abandoned by a stopped worker is reported as the
+ * failure it is rather than as work still in progress.
+ */
+async function resolveOperationForKey(
+  context: ComputeWorkerRouteContext,
+  opKey: string,
+): Promise<StreamedOperationState | null> {
+  const index = await context.deps.operationStateStore.getOpIndex?.(opKey);
+  return index?.opId ? await context.getOpState(index.opId) : null;
+}
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
 
@@ -121,7 +135,10 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
       },
     };
     await ensureOrphanedOpRecovery();
-    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
+      ...(parsed.data.supersedeOpId ? { supersedeOpId: parsed.data.supersedeOpId } : {}),
+    });
+    logAccepted(context, requestOp, op);
     reply.code(202);
     return toComputeOperation(op);
   });
@@ -194,8 +211,7 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
       prefix: s3Prefix,
     });
     const hasArtifact = await deps.artifactExists?.(artifactKey) ?? false;
-    const index = await deps.operationStateStore.getOpIndex?.(buildPdfOperationKey(parsed.data));
-    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    const operation = await resolveOperationForKey(context, buildPdfOperationKey(parsed.data));
     return {
       artifact: hasArtifact ? { objectKey: artifactKey } : null,
       operation: operation ? toComputeOperation(operation) : null,
@@ -215,8 +231,7 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
     }
     await ensureOrphanedOpRecovery();
     const artifact = await readPreviewMetadata(context, parsed.data);
-    const index = await deps.operationStateStore.getOpIndex?.(buildDocumentPreviewOperationKey(parsed.data));
-    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    const operation = await resolveOperationForKey(context, buildDocumentPreviewOperationKey(parsed.data));
     return { artifact, operation: operation ? toComputeOperation(operation) : null };
   });
 
@@ -233,8 +248,7 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
     }
     await ensureOrphanedOpRecovery();
     const artifact = await readConversionMetadata(context, parsed.data);
-    const index = await deps.operationStateStore.getOpIndex?.(buildDocumentConversionOperationKey(parsed.data));
-    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    const operation = await resolveOperationForKey(context, buildDocumentConversionOperationKey(parsed.data));
     return { artifact, operation: operation ? toComputeOperation(operation) : null };
   });
 

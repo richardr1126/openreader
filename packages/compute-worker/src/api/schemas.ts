@@ -54,6 +54,12 @@ export const pdfOperationCreateSchema = z.object({
   namespace: namespaceSchema,
   documentObjectKey: z.string().trim().min(1).max(2048),
   replaceToken: z.string().trim().min(1).max(256).optional(),
+  /**
+   * Replace this operation even if it would otherwise be reused, keeping the
+   * same operation key so the next resolve reports the replacement. This is how
+   * a reader restarts a preparation that is in flight but getting nowhere.
+   */
+  supersedeOpId: z.string().trim().min(1).max(128).optional(),
 });
 
 export const documentPreviewOperationCreateSchema = z.object({

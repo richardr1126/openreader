@@ -19,6 +19,16 @@ import type {
 import type { ReaderDocument } from '@/types/documents';
 import type { DocumentProgressPayload } from '@/types/user-state';
 
+/**
+ * The PDF preparation a reader is watching, which a restart supersedes: the
+ * operation behind a failure, or the one still reporting progress.
+ */
+function watchedPdfOperationId(result: ReaderBootstrapResult): string | undefined {
+  if (result.status === 'error') return result.failedPdfOperationId;
+  if (result.status === 'pending') return result.progress?.kind === 'pdf-parse' ? result.operationId : undefined;
+  return undefined;
+}
+
 export type ReaderDocumentSourceResult =
   | { status: 'idle' | 'pending' }
   | { status: 'ready'; document: ReaderDocument }
@@ -61,6 +71,15 @@ export function useReaderBootstrap(documentId: string | undefined) {
     mutationFn: (settings: DocumentSettings) => putDocumentSettings(documentId!, settings),
   });
   const progressMutation = useMutation({ mutationFn: putDocumentProgress });
+  const pdfRestartMutation = useMutation({
+    mutationFn: (operationId: string) => getReaderBootstrap(documentId!, operationId),
+    // A snapshot from elsewhere may already have moved the reader on, so the
+    // restart only replaces the state it was started from.
+    onSuccess: (snapshot, operationId) => {
+      queryClient.setQueryData<ReaderBootstrapResult>(key, (current) =>
+        current && watchedPdfOperationId(current) === operationId ? snapshot : current);
+    },
+  });
   const mutateProgress = progressMutation.mutate;
 
   const currentResult: ReaderBootstrapResult = !documentId
@@ -177,9 +196,18 @@ export function useReaderBootstrap(documentId: string | undefined) {
     bootstrapSettingsAtStart.current = lastSettingsCommit.current;
     queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
   }, [key, queryClient]);
+  const restartablePdfOperationId = watchedPdfOperationId(currentResult);
+  const restartPdfPreparation = useCallback(() => {
+    if (restartablePdfOperationId) pdfRestartMutation.mutate(restartablePdfOperationId);
+  }, [pdfRestartMutation, restartablePdfOperationId]);
+  const failedPdfOperationId = currentResult.status === 'error' ? currentResult.failedPdfOperationId : undefined;
   const retry = useCallback(async () => {
+    if (failedPdfOperationId) {
+      pdfRestartMutation.mutate(failedPdfOperationId);
+      return;
+    }
     await query.refetch();
-  }, [query]);
+  }, [failedPdfOperationId, pdfRestartMutation, query]);
   const retryDocumentSource = useCallback(async () => {
     await sourceQuery.refetch();
   }, [sourceQuery]);
@@ -226,6 +254,11 @@ export function useReaderBootstrap(documentId: string | undefined) {
     documentSource,
     restart,
     retry,
+    /** Supersede the PDF preparation the reader is watching with a fresh one. */
+    restartPdfPreparation: restartablePdfOperationId ? restartPdfPreparation : undefined,
+    restarting: pdfRestartMutation.isPending,
+    retrying: pdfRestartMutation.isPending || query.isFetching,
+    retryError: pdfRestartMutation.error,
     retryDocumentSource,
     updateSettings,
     updatePresentation,
