@@ -3,6 +3,8 @@ import type { AccountExportArtifactMetadata, AccountExportJobRequest, AccountExp
 import { accountExportArtifactKey, accountExportMetadataArtifactKey } from '../storage/artifact-addressing';
 import { buildAccountExportArchive, type SupportedAccountExportManifest } from './account-export-archive';
 import type { JobHandlerContext } from './context';
+import type { JobExecution } from '../operations/types';
+import { prepareArtifactWrite } from '../storage/artifact-write';
 
 const requestSchema = z.object({
   artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
@@ -18,11 +20,12 @@ export function createAccountExportHandler(input: JobHandlerContext) {
   return async function runAccountExport(
     payload: AccountExportJobRequest,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: AccountExportProgress) => Promise<void> },
+    hooks?: JobExecution<AccountExportProgress>,
   ): Promise<AccountExportJobResult> {
     const parsed = requestSchema.parse(payload);
     const startedAt = Date.now();
     const metadataObjectKey = accountExportMetadataArtifactKey({ artifactId: parsed.artifactId, storageUserId: parsed.storageUserId, namespace: parsed.namespace, prefix: input.s3Prefix });
+    const writeMetadata = await prepareArtifactWrite(input.storage, metadataObjectKey, hooks);
     const existingMetadata = await input.storage.readObject(metadataObjectKey)
       .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as AccountExportArtifactMetadata)
       .catch(() => null);
@@ -43,8 +46,11 @@ export function createAccountExportHandler(input: JobHandlerContext) {
       throw new Error('Account export manifest scope mismatch');
     }
     const archive = await buildAccountExportArchive({ manifest, readObject: input.storage.readObject, onProgress: hooks?.onProgress });
-    const objectKey = accountExportArtifactKey({ artifactId: parsed.artifactId, storageUserId: parsed.storageUserId, namespace: parsed.namespace, prefix: input.s3Prefix });
-    await input.storage.putObject(objectKey, archive, 'application/zip');
+    const objectKey = accountExportArtifactKey({
+      ...parsed, prefix: input.s3Prefix, buildId: hooks && `${hooks.opId}-${hooks.attempt}`,
+    });
+    await hooks?.assertActive();
+    await input.storage.putObject(objectKey, archive, 'application/zip', hooks?.signal);
     const artifact: AccountExportArtifactMetadata = {
       schemaVersion: 1,
       artifactId: parsed.artifactId,
@@ -61,7 +67,7 @@ export function createAccountExportHandler(input: JobHandlerContext) {
       status: 'ready',
       createdAt: Date.now(),
     };
-    await input.storage.putObject(metadataObjectKey, Buffer.from(JSON.stringify(artifact)), 'application/json');
+    await writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json');
     await hooks?.onProgress?.({ phase: 'uploading', completedFiles: manifest.files.length, plannedFiles: manifest.files.length });
     return { artifact, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
   };

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { runPdfLayoutFromPdfBuffer } from '../inference/runtime';
 import { withIdleTimeoutAndHardCap } from '../infrastructure/config';
 import type { PdfLayoutJobRequest, PdfLayoutJobResult, PdfLayoutProgress } from '../operations/contracts';
+import type { JobExecution } from '../operations/types';
 import { parsedPdfArtifactKey } from '../storage/artifact-addressing';
 import { createPdfParseCheckpoint } from '../storage/pdf-parse-checkpoint';
 import type { PdfLayoutJobContext } from './context';
@@ -17,14 +18,7 @@ const requestSchema = z.object({
   documentObjectKey: z.string().trim().min(1).max(2048),
 });
 
-export interface PdfLayoutExecution {
-  opId: string;
-  operationKey: string;
-  attempt: number;
-  signal: AbortSignal;
-  assertActive: () => Promise<void>;
-  onProgress: (progress: PdfLayoutProgress) => Promise<void>;
-}
+export type PdfLayoutExecution = JobExecution<PdfLayoutProgress>;
 
 export function createPdfLayoutHandler(input: PdfLayoutJobContext) {
   return async function runPdfLayout(

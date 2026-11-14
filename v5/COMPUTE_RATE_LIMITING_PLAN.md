@@ -1002,7 +1002,11 @@ linking the admission to cover completion that arrived before linkage.
 Age-based sweeping applies to records from older workers for one operation
 retention window. New operations close through delivery exhaustion,
 publication expiry, or a terminal execution result. PDF layout resumes from
-saved page batches when JetStream redelivers its job.
+saved page batches when JetStream redelivers its job. Playback plans, audiobook
+exports, document previews, document conversions, and account exports can also
+recover across up to three deliveries. A replacement delivery reuses an
+available result or rebuilds it. Artifact publication checks the observed
+object revision to prevent a delayed write from replacing a newer result.
 
 ---
 

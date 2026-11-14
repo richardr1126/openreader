@@ -26,6 +26,18 @@ export interface OperationAttemptUpdate {
   timing?: WorkerJobTiming;
 }
 
+export interface JobAttempt {
+  opId: string;
+  operationKey: string;
+  attempt: number;
+  signal: AbortSignal;
+  assertActive: () => Promise<void>;
+}
+
+export type JobExecution<Progress = never> = JobAttempt & {
+  onProgress: (progress: Progress) => Promise<void>;
+};
+
 export type OperationAttemptOutcome =
   | { status: 'succeeded'; result: unknown }
   | { status: 'failed'; error: WorkerJobErrorShape };

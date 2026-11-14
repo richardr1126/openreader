@@ -28,6 +28,7 @@ export interface ParsedPdfArtifactStorage extends ArtifactStorage {
 
 export interface ArtifactStorage {
   readObject(key: string, signal?: AbortSignal): Promise<ArrayBuffer>;
+  getObjectEtag?(key: string, signal?: AbortSignal): Promise<string | null>;
   objectExists(key: string, signal?: AbortSignal): Promise<boolean>;
   deleteObject(key: string, signal?: AbortSignal): Promise<void>;
   listPrefix(prefix: string, signal?: AbortSignal): Promise<string[]>;
@@ -42,9 +43,9 @@ export interface ArtifactStorage {
    * name returned as `startAfter` to continue.
    */
   listChildPrefixes(prefix: string, options?: { startAfter?: string; limit?: number }): Promise<string[]>;
-  putObject(key: string, body: Buffer | Uint8Array, contentType?: string, signal?: AbortSignal): Promise<void>;
+  putObject(key: string, body: Buffer | Uint8Array, contentType?: string, signal?: AbortSignal, expectedEtag?: string | null): Promise<void>;
   /** Upload a derived file without materializing the entire artifact in memory. */
-  putFile(key: string, path: string, contentType: string): Promise<void>;
+  putFile(key: string, path: string, contentType: string, signal?: AbortSignal): Promise<void>;
   putParsedPdf(documentId: string, namespace: string | null, parsed: unknown, options: {
     operationId: string;
     expected: ParsedPdfArtifactRevision | null;
@@ -126,6 +127,18 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ParsedPdfA
   };
 
   return {
+    async getObjectEtag(key, signal) {
+      try {
+        const response = await config.client.send(new HeadObjectCommand({
+          Bucket: config.bucket, Key: safeKey(key),
+        }), { abortSignal: signal });
+        if (!response.ETag) throw new Error('Stored object is missing its ETag');
+        return response.ETag;
+      } catch (error) {
+        if (isNotFound(error)) return null;
+        throw error;
+      }
+    },
     async readObject(key, signal) {
       const response = await config.client.send(new GetObjectCommand({
         Bucket: config.bucket,
@@ -220,23 +233,24 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ParsedPdfA
       } while (continuationToken);
       return names;
     },
-    async putObject(key, body, contentType, signal) {
+    async putObject(key, body, contentType, signal, expectedEtag) {
       await config.client.send(new PutObjectCommand({
         Bucket: config.bucket,
         Key: safeKey(key),
         Body: Buffer.from(body),
         ContentType: contentType,
         ServerSideEncryption: 'AES256',
+        ...(expectedEtag === null ? { IfNoneMatch: '*' } : expectedEtag ? { IfMatch: expectedEtag } : {}),
       }), { abortSignal: signal });
     },
-    async putFile(key, path, contentType) {
+    async putFile(key, path, contentType, signal) {
       const { size } = await stat(path);
       const body = createReadStream(path);
       try {
         await config.client.send(new PutObjectCommand({
           Bucket: config.bucket, Key: safeKey(key), Body: body,
           ContentLength: size, ContentType: contentType, ServerSideEncryption: 'AES256',
-        }));
+        }), { abortSignal: signal });
       } finally {
         body.destroy();
       }

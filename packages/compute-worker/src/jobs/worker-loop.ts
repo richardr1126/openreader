@@ -26,8 +26,8 @@ import type {
 } from '../operations/contracts';
 import { WORKER_OPERATION_KIND_POLICY } from '../operations/contracts';
 import type { JsonCodec } from '../infrastructure/json-codec';
-import type { OperationAttemptUpdate, OperationExecution } from '../operations/types';
-import type { PdfLayoutExecution } from './pdf-layout';
+import type { JobExecution, OperationAttemptUpdate, OperationExecution } from '../operations/types';
+import { WORKER_HEARTBEAT_MS } from '../operations/delivery-policy';
 import { pdfInputErrorCode } from '../inference/pdf/parse';
 import type { JobHandlers } from './handlers';
 import { buildQueueWaitTiming, decideRetryAction } from './worker-loop-policy';
@@ -45,7 +45,6 @@ import {
 } from './execution-scheduler';
 
 const LOOP_ERROR_BACKOFF_MS = 500;
-const RUNNING_HEARTBEAT_MS = 5000;
 const PULL_EXPIRES_MS = 5_000;
 
 class ComputeQueueExpiredError extends Error {
@@ -124,7 +123,6 @@ export function createWorkerLoopController(input: {
   logger: WorkerLogger;
   getComputePolicy: () => ComputeLimitPolicyDocument;
   pdfAttempts: number;
-  documentJobAttempts?: number;
   pdfCodec: JsonCodec<QueuedJob<PdfLayoutJobRequest>>;
   ttsPlaybackCodec?: JsonCodec<QueuedJob<TtsPlaybackJobRequest>>;
   ttsPlaybackPlanCodec?: JsonCodec<QueuedJob<TtsPlaybackPlanJobRequest>>;
@@ -159,9 +157,7 @@ export function createWorkerLoopController(input: {
   type JobRunner<TPayload, TResult> = (
     payload: TPayload,
     queueWaitMs: number,
-    hooks: Omit<PdfLayoutExecution, 'onProgress'> & {
-      onProgress: (progress: WorkerOperationProgress) => Promise<void>;
-    },
+    hooks: JobExecution<WorkerOperationProgress>,
   ) => Promise<TResult>;
 
   type WorkDefinition<TPayload, TResult> = {
@@ -283,7 +279,7 @@ export function createWorkerLoopController(input: {
         }).finally(() => {
           heartbeatPending = false;
         });
-      }, RUNNING_HEARTBEAT_MS);
+      }, WORKER_HEARTBEAT_MS);
       const result = await work.run(decoded.payload, delivery.queueWaitTiming?.queueWaitMs ?? 0, {
         opId: decoded.opId,
         operationKey: decoded.opKey,
@@ -342,7 +338,6 @@ export function createWorkerLoopController(input: {
           kind,
           deliveryCount,
           pdfAttempts: input.pdfAttempts,
-          documentJobAttempts: input.documentJobAttempts,
           retryable,
         });
       stopHeartbeat();
@@ -412,7 +407,7 @@ export function createWorkerLoopController(input: {
         } catch {
           // A detached or redelivered message is handled by the normal loop path.
         }
-      }, RUNNING_HEARTBEAT_MS);
+      }, WORKER_HEARTBEAT_MS);
       try {
         if (work.action) {
           const acquisition = await scheduler.acquire(work.action);
@@ -451,7 +446,6 @@ export function createWorkerLoopController(input: {
         kind: work.codec.decode(msg.data).kind,
         deliveryCount: msg.info.deliveryCount,
         pdfAttempts: input.pdfAttempts,
-        documentJobAttempts: input.documentJobAttempts,
       }) === 'nak_retry';
     } catch {
       return true;

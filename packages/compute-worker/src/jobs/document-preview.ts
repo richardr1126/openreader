@@ -3,6 +3,9 @@ import { withTimeout } from '../infrastructure/config';
 import { DOCUMENT_PREVIEW_RENDERER_VERSION, type DocumentPreviewArtifactMetadata, type DocumentPreviewJobRequest, type DocumentPreviewJobResult } from '../operations/contracts';
 import { documentPreviewArtifactKey, documentPreviewMetadataArtifactKey } from '../storage/artifact-addressing';
 import type { JobHandlerContext } from './context';
+import type { JobAttempt } from '../operations/types';
+import { prepareArtifactWrite } from '../storage/artifact-write';
+import { readDocumentPreviewMetadata } from '../storage/document-preview-metadata';
 import { renderEpubCoverToJpeg, renderPdfFirstPageToJpeg } from './document-preview-render';
 
 const requestSchema = z.object({
@@ -17,8 +20,19 @@ const requestSchema = z.object({
 }).strict();
 
 export function createDocumentPreviewHandler(input: JobHandlerContext) {
-  return async function runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number): Promise<DocumentPreviewJobResult> {
+  return async function runDocumentPreview(payload: DocumentPreviewJobRequest, queueWaitMs: number, attempt?: JobAttempt): Promise<DocumentPreviewJobResult> {
     const parsed = requestSchema.parse(payload);
+    const scope = { ...parsed, prefix: input.s3Prefix };
+    const objectKey = documentPreviewArtifactKey(scope);
+    const metadataObjectKey = documentPreviewMetadataArtifactKey(scope);
+    const [writePreview, writeMetadata] = await Promise.all([
+      prepareArtifactWrite(input.storage, objectKey, attempt),
+      prepareArtifactWrite(input.storage, metadataObjectKey, attempt),
+    ]);
+    if (attempt && attempt.attempt > 1) {
+      const existing = await readDocumentPreviewMetadata(input.storage, parsed, input.s3Prefix);
+      if (existing) return { artifact: existing, timing: { queueWaitMs, computeMs: 0 } };
+    }
     const s3FetchStartedAt = Date.now();
     const sourceBytes = Buffer.from(await withTimeout(input.storage.readObject(parsed.sourceObjectKey), Math.max(input.pdfTimeoutMs, 1_000), 'document preview source fetch'));
     const s3FetchMs = Date.now() - s3FetchStartedAt;
@@ -27,9 +41,7 @@ export function createDocumentPreviewHandler(input: JobHandlerContext) {
       ? await renderPdfFirstPageToJpeg(sourceBytes, parsed.targetWidth ?? 400)
       : await renderEpubCoverToJpeg(sourceBytes, parsed.targetWidth ?? 400);
     const computeMs = Date.now() - computeStartedAt;
-    const objectKey = documentPreviewArtifactKey({ documentId: parsed.documentId, namespace: parsed.namespace, prefix: input.s3Prefix });
-    const metadataObjectKey = documentPreviewMetadataArtifactKey({ documentId: parsed.documentId, namespace: parsed.namespace, prefix: input.s3Prefix });
-    await input.storage.putObject(objectKey, rendered.bytes, 'image/jpeg');
+    await writePreview(rendered.bytes, 'image/jpeg');
     const artifact: DocumentPreviewArtifactMetadata = {
       schemaVersion: 1,
       documentId: parsed.documentId,
@@ -49,7 +61,7 @@ export function createDocumentPreviewHandler(input: JobHandlerContext) {
       status: 'ready',
       createdAt: Date.now(),
     };
-    await input.storage.putObject(metadataObjectKey, Buffer.from(JSON.stringify(artifact)), 'application/json');
+    await writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json');
     return { artifact, timing: { queueWaitMs, s3FetchMs, computeMs } };
   };
 }

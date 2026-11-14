@@ -82,12 +82,12 @@ import {
   COMPUTE_STATE_TTL_MS,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
-  PDF_LAYOUT_ACK_WAIT_MS,
   TTS_PLAYBACK_PLAN_JOBS_SUBJECT,
   TTS_PLAYBACK_EXPORT_JOBS_SUBJECT,
   TTS_PLAYBACK_JOBS_SUBJECT,
   TTS_PLAYBACK_DOCUMENT_JOBS_SUBJECT,
 } from '../infrastructure/nats';
+import { WORKER_ACK_WAIT_MS } from '../operations/delivery-policy';
 import { registerHttpHooks } from './http-hooks';
 import {
   registerComputeWorkerRoutes,
@@ -180,7 +180,6 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
   const pdfHardCapMs = timeoutConfig.pdfHardCapMs;
   const ttsPlaybackSegmentTimeoutMs = timeoutConfig.ttsPlaybackSegmentTimeoutMs;
   const pdfAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 3);
-  const documentJobAttempts = readPositiveIntEnv('COMPUTE_PDF_JOB_ATTEMPTS', 1);
   const prewarmModels = readBoolEnv('COMPUTE_PREWARM_MODELS', false);
   const jobsStreamMaxBytes = readPositiveIntEnv('COMPUTE_JOBS_STREAM_MAX_BYTES', 256 * 1024 * 1024);
   const eventsStreamMaxBytes = readPositiveIntEnv('COMPUTE_EVENTS_STREAM_MAX_BYTES', 128 * 1024 * 1024);
@@ -381,7 +380,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     orchestrator,
     whisperTimeoutMs,
     pdfTimeoutMs,
-    pdfRecoveryMinMs: 2 * PDF_LAYOUT_ACK_WAIT_MS,
+    pdfRecoveryMinMs: 2 * WORKER_ACK_WAIT_MS,
     opStaleMs,
     getGeneration: () => options.routeDeps ? 0 : sessionManager.getGeneration(),
     logger: app.log,
@@ -458,7 +457,6 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     getComputePolicy: () => computePolicy,
     pdfAttempts,
     pdfCodec: layoutJobCodec,
-    documentJobAttempts,
     ttsPlaybackCodec: ttsPlaybackJobCodec,
     ttsPlaybackPlanCodec: ttsPlaybackPlanJobCodec,
     ttsPlaybackExportCodec: ttsPlaybackExportJobCodec,
@@ -519,10 +517,8 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     connectOptions: connectOpts,
     logger: app.log,
     whisperTimeoutMs,
-    pdfTimeoutMs,
     pdfAttempts,
     jobsStreamMaxBytes,
-    documentJobAttempts,
     eventsStreamMaxBytes,
     jobStatesMaxBytes,
     natsReplicas,

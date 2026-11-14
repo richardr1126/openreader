@@ -14,6 +14,8 @@ import { isTtsProviderType } from '@openreader/tts/provider-catalog';
 import type { TTSSegmentSettings } from '@openreader/tts/types';
 import { extractEpubSpine } from '../../inference/epub/spine-text';
 import type { ParsedPdfDocument } from '../../operations/contracts';
+import type { JobAttempt } from '../../operations/types';
+import { prepareArtifactWrite } from '../../storage/artifact-write';
 import {
   documentSourceKey,
   parsedPdfArtifactKey,
@@ -226,7 +228,7 @@ export function computePlaybackPlanSignature(request: TtsPlaybackPlanCapableRequ
 }
 
 async function persistTtsPlaybackPlan(input: {
-  storage: Pick<ArtifactStorage, 'putObject'>;
+  write: (body: Buffer, contentType: string) => Promise<void>;
   planObjectKey: string;
   request: TtsPlaybackPlanCapableRequest;
   segments: TtsPlaybackSegmentInput[];
@@ -247,7 +249,7 @@ async function persistTtsPlaybackPlan(input: {
       locator: segment.locator,
     })),
   };
-  await input.storage.putObject(input.planObjectKey, Buffer.from(JSON.stringify(artifact)), 'application/json');
+  await input.write(Buffer.from(JSON.stringify(artifact)), 'application/json');
   return input.planObjectKey;
 }
 
@@ -297,6 +299,7 @@ export async function resolveAndPersistTtsPlaybackPlan(input: {
   storage: ArtifactStorage;
   s3Prefix: string;
   requireStartOrdinal?: boolean;
+  attempt?: JobAttempt;
 }): Promise<{
   planObjectKey: string;
   planSignature: string;
@@ -312,13 +315,14 @@ export async function resolveAndPersistTtsPlaybackPlan(input: {
     prefix: input.s3Prefix,
   });
   const planObjectKey = input.request.planObjectKey ?? computedPlanObjectKey;
+  const write = await prepareArtifactWrite(input.storage, planObjectKey, input.attempt);
   let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
   if (!plannedSegments || plannedSegments.length === 0) {
     plannedSegments = planTtsPlaybackSegments(
       input.request,
       await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix),
     );
-    await persistTtsPlaybackPlan({ storage: input.storage, planObjectKey, request: input.request, segments: plannedSegments });
+    await persistTtsPlaybackPlan({ write, planObjectKey, request: input.request, segments: plannedSegments });
   }
   return {
     planObjectKey,

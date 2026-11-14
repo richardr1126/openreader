@@ -5,6 +5,8 @@ import { withTimeout } from '../infrastructure/config';
 import { DOCX_CONVERTER_VERSION, type DocumentConversionArtifactMetadata, type DocumentConversionJobRequest, type DocumentConversionJobResult, type DocumentConversionProgress } from '../operations/contracts';
 import { documentConversionArtifactKey, documentConversionMetadataArtifactKey } from '../storage/artifact-addressing';
 import type { JobHandlerContext } from './context';
+import type { JobExecution } from '../operations/types';
+import { prepareArtifactWrite } from '../storage/artifact-write';
 
 const requestSchema = z.object({
   conversionId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
@@ -20,16 +22,18 @@ export function createDocumentConversionHandler(input: JobHandlerContext) {
   return async function runDocumentConversion(
     payload: DocumentConversionJobRequest,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: DocumentConversionProgress) => Promise<void> },
+    hooks?: JobExecution<DocumentConversionProgress>,
   ): Promise<DocumentConversionJobResult> {
     const parsed = requestSchema.parse(payload);
     const metadataObjectKey = documentConversionMetadataArtifactKey({ conversionId: parsed.conversionId, namespace: parsed.namespace, prefix: input.s3Prefix });
+    const writeMetadata = await prepareArtifactWrite(input.storage, metadataObjectKey, hooks);
     const existingMetadata = await input.storage.readObject(metadataObjectKey)
       .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as DocumentConversionArtifactMetadata)
       .catch(() => null);
     if (
       existingMetadata?.schemaVersion === 1
       && existingMetadata.status === 'ready'
+      && existingMetadata.converterVersion === (parsed.converterVersion?.trim() || DOCX_CONVERTER_VERSION)
       && existingMetadata.sourceObjectKey === parsed.sourceObjectKey
       && existingMetadata.sourceLastModifiedMs === parsed.sourceLastModifiedMs
       && existingMetadata.sourceContentType === parsed.sourceContentType
@@ -47,9 +51,12 @@ export function createDocumentConversionHandler(input: JobHandlerContext) {
     const pdfBytes = await convertDocxBufferToPdfBuffer(sourceBytes);
     const computeMs = Date.now() - computeStartedAt;
     await hooks?.onProgress?.({ phase: 'uploading' });
-    const objectKey = documentConversionArtifactKey({ conversionId: parsed.conversionId, namespace: parsed.namespace, prefix: input.s3Prefix });
+    const objectKey = documentConversionArtifactKey({
+      ...parsed, prefix: input.s3Prefix, buildId: hooks && `${hooks.opId}-${hooks.attempt}`,
+    });
     const documentId = createHash('sha256').update(pdfBytes).digest('hex');
-    await input.storage.putObject(objectKey, pdfBytes, 'application/pdf');
+    await hooks?.assertActive();
+    await input.storage.putObject(objectKey, pdfBytes, 'application/pdf', hooks?.signal);
     const artifact: DocumentConversionArtifactMetadata = {
       schemaVersion: 1,
       conversionId: parsed.conversionId,
@@ -67,7 +74,7 @@ export function createDocumentConversionHandler(input: JobHandlerContext) {
       status: 'ready',
       createdAt: Date.now(),
     };
-    await input.storage.putObject(metadataObjectKey, Buffer.from(JSON.stringify(artifact)), 'application/json');
+    await writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json');
     return { artifact, timing: { queueWaitMs, s3FetchMs, computeMs } };
   };
 }

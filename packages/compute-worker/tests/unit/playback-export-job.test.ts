@@ -129,7 +129,10 @@ describe('TTS playback export job', () => {
       s3Prefix: 'test',
     } as never);
 
-    const result = await run(request, 0, { onProgress });
+    const result = await run(request, 0, {
+      onProgress, opId: 'export', operationKey: 'export', attempt: 1,
+      signal: new AbortController().signal, assertActive: async () => {},
+    });
 
     expect(result.artifact).toMatchObject({
       status: 'ready', generatedSegments: 2, skippedSegments: 1, plannedSegments: 3,

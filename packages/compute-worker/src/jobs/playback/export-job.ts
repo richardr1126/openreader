@@ -10,6 +10,8 @@ import type { TtsPlaybackExportArtifactMetadata, TtsPlaybackExportArtifactReques
 import type { TtsPlaybackSegmentMetadata } from '../../playback/storage';
 import { ttsPlaybackExportArtifactKey, ttsPlaybackExportMetadataArtifactKey } from '../../storage/artifact-addressing';
 import type { JobHandlerContext } from '../context';
+import type { JobExecution } from '../../operations/types';
+import { prepareArtifactWrite } from '../../storage/artifact-write';
 import {
   buildExportChapters,
   buildExportFilename,
@@ -76,7 +78,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
   return async function runTtsPlaybackExportArtifact(
     payload: TtsPlaybackExportArtifactRequest,
     queueWaitMs: number,
-    hooks?: { onProgress?: (progress: TtsPlaybackExportProgress) => Promise<void> },
+    hooks?: JobExecution<TtsPlaybackExportProgress>,
   ): Promise<TtsPlaybackExportArtifactResult> {
     const parsed = ttsPlaybackExportArtifactRequestSchema.parse(payload);
     const startedAt = Date.now();
@@ -103,6 +105,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       documentId: parsed.documentId,
       prefix: input.s3Prefix,
     });
+    const writeMetadata = await prepareArtifactWrite(input.storage, metadataKey, hooks);
     const session = await playbackStorage.sessions.getSession(parsed.sessionId);
     if (session && (session.storageUserId !== parsed.storageUserId || session.documentId !== parsed.documentId)) {
       throw new Error('TTS playback export session scope mismatch');
@@ -116,6 +119,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
     }
     const cacheEpoch = await playbackStorage.artifacts.getScopeEpoch(parsed);
     const assertCurrentSource = async () => {
+      await hooks?.assertActive();
       const [current, epoch] = await Promise.all([
         playbackStorage.sessions.getSession(parsed.sessionId),
         playbackStorage.artifacts.getScopeEpoch(parsed),
@@ -250,7 +254,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       await reportProgress({ phase: 'uploading', completedSegments: plannedSegments.length,
         plannedSegments: plannedSegments.length, skippedSegments });
       const { size: byteLength } = await stat(outputPath);
-      await input.storage.putFile(objectKey, outputPath, contentTypeForExportFormat(parsed.format));
+      await input.storage.putFile(objectKey, outputPath, contentTypeForExportFormat(parsed.format), hooks?.signal);
       await assertCurrentSource();
       const metadata: TtsPlaybackExportArtifactMetadata = {
         schemaVersion: 1,
@@ -282,9 +286,9 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         status: 'ready',
         createdAt: Date.now(),
       };
-      await input.storage.putObject(metadataKey, Buffer.from(JSON.stringify(metadata)), 'application/json');
-      await assertCurrentSource();
+      await writeMetadata(Buffer.from(JSON.stringify(metadata)), 'application/json');
       committed = true;
+      await assertCurrentSource();
       await deleteSupersededExportOutputs({
         storage: input.storage,
         objectKey,
