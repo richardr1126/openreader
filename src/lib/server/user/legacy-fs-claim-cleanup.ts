@@ -67,13 +67,13 @@ async function collectLegacyDocumentPaths(input: {
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
       const metadataPath = path.join(docstoreDir, entry.name);
-      const parsed = await fsp.readFile(metadataPath, 'utf8')
+      const parsed = await fsp.readFile(/*turbopackIgnore: true*/ metadataPath, 'utf8')
         .then((raw) => JSON.parse(raw) as unknown)
         .catch(() => null);
       if (!isLegacyDocumentMetadata(parsed)) continue;
 
-      const contentPath = path.join(docstoreDir, `${parsed.id}.${parsed.type}`);
-      const bytes = await fsp.readFile(contentPath).catch(() => null);
+      const contentPath = path.join(/*turbopackIgnore: true*/ docstoreDir, `${parsed.id}.${parsed.type}`);
+      const bytes = await fsp.readFile(/*turbopackIgnore: true*/ contentPath).catch(() => null);
       if (!bytes) continue;
 
       const id = createHash('sha256').update(bytes).digest('hex');

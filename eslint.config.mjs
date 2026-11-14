@@ -1,13 +1,5 @@
-import { dirname } from "path";
-import { fileURLToPath } from "url";
-import { FlatCompat } from "@eslint/eslintrc";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-});
+import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
+import nextTypescript from "eslint-config-next/typescript";
 
 const LOGGER_LEVEL_METHOD = "trace|debug|info|warn|error|fatal";
 const STATIC_LOGGER_CALL_SELECTOR =
@@ -115,7 +107,24 @@ const RESTRICTED_APP_CLASS_PATTERNS = [
 ];
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...nextCoreWebVitals,
+  ...nextTypescript,
+  {
+    ignores: [".next/**", "out/**", "build/**", "next-env.d.ts"],
+  },
+  {
+    // eslint-plugin-react-hooks 7 (via eslint-config-next 16) adds React
+    // Compiler rules. The app does not use the compiler, and adopting them
+    // means restructuring the playback controller and reader contexts, so
+    // they stay off until that work is done on its own.
+    rules: {
+      "react-hooks/refs": "off",
+      "react-hooks/set-state-in-effect": "off",
+      "react-hooks/immutability": "off",
+      "react-hooks/preserve-manual-memoization": "off",
+      "react-hooks/globals": "off",
+    },
+  },
   {
     rules: {
       "no-restricted-imports": [

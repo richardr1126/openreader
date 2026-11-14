@@ -6,7 +6,6 @@ import { ConsentAwareAnalytics } from "@/components/ConsentAwareAnalytics";
 import { CookieConsentBanner } from "@/components/CookieConsentBanner";
 import { getResolvedRuntimeConfig, publicRuntimeConfig } from "@/lib/server/runtime-config";
 import { getSiteOrigin } from "@/lib/shared/urls";
-import pkg from "../../package.json";
 
 const figtree = localFont({
   src: "./fonts/figtree.ttf",
@@ -60,7 +59,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   const runtimeConfig = await getResolvedRuntimeConfig();
   const runtimeConfigWithAppVersion = {
     ...publicRuntimeConfig(runtimeConfig),
-    appVersion: pkg.version,
+    appVersion: process.env.OPENREADER_APP_VERSION ?? "0.0.0",
   };
   const runtimeConfigInit = `window.__RUNTIME_CONFIG__=${jsonEmbedSafe(runtimeConfigWithAppVersion)};`;
 

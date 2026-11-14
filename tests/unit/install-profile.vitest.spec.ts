@@ -116,19 +116,19 @@ describe('install profile boundary check', () => {
     expect(findInstallProfileViolations(process.cwd())).toEqual([]);
   });
 
-  test('flags installProfile in API routes, auth modules and middleware', () => {
+  test('flags installProfile in API routes, auth modules and proxy', () => {
     root = mkdtempSync(join(tmpdir(), 'openreader-install-profile-'));
     mkdirSync(join(root, 'src/app/api/example'), { recursive: true });
     mkdirSync(join(root, 'src/lib/server/auth'), { recursive: true });
     mkdirSync(join(root, 'src/components'), { recursive: true });
     writeFileSync(join(root, 'src/app/api/example/route.ts'), "if (config.installProfile === 'desktop') allow();\n");
     writeFileSync(join(root, 'src/lib/server/auth/guard.ts'), "import type { InstallProfile } from '@/lib/shared/install-profile';\n");
-    writeFileSync(join(root, 'src/middleware.ts'), 'const ok = true;\nconst profile = runtime.installProfile;\n');
+    writeFileSync(join(root, 'src/proxy.ts'), 'const ok = true;\nconst profile = runtime.installProfile;\n');
     writeFileSync(join(root, 'src/components/Menu.tsx'), "const desktop = installProfile === 'desktop';\n");
     expect(findInstallProfileViolations(root)).toEqual(expect.arrayContaining([
       { file: 'src/app/api/example/route.ts', line: 1 },
       { file: 'src/lib/server/auth/guard.ts', line: 1 },
-      { file: 'src/middleware.ts', line: 2 },
+      { file: 'src/proxy.ts', line: 2 },
     ]));
     expect(findInstallProfileViolations(root)).toHaveLength(3);
   });

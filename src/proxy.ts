@@ -87,7 +87,7 @@ function getCountryCodeFromHeaders(request: NextRequest): string | null {
   return null;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Internal compute callbacks authenticate at their route boundary with a
@@ -158,7 +158,7 @@ export function middleware(request: NextRequest) {
 /**
  * Match all routes except static assets, Next.js internals, and the raw
  * same-origin blob transfer. The upload file route authenticates requests
- * itself; excluding it here also prevents Next middleware from buffering and
+ * itself; excluding it here also prevents the Next proxy from buffering and
  * truncating request bodies at its independent 10 MB default.
  */
 export const config = {

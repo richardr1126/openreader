@@ -51,7 +51,7 @@ version or tag a release unless asked.
 - `installProfile` (`server` | `desktop`, see `v5/DESKTOP_SINGLE_OWNER.md`) is a
   derived, presentation-only fact. It must never take part in authorization;
   `pnpm check:install-profile` keeps it out of `src/app/api/**`,
-  `src/lib/server/auth/**` and `src/middleware.ts`.
+  `src/lib/server/auth/**` and `src/proxy.ts`.
 - Existing v4 provider ciphertext remains app-owned and encrypted with
   `AUTH_SECRET`; do not invent a second at-rest key without a complete migration.
 

@@ -4,8 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 // installProfile shapes presentation only. It must never take part in an
 // authorization decision, so it may not appear in API routes, auth code or
-// middleware. The desktop exchange route authorizes with its launch token.
-export const GUARDED_PATHS = ['src/app/api', 'src/lib/server/auth', 'src/middleware.ts'];
+// proxy. The desktop exchange route authorizes with its launch token.
+export const GUARDED_PATHS = ['src/app/api', 'src/lib/server/auth', 'src/proxy.ts'];
 const PATTERN = /install[-_]?profile/i;
 const SOURCE_FILE = /\.(ts|tsx|js|mjs|cjs)$/;
 
@@ -41,5 +41,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     for (const violation of violations) console.error(`- ${violation.file}:${violation.line}`);
     process.exit(1);
   }
-  console.info('[install-profile] OK: no API route, auth module or middleware reads installProfile');
+  console.info('[install-profile] OK: no API route, auth module or proxy reads installProfile');
 }

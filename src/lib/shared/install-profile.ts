@@ -3,7 +3,7 @@
  * single-owner Electron install; every other deployment is `server`.
  *
  * It never grants, skips or relaxes authorization: `pnpm check:install-profile`
- * keeps it out of API routes, auth code and middleware.
+ * keeps it out of API routes, auth code and the proxy.
  */
 export type InstallProfile = 'server' | 'desktop';
 
