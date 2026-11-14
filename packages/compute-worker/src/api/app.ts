@@ -58,7 +58,7 @@ import {
   normalizeS3Prefix,
 } from '../infrastructure/storage';
 import { createTtsPlaybackStorage } from '../playback/storage';
-import { ttsPlaybackSubjectFromOperationKey } from '../operations/keys';
+import { buildTtsPlaybackOperationKey, ttsPlaybackSubjectFromOperationKey } from '../operations/keys';
 import { createJobHandlers } from '../jobs/handlers';
 import { createWorkerLoopController, type QueuedJob } from '../jobs/worker-loop';
 import { fetchComputeLimitPolicy } from '../jobs/compute-limit-policy-broker';
@@ -367,10 +367,20 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       if (state.status === 'failed' && state.kind === 'tts_playback') {
         const subject = ttsPlaybackSubjectFromOperationKey(state.opKey);
         const session = subject ? await playbackStorage.sessions.getSession(subject.sessionId) : null;
-        if (session?.workerOpId === state.opId) {
+        // Publication expiry can win before the session link is written.
+        const unlinkedExpiredRun = session && session.workerOpId == null && session.planObjectKey
+          && state.error?.code === 'COMPUTE_WORK_NOT_STARTED'
+          && buildTtsPlaybackOperationKey({
+            ...session,
+            planObjectKey: session.planObjectKey,
+            generationRunId: session.generationRunId ?? undefined,
+            generationExtent: session.generationExtent ?? undefined,
+          }) === state.opKey
+          && (await defaultOperationStateStore.getOpIndex(state.opKey))?.opId === state.opId;
+        if (session && (session.workerOpId === state.opId || unlinkedExpiredRun)) {
           await playbackStorage.sessions.patchSessionIfGenerationRun(session.sessionId, session.generationRunId ?? null, {
-            status: 'failed', lastError: state.error?.message ?? 'Playback generation failed',
-          }, session.sessionInstanceId, { opId: state.opId });
+            workerOpId: state.opId, status: 'failed', lastError: state.error?.message ?? 'Playback generation failed',
+          }, session.sessionInstanceId, { opId: state.opId, link: Boolean(unlinkedExpiredRun) });
         }
       }
       await defaultOperationEventStream.append(state.opId, state);

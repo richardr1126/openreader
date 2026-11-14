@@ -7,16 +7,18 @@ export interface PendingTerminalSettlement {
   opId: string;
   revision: number;
   previousStateRevision?: number;
+  replacement?: { updatedAt: number; error: WorkerOperationState['error'] };
 }
 
 export function createTerminalSettlement<Result>(input: {
   store: {
-    trackTerminalSettlement(opId: string, previousStateRevision?: number): Promise<void>;
+    trackTerminalSettlement(opId: string, previousStateRevision?: number, replacement?: WorkerOperationState): Promise<void>;
     getTerminalSettlement(opId: string): Promise<PendingTerminalSettlement | null>;
     listTerminalSettlements(limit: number): Promise<PendingTerminalSettlement[]>;
     finishTerminalSettlement(pending: PendingTerminalSettlement): Promise<void>;
     deferTerminalSettlement(pending: PendingTerminalSettlement): Promise<void>;
     getOpStateRecord(opId: string): Promise<{ state: WorkerOperationState<Result>; revision: number } | null>;
+    compareAndSetOpState(input: { opId: string; expectedRevision: number; newState: WorkerOperationState<Result> }): Promise<boolean>;
   };
   publish: (state: WorkerOperationState<Result>) => Promise<unknown>;
   notify: (result: { operationId: string; state: 'succeeded' | 'failed' }, snapshot: WorkerOperationState<Result>) => Promise<void>;
@@ -30,7 +32,14 @@ export function createTerminalSettlement<Result>(input: {
     const inProgress = active.get(pending.opId);
     if (inProgress) return inProgress;
     const task = (async () => {
-      const record = await store.getOpStateRecord(pending.opId);
+      let record = await store.getOpStateRecord(pending.opId);
+      if (record && pending.replacement && record.revision === pending.previousStateRevision) {
+        await store.compareAndSetOpState({
+          opId: pending.opId, expectedRevision: record.revision,
+          newState: { ...record.state, ...pending.replacement, status: 'failed' },
+        });
+        record = await store.getOpStateRecord(pending.opId);
+      }
       if (!record) {
         await store.finishTerminalSettlement(pending);
         return;
@@ -55,7 +64,8 @@ export function createTerminalSettlement<Result>(input: {
   }
 
   return {
-    track: (opId: string, previousStateRevision?: number) => store.trackTerminalSettlement(opId, previousStateRevision),
+    track: (opId: string, previousStateRevision?: number, replacement?: WorkerOperationState) =>
+      store.trackTerminalSettlement(opId, previousStateRevision, replacement),
     async flush(opId: string): Promise<void> {
       const pending = await store.getTerminalSettlement(opId);
       if (pending) await settle(pending);

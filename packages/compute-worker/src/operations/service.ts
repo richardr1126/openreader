@@ -39,7 +39,7 @@ export interface OperationOrchestratorDeps {
   config: OperationLifecycleConfig;
   clock?: OperationClock;
   idFactory?: OperationIdFactory;
-  terminalSettlement?: { track(opId: string, previousStateRevision?: number): Promise<void> };
+  terminalSettlement?: { track(opId: string, previousStateRevision?: number, replacement?: WorkerOperationState): Promise<void> };
   publication?: {
     stage(job: QueuedOperation): Promise<void>;
     flush(opId: string): Promise<void>;
@@ -235,7 +235,7 @@ export class OperationOrchestrator implements OperationExecution {
       ...(input.timing ? { timing: input.timing } : {}),
     };
 
-    return await this.persistStateIfUnchanged(next, input.expectedRevision) ? next : null;
+    return await this.persistStateIfUnchanged(next, input.expectedRevision, isTerminalStatus(input.current.status)) ? next : null;
   }
 
   async explainReuseDecision(input: {
@@ -269,17 +269,22 @@ export class OperationOrchestrator implements OperationExecution {
     throw new Error('Unable to update operation attempt after repeated CAS conflicts');
   }
 
-  private async persistStateIfUnchanged(state: WorkerOperationState, expectedRevision: number): Promise<boolean> {
+  private async persistStateIfUnchanged(state: WorkerOperationState, expectedRevision: number, replacesTerminal = false): Promise<boolean> {
     // Record the unfinished side effects before committing terminal state so a
     // crash between the compare-and-set and event publication is recoverable.
     const pendingTerminal = isTerminalStatus(state.status) && this.terminalSettlement;
-    if (pendingTerminal) await pendingTerminal.track(state.opId, expectedRevision);
+    if (pendingTerminal) await pendingTerminal.track(state.opId, expectedRevision, replacesTerminal ? state : undefined);
     const updated = await this.stateStore.compareAndSetOpState({
       opId: state.opId,
       expectedRevision,
       newState: state,
     });
-    if (!updated) return false;
+    if (!updated) {
+      if (!replacesTerminal || !pendingTerminal) return false;
+      const committed = await this.stateStore.getOpState(state.opId);
+      return committed?.status === state.status && committed.updatedAt === state.updatedAt
+        && committed.error?.code === state.error?.code && committed.error?.message === state.error?.message;
+    }
     if (!pendingTerminal) await this.eventStream.append(state.opId, state);
     return true;
   }

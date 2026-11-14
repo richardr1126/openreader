@@ -21,6 +21,7 @@ import type {
   TtsPlaybackPlanJobRequest,
   TtsPlaybackJobRequest,
   WorkerOperationKind,
+  WorkerOperationState,
 } from '../operations/contracts';
 import { createJsonCodec } from './json-codec';
 import { toErrorMessage } from './errors';
@@ -75,9 +76,10 @@ export function opStateKvKey(opId: string): string {
 
 const TERMINAL_SETTLEMENT_PREFIX = 'op_terminal_pending.';
 const OP_PUBLICATION_PREFIX = 'op_publication.';
-const terminalSettlementCodec = createJsonCodec<{ previousStateRevision?: number }>();
+type TerminalSettlementMarker = Pick<PendingTerminalSettlement, 'previousStateRevision' | 'replacement'>;
+const terminalSettlementCodec = createJsonCodec<TerminalSettlementMarker>();
 
-function decodeTerminalSettlementMarker(value: Uint8Array): { previousStateRevision?: number } {
+function decodeTerminalSettlementMarker(value: Uint8Array): TerminalSettlementMarker {
   return value.length ? terminalSettlementCodec.decode(value) : {};
 }
 
@@ -160,16 +162,20 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
   }
 
 
-  async trackTerminalSettlement(opId: string, previousStateRevision?: number): Promise<void> {
+  async trackTerminalSettlement(opId: string, previousStateRevision?: number, replacement?: WorkerOperationState): Promise<void> {
     const kv = await this.getKv();
     const key = TERMINAL_SETTLEMENT_PREFIX + opId;
-    const marker = terminalSettlementCodec.encode({ previousStateRevision });
+    const marker = terminalSettlementCodec.encode({
+      previousStateRevision,
+      replacement: replacement && { updatedAt: replacement.updatedAt, error: replacement.error },
+    });
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const current = await kv.get(key);
       try {
         if (isPut(current)) {
-          const previous = decodeTerminalSettlementMarker(current.value).previousStateRevision;
-          if (previousStateRevision === undefined || (previous ?? -1) >= previousStateRevision) return;
+          const previous = decodeTerminalSettlementMarker(current.value);
+          if (previousStateRevision === undefined || (previous.previousStateRevision ?? -1) > previousStateRevision
+            || (previous.previousStateRevision === previousStateRevision && (previous.replacement || !replacement))) return;
           await kv.update(key, marker, current.revision);
         } else {
           await kv.create(key, marker);
@@ -246,7 +252,9 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
     const kv = await this.getKv();
     try {
       // Updating the marker moves it behind the other pending settlements.
-      const marker = terminalSettlementCodec.encode({ previousStateRevision: pending.previousStateRevision });
+      const marker = terminalSettlementCodec.encode({
+        previousStateRevision: pending.previousStateRevision, replacement: pending.replacement,
+      });
       await kv.update(TERMINAL_SETTLEMENT_PREFIX + pending.opId, marker, pending.revision);
     } catch (error) {
       if (!isKvCasConflictError(error)) throw error;

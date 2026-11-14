@@ -38,9 +38,11 @@ export function createOperationPublication(input: {
           // that arrives after this point can only expose a terminal operation.
           await input.expire(job);
         } else {
-          await input.beforePublish?.(job);
           if (Date.now() - job.queuedAt >= input.maxAgeMs) await input.expire(job);
-          else await input.queue.enqueue(job);
+          else {
+            await input.beforePublish?.(job);
+            await input.queue.enqueue(job);
+          }
         }
       }
       await store.finishPublication(job.opId, revision);

@@ -145,6 +145,34 @@ describe('jetstream adapters', () => {
     expect(await stateStore.getPublication(result.opId)).toBeNull();
   });
 
+  test('expires claimed work even if the prepublication dependency never recovers', async () => {
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const kv = new FakeKvStore();
+    const queue = { enqueue: vi.fn(), claimNext: async () => null, size: () => 0 };
+    const beforePublish = vi.fn(async () => { throw new Error('link unavailable'); });
+    const publication = createOperationPublication({
+      store: stateStore, queue, beforePublish, logger: { warn: vi.fn() }, maxAgeMs: 1_000,
+      expire: (job) => orchestrator.failUnpublishedJob(job),
+    });
+    const now = Date.now();
+    const orchestrator = new OperationOrchestrator({
+      queue, stateStore, eventStream: { append: vi.fn(), listSince: vi.fn(), subscribe: vi.fn() },
+      config: { opStaleMs: 1_000 }, clock: { now: () => now }, publication,
+    });
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      const operation = await orchestrator.enqueueOrReuse(buildPdfRequest('blocked-publication'));
+      expect(operation.status).toBe('queued');
+      dateNow.mockReturnValue(now + 1_000);
+      await publication.drain();
+      expect(beforePublish).toHaveBeenCalledOnce();
+      expect(queue.enqueue).not.toHaveBeenCalled();
+      expect(await stateStore.getOpState(operation.opId)).toMatchObject({ status: 'failed' });
+    } finally {
+      dateNow.mockRestore();
+    }
+  });
+
   test('retries a failed queue publication in a new process under the original job ID', async () => {
     const kv = new FakeKvStore();
     const js = new FakeJetStream();
@@ -232,8 +260,10 @@ describe('jetstream adapters', () => {
     await replacement.flush(opId);
     expect(notify).toHaveBeenCalledTimes(2);
     expect(await stateStore.getTerminalSettlement(opId)).not.toBeNull();
-    await orchestrator.markFailedIfUnchanged({
-      current: previous.state, expectedRevision: previous.revision, error: 'Playback cache cleared',
+    // The process can also stop after recording the replacement intent.
+    await first.track(opId, previous.revision, {
+      ...previous.state, status: 'failed', updatedAt: previous.state.updatedAt + 1,
+      error: { message: 'Playback cache cleared' },
     });
     await replacement.flush(opId);
     expect(notify).toHaveBeenLastCalledWith({ operationId: opId, state: 'failed' }, expect.objectContaining({ opId }));
