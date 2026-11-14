@@ -92,6 +92,15 @@ function runtimeDependencies(packageDir) {
 // imports it (the worker or a bundled @openreader/* package), so a production
 // `pnpm deploy` of the worker installs it. The repository's hoisted node-linker
 // (.npmrc) places those packages where dist/ resolves them.
+// The installed directory Node's resolver reaches first from `fromDir`.
+function installedPackageDir(fromDir, name) {
+  for (let dir = fromDir; ; dir = path.dirname(dir)) {
+    const candidate = path.join(dir, 'node_modules', name);
+    if (fs.existsSync(path.join(candidate, 'package.json'))) return fs.realpathSync(candidate);
+    if (path.dirname(dir) === dir) return null;
+  }
+}
+
 const externals = new Set();
 for (const { importer, name } of externalImports) {
   externals.add(name);
@@ -100,6 +109,19 @@ for (const { importer, name } of externalImports) {
     problems.push(
       `${path.relative(workerDir, importer)} imports "${name}", which is not in the dependencies of `
       + `${path.relative(workerDir, path.join(ownerDir, 'package.json'))}.`,
+    );
+    continue;
+  }
+  // Bundled sources resolve externals from dist/, not from their own package.
+  // Another version hoisted above the owner's copy (some tool's transitive
+  // dependency) would load in its place, so both must reach the same install.
+  const fromSource = installedPackageDir(path.dirname(importer), name);
+  const fromDist = installedPackageDir(distDir, name);
+  if (fromSource !== fromDist) {
+    problems.push(
+      `"${name}" resolves to ${fromDist ? path.relative(workerDir, fromDist) : 'nothing'} from dist/ but to `
+      + `${fromSource ? path.relative(workerDir, fromSource) : 'nothing'} from ${path.relative(workerDir, importer)}; `
+      + `declare it in ${path.relative(workerDir, path.join(workerDir, 'package.json'))} so the hoisted install matches.`,
     );
   }
 }

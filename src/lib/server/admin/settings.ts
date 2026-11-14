@@ -161,19 +161,32 @@ const RUNTIME_CONFIG_CACHE_TTL_MS = (() => {
   return 15_000;
 })();
 
-let runtimeConfigRowsCache: { rows: RuntimeConfigRows; expiresAt: number } | null = null;
-// Last successful read, retained across invalidations purely as an error
-// fallback. A write busts `runtimeConfigRowsCache` (so the next read is fresh),
-// but must not erase this — otherwise a transient DB failure on that very next
-// read would leave `readAllRows()` with nothing and snap every key back to its
-// built-in default (which could, e.g., momentarily reopen signups). It is never
-// consulted on the normal cache-hit path, only when a read throws.
-let runtimeConfigLastKnownGood: RuntimeConfigRows | null = null;
-// Bumped on every invalidation. A read captures the generation before its
-// `db.select()` and only publishes its rows if it still matches — so a read
-// that started before a concurrent write cannot repopulate the cache with
-// pre-write rows after that write invalidated it.
-let runtimeConfigCacheGeneration = 0;
+type RuntimeConfigCacheState = {
+  rows: { rows: RuntimeConfigRows; expiresAt: number } | null;
+  // Last successful read, retained across invalidations purely as an error
+  // fallback. A write busts `rows` (so the next read is fresh), but must not
+  // erase this — otherwise a transient DB failure on that very next read would
+  // leave `readAllRows()` with nothing and snap every key back to its built-in
+  // default (which could, e.g., momentarily reopen signups). It is never
+  // consulted on the normal cache-hit path, only when a read throws.
+  lastKnownGood: RuntimeConfigRows | null;
+  // Bumped on every invalidation. A read captures the generation before its
+  // `db.select()` and only publishes its rows if it still matches — so a read
+  // that started before a concurrent write cannot repopulate the cache with
+  // pre-write rows after that write invalidated it.
+  generation: number;
+};
+
+// Held on globalThis, not in module scope: the bundler can load this module
+// more than once in one server process (route handlers and page rendering get
+// separate copies under Turbopack). A write must bust the cache that pages
+// read, not just the copy in the route that handled it.
+const CACHE_STATE_KEY = Symbol.for('openreader.runtimeConfigCache');
+const cacheState: RuntimeConfigCacheState = ((globalThis as Record<symbol, unknown>)[CACHE_STATE_KEY] ??= {
+  rows: null,
+  lastKnownGood: null,
+  generation: 0,
+}) as RuntimeConfigCacheState;
 
 /**
  * Drop the in-process runtime-config read cache so the next read is fresh.
@@ -181,8 +194,8 @@ let runtimeConfigCacheGeneration = 0;
  * deliberately preserved for read-error resilience.
  */
 export function invalidateRuntimeConfigCache(): void {
-  runtimeConfigRowsCache = null;
-  runtimeConfigCacheGeneration += 1;
+  cacheState.rows = null;
+  cacheState.generation += 1;
 }
 
 async function resolveImplicitDefaultTtsProvider(): Promise<string | undefined> {
@@ -227,14 +240,14 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
   if (
     RUNTIME_CONFIG_CACHE_TTL_MS > 0
     && !options?.forceFresh
-    && runtimeConfigRowsCache
-    && now < runtimeConfigRowsCache.expiresAt
+    && cacheState.rows
+    && now < cacheState.rows.expiresAt
   ) {
-    return runtimeConfigRowsCache.rows;
+    return cacheState.rows.rows;
   }
   // Capture the generation before the read so a write that invalidates the cache
   // while this `db.select()` is in flight prevents us from publishing stale rows.
-  const generationAtReadStart = runtimeConfigCacheGeneration;
+  const generationAtReadStart = cacheState.generation;
   try {
     const rows = await db.select().from(adminSettings);
     const out: RuntimeConfigRows = new Map();
@@ -242,13 +255,13 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
       const parsed = parseStoredValue(row.valueJson);
       out.set(row.key, { value: parsed, source: row.source });
     }
-    if (RUNTIME_CONFIG_CACHE_TTL_MS > 0 && runtimeConfigCacheGeneration === generationAtReadStart) {
-      runtimeConfigRowsCache = { rows: out, expiresAt: now + RUNTIME_CONFIG_CACHE_TTL_MS };
+    if (RUNTIME_CONFIG_CACHE_TTL_MS > 0 && cacheState.generation === generationAtReadStart) {
+      cacheState.rows = { rows: out, expiresAt: now + RUNTIME_CONFIG_CACHE_TTL_MS };
       // Keep the fallback snapshot in lockstep with a published read: same
       // generation guard, so an in-flight read that raced a write never
       // downgrades it to pre-write rows, and disabled under tests (TTL 0) so a
       // stale snapshot can't leak across cases that mutate admin_settings.
-      runtimeConfigLastKnownGood = out;
+      cacheState.lastKnownGood = out;
     }
     return out;
   } catch (error) {
@@ -265,8 +278,8 @@ async function readAllRows(options?: { forceFresh?: boolean }): Promise<RuntimeC
     // during a transient DB blip (which could, e.g., momentarily reopen
     // signups). A recent write nulls the active cache but leaves the fallback
     // snapshot intact, so this still resolves the last successfully-read config.
-    if (runtimeConfigRowsCache) return runtimeConfigRowsCache.rows;
-    if (runtimeConfigLastKnownGood) return runtimeConfigLastKnownGood;
+    if (cacheState.rows) return cacheState.rows.rows;
+    if (cacheState.lastKnownGood) return cacheState.lastKnownGood;
     return new Map();
   }
 }
