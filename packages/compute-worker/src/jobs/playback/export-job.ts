@@ -295,8 +295,8 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
       // Source invalidation must discard this build even if it also revoked
       // the job. A delivery takeover alone can reuse the published file.
       await assertCurrentSource(true);
+      committed = !winner || winner.objectKey === objectKey;
       if (winner) return { artifact: winner, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
-      committed = true;
       await hooks?.assertActive();
       await deleteSupersededExportOutputs({
         storage: input.storage,

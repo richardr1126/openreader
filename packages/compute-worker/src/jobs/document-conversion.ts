@@ -79,7 +79,7 @@ export function createDocumentConversionHandler(input: JobHandlerContext) {
     const winner = await publishOrAdoptArtifact(
       () => writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json'), readReadyArtifact, hooks,
     );
-    if (winner) await input.storage.deleteObject(objectKey).catch(() => undefined);
+    if (winner && winner.objectKey !== objectKey) await input.storage.deleteObject(objectKey).catch(() => undefined);
     return { artifact: winner ?? artifact, timing: { queueWaitMs, s3FetchMs, computeMs } };
   };
 }

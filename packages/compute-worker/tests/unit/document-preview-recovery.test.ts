@@ -31,6 +31,9 @@ test('adopts a matching preview after a final-delivery conflict and keeps sizes 
   const wide = { ...request, targetWidth: 800 };
   const wideKey = documentPreviewArtifactKey({ ...wide, prefix: 'test' });
   expect(buildDocumentPreviewOperationKey(wide)).not.toBe(buildDocumentPreviewOperationKey(request));
+  expect(buildDocumentPreviewOperationKey(wide)).not.toBe(buildDocumentPreviewOperationKey({
+    ...request, sourceObjectKey: 'test/source.pdf|1', sourceLastModifiedMs: 800,
+  }));
   expect(wideKey).not.toBe(defaultKey);
 
   const execution = { opId: 'preview', operationKey: buildDocumentPreviewOperationKey(wide),

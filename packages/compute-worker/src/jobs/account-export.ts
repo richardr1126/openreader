@@ -72,7 +72,7 @@ export function createAccountExportHandler(input: JobHandlerContext) {
     const winner = await publishOrAdoptArtifact(
       () => writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json'), readReadyArtifact, hooks,
     );
-    if (winner) await input.storage.deleteObject(objectKey).catch(() => undefined);
+    if (winner && winner.objectKey !== objectKey) await input.storage.deleteObject(objectKey).catch(() => undefined);
     await hooks?.onProgress?.({ phase: 'uploading', completedFiles: manifest.files.length, plannedFiles: manifest.files.length });
     return { artifact: winner ?? artifact, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
   };

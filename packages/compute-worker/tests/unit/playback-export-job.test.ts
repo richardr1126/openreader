@@ -341,7 +341,7 @@ describe('TTS playback export job', () => {
     expect([...storage.objects.keys()].some((key) => key.endsWith('metadata.json'))).toBe(false);
   });
 
-  test('a cache clear during metadata publication leaves no downloadable export', async () => {
+  test.each([false, true])('rechecks the source after adopting its committed upload (cache cleared: %s)', async (cleared) => {
     const storage = pdfPlanStorage();
     let epoch = 0;
     let publishedObject: string | undefined;
@@ -350,7 +350,8 @@ describe('TTS playback export job', () => {
       await putObject(key, body);
       if (key.endsWith('metadata.json')) {
         publishedObject = JSON.parse(Buffer.from(body).toString()).objectKey;
-        epoch += 1;
+        if (cleared) epoch += 1;
+        throw Object.assign(new Error('write already committed'), { name: 'PreconditionFailed' });
       }
     };
     const run = createTtsPlaybackExportHandler({
@@ -360,9 +361,11 @@ describe('TTS playback export job', () => {
           readSegmentMetadata: async ({ ordinal }: { ordinal: number }) => sidecar(ordinal, 'completed', `audio/${ordinal}`) },
       },
     } as never);
-    await expect(run({ ...request, chapterIndex: 0 }, 0)).rejects.toThrow('sources were cleared');
+    const result = run({ ...request, chapterIndex: 0 }, 0);
+    if (cleared) await expect(result).rejects.toThrow('sources were cleared');
+    else await expect(result).resolves.toMatchObject({ artifact: { status: 'ready' } });
     expect(publishedObject).toBeDefined();
-    expect(storage.objects.has(publishedObject!)).toBe(false);
+    expect(storage.objects.has(publishedObject!)).toBe(!cleared);
   });
 
   test('refuses a whole-book export from a usage-limited run', async () => {

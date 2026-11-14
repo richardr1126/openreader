@@ -66,7 +66,7 @@ export const documentPreviewOperationCreateSchema = z.object({
   sourceLastModifiedMs: z.number().int().nonnegative(),
   previewKind: z.literal('card'),
   rendererVersion: z.string().trim().min(1).max(256).optional(),
-  targetWidth: z.number().int().positive().max(2048).optional(),
+  targetWidth: z.number().int().min(1).max(2048).optional(),
 }).strict();
 
 export const documentPreviewResolveSchema = documentPreviewOperationCreateSchema;

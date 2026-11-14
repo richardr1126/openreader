@@ -59,7 +59,7 @@ export function buildDocumentPreviewOperationKey(input: {
     input.previewKind,
     input.sourceObjectKey,
     String(Math.max(0, Math.floor(input.sourceLastModifiedMs))),
-    ...(width === 400 ? [] : [String(width)]),
+    ...(width === 400 ? [] : [`width=${width}`]),
   ].join('|');
 }
 
