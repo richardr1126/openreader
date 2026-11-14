@@ -2,6 +2,8 @@ packages:
   - .
   - packages/*
 
+nodeLinker: hoisted
+
 allowBuilds:
   '@napi-rs/canvas': true
   better-sqlite3: true

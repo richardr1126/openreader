@@ -19,7 +19,7 @@ RUN node /packaging/ffmpeg/fetch.mjs --out /opt/ffmpeg
 FROM node:26-slim AS app-builder
 
 # Install pnpm globally
-RUN npm install -g pnpm@10.34.7
+RUN npm install -g pnpm@12.18.0
 
 # Create app directory
 WORKDIR /app

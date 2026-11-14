@@ -91,7 +91,7 @@ function runtimeDependencies(packageDir) {
 // Each external import must be a runtime dependency of the package whose source
 // imports it (the worker or a bundled @openreader/* package), so a production
 // `pnpm deploy` of the worker installs it. The repository's hoisted node-linker
-// (.npmrc) places those packages where dist/ resolves them.
+// (pnpm-workspace.yaml) places those packages where dist/ resolves them.
 // The installed directory Node's resolver reaches first from `fromDir`.
 function installedPackageDir(fromDir, name) {
   for (let dir = fromDir; ; dir = path.dirname(dir)) {
