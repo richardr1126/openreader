@@ -27,7 +27,7 @@ import { MAINTENANCE_CONSUMER_NAME } from './nats';
 const IDLE_DISCONNECT_MS = 120_000;
 const IDLE_CHECK_INTERVAL_MS = 5_000;
 const IDLE_STATUS_LOG_INTERVAL_MS = 60_000;
-const ORPHAN_SWEEP_INTERVAL_MS = 15_000;
+const RECOVERY_INTERVAL_MS = 15_000;
 
 export interface NatsSession {
   nc: NatsConnection;
@@ -83,17 +83,17 @@ export function createNatsSessionManager(input: {
   let session: NatsSession | null = null;
   let connecting: Promise<NatsSession> | null = null;
   let idleTimer: NodeJS.Timeout | null = null;
-  let orphanSweepTimer: NodeJS.Timeout | null = null;
+  let recoveryTimer: NodeJS.Timeout | null = null;
   let lastIdleStatusLogAt = 0;
   let generation = -1;
   let reconciling = false;
-  let hasPendingSettlement = false;
+  let hasPendingRecovery = false;
 
   const clearTimers = () => {
     if (idleTimer) clearInterval(idleTimer);
-    if (orphanSweepTimer) clearInterval(orphanSweepTimer);
+    if (recoveryTimer) clearInterval(recoveryTimer);
     idleTimer = null;
-    orphanSweepTimer = null;
+    recoveryTimer = null;
   };
 
   const disconnect = async (reason: string): Promise<void> => {
@@ -130,29 +130,29 @@ export function createNatsSessionManager(input: {
           input.logger.info({
             ...activity,
             idleForMs,
-            disconnectEligible: !reconciling && !hasPendingSettlement && activity.activeSse === 0 && activity.inFlightHttp === 0
+            disconnectEligible: !reconciling && !hasPendingRecovery && activity.activeSse === 0 && activity.inFlightHttp === 0
               && activity.inFlightJobs === 0
               && idleForMs >= IDLE_DISCONNECT_MS,
           }, 'nats idle status');
         }
-        if (reconciling || hasPendingSettlement || activity.activeSse > 0 || activity.inFlightHttp > 0
+        if (reconciling || hasPendingRecovery || activity.activeSse > 0 || activity.inFlightHttp > 0
           || activity.inFlightJobs > 0 || idleForMs < IDLE_DISCONNECT_MS) return;
         void disconnect('idle');
       }, IDLE_CHECK_INTERVAL_MS);
       idleTimer.unref?.();
     }
-    if (!orphanSweepTimer) {
-      orphanSweepTimer = setInterval(() => {
+    if (!recoveryTimer) {
+      recoveryTimer = setInterval(() => {
         if (!session || input.isStopping() || reconciling) return;
         reconciling = true;
         void input.runReconciliation(session)
-          .then((pending) => { hasPendingSettlement = pending; })
+          .then((pending) => { hasPendingRecovery = pending; })
           .catch((error) => {
             input.logger.error({ error: toErrorMessage(error) }, 'periodic operation reconciliation failed');
           })
           .finally(() => { reconciling = false; });
-      }, ORPHAN_SWEEP_INTERVAL_MS);
-      orphanSweepTimer.unref?.();
+      }, RECOVERY_INTERVAL_MS);
+      recoveryTimer.unref?.();
     }
   };
 

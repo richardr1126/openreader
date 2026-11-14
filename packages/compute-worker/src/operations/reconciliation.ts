@@ -44,15 +44,21 @@ export function createOperationReconciler(input: {
   getGeneration: () => number;
   logger: ReconciliationLogger;
   onOperationTerminal?: (input: { operationId: string; state: 'failed' }) => Promise<void>;
+  legacySweepUntilMs?: number;
 }) {
   let recoveryPromise: Promise<void> | null = null;
   let recoveredGeneration = -1;
+  let lastLegacySweep = Number.NEGATIVE_INFINITY;
 
   const run = async (options?: { force?: boolean }): Promise<void> => {
+    const now = Date.now();
+    if (input.legacySweepUntilMs !== undefined
+      && (now >= input.legacySweepUntilMs || now - lastLegacySweep < 60_000)) return;
     if (!supportsRecovery(input.stateStore, input.orchestrator)) return;
     const generation = input.getGeneration();
     if (!options?.force && recoveredGeneration === generation) return;
     if (recoveryPromise) return await recoveryPromise;
+    lastLegacySweep = now;
 
     recoveryPromise = (async () => {
       const recoveredStates = await recoverOrphanedOperations({

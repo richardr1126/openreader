@@ -51,6 +51,7 @@ import {
 import { createJsonCodec } from '../infrastructure/json-codec';
 import { createOperationReconciler } from '../operations/reconciliation';
 import { createTerminalSettlement } from '../operations/terminal-settlement';
+import { createOperationPublication } from '../operations/publication';
 import {
   createArtifactStorage,
   createS3ClientFromEnv,
@@ -68,6 +69,7 @@ import { generateTTSBuffer, registerLocalTtsSynthesizer } from '@openreader/tts/
 import { synthesizeKokoro } from '../inference/kokoro/engine';
 import { createNatsSessionManager } from '../infrastructure/nats-session';
 import { drainExhaustedJobs } from '../infrastructure/exhausted-jobs';
+import { toErrorMessage } from '../infrastructure/errors';
 import { listKvKeys } from '../infrastructure/kv-keys';
 import { createMaintenanceHandler } from '../jobs/maintenance';
 import {
@@ -77,6 +79,7 @@ import {
   EVENTS_STREAM_NAME,
   DOCUMENT_PREVIEW_JOBS_SUBJECT,
   DOCUMENT_CONVERSION_JOBS_SUBJECT,
+  COMPUTE_STATE_TTL_MS,
   LAYOUT_JOBS_SUBJECT,
   NATS_API_TIMEOUT_MS,
   PDF_LAYOUT_ACK_WAIT_MS,
@@ -351,11 +354,19 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     notify: notifyComputeAdmissionTerminal,
     logger: app.log,
   });
+  const publication: ReturnType<typeof createOperationPublication> = createOperationPublication({
+    store: defaultOperationStateStore,
+    queue: operationQueue,
+    logger: app.log,
+    maxAgeMs: Math.min(opStaleMs, 12 * 60 * 60 * 1000),
+    expire: (job) => defaultOrchestrator.failUnpublishedJob(job),
+  });
   const defaultOrchestrator = new OperationOrchestrator({
     queue: operationQueue,
     stateStore: defaultOperationStateStore,
     eventStream: defaultOperationEventStream,
     terminalSettlement,
+    publication,
     config: {
       opStaleMs,
       maxCasRetries: 10,
@@ -374,6 +385,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     opStaleMs,
     getGeneration: () => options.routeDeps ? 0 : sessionManager.getGeneration(),
     logger: app.log,
+    legacySweepUntilMs: options.routeDeps ? undefined : Date.now() + COMPUTE_STATE_TTL_MS,
     ...(options.routeDeps ? {} : { onOperationTerminal: ({ operationId }) => terminalSettlement.flush(operationId) }),
   });
   const ensureOrphanedOpRecovery = () => reconciler.run();
@@ -544,7 +556,7 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
     },
     stopWorkers: () => workerLoops.stop(),
     runReconciliation: async (session) => {
-      const [exhausted, pending] = await Promise.all([
+      const [exhausted, pending, publishing] = await Promise.all([
         drainExhaustedJobs({
           consumer: session.exhaustedJobsConsumer,
           streams: session.jsm.streams,
@@ -552,9 +564,10 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
           logger: app.log,
         }),
         terminalSettlement.drain(),
+        publication.drain(),
         reconciler.run({ force: true }),
       ]);
-      return pending || exhausted;
+      return pending || exhausted || publishing;
     },
   });
 
@@ -586,6 +599,12 @@ export async function createComputeWorkerApp(options: CreateComputeWorkerAppOpti
       }
       await app.listen({ host, port });
       app.log.info({ host, port }, 'compute worker listening');
+      if (!disableWorkers) {
+        // Resume queued work even when no reader is open after a restart.
+        void ensureConnected().catch((error: unknown) => {
+          app.log.warn({ error: toErrorMessage(error) }, 'initial compute queue connection failed');
+        });
+      }
     },
     close,
   };

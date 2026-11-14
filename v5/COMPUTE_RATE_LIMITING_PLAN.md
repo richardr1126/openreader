@@ -985,6 +985,25 @@ NATS remains durable, but durability is not permission for unbounded backlog.
 - A pulled message receives `working()` heartbeats while waiting and while
   legitimately executing.
 
+### Worker recovery
+
+The worker stages the job envelope in JetStream KV before claiming its operation
+key. The publication reconciler retries a missing publish under the same job
+ID. The jobs stream deduplicates that ID for the lifetime of the KV entry and
+rejects new jobs when full, preserving jobs it already accepted. Its delivery
+exhaustion advisories are persisted and processed in bounded batches.
+
+Each delivery claims the operation before running. A newer delivery owns
+progress and completion, and terminal reconciliation retries the SSE event and
+admission broker callback until both succeed. The admission remains linked to
+one operation across worker attempts. Next checks for a terminal result after
+linking the admission to cover completion that arrived before linkage.
+
+Age-based sweeping applies to records from older workers for one operation
+retention window. New operations close through delivery exhaustion,
+publication expiry, or a terminal execution result. PDF layout resumes from
+saved page batches when JetStream redelivers its job.
+
 ---
 
 ## Provider Throughput Limiting

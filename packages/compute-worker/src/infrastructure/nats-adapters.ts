@@ -26,6 +26,7 @@ import { createJsonCodec } from './json-codec';
 import { toErrorMessage } from './errors';
 import type { MaintenanceJobRequest } from '../operations/contracts';
 import type { PendingTerminalSettlement } from '../operations/terminal-settlement';
+import type { PendingOperationPublication } from '../operations/publication';
 
 export interface KvEntryLike {
   operation?: string;
@@ -56,6 +57,7 @@ interface OpIndexEntry {
   opId: string;
 }
 
+
 export const OP_EVENTS_SUBJECT_PREFIX = 'ops.events';
 export const OP_EVENTS_SUBJECT_WILDCARD = `${OP_EVENTS_SUBJECT_PREFIX}.*`;
 
@@ -72,6 +74,7 @@ export function opStateKvKey(opId: string): string {
 }
 
 const TERMINAL_SETTLEMENT_PREFIX = 'op_terminal_pending.';
+const OP_PUBLICATION_PREFIX = 'op_publication.';
 const terminalSettlementMarker = new Uint8Array();
 
 export function opEventsSubject(opId: string): string {
@@ -88,6 +91,7 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
   private readonly listKeys: (filter: string) => AsyncIterable<string>;
   private readonly opStateCodec = createJsonCodec<OperationState<Result>>();
   private readonly opIndexCodec = createJsonCodec<OpIndexEntry>();
+  private readonly publicationCodec = createJsonCodec<QueuedOperation>();
 
   constructor(deps: JetStreamOperationStateStoreDeps) {
     this.getKv = deps.getKv;
@@ -151,6 +155,7 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
     return states;
   }
 
+
   async trackTerminalSettlement(opId: string): Promise<void> {
     const kv = await this.getKv();
     try {
@@ -166,23 +171,58 @@ export class JetStreamOperationStateStore<Result = unknown> implements Operation
   }
 
   async listTerminalSettlements(limit: number): Promise<PendingTerminalSettlement[]> {
-    const pending: PendingTerminalSettlement[] = [];
-    for await (const key of this.listKeys(TERMINAL_SETTLEMENT_PREFIX + '*')) {
-      const entry = await this.getTerminalSettlement(key.slice(TERMINAL_SETTLEMENT_PREFIX.length));
+    return this.listPending(TERMINAL_SETTLEMENT_PREFIX, limit, (opId) => this.getTerminalSettlement(opId));
+  }
+
+  async finishTerminalSettlement(pending: PendingTerminalSettlement): Promise<void> {
+    await this.deletePending(TERMINAL_SETTLEMENT_PREFIX + pending.opId, pending.revision);
+  }
+
+  private async deletePending(key: string, revision: number): Promise<void> {
+    const kv = await this.getKv();
+    if (!kv.delete) throw new Error('KV store does not support deleting terminal settlement markers');
+    try {
+      await kv.delete(key, { previousSeq: revision });
+    } catch (error) {
+      if (!isKvCasConflictError(error)) throw error;
+    }
+  }
+
+  async stagePublication(job: QueuedOperation): Promise<void> {
+    const kv = await this.getKv();
+    await kv.create(OP_PUBLICATION_PREFIX + job.opId, this.publicationCodec.encode(job));
+  }
+
+  async getPublication(opId: string): Promise<PendingOperationPublication | null> {
+    const entry = await (await this.getKv()).get(OP_PUBLICATION_PREFIX + opId);
+    return isPut(entry) ? { job: this.publicationCodec.decode(entry.value), revision: entry.revision } : null;
+  }
+
+  async listPublications(limit: number): Promise<PendingOperationPublication[]> {
+    return this.listPending(OP_PUBLICATION_PREFIX, limit, (opId) => this.getPublication(opId));
+  }
+
+  async deferPublication(pending: PendingOperationPublication): Promise<void> {
+    const kv = await this.getKv();
+    try {
+      await kv.update(OP_PUBLICATION_PREFIX + pending.job.opId, this.publicationCodec.encode(pending.job), pending.revision);
+    } catch (error) {
+      if (!isKvCasConflictError(error)) throw error;
+    }
+  }
+
+  async finishPublication(opId: string, revision: number): Promise<void> {
+    await this.deletePending(OP_PUBLICATION_PREFIX + opId, revision);
+  }
+
+  private async listPending<T>(prefix: string, limit: number, get: (opId: string) => Promise<T | null>): Promise<T[]> {
+    const pending: T[] = [];
+    for await (const key of this.listKeys(prefix + '*')) {
+      const entry = await get(key.slice(prefix.length));
       if (entry) pending.push(entry);
       if (pending.length >= limit) break;
     }
     return pending;
-  }
-
-  async finishTerminalSettlement(pending: PendingTerminalSettlement): Promise<void> {
-    const kv = await this.getKv();
-    if (!kv.delete) throw new Error('KV store does not support deleting terminal settlement markers');
-    try {
-      await kv.delete(TERMINAL_SETTLEMENT_PREFIX + pending.opId, { previousSeq: pending.revision });
-    } catch (error) {
-      if (!isKvCasConflictError(error)) throw error;
-    }
   }
 
   async deferTerminalSettlement(pending: PendingTerminalSettlement): Promise<void> {
@@ -443,10 +483,12 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
 
   async enqueue(job: QueuedOperation<JetStreamQueuedPayload>): Promise<void> {
     const js = await this.getJs();
+    const options = { msgID: job.jobId };
     if (job.kind === 'pdf_layout') {
       await js.publish(
         this.layoutSubject,
         this.layoutCodec.encode(job as QueuedOperation<PdfLayoutJobRequest>),
+        options,
       );
     } else if (job.kind === 'tts_playback') {
       // Whole-document runs have their own consumer so hours-long exports
@@ -455,44 +497,52 @@ export class JetStreamOperationQueue implements OperationQueue<JetStreamQueuedPa
       await js.publish(
         payload.generationExtent === 'document' ? this.ttsPlaybackDocumentSubject : this.ttsPlaybackSubject,
         this.ttsPlaybackCodec.encode(job as QueuedOperation<TtsPlaybackJobRequest>),
+        options,
       );
     } else if (job.kind === 'tts_playback_plan') {
       await js.publish(
         this.ttsPlaybackPlanSubject,
         this.ttsPlaybackPlanCodec.encode(job as QueuedOperation<TtsPlaybackPlanJobRequest>),
+        options,
       );
     } else if (job.kind === 'tts_playback_export') {
       await js.publish(
         this.ttsPlaybackExportSubject,
         this.ttsPlaybackExportCodec.encode(job as QueuedOperation<TtsPlaybackExportArtifactRequest>),
+        options,
       );
     } else if (job.kind === 'document_preview') {
       await js.publish(
         this.documentPreviewSubject,
         this.documentPreviewCodec.encode(job as QueuedOperation<DocumentPreviewJobRequest>),
+        options,
       );
     } else if (job.kind === 'document_conversion') {
       await js.publish(
         this.documentConversionSubject,
         this.documentConversionCodec.encode(job as QueuedOperation<DocumentConversionJobRequest>),
+        options,
       );
     } else if (job.kind === 'account_export') {
       await js.publish(
         this.accountExportSubject,
         this.accountExportCodec.encode(job as QueuedOperation<AccountExportJobRequest>),
+        options,
       );
     } else if (job.kind === 'email_delivery') {
       await js.publish(
         this.emailDeliverySubject,
         this.emailDeliveryCodec.encode(job as QueuedOperation<EmailDeliveryJobRequest>),
+        options,
       );
     } else if (job.kind === 'model_download') {
       await js.publish(
         this.modelDownloadSubject,
         this.modelDownloadCodec.encode(job as QueuedOperation<ModelDownloadJobRequest>),
+        options,
       );
     } else if (job.kind === 'maintenance') {
-      await js.publish(this.maintenanceSubject, this.maintenanceCodec.encode(job as QueuedOperation<MaintenanceJobRequest>));
+      await js.publish(this.maintenanceSubject, this.maintenanceCodec.encode(job as QueuedOperation<MaintenanceJobRequest>), options);
     } else {
       const exhaustive: never = job.kind;
       throw new Error(`Unsupported operation kind: ${String(exhaustive)}`);

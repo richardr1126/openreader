@@ -56,6 +56,7 @@ export function getOrphanRecoveryThresholdMs(input: {
   opStaleMs: number;
 }): number | null {
   if (!isInflightStatus(input.state.status)) return null;
+  if (input.state.durableDelivery) return null;
   if (input.state.status === 'queued' && !WORKER_OPERATION_KIND_POLICY[input.state.kind].enforcesQueueDeadline) return null;
   if (input.state.status === 'running') {
     if (input.state.kind === 'pdf_layout') return Math.max(input.pdfTimeoutMs, input.pdfRecoveryMinMs ?? 0);

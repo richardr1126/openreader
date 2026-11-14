@@ -40,6 +40,10 @@ export interface OperationOrchestratorDeps {
   clock?: OperationClock;
   idFactory?: OperationIdFactory;
   terminalSettlement?: { track(opId: string): Promise<void> };
+  publication?: {
+    stage(job: QueuedOperation): Promise<void>;
+    flush(opId: string): Promise<void>;
+  };
 }
 
 export class OperationOrchestrator implements OperationExecution {
@@ -51,12 +55,14 @@ export class OperationOrchestrator implements OperationExecution {
   private readonly clock: OperationClock;
   private readonly ids: OperationIdFactory;
   private readonly terminalSettlement: OperationOrchestratorDeps['terminalSettlement'];
+  private readonly publication: OperationOrchestratorDeps['publication'];
 
   constructor(deps: OperationOrchestratorDeps) {
     this.queue = deps.queue;
     this.stateStore = deps.stateStore;
     this.eventStream = deps.eventStream;
     this.terminalSettlement = deps.terminalSettlement;
+    this.publication = deps.publication;
     this.opStaleMs = deps.config.opStaleMs;
     this.maxCasRetries = Math.max(1, Math.floor(deps.config.maxCasRetries ?? 10));
     this.clock = deps.clock ?? { now: () => Date.now() };
@@ -89,79 +95,44 @@ export class OperationOrchestrator implements OperationExecution {
 
     for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
       const indexEntry = await this.stateStore.getOpIndex(opKey);
-      if (indexEntry?.opId) {
-        const current = await this.stateStore.getOpState(indexEntry.opId);
-        if (!current) {
-          await sleep(RETRY_DELAY_MS);
-          continue;
-        }
-
-        const now = this.clock.now();
-        if (shouldReuseExistingOperation({
-          current,
-          requestKind: request.kind,
-          now,
-          opStaleMs: this.opStaleMs,
-        })) {
-          return current;
-        }
-
-        const replacement = buildQueuedState({
-          request,
-          opId: this.ids.opId(),
-          jobId: this.ids.jobId(),
-          queuedAt: now,
-        });
-
-        const replaced = await this.stateStore.compareAndSetOpIndex({
-          opKey,
-          newOpId: replacement.opId,
-          expectedOpId: indexEntry.opId,
-        });
-        if (!replaced) {
-          await sleep(RETRY_DELAY_MS);
-          continue;
-        }
-
-        await this.persistState(replacement);
-
-        try {
-          await this.queue.enqueue(this.buildQueuedJob(replacement, request));
-          return replacement;
-        } catch (error) {
-          const failed: WorkerOperationState = {
-            ...replacement,
-            status: 'failed',
-            updatedAt: this.clock.now(),
-            error: createErrorShape(error),
-          };
-          await this.persistState(failed);
-          return failed;
-        }
+      const current = indexEntry && await this.stateStore.getOpState(indexEntry.opId);
+      // During a rolling upgrade an older worker can still write the index
+      // before the operation. Give it its normal creation window.
+      if (indexEntry && !current && attempt + 1 < this.maxCasRetries) {
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      const now = this.clock.now();
+      if (current && shouldReuseExistingOperation({ current, requestKind: request.kind, now, opStaleMs: this.opStaleMs })) {
+        return current;
       }
 
-      const now = this.clock.now();
-      const created = buildQueuedState({
-        request,
-        opId: this.ids.opId(),
-        jobId: this.ids.jobId(),
-        queuedAt: now,
-      });
-
-      const createdIndex = await this.stateStore.compareAndSetOpIndex({
+      const created = buildQueuedState({ request: { ...request, opKey }, opId: this.ids.opId(), jobId: this.ids.jobId(), queuedAt: now });
+      const job = this.buildQueuedJob(created, request);
+      if (this.publication) {
+        created.durableDelivery = true;
+        await this.stateStore.putOpState(created);
+        await this.publication.stage(job);
+      }
+      const claimed = await this.stateStore.compareAndSetOpIndex({
         opKey,
         newOpId: created.opId,
-        expectedOpId: null,
+        expectedOpId: indexEntry?.opId ?? null,
       });
-      if (!createdIndex) {
+      if (!claimed) {
         await sleep(RETRY_DELAY_MS);
         continue;
       }
 
-      await this.persistState(created);
+      if (this.publication) {
+        // A failed or ambiguous publish is replayed by the durable outbox.
+        await this.publication.flush(created.opId);
+        return created;
+      }
 
+      await this.persistState(created);
       try {
-        await this.queue.enqueue(this.buildQueuedJob(created, request));
+        await this.queue.enqueue(job);
         return created;
       } catch (error) {
         const failed: WorkerOperationState = {
@@ -230,6 +201,17 @@ export class OperationOrchestrator implements OperationExecution {
       if (failed) return;
     }
     throw new Error('Unable to close exhausted operation after repeated CAS conflicts');
+  }
+
+  async failUnpublishedJob(job: QueuedOperation): Promise<void> {
+    const record = await this.stateStore.getOpStateRecord(job.opId);
+    if (!record || record.state.jobId !== job.jobId || record.state.status !== 'queued') return;
+    const failed = await this.markFailedIfUnchanged({
+      current: record.state,
+      expectedRevision: record.revision,
+      error: { code: 'COMPUTE_WORK_NOT_STARTED', message: 'The worker could not publish this job before its queue deadline.' },
+    });
+    if (!failed) throw new Error('The queued operation changed during publication reconciliation');
   }
 
   async markFailedIfUnchanged(input: {

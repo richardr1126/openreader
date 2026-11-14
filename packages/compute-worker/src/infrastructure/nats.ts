@@ -1,6 +1,7 @@
 import {
   AckPolicy,
   DeliverPolicy,
+  DiscardPolicy,
   ReplayPolicy,
   RetentionPolicy,
   StorageType,
@@ -75,6 +76,8 @@ export async function ensureJetStreamResources(input: {
     retention: RetentionPolicy.Workqueue,
     storage: StorageType.File,
     max_bytes: input.jobsMaxBytes,
+    discard: DiscardPolicy.New,
+    duplicate_window: nanos(COMPUTE_STATE_TTL_MS),
     num_replicas: input.natsReplicas,
   };
   try {
@@ -84,6 +87,8 @@ export async function ensureJetStreamResources(input: {
     await input.jsm.streams.update(JOBS_STREAM_NAME, {
       subjects: streamConfig.subjects,
       max_bytes: input.jobsMaxBytes,
+      discard: streamConfig.discard,
+      duplicate_window: streamConfig.duplicate_window,
       num_replicas: input.natsReplicas,
     });
   }

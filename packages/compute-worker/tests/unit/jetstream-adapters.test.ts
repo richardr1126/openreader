@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { DeliverPolicy } from '@nats-io/jetstream';
 import { OperationOrchestrator } from '../../src/operations/service';
 import { createTerminalSettlement } from '../../src/operations/terminal-settlement';
+import { createOperationPublication } from '../../src/operations/publication';
 import type { WorkerOperationRequest, WorkerOperationState } from '../../src/operations/contracts';
 import {
   JetStreamOperationEventStream,
@@ -96,6 +97,39 @@ function buildPdfRequest(opKey: string): WorkerOperationRequest {
 }
 
 describe('jetstream adapters', () => {
+  test('retries a failed queue publication in a new process under the original job ID', async () => {
+    const kv = new FakeKvStore();
+    const js = new FakeJetStream();
+    const stateStore = new JetStreamOperationStateStore({ getKv: async () => kv });
+    const queue = new JetStreamOperationQueue({
+      getJs: async () => js, layoutSubject: 'jobs.layout', ttsPlaybackSubject: 'jobs.tts_playback',
+    });
+    const enqueue = vi.spyOn(queue, 'enqueue').mockRejectedValueOnce(new Error('publish ack unavailable'));
+    const deps = { store: stateStore, queue, logger: { warn: vi.fn() }, maxAgeMs: 30_000, expire: vi.fn() };
+    const orchestrator = new OperationOrchestrator({
+      queue,
+      stateStore,
+      eventStream: new JetStreamOperationEventStream({
+        getJs: async () => js as never,
+        getJsm: async () => ({ consumers: {} }) as never,
+        eventsStreamName: 'events',
+      }),
+      config: { opStaleMs: 30_000 },
+      publication: createOperationPublication(deps),
+    });
+    const request = buildPdfRequest('durable-publication');
+    const operation = await orchestrator.enqueueOrReuse(request);
+    expect(await orchestrator.enqueueOrReuse(request)).toEqual(operation);
+    expect(js.published).toHaveLength(0);
+
+    const replacement = createOperationPublication(deps);
+    await expect(replacement.drain()).resolves.toBe(true);
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(js.published[0]?.payload).toMatchObject({ opId: operation.opId, jobId: operation.jobId });
+    expect(await stateStore.getPublication(operation.opId)).toBeNull();
+    await expect(replacement.drain()).resolves.toBe(false);
+  });
+
   test('a new process retries terminal settlement after the broker was unavailable', async () => {
     const kv = new FakeKvStore();
     const js = new FakeJetStream();
