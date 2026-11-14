@@ -28,8 +28,8 @@ export function createPdfParseCheckpoint(input: {
   const pageKey = (pageNumber: number) => `${prefix}${String(pageNumber).padStart(10, '0')}/`;
 
   return {
-    async read(signal: AbortSignal): Promise<PdfPageCheckpoint | null> {
-      const keys = (await storage.listPrefix(prefix, signal)).sort();
+    async read(signal: AbortSignal, requestSignal: () => AbortSignal): Promise<PdfPageCheckpoint | null> {
+      const keys = (await storage.listPrefix(prefix, requestSignal())).sort();
       const checkpoint: PdfPageCheckpoint = { pages: [], totalPages: 0, sawText: false };
       let nextBlockId = 1;
       for (const key of keys) {
@@ -39,7 +39,7 @@ export function createPdfParseCheckpoint(input: {
         if (key < expectedPrefix) continue;
         if (!key.startsWith(expectedPrefix)) break;
 
-        const bytes = await storage.readObject(key, signal).catch((error) => {
+        const bytes = await storage.readObject(key, requestSignal()).catch((error) => {
           if (isNotFound(error)) return null;
           throw error;
         });
@@ -66,6 +66,7 @@ export function createPdfParseCheckpoint(input: {
         checkpoint.totalPages = chunk.totalPages;
         nextBlockId = blockId;
       }
+      signal.throwIfAborted();
       return checkpoint.pages.length > 0 ? checkpoint : null;
     },
     key(chunk: PdfPageCheckpoint, opId: string, attempt: number): string {

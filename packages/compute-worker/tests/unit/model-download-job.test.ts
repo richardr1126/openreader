@@ -74,4 +74,18 @@ describe('model download job', () => {
     expect(cancelKokoroDownload()).toBe(true);
     await next;
   });
+
+  test('a rejected progress listener leaves the shared transfer running', async () => {
+    const fetchImpl = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+    }));
+    const progress = vi.fn(async () => { throw new Error('Delivery superseded'); });
+    vi.stubGlobal('fetch', fetchImpl);
+    const first = expect(ensureKokoroAssets(progress)).rejects.toThrow('canceled');
+    const second = expect(ensureKokoroAssets()).rejects.toThrow('canceled');
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledOnce());
+    expect(progress).toHaveBeenCalled();
+    expect(cancelKokoroDownload()).toBe(true);
+    await Promise.all([first, second]);
+  });
 });

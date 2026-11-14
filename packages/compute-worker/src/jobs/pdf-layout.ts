@@ -48,7 +48,7 @@ export function createPdfLayoutHandler(input: PdfLayoutJobContext) {
       await clearCheckpoint();
       return { parsedObjectKey: resultKey, timing: { queueWaitMs, s3FetchMs } };
     }
-    const resume = await checkpoint.read(storageSignal()).catch((error) => {
+    const resume = await checkpoint.read(execution.signal, storageSignal).catch((error) => {
       execution.signal.throwIfAborted();
       input.logger?.warn({ documentId: parsed.documentId, error: String(error) }, 'PDF checkpoint read failed');
       return null;

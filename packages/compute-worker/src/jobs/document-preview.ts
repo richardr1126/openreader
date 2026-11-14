@@ -4,7 +4,7 @@ import { DOCUMENT_PREVIEW_RENDERER_VERSION, type DocumentPreviewArtifactMetadata
 import { documentPreviewArtifactKey } from '../storage/artifact-addressing';
 import type { JobHandlerContext } from './context';
 import type { JobAttempt } from '../operations/types';
-import { prepareArtifactWrite } from '../storage/artifact-write';
+import { prepareArtifactWrite, publishOrAdoptArtifact } from '../storage/artifact-write';
 import { documentPreviewObjectMetadata, readDocumentPreviewMetadata } from '../storage/document-preview-metadata';
 import { renderEpubCoverToJpeg, renderPdfFirstPageToJpeg } from './document-preview-render';
 
@@ -56,7 +56,11 @@ export function createDocumentPreviewHandler(input: JobHandlerContext) {
       status: 'ready',
       createdAt: Date.now(),
     };
-    await writePreview(rendered.bytes, 'image/jpeg', documentPreviewObjectMetadata(artifact));
-    return { artifact, timing: { queueWaitMs, s3FetchMs, computeMs } };
+    const winner = await publishOrAdoptArtifact(
+      () => writePreview(rendered.bytes, 'image/jpeg', documentPreviewObjectMetadata(parsed, artifact)),
+      () => readDocumentPreviewMetadata(input.storage, parsed, input.s3Prefix),
+      attempt,
+    );
+    return { artifact: winner ?? artifact, timing: { queueWaitMs, s3FetchMs, computeMs } };
   };
 }

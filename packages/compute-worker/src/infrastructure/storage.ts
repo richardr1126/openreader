@@ -100,6 +100,11 @@ export function isNotFound(error: unknown): boolean {
     || maybe.Code === 'NoSuchKey';
 }
 
+export function isPreconditionFailed(error: unknown): boolean {
+  const response = error as { name?: string; $metadata?: { httpStatusCode?: number } } | null;
+  return response?.$metadata?.httpStatusCode === 412 || response?.name === 'PreconditionFailed';
+}
+
 export function normalizeS3Prefix(prefix: string | undefined): string {
   const value = (prefix || 'openreader').trim();
   return value ? value.replace(/^\/+|\/+$/g, '') : 'openreader';

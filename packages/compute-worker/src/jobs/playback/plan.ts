@@ -15,7 +15,7 @@ import type { TTSSegmentSettings } from '@openreader/tts/types';
 import { extractEpubSpine } from '../../inference/epub/spine-text';
 import type { ParsedPdfDocument } from '../../operations/contracts';
 import type { JobAttempt } from '../../operations/types';
-import { prepareArtifactWrite } from '../../storage/artifact-write';
+import { prepareArtifactWrite, publishOrAdoptArtifact } from '../../storage/artifact-write';
 import {
   documentSourceKey,
   parsedPdfArtifactKey,
@@ -322,7 +322,13 @@ export async function resolveAndPersistTtsPlaybackPlan(input: {
       input.request,
       await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix),
     );
-    await persistTtsPlaybackPlan({ write, planObjectKey, request: input.request, segments: plannedSegments });
+    const computed = plannedSegments;
+    const winner = await publishOrAdoptArtifact(
+      () => persistTtsPlaybackPlan({ write, planObjectKey, request: input.request, segments: computed }),
+      () => readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey, input.request),
+      input.attempt,
+    );
+    plannedSegments = winner ?? computed;
   }
   return {
     planObjectKey,

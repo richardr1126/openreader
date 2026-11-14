@@ -1,5 +1,6 @@
 import { PDF_PARSER_VERSION } from '../operations/contracts';
 import { encodeParserVersion } from '../operations/contracts';
+import { documentPreviewWidth } from '../operations/keys';
 
 const DOCUMENT_ID_REGEX = /^[a-f0-9]{64}$/i;
 const SAFE_NAMESPACE_REGEX = /^[a-zA-Z0-9._-]{1,128}$/;
@@ -198,8 +199,9 @@ export function documentPreviewArtifactKey(input: {
   documentId: string;
   namespace: string | null;
   prefix: string;
+  targetWidth?: number;
 }): string {
-  return `${documentPreviewArtifactPrefix(input)}card-400.jpg`;
+  return `${documentPreviewArtifactPrefix(input)}card-${documentPreviewWidth(input.targetWidth)}.jpg`;
 }
 
 export function documentPreviewMetadataArtifactKey(input: {

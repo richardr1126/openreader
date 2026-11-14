@@ -434,7 +434,7 @@ export async function ensureKokoroAssets(
         components,
         signal: controller.signal,
         onProgress: async (progress) => {
-          await Promise.all([...listeners].map((listener) => listener(progress)));
+          await Promise.allSettled([...listeners].map(async (listener) => listener(progress)));
         },
       }, verifiedAssets);
     }).finally(() => {

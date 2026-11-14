@@ -4,7 +4,7 @@ import { accountExportArtifactKey, accountExportMetadataArtifactKey } from '../s
 import { buildAccountExportArchive, type SupportedAccountExportManifest } from './account-export-archive';
 import type { JobHandlerContext } from './context';
 import type { JobExecution } from '../operations/types';
-import { prepareArtifactWrite } from '../storage/artifact-write';
+import { prepareArtifactWrite, publishOrAdoptArtifact } from '../storage/artifact-write';
 
 const requestSchema = z.object({
   artifactId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),
@@ -26,21 +26,23 @@ export function createAccountExportHandler(input: JobHandlerContext) {
     const startedAt = Date.now();
     const metadataObjectKey = accountExportMetadataArtifactKey({ artifactId: parsed.artifactId, storageUserId: parsed.storageUserId, namespace: parsed.namespace, prefix: input.s3Prefix });
     const writeMetadata = await prepareArtifactWrite(input.storage, metadataObjectKey, hooks);
-    const existingMetadata = await input.storage.readObject(metadataObjectKey)
-      .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as AccountExportArtifactMetadata)
-      .catch(() => null);
-    if (
-      existingMetadata?.schemaVersion === 1
-      && existingMetadata.status === 'ready'
-      && existingMetadata.userId === parsed.userId
-      && existingMetadata.storageUserId === parsed.storageUserId
-      && existingMetadata.namespace === parsed.namespace
-      && existingMetadata.exportSchemaVersion === parsed.schemaVersion
-      && existingMetadata.manifestHash === parsed.manifestHash
-      && await input.storage.objectExists(existingMetadata.objectKey).catch(() => false)
-    ) {
-      return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
-    }
+    const readReadyArtifact = async () => {
+      const existingMetadata = await input.storage.readObject(metadataObjectKey)
+        .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as AccountExportArtifactMetadata)
+        .catch(() => null);
+      return existingMetadata?.schemaVersion === 1
+        && existingMetadata.artifactId === parsed.artifactId
+        && existingMetadata.status === 'ready'
+        && existingMetadata.userId === parsed.userId
+        && existingMetadata.storageUserId === parsed.storageUserId
+        && existingMetadata.namespace === parsed.namespace
+        && existingMetadata.exportSchemaVersion === parsed.schemaVersion
+        && existingMetadata.manifestHash === parsed.manifestHash
+        && await input.storage.objectExists(existingMetadata.objectKey).catch(() => false)
+        ? existingMetadata : null;
+    };
+    const existingMetadata = await readReadyArtifact();
+    if (existingMetadata) return { artifact: existingMetadata, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
     const manifest = JSON.parse(Buffer.from(await input.storage.readObject(parsed.manifestObjectKey)).toString('utf8')) as SupportedAccountExportManifest;
     if (manifest.userId !== parsed.userId || manifest.storageUserId !== parsed.storageUserId || manifest.namespace !== parsed.namespace || manifest.schemaVersion !== parsed.schemaVersion) {
       throw new Error('Account export manifest scope mismatch');
@@ -67,8 +69,11 @@ export function createAccountExportHandler(input: JobHandlerContext) {
       status: 'ready',
       createdAt: Date.now(),
     };
-    await writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json');
+    const winner = await publishOrAdoptArtifact(
+      () => writeMetadata(Buffer.from(JSON.stringify(artifact)), 'application/json'), readReadyArtifact, hooks,
+    );
+    if (winner) await input.storage.deleteObject(objectKey).catch(() => undefined);
     await hooks?.onProgress?.({ phase: 'uploading', completedFiles: manifest.files.length, plannedFiles: manifest.files.length });
-    return { artifact, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
+    return { artifact: winner ?? artifact, timing: { queueWaitMs, computeMs: Date.now() - startedAt } };
   };
 }

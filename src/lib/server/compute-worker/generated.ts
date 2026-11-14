@@ -4708,6 +4708,7 @@ export interface paths {
                         /** @enum {string} */
                         previewKind: "card";
                         rendererVersion?: string;
+                        targetWidth?: number;
                     };
                 };
             };

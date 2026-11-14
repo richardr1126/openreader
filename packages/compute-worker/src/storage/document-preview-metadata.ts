@@ -1,16 +1,16 @@
 import { createHash } from 'node:crypto';
 import { DOCUMENT_PREVIEW_RENDERER_VERSION, type DocumentPreviewArtifactMetadata, type DocumentPreviewJobRequest } from '../operations/contracts';
 import type { ArtifactStorage } from '../infrastructure/storage';
-import { buildDocumentPreviewOperationKey } from '../operations/keys';
+import { buildDocumentPreviewOperationKey, documentPreviewWidth } from '../operations/keys';
 import { documentPreviewArtifactKey, documentPreviewMetadataArtifactKey } from './artifact-addressing';
 
 function previewScopeHash(input: DocumentPreviewJobRequest): string {
   return createHash('sha256').update(buildDocumentPreviewOperationKey(input)).digest('hex');
 }
 
-export function documentPreviewObjectMetadata(artifact: DocumentPreviewArtifactMetadata): Record<string, string> {
+export function documentPreviewObjectMetadata(input: DocumentPreviewJobRequest, artifact: DocumentPreviewArtifactMetadata): Record<string, string> {
   return {
-    'preview-scope': previewScopeHash(artifact),
+    'preview-scope': previewScopeHash(input),
     'preview-width': String(artifact.width),
     'preview-height': String(artifact.height),
     'preview-created-at': String(artifact.createdAt),
@@ -46,6 +46,7 @@ export async function readDocumentPreviewMetadata(
         contentType: 'image/jpeg', byteLength: head.size!, eTag: head.etag, status: 'ready',
       };
     }
+    if (documentPreviewWidth(input.targetWidth) !== 400) return null;
     const parsed = JSON.parse(Buffer.from(await storage.readObject(key)).toString('utf8')) as DocumentPreviewArtifactMetadata;
     if (
       parsed.schemaVersion !== 1
@@ -57,6 +58,7 @@ export async function readDocumentPreviewMetadata(
       || parsed.previewKind !== input.previewKind
       || parsed.rendererVersion !== (input.rendererVersion?.trim() || DOCUMENT_PREVIEW_RENDERER_VERSION)
       || parsed.objectKey !== objectKey
+      || parsed.width !== 400
       || parsed.status !== 'ready'
     ) return null;
     return head || await storage.objectExists(objectKey) ? parsed : null;

@@ -69,9 +69,7 @@ export const documentPreviewOperationCreateSchema = z.object({
   targetWidth: z.number().int().positive().max(2048).optional(),
 }).strict();
 
-export const documentPreviewResolveSchema = documentPreviewOperationCreateSchema.omit({
-  targetWidth: true,
-});
+export const documentPreviewResolveSchema = documentPreviewOperationCreateSchema;
 
 export const documentConversionOperationCreateSchema = z.object({
   conversionId: z.string().trim().regex(/^[a-f0-9]{8,128}$/i),

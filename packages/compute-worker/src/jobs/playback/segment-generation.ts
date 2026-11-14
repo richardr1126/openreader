@@ -16,6 +16,7 @@ import { prepareKokoro, synthesizeKokoro } from '../../inference/kokoro/engine';
 import { runWhisperAlignmentFromAudioBuffer } from '../../inference/runtime';
 import { mapWordsToSentenceOffsets } from '../../inference/whisper/timestamps';
 import { withTimeout } from '../../infrastructure/config';
+import { isPreconditionFailed } from '../../infrastructure/storage';
 import type { TtsPlaybackStorage } from '../../playback/storage';
 import type { JobAttempt } from '../../operations/types';
 import { resolveTtsCredentialsFromBroker } from '../tts-credential-broker';
@@ -685,12 +686,21 @@ export async function generateExplicitTtsPlaybackSegments(input: {
             await releaseProvider().catch(() => undefined);
           }
           if (!await shouldContinueWrites(planOrdinal)) return null;
-          await input.putAudioObject(audioKey, audioBuffer);
+          let uploaded = false;
+          try {
+            await input.putAudioObject(audioKey, audioBuffer);
+            uploaded = true;
+          } catch (error) {
+            if (!input.attempt || !input.readAudioObject || !isPreconditionFailed(error)) throw error;
+            if (!await shouldContinueWrites(planOrdinal)) return null;
+            audioBuffer = await input.readAudioObject(audioKey).catch((cause) => { throw new SegmentPublicationError(cause); });
+            alignment = null;
+          }
           if (!await shouldContinueWrites(planOrdinal)) {
             // The key is content-addressed, so a successor run writes and
             // adopts this same key; deleting it could remove audio the
             // successor already published. Only a cleared cache discards it.
-            if (input.cacheEpoch !== undefined && input.getCurrentCacheEpoch
+            if (uploaded && input.cacheEpoch !== undefined && input.getCurrentCacheEpoch
               && await input.getCurrentCacheEpoch().catch(() => input.cacheEpoch) !== input.cacheEpoch) {
               await input.deleteAudioObject?.(audioKey).catch(() => undefined);
             }
@@ -716,10 +726,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
           break;
         } catch (error) {
           if (input.signal?.aborted) return null;
-          // A competing publisher won the immutable audio key. A later
-          // delivery adopts those bytes and repairs the segment sidecar.
-          if (error instanceof SegmentPublicationError
-            || (input.attempt && (error as { $metadata?: { httpStatusCode?: number } } | null)?.$metadata?.httpStatusCode === 412)) throw error;
+          if (error instanceof SegmentPublicationError || (input.attempt && isPreconditionFailed(error))) throw error;
           if (error instanceof ProviderCapacityWaitTimeoutError || slotLost.signal.aborted) {
             // Saturated shared capacity is back-pressure, not a failed segment.
             // Keep waiting while this run still owns the segment.
