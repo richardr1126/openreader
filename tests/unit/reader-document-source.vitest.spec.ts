@@ -204,6 +204,24 @@ test('an appearance save after an acknowledged book voice save keeps the new voi
   expect(mocks.putDocumentSettings.mock.calls.at(-1)?.[1]).toMatchObject({ voiceOverride, presentation: { showsLayout: true } });
 });
 
+test('retry adopts a new pending operation when settings refetch failed over cached ready data', async () => {
+  const initial = payload('pdf');
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'ready', payload: initial });
+  mocks.ensureCachedDocument.mockResolvedValue(sourceDocument('pdf'));
+  await act(async () => renderProbe('pdf', 0));
+  await waitFor(() => latest?.documentSource.status === 'ready');
+  mocks.getReaderBootstrap.mockRejectedValueOnce(new Error('Settings refetch failed'));
+  await act(async () => {
+    await expect(latest!.updateSettings({ ...initial.settings, language: 'de' })).rejects.toThrow('Settings refetch failed');
+  });
+  await waitFor(() => latest?.replanError === 'Settings refetch failed');
+  mocks.getReaderBootstrap.mockResolvedValueOnce({ status: 'pending', operationId: 'retry-operation' });
+  await act(async () => { await latest!.retry(); });
+  await waitFor(() => mocks.subscribeReaderBootstrap.mock.calls.length > 0);
+  expect(queryClient.getQueryData(queryKeys.readerBootstrap('reader-test-user', 'doc-pdf')))
+    .toMatchObject({ status: 'pending', operationId: 'retry-operation' });
+});
+
 test.each(['http', 'sse'])('a delayed %s replan cannot undo a newer appearance save or restore older speech settings', async (delivery) => {
   const initial = payload('pdf');
   initial.settings.presentation = { showsLayout: true };

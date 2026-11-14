@@ -179,20 +179,23 @@ export function useReaderBootstrap(documentId: string | undefined) {
     queryClient.setQueryData<ReaderBootstrapResult>(key, pending);
   }, [key, queryClient]);
   const { mutateAsync: retryBootstrap, isPending: retrying, error: retryError, variables: retryOwner } = useMutation({
-    mutationFn: (_request: { owner: string; key: typeof key }) => loadBootstrap(true),
+    mutationFn: (_request: { owner: string; key: typeof key; dataUpdateCount: number }) => loadBootstrap(true),
     onSuccess: (snapshot, request) => {
-      queryClient.setQueryData<ReaderBootstrapResult>(request.key, (current) =>
-        !current || current.status === 'error' ? snapshot : current);
+      const state = queryClient.getQueryState(request.key);
+      if ((state?.dataUpdateCount ?? 0) === request.dataUpdateCount) {
+        queryClient.setQueryData<ReaderBootstrapResult>(request.key, snapshot);
+      }
     },
   });
   const retry = useCallback(async () => {
     if (!documentId) return;
     if (currentResult.status === 'error') {
-      await retryBootstrap({ owner: surfaceOwner, key }).catch(() => undefined);
+      await retryBootstrap({ owner: surfaceOwner, key, dataUpdateCount: queryClient.getQueryState(key)?.dataUpdateCount ?? 0 })
+        .catch(() => undefined);
     } else {
       await query.refetch();
     }
-  }, [currentResult.status, documentId, key, query, retryBootstrap, surfaceOwner]);
+  }, [currentResult.status, documentId, key, query, queryClient, retryBootstrap, surfaceOwner]);
   const retryDocumentSource = useCallback(async () => {
     await sourceQuery.refetch();
   }, [sourceQuery]);
