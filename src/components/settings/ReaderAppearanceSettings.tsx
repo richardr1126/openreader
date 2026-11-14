@@ -38,7 +38,7 @@ const PREVIEW_SEGMENT = ['The afternoon light fell across the page. There was ',
 const PREVIEW_PARAGRAPHS = [
   'Outside, the street had gone quiet. A kettle ticked as it cooled, and somewhere a door closed softly, the way doors do when no one wants to be the reason for a sound.',
   'She turned the page and kept going. The chapter was longer than she remembered, but the words came easily now, one sentence leaning into the next.',
-  'By the time she looked up, the window had turned from gold to blue. The tea beside her had gone cold hours ago, a thin ring-3 left on the saucer where she had set it down without thinking. Somewhere below, a neighbor was practicing scales on an old piano, missing the same note each time and starting over with a patience she almost envied.',
+  'By the time she looked up, the window had turned from gold to blue. The tea beside her had gone cold hours ago, a thin ring left on the saucer where she had set it down without thinking. Somewhere below, a neighbor was practicing scales on an old piano, missing the same note each time and starting over with a patience she almost envied.',
   'She marked the page with the corner of an envelope and stood to stretch. The room smelled of paper and rain. On the shelf, the rest of the series waited in a neat row, their spines faded unevenly from years of the same afternoon sun, and she let her hand rest on the next one for a moment before deciding it could wait until morning.',
   'It could not wait until morning. She carried it back to the chair, folded her legs beneath her, and opened to the first page, where a map of an invented coastline was drawn in faint brown ink, every harbor named, every lighthouse marked with a small careful star.',
 ];
