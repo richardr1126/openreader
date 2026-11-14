@@ -12,7 +12,7 @@ Run OpenReader from a checkout to work on it. To run it from source without chan
 
 | Tool | Needed | Why |
 | --- | --- | --- |
-| Node.js 26 and pnpm | Always | Runs the app. The repository pins the pnpm version. |
+| Node.js 26 and pnpm 12 | Always | Runs the app. The repository pins the exact pnpm version. |
 | `weed` (SeaweedFS) | Unless you use external S3 | Embedded object storage. |
 | `nats-server` | Unless you use an external worker | The embedded worker's job queue. |
 | `soffice` (LibreOffice) | Optional | DOCX conversion. Without it, DOCX uploads fail. |
@@ -33,7 +33,7 @@ brew install --cask libreoffice   # optional
 Install Node.js 26 (for example with [nvm](https://github.com/nvm-sh/nvm)), then:
 
 ```bash
-npm install -g pnpm   # Node.js 25 and later no longer bundle Corepack
+npm install -g pnpm@12   # Node.js 25 and later no longer bundle Corepack
 mkdir -p "$HOME/.local/bin" && cd /tmp
 
 # SeaweedFS 4.48, the version Docker ships
@@ -52,6 +52,8 @@ Make sure `$HOME/.local/bin` is on your `PATH`.
 
 </TabItem>
 </Tabs>
+
+pnpm 10 and earlier cannot switch to the pinned version and stop with an error. Upgrade with `brew upgrade pnpm`, or `npm install -g pnpm@12` where npm installed it.
 
 ## Run it
 

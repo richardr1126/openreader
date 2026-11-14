@@ -17,8 +17,8 @@ OpenReader is a [pnpm](https://pnpm.io/) workspace written in TypeScript. The ar
 
 ## App
 
-- **Framework**: [Next.js](https://nextjs.org/) 15 (App Router) and [React](https://react.dev/) 19
-- **UI**: [Tailwind CSS](https://tailwindcss.com) 3, [Headless UI](https://headlessui.com), `react-dnd`, `react-dropzone`, `react-hot-toast`
+- **Framework**: [Next.js](https://nextjs.org/) 16 (App Router) and [React](https://react.dev/) 19
+- **UI**: [Tailwind CSS](https://tailwindcss.com) 4, [Headless UI](https://headlessui.com), `react-dnd`, `react-dropzone`, `react-hot-toast`
 - **Data**: [TanStack Query](https://tanstack.com/query); server-sent events for playback and job progress
 - **Readers**: [react-pdf](https://github.com/wojtekmaj/react-pdf) and [pdf.js](https://mozilla.github.io/pdf.js/) for PDF, [epub.js](https://github.com/futurepress/epub.js/) for EPUB, [react-markdown](https://github.com/remarkjs/react-markdown) with [remark-gfm](https://github.com/remarkjs/remark-gfm) for Markdown and text
 - **Web import**: [Readability](https://github.com/mozilla/readability), [Turndown](https://github.com/mixmark-io/turndown), [linkedom](https://github.com/WebReflection/linkedom)
@@ -53,7 +53,7 @@ The worker runs embedded in Docker, native and desktop installs, or as its own s
 
 ## Tooling
 
-- ESLint and TypeScript
-- [Vitest](https://vitest.dev/) 4 for unit and integration tests
+- ESLint 10 with the React Compiler rules, and TypeScript 7 (`tsc`)
+- [Vitest](https://vitest.dev/) 5 for unit and integration tests
 - [Playwright](https://playwright.dev/) for end-to-end tests in Chromium and WebKit
 - [Docusaurus](https://docusaurus.io/) for this site (`docs-site/`)
