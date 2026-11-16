@@ -120,7 +120,7 @@ test('admin approves a pending user and inspects the user directory', async ({ b
       await refresh.fill(value);
       await page.getByRole('button', { name: /^Save \(1\)$/ }).click();
       await expect(page.getByRole('status').filter({ hasText: /^Limits saved$/ }).last()).toBeVisible();
-      await expect(page.getByRole('button', { name: /^Save/ })).toHaveCount(0);
+      await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toHaveCount(0);
     }
   }
   await page.getByRole('button', { name: 'Access', exact: true }).first().click();
