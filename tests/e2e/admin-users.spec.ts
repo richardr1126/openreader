@@ -110,6 +110,18 @@ test('admin approves a pending user and inspects the user directory', async ({ b
     await page.locator('div.justify-between').filter({ has: retries }).getByRole('button', { name: 'Reset', exact: true }).click();
     await expect(page.getByText('Reset to env default')).toBeVisible();
     await expect(retries).toHaveValue(seededRetries);
+
+    // The compute policy is one object-valued setting; a save must clear its edit.
+    await page.getByRole('button', { name: 'Limits', exact: true }).first().click();
+    await page.getByText('Worker capacity', { exact: true }).click();
+    const refresh = page.getByRole('spinbutton', { name: 'Policy refresh sec', exact: true });
+    const seededRefresh = await refresh.inputValue();
+    for (const value of [String(Number(seededRefresh) + 1), seededRefresh]) {
+      await refresh.fill(value);
+      await page.getByRole('button', { name: /^Save \(1\)$/ }).click();
+      await expect(page.getByRole('status').filter({ hasText: /^Limits saved$/ }).last()).toBeVisible();
+      await expect(page.getByRole('button', { name: /^Save/ })).toHaveCount(0);
+    }
   }
   await page.getByRole('button', { name: 'Access', exact: true }).first().click();
   await page.getByRole('radio', { name: 'Approve', exact: true }).click();
