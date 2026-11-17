@@ -116,7 +116,19 @@ jobs:
           printf '%s' "$APPLE_API_KEY_P8" | base64 --decode > "$APPLE_API_KEY"
           grep -q 'BEGIN PRIVATE KEY' "$APPLE_API_KEY" || { echo "::error::APPLE_API_KEY_P8 is not a base64 .p8 key"; exit 1; }
           trap 'rm -f "$APPLE_API_KEY"' EXIT
-          pnpm --dir desktop package
+          # Electron's signer opens runtime files concurrently. Use its existing
+          # graceful-fs dependency to retry opens when the runner runs out of descriptors.
+          node --input-type=commonjs - <<'NODE'
+          const { createRequire } = require('node:module');
+          const { resolve } = require('node:path');
+          const desktopRequire = createRequire(resolve('desktop/package.json'));
+          const builderRequire = createRequire(desktopRequire.resolve('electron-builder'));
+          const appBuilderRequire = createRequire(builderRequire.resolve('app-builder-lib'));
+          const signerRequire = createRequire(appBuilderRequire.resolve('@electron/osx-sign'));
+          const fsExtraRequire = createRequire(signerRequire.resolve('fs-extra'));
+          fsExtraRequire('graceful-fs').gracefulify(require('node:fs'));
+          import('./desktop/scripts/package.mjs');
+          NODE
           # electron-builder stops on a failed notarization or staple; this checks
           # Gatekeeper's verdict on the result without another ticket lookup.
           apps=(desktop/dist/mac*/"OpenReader Desktop.app")
