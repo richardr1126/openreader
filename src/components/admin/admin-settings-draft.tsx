@@ -93,7 +93,7 @@ export function useAdminSettingsDraft(savedMessage: string) {
     const { values } = settings;
     setEdits((current) => {
       const kept = Object.fromEntries(Object.entries(current).filter(([key, value]) => (
-        keep(key) || !Object.is(value, values[key])
+        keep(key) || !sameValue(value, values[key])
       )));
       return Object.keys(kept).length === Object.keys(current).length ? current : kept;
     });
@@ -153,7 +153,7 @@ export function useAdminSettingsDraft(savedMessage: string) {
       : key in unconfirmed.current ? unconfirmed.current[key]
         : data?.values?.[key];
     setEdits((current) => (
-      Object.is(value, base) ? without(current, key) : { ...current, [key]: value }
+      sameValue(value, base) ? without(current, key) : { ...current, [key]: value }
     ));
   };
 
@@ -229,6 +229,18 @@ export function useAdminSettingsDraft(savedMessage: string) {
 }
 
 const RESETTING = Symbol('resetting');
+
+/** Settings are JSON, and object-valued ones (compute limit policies) come back as new objects, so compare by content. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length
+    && keys.every((key) => Object.hasOwn(right, key) && sameValue(left[key], right[key]));
+}
 
 function without(edits: Record<string, unknown>, key: string): Record<string, unknown> {
   const next = { ...edits };
