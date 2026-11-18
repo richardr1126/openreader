@@ -8,7 +8,7 @@ import {
   type ReaderRendererProps,
 } from '@/components/reader/ReaderShell';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
-import { ReaderHeader } from '@/components/reader/ReaderHeader';
+import { ReaderHeaderActions } from '@/components/reader/ReaderHeader';
 import { useTTS } from "@/contexts/TTSContext";
 import TTSPlayer from '@/components/player/TTSPlayer';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
@@ -40,7 +40,7 @@ function EpubReader({
   document: sourceDocument,
   bootstrap,
   rendererReady,
-  onBackToDocuments,
+  headerActions,
   onReady,
   onError,
 }: ReaderRendererProps<'epub'>) {
@@ -135,10 +135,8 @@ function EpubReader({
 
   return (
     <>
-      <ReaderHeader
-        onBackToDocuments={onBackToDocuments}
-        title={currDocName || payload.document.name}
-        right={rendererReady ? (
+      <ReaderHeaderActions target={headerActions}>
+        {rendererReady ? (
           <div className="flex items-center gap-3">
             <DocumentHeaderMenu
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
@@ -161,8 +159,8 @@ function EpubReader({
               }}
             />
           </div>
-        ) : <DocumentHeaderMenu showAudiobookExport={canExportAudiobook} />}
-      />
+        ) : null}
+      </ReaderHeaderActions>
       {widthError && <p role="alert">{widthError}</p>}
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight ?? 0 }}>
         {epubState.currDocData && containerHeight !== null ? (

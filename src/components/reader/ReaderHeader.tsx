@@ -1,6 +1,7 @@
 'use client';
 
 import type { MouseEvent, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Header } from '@/components/Header';
 import { ButtonLink } from '@/components/ui';
 
@@ -28,4 +29,9 @@ export function ReaderHeader({
       right={right}
     />
   );
+}
+
+/** Renderer-owned controls share the shell's persistent header. */
+export function ReaderHeaderActions({ target, children }: { target: HTMLElement | null; children: ReactNode }) {
+  return target ? createPortal(children, target) : null;
 }

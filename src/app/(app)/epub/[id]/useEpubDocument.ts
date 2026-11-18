@@ -114,7 +114,7 @@ export function useEpubDocument(
     playbackSegments,
     skipToOrdinal,
     setFollowingNarration,
-    followingNarration,
+    followingNarrationRef,
   } = useTTS();
   const { presentation: { highlightSegment: epubHighlightEnabled, highlightWords: epubWordHighlightEnabled, showsLayout: readerShowsLayout } } = useReaderAppearance();
 
@@ -145,7 +145,6 @@ export function useEpubDocument(
   const initialPositionRef = useRef<ReadingPosition | null>(initialPosition);
   const pendingInitialOrdinalRef = useRef<number | null>(null);
   const playbackSegmentsRef = useRef<CanonicalTtsSegment[]>(playbackSegments);
-  const followingNarrationRef = useRef(followingNarration);
   // Navigation callbacks change identity whenever playback state does (each
   // SSE seek-layout update during generation). Placement reads the latest ones
   // through refs: as dependencies they re-ran a full placement every few
@@ -155,10 +154,9 @@ export function useEpubDocument(
   useLayoutEffect(() => {
     reconcileEpubRenderedAnchorRef.current = reconcileEpubRenderedAnchor;
     skipToOrdinalRef.current = skipToOrdinal;
-    followingNarrationRef.current = followingNarration;
     playbackSegmentsRef.current = playbackSegments;
     playbackPlanReadyRef.current = playbackPlanReady;
-  }, [followingNarration, playbackPlanReady, playbackSegments, reconcileEpubRenderedAnchor, skipToOrdinal]);
+  }, [playbackPlanReady, playbackSegments, reconcileEpubRenderedAnchor, skipToOrdinal]);
   const startupDisplayStartedRef = useRef(false);
   const startupDisplayOwnerRef = useRef(0);
 

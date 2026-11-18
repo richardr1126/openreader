@@ -23,7 +23,7 @@ type UseEpubLocationControllerParams = {
   bookRef: RefObject<Book | null>;
   renditionRef: RefObject<Rendition | undefined>;
   resolveLocatorToCfi: (locator: TTSSegmentLocator) => Promise<string | null>;
-  followingNarrationRef: MutableRefObject<boolean>;
+  followingNarrationRef: Readonly<MutableRefObject<boolean>>;
 };
 
 function isEpubLocatorTarget(value: EpubLocation | TTSSegmentLocator): value is TTSSegmentLocator {
