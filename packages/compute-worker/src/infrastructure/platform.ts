@@ -5,7 +5,9 @@ function findMonorepoRoot(startDir: string): string | null {
   let current = path.resolve(startDir);
   for (;;) {
     const marker = path.join(current, 'pnpm-workspace.yaml');
-    if (fs.existsSync(marker)) return current;
+    // pnpm deploy writes this marker too; only the source workspace has the
+    // worker source package beneath it.
+    if (fs.existsSync(marker) && fs.existsSync(path.join(current, 'packages', 'compute-worker', 'src'))) return current;
     const parent = path.dirname(current);
     if (parent === current) return null;
     current = parent;
@@ -13,23 +15,24 @@ function findMonorepoRoot(startDir: string): string | null {
 }
 
 function resolveDocstoreDir(): string {
-  // 1. Try to find the monorepo root (works in local development)
-  const repoRoot = findMonorepoRoot(process.cwd());
-  if (repoRoot) return path.join(repoRoot, 'docstore');
-
-  // 2. In a containerized environment, the parent bootstrap process runs in /app
-  // and the child process inherits process.env.PWD = '/app'.
+  // Bootstrap preserves the launcher's PWD: the desktop data directory or /app
+  // in Docker. Prefer its existing docstore over package metadata: pnpm deploy
+  // also writes pnpm-workspace.yaml inside the bundled, read-only worker.
   if (process.env.PWD) {
     const pwdDocstore = path.join(process.env.PWD, 'docstore');
     if (fs.existsSync(pwdDocstore)) return pwdDocstore;
   }
 
-  // 3. Fallback to the standard container app docstore path if it exists
+  // Local development can start from any package in the source workspace.
+  const repoRoot = findMonorepoRoot(process.cwd());
+  if (repoRoot) return path.join(repoRoot, 'docstore');
+
+  // Fallback to the standard container app docstore path if it exists.
   if (fs.existsSync('/app/docstore')) {
     return '/app/docstore';
   }
 
-  // 4. Fallback to the process cwd docstore
+  // A standalone worker keeps its data beside its working directory.
   return path.join(process.cwd(), 'docstore');
 }
 
