@@ -12,11 +12,15 @@ describe('worker model storage directory', () => {
     containerDocstore = false;
     vi.resetModules();
     vi.stubEnv('PWD', '');
-    // Keep the container fallback independent of the machine running the test.
+    // Keep fallback discovery independent of the host, even with TMPDIR inside
+    // a source checkout. Workspace probes inside the fixture still hit disk.
     const existsSync = fs.existsSync;
-    vi.spyOn(fs, 'existsSync').mockImplementation((file) => (
-      file === '/app/docstore' ? containerDocstore : existsSync(file)
-    ));
+    vi.spyOn(fs, 'existsSync').mockImplementation((file) => {
+      if (file === '/app/docstore') return containerDocstore;
+      if (typeof file === 'string' && path.basename(file) === 'pnpm-workspace.yaml'
+        && !file.startsWith(root + path.sep)) return false;
+      return existsSync(file);
+    });
   });
 
   afterEach(() => {
@@ -59,6 +63,7 @@ describe('worker model storage directory', () => {
     fs.writeFileSync(path.join(root, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
     directory('packages', 'compute-worker', 'src');
     const worker = directory('desktop', 'stage', 'runtime', 'embedded-compute-worker');
+    fs.writeFileSync(path.join(worker, 'pnpm-workspace.yaml'), "packages:\n  - '.'\n");
     const data = directory('user-data');
     directory('user-data', 'docstore');
     vi.spyOn(process, 'cwd').mockReturnValue(worker);
@@ -74,6 +79,18 @@ describe('worker model storage directory', () => {
     vi.stubEnv('PWD', directory('other-directory'));
 
     expect(await docstore()).toBe(path.join(root, 'docstore'));
+  });
+
+  test('uses the current source checkout when PWD belongs to another checkout with models', async () => {
+    const checkout = directory('current-checkout');
+    fs.writeFileSync(path.join(checkout, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
+    const worker = directory('current-checkout', 'packages', 'compute-worker', 'src');
+    const inherited = directory('other-checkout');
+    directory('other-checkout', 'docstore');
+    vi.spyOn(process, 'cwd').mockReturnValue(worker);
+    vi.stubEnv('PWD', inherited);
+
+    expect(await docstore()).toBe(path.join(checkout, 'docstore'));
   });
 
   test('uses the Docker volume despite a deployed workspace manifest when PWD is unset', async () => {
