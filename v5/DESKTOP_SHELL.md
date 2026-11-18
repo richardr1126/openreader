@@ -74,7 +74,12 @@ import, so the smoke test runs the shell's own startup and sign-in code.
   chosen free on 127.0.0.1 at each launch.
 - **Data.** The working directory and `PWD` are the userData directory, so the
   bootstrap and worker put SQLite, SeaweedFS, JetStream and models in
-  `<userData>/docstore`, as they would beside a checkout. The local library
+  `<userData>/docstore`, as they would beside a checkout. The deployed worker
+  reuses that existing data directory. Workspace discovery stops at the
+  `pnpm-workspace.yaml` that `pnpm deploy` writes inside deployed packages,
+  so a staged runtime cannot pick up an enclosing checkout's data. A worker
+  running from source uses its own checkout before the inherited `PWD`.
+  The local library
   defaults to `<userData>/docstore/library` through `IMPORT_LIBRARY_DIRS`,
   because the standalone server runs from the read-only bundle.
 - **Secrets.** `AUTH_SECRET` is generated once into `<userData>/auth-secret`

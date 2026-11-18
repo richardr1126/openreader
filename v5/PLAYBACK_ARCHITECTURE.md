@@ -506,6 +506,10 @@ session and cached stream so resume does not create a new playback timeline.
 
 For EPUB specifically, the client owns only reader rendering/navigation concerns:
 
+- `TTSContext` owns synchronous follow intent. The rendition controller reads
+  that same ref, rather than a layout-effect copy of React state, so an explicit
+  return cannot be discarded before React commits. A browse command can still
+  cancel unresolved automatic follow navigation.
 - It builds rendered text maps for the visible page.
 - It records a stable spine anchor for visible highlight mapping and CFI
   navigation.

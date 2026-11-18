@@ -245,10 +245,16 @@ function ReaderShell({
 }
 ```
 
-The shell uses a render prop because each route owns different reader chrome,
-settings, and renderer-specific document state. It keys readiness to the
-authoritative document and plan surface, supports renderer retry, and gates
-progress persistence. It must not expand into a general readiness framework.
+The shell mounts a renderer component because each route owns different reader
+controls, settings, and renderer-specific document state. It keys readiness to
+the authoritative document surface, supports renderer retry, and gates progress
+persistence. It must not expand into a general readiness framework.
+
+`ReaderShell` owns one persistent `ReaderHeader` through loading, ready, and
+error transitions. A pointer press on Back must remain on the same link until
+release, even if startup completes in between. Renderers supply their controls
+through `ReaderHeaderActions` into the shell's header slot; readiness overlays
+cover only the content below that header.
 
 ## One Loader
 
@@ -274,6 +280,7 @@ type ReaderRendererProps<T extends ReaderType> = {
   payload: Extract<ReaderPayload, { readerType: T }>;
   bootstrap: ReturnType<typeof useReaderBootstrap>;
   rendererReady: boolean;
+  headerActions: HTMLElement | null;
   onReady: () => void;
   onError: (error: Error) => void;
 };

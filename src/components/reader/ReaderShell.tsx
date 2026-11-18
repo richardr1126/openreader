@@ -37,7 +37,7 @@ export type ReaderRendererProps<T extends ReaderType> = {
   bootstrap: ReturnType<typeof useReaderBootstrap>;
   rendererReady: boolean;
   restartBootstrap: (command: ReaderBootstrapRestart) => void;
-  onBackToDocuments: (event: MouseEvent) => void;
+  headerActions: HTMLElement | null;
   onReady: () => void;
   onError: (error: Error) => void;
 };
@@ -80,6 +80,7 @@ export function ReaderShell<T extends ReaderType>({
     error: Error;
   } | null>(null);
   const [rendererAttempt, setRendererAttempt] = useState(0);
+  const [headerActions, setHeaderActions] = useState<HTMLDivElement | null>(null);
   const advanceRendererAttempt = useCallback(() => {
     setRendererAttempt((current) => current + 1);
   }, []);
@@ -201,120 +202,93 @@ export function ReaderShell<T extends ReaderType>({
     router.push('/app');
   }, [disableProgressPersistence, router, stop]);
 
-  // Until the reader is usable, the shell draws the header, so the way back to
-  // the library works while a document prepares or after it fails.
-  const statusScreen = (status: ReactNode) => (
-    <main className="flex h-dvh flex-col">
-      <ReaderHeader
-        title={result.status === 'ready' ? result.payload.document.name : undefined}
-        right={<DocumentHeaderMenu showAudiobookExport={canExportAudiobook} />}
-        onBackToDocuments={backToDocuments}
-      />
-      <div className="grid min-h-0 flex-1">{status}</div>
-    </main>
-  );
-
+  // One header survives every startup/renderer transition. Replacing the
+  // loading header during a pointer press can discard its eventual click.
+  const canMountRenderer = payload && sourceDocument
+    && adoption.adoptedAttemptKey === attemptKey && !initializationError;
+  let status: ReactNode = null;
   if (result.status === 'pending') {
-    return statusScreen(
-      <ReaderLoader progress={result.progress} />,
-    );
-  }
-
-  if (result.status === 'error' && result.notFound) {
-    return (
-      <main className="flex h-dvh flex-col">
-        <AccessRequiredCard subject="document" accountName={session?.user && !session.user.isAnonymous ? session.user.name : null} />
-      </main>
-    );
-  }
-
-  if (result.status === 'error') {
-    return statusScreen(
+    status = <ReaderLoader progress={result.progress} />;
+  } else if (result.status === 'error' && result.notFound) {
+    status = <AccessRequiredCard subject="document" accountName={session?.user && !session.user.isAnonymous ? session.user.name : null} />;
+  } else if (result.status === 'error') {
+    status = (
       <ReaderError
         error={bootstrap.retryError ?? new Error(result.message)}
         onRetry={result.retryable ? () => void bootstrap.retry() : undefined}
         retrying={bootstrap.retrying}
-      />,
+      />
     );
-  }
-
-  if (result.payload.readerType !== readerType) {
-    return statusScreen(
+  } else if (result.payload.readerType !== readerType) {
+    status = (
       <ReaderError
         error={new Error(`Expected a ${readerType.toUpperCase()} document, received ${result.payload.readerType}.`)}
-      />,
+      />
     );
-  }
-
-  if (bootstrap.documentSource.status === 'error') {
-    return statusScreen(
+  } else if (bootstrap.documentSource.status === 'error') {
+    status = (
       <ReaderError
         error={bootstrap.documentSource.error}
         onRetry={() => void bootstrap.retryDocumentSource()}
-      />,
+      />
     );
-  }
-
-  if (bootstrap.documentSource.status !== 'ready') {
-    return statusScreen(
-      <ReaderLoader />,
-    );
-  }
-
-  if (!sourceDocument) {
-    return statusScreen(
+  } else if (bootstrap.documentSource.status !== 'ready') {
+    status = <ReaderLoader />;
+  } else if (!sourceDocument) {
+    status = (
       <ReaderError
         error={new Error(`Expected ${readerType.toUpperCase()} source data, received ${bootstrap.documentSource.document.type}.`)}
-      />,
+      />
     );
-  }
-
-  if (initializationError) {
-    return statusScreen(
-      <ReaderError error={initializationError} onRetry={retryRenderer} />,
-    );
-  }
-
-  if (!payload || adoption.adoptedAttemptKey !== attemptKey) {
-    return statusScreen(
-      <ReaderLoader />,
-    );
+  } else if (initializationError) {
+    status = <ReaderError error={initializationError} onRetry={retryRenderer} />;
+  } else if (!canMountRenderer || !rendererReady || rendererError) {
+    status = rendererError
+      ? <ReaderError error={rendererError} onRetry={retryRenderer} />
+      : <ReaderLoader />;
   }
 
   return (
-    <>
+    <div className="flex h-dvh flex-col">
+      <ReaderHeader
+        title={payload?.document.name}
+        right={result.status === 'error' && result.notFound ? null : (
+          <div ref={setHeaderActions} className="contents">
+            {!canMountRenderer || !rendererReady ? <DocumentHeaderMenu showAudiobookExport={canExportAudiobook} /> : null}
+          </div>
+        )}
+        onBackToDocuments={backToDocuments}
+      />
       {rendererReady && (bootstrap.replanning || bootstrap.replanError) ? (
         <ReaderReplanStatus
           error={bootstrap.replanError}
           onRetry={() => void bootstrap.retry()}
         />
       ) : null}
-      <div
-        className={rendererReady ? undefined : 'pointer-events-none opacity-0'}
-        aria-hidden={!rendererReady}
-      >
-        <Fragment key={attemptKey}>
-          <ReaderAppearanceProvider readerType={readerType} settings={payload.settings} update={bootstrap.updatePresentation}>
-          <Renderer
-            payload={payload}
-            document={sourceDocument}
-            bootstrap={bootstrap}
-            rendererReady={rendererReady}
-            restartBootstrap={restartBootstrap}
-            onBackToDocuments={backToDocuments}
-            onReady={handleReady}
-            onError={handleError}
-          />
-          </ReaderAppearanceProvider>
-        </Fragment>
+      <div className="relative min-h-0 flex-1">
+        {canMountRenderer ? (
+          <div
+            className={rendererReady ? undefined : 'pointer-events-none opacity-0'}
+            aria-hidden={!rendererReady}
+          >
+            <Fragment key={attemptKey}>
+              <ReaderAppearanceProvider readerType={readerType} settings={payload.settings} update={bootstrap.updatePresentation}>
+                <Renderer
+                  payload={payload}
+                  document={sourceDocument}
+                  bootstrap={bootstrap}
+                  rendererReady={rendererReady}
+                  restartBootstrap={restartBootstrap}
+                  headerActions={headerActions}
+                  onReady={handleReady}
+                  onError={handleError}
+                />
+              </ReaderAppearanceProvider>
+            </Fragment>
+          </div>
+        ) : null}
+        {status ? <div className="absolute inset-0 grid">{status}</div> : null}
       </div>
-      {!rendererReady || rendererError ? (
-        <div className="fixed inset-0 z-50">
-          {statusScreen(rendererError
-            ? <ReaderError error={rendererError} onRetry={retryRenderer} />
-            : <ReaderLoader />)}
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 }

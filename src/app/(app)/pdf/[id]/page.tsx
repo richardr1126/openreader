@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { DocumentSettings } from '@/components/documents/DocumentSettings';
 import { DocumentHeaderMenu } from '@/components/documents/DocumentHeaderMenu';
-import { ReaderHeader } from '@/components/reader/ReaderHeader';
+import { ReaderHeaderActions } from '@/components/reader/ReaderHeader';
 import { AudiobookExportModal } from '@/components/AudiobookExportModal';
 import { VoiceSidebar } from '@/components/player/VoiceSidebar';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -56,7 +56,7 @@ function PdfReader({
   bootstrap,
   rendererReady,
   restartBootstrap,
-  onBackToDocuments,
+  headerActions,
   onReady,
   onError,
 }: ReaderRendererProps<'pdf'>) {
@@ -149,10 +149,8 @@ function PdfReader({
 
   return (
     <>
-      <ReaderHeader
-        onBackToDocuments={onBackToDocuments}
-        title={currDocName || payload.document.name}
-        right={
+      <ReaderHeaderActions target={headerActions}>
+        {rendererReady ? (
           <div className="flex items-center gap-2">
             <DocumentHeaderMenu
               onOpenSettings={() => setActiveSidebar((prev) => prev === 'settings' ? null : 'settings')}
@@ -181,8 +179,8 @@ function PdfReader({
               } : undefined}
             />
           </div>
-        }
-      />
+        ) : null}
+      </ReaderHeaderActions>
       <div className="relative flex flex-col overflow-hidden" style={{ height: containerHeight }}>
         <div id="main-content" tabIndex={-1} className={rendererReady ? 'min-h-0 flex-1' : 'min-h-0 flex-1 opacity-0 pointer-events-none'}>
           {readerShowsLayout ? (

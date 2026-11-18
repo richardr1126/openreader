@@ -99,6 +99,8 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
 
   // Control functions
   followingNarration: boolean;
+  /** Synchronous command intent shared with renderer navigation. */
+  followingNarrationRef: Readonly<{ current: boolean }>;
   setFollowingNarration: (enabled: boolean) => void;
   returnToNarration: () => void;
   readerNavigationRevision: number;
@@ -616,7 +618,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
    */
   const value = useMemo(() => ({
     documentId,
-    followingNarration, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
+    followingNarration, followingNarrationRef, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
     isPlaying,
     isProcessing,
     canSkip,
