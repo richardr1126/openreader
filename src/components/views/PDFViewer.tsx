@@ -14,6 +14,8 @@ import { resolvePdfBlockAtPoint } from '@/lib/client/pdf';
 import { indexSegmentsBySource, resolvePointInUnit } from '@/lib/client/reader/segment-hit';
 import { bindTapToSeek } from '@/lib/client/reader/tap-to-seek';
 import { useLatestRef } from '@/hooks/useLatestRef';
+import { pdfSegmentPageAt, resolvePdfSegmentPageParts } from '@/lib/client/pdf/segment-pages';
+import { locateAlignmentWordSpans } from '@/lib/client/highlight-token-alignment';
 
 interface PDFViewerProps {
   zoomLevel: number;
@@ -70,6 +72,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     playbackPlanSegmentCount,
     playbackSegments,
     skipToOrdinal,
+    syncPlaybackLocator,
   } = useTTS();
   const {
     currentSentence,
@@ -92,6 +95,48 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     parsedDocument,
     parsedOverlayEnabled,
   } = pdfState;
+
+  // A sentence that runs over a page break is split by page. Narration turns to
+  // the page of the word being spoken, and each page highlights only its words.
+  const segmentPageParts = useMemo(
+    () => resolvePdfSegmentPageParts(parsedDocument, currentSegment?.ownerLocator, currentSentence),
+    [parsedDocument, currentSegment, currentSentence],
+  );
+  const segmentWordSpans = useMemo(
+    () => (segmentPageParts.length > 1 && currentSentenceAlignment
+      ? locateAlignmentWordSpans(currentSentenceAlignment.words, currentSentence.replace(/\s+/g, ' ').trim(), resolvedLanguage)
+      : null),
+    [segmentPageParts, currentSentenceAlignment, currentSentence, resolvedLanguage],
+  );
+  const spokenWordOffset = currentWordIndex !== null && currentWordIndex !== undefined && currentWordIndex >= 0
+    ? segmentWordSpans?.[currentWordIndex]?.start ?? 0
+    : 0;
+  const spokenPage = segmentPageParts.length > 1 ? pdfSegmentPageAt(segmentPageParts, spokenWordOffset) : null;
+  const renderedPagePart = segmentPageParts.find((part) => part.page === currDocPage) ?? null;
+  // The spoken words this page shows, as a slice of the segment alignment.
+  const renderedPageWords = useMemo(() => {
+    if (!renderedPagePart || !currentSentenceAlignment) return null;
+    if (!segmentWordSpans) return { first: 0, alignment: currentSentenceAlignment };
+    let first = -1;
+    let last = -1;
+    segmentWordSpans.forEach((span, index) => {
+      if (!span || span.start < renderedPagePart.start || span.start >= renderedPagePart.end) return;
+      if (first < 0) first = index;
+      last = index;
+    });
+    if (first < 0) return null;
+    return {
+      first,
+      alignment: { ...currentSentenceAlignment, words: currentSentenceAlignment.words.slice(first, last + 1) },
+    };
+  }, [renderedPagePart, currentSentenceAlignment, segmentWordSpans]);
+
+  useLayoutEffect(() => {
+    if (!followingNarration || spokenPage === null || spokenPage === currDocPage) return;
+    const locator = currentSegment?.ownerLocator;
+    if (locator?.readerType !== 'pdf') return;
+    syncPlaybackLocator({ ...locator, page: spokenPage });
+  }, [currDocPage, currentSegment, followingNarration, spokenPage, syncPlaybackLocator]);
 
   // Tap a sentence to play from it. Parsed blocks are plan source units, so a
   // tap resolves within the block's own sentences on the rendered text layer.
@@ -251,7 +296,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     // page. There is no highlight to paint on this surface, even when its
     // extracted text is empty.
     const activeLocator = currentSegment?.ownerLocator ?? null;
-    if (activeLocator?.readerType === 'pdf' && activeLocator.page !== currDocPage) {
+    if (activeLocator?.readerType === 'pdf' && !renderedPagePart) {
       clearHighlights();
       clearWordHighlights();
       commitSurfacePart(surfaceKey, 'highlight');
@@ -276,7 +321,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     const hasParsedBlockLocator =
       !!parsedDocument
       && activeLocator?.readerType === 'pdf'
-      && activeLocator.page === currDocPage
+      && renderedPagePart !== null
       && typeof activeLocator.blockId === 'string'
       && activeLocator.blockId.length > 0;
 
@@ -295,7 +340,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
 
     try {
       const didCommitHighlight = highlightPattern(
-        currentSentence,
+        renderedPagePart.text,
         containerRef as RefObject<HTMLDivElement>,
         {
           parsedDocument,
@@ -329,6 +374,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     currDocPage,
     currentSentence,
     currentSegment,
+    renderedPagePart,
     highlightPattern,
     clearHighlights,
     clearWordHighlights,
@@ -349,20 +395,18 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   useEffect(() => {
     clearWordHighlightTimeouts();
 
-    if (!pdfWordHighlightEnabled || currentSegment?.ownerLocator?.readerType === 'pdf' && currentSegment.ownerLocator.page !== currDocPage) {
+    if (!pdfWordHighlightEnabled || !renderedPagePart || !renderedPageWords) {
       clearWordHighlights();
       return;
     }
 
-    if (!currentSentence || currentWordIndex === null || currentWordIndex === undefined || currentWordIndex < 0) {
+    if (currentWordIndex === null || currentWordIndex === undefined || currentWordIndex < 0) {
       clearWordHighlights();
       return;
     }
 
-    const wordEntry =
-      currentSentenceAlignment && currentWordIndex < currentSentenceAlignment.words.length
-        ? currentSentenceAlignment.words[currentWordIndex]
-        : undefined;
+    const pageWordIndex = currentWordIndex - renderedPageWords.first;
+    const wordEntry = renderedPageWords.alignment.words[pageWordIndex];
     const wordText = wordEntry?.text || null;
 
     if (!wordText) {
@@ -384,9 +428,9 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       if (!container) return;
 
       highlightWordIndex(
-        currentSentenceAlignment,
-        currentWordIndex,
-        currentSentence || '',
+        renderedPageWords.alignment,
+        pageWordIndex,
+        renderedPagePart.text,
         containerRef as RefObject<HTMLDivElement>
       );
 
@@ -404,20 +448,15 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       clearWordHighlightTimeouts();
     };
 
-    if (isLayoutChange) {
-      clearWordHighlights();
-      scheduleWordTimeout(() => tryApplyWord(0), 250);
-      return cleanup;
-    }
-
+    // A page turn paints the spoken word at once; the retry above covers a
+    // sentence layer that has not mapped yet.
+    if (isLayoutChange) clearWordHighlights();
     tryApplyWord(0);
     return cleanup;
   }, [
     currentWordIndex,
-    currentSegment,
-    currDocPage,
-    currentSentence,
-    currentSentenceAlignment,
+    renderedPagePart,
+    renderedPageWords,
     pdfHighlightEnabled,
     pdfWordHighlightEnabled,
     clearWordHighlights,
