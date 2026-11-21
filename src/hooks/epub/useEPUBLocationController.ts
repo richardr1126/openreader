@@ -141,7 +141,7 @@ export function useEPUBLocationController({
         setIsEpub(true);
         isEpubSetOnceRef.current = true;
       }
-      placementIntentRef.current = 'manual';
+      placementIntentRef.current = intent;
       safeRenditionNavigate(location === 'next' ? 'next' : 'prev');
       return;
     }

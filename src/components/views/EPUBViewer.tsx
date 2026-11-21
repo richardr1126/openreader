@@ -29,6 +29,7 @@ interface EPUBViewerProps {
     | 'highlightSegment'
     | 'clearHighlights'
     | 'highlightWordIndex'
+    | 'followSpokenWord'
     | 'clearWordHighlights'
   >;
 }
@@ -116,6 +117,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     clearHighlights,
     highlightWordIndex,
     clearWordHighlights,
+    followSpokenWord,
   } = epubState;
   const {
     registerLocationChangeHandler,
@@ -226,6 +228,21 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     renderedTextRevision,
     clearWordHighlights,
     highlightWordIndex
+  ]);
+
+  // A sentence that runs onto the next page turns it on the first word spoken
+  // there, using word timings when the segment has them.
+  useEffect(() => {
+    if (!isPlaybackReady || !followingNarration) return;
+    followSpokenWord(currentSegment, currentSentenceAlignment, currentWordIndex);
+  }, [
+    currentSegment,
+    currentSentenceAlignment,
+    currentWordIndex,
+    followingNarration,
+    followSpokenWord,
+    isPlaybackReady,
+    renderedTextRevision,
   ]);
 
   if (!currDocData) return null;

@@ -1,10 +1,12 @@
 import { describe, expect, test, vi } from 'vitest';
 import { parseHTML } from 'linkedom';
-import type { Book } from 'epubjs';
+import type { Book, Rendition } from 'epubjs';
 
-import type { MappedChar } from '@/lib/client/highlight-char-map';
 import {
-  buildEpubRangeStartAnchor,
+  buildRenderedTextMaps,
+  resolveRenderedPageStart,
+} from '@/lib/client/epub/epub-rendered-text-maps';
+import {
   resolveNormalizedRangeStartOffset,
   resolveSpineFromCfi,
 } from '@/lib/client/epub/spine-coordinates';
@@ -52,8 +54,7 @@ describe('EPUB CFI spine coordinates', () => {
 
   test('maps a committed DOM range start directly into normalized character space', () => {
     const textNode = {} as Text;
-    const normalizedCharacters: Array<MappedChar<{ node: Text; offset: number }>> =
-      Array.from('alpha beta', (char, offset) => ({ char, pos: { node: textNode, offset } }));
+    const positions = Array.from('alpha beta', (_, offset) => ({ node: textNode, offset }));
     const range = {
       comparePoint: (node: Node, offset: number) => {
         if (node !== textNode) throw new Error('wrong document');
@@ -63,22 +64,19 @@ describe('EPUB CFI spine coordinates', () => {
       },
     } as unknown as Range;
 
-    expect(resolveNormalizedRangeStartOffset(range, normalizedCharacters)).toBe(6);
+    expect(resolveNormalizedRangeStartOffset(range, positions)).toBe(6);
   });
 
   test('rejects a range whose positions belong to another document', () => {
-    const normalizedCharacters = [{
-      char: 'a',
-      pos: { node: {} as Text, offset: 0 },
-    }];
+    const positions = [{ node: {} as Text, offset: 0 }];
     const range = {
       comparePoint: () => { throw new Error('wrong document'); },
     } as unknown as Range;
 
-    expect(resolveNormalizedRangeStartOffset(range, normalizedCharacters)).toBeNull();
+    expect(resolveNormalizedRangeStartOffset(range, positions)).toBeNull();
   });
 
-  test('builds the stable anchor from DOM order without searching rendered text', () => {
+  test('anchors the rendered page start in its section text map', () => {
     const first = { textContent: 'alpha   ' } as unknown as Text;
     const second = { textContent: 'beta' } as unknown as Text;
     const nodes = [first, second];
@@ -104,13 +102,24 @@ describe('EPUB CFI spine coordinates', () => {
         return 1;
       },
     } as unknown as Range;
+    Object.assign(range, { toString: () => 'beta' });
     const book = makeFakeBook([{ index: 4, href: 'chapter.xhtml', cfiBase: '/6/8' }]);
+    const rendition = {
+      book,
+      getContents: () => [{ document: doc, sectionIndex: 4, range: () => range }],
+    } as unknown as Rendition;
 
-    expect(buildEpubRangeStartAnchor(book, 'epubcfi(/6/8!/4:8)', range)).toEqual({
+    const maps = buildRenderedTextMaps(rendition);
+    expect(maps).toHaveLength(1);
+    expect(maps[0].text).toBe('alpha beta');
+    expect(resolveRenderedPageStart(maps, 'epubcfi(/6/8!/4:8)', 'epubcfi(/6/8!/4:12)')).toEqual({
       spineHref: 'chapter.xhtml',
       spineIndex: 4,
       charOffset: 6,
+      hasReadableText: true,
     });
+    // An unchanged section document keeps its map.
+    expect(buildRenderedTextMaps(rendition, maps)[0]).toBe(maps[0]);
   });
 });
 

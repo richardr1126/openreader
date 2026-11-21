@@ -7,6 +7,9 @@ import {
   shouldPreserveEpubPlaybackCursor,
   shouldNavigateToDifferentCfi,
 } from '../../src/lib/client/epub/location-controller';
+import {
+  isRectPastViewport,
+} from '../../src/lib/client/epub/epub-rendered-text-maps';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -76,5 +79,20 @@ describe('EPUB location controller helpers', () => {
     expect(shouldPreserveEpubPlaybackCursor('manual')).toBe(true);
     expect(shouldPreserveEpubPlaybackCursor('renderer')).toBe(true);
     expect(shouldPreserveEpubPlaybackCursor('playback-follow')).toBe(true);
+  });
+});
+
+describe('EPUB spoken-word page follow', () => {
+  const viewport = { right: 800, bottom: 560 };
+  const word = (left: number, top = 100) => ({ left, top, width: 40, height: 18 });
+
+  test('turns on a word laid out past the visible page', () => {
+    expect(isRectPastViewport(word(760), viewport)).toBe(false);
+    expect(isRectPastViewport(word(810), viewport)).toBe(true);
+    expect(isRectPastViewport(word(100, 600), viewport)).toBe(true);
+  });
+
+  test('ignores words with no layout', () => {
+    expect(isRectPastViewport({ left: 900, top: 0, width: 0, height: 0 }, viewport)).toBe(false);
   });
 });

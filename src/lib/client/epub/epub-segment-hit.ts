@@ -76,8 +76,7 @@ export function resolveEpubPointHit(
   const caret = caretAtPoint(doc, point.clientX, point.clientY);
   if (!caret) return null;
   for (const map of maps) {
-    if (typeof map.baseCharOffset !== 'number' || typeof map.spineIndex !== 'number') continue;
-    if (map.chars[0]?.node.ownerDocument !== doc) continue;
+    if (map.content.document !== doc) continue;
     let index = -1;
     for (let i = 0; i < map.chars.length; i += 1) {
       const position = map.chars[i];
@@ -95,14 +94,9 @@ export function resolveEpubPointHit(
       index -= 1;
     }
     const spans = spansBySpine.get(map.spineIndex) ?? [];
-    const mapStart = Math.max(0, Math.floor(map.baseCharOffset));
-    const span = epubSpanAtOffset(spans, mapStart + index);
+    const span = epubSpanAtOffset(spans, index);
     if (!span) return null;
-    const range = createRangeFromMappedOffsets(
-      map,
-      Math.max(0, span.start - mapStart),
-      Math.min(map.chars.length, span.end - mapStart),
-    );
+    const range = createRangeFromMappedOffsets(map, span.start, Math.min(map.chars.length, span.end));
     return { ordinal: span.ordinal, range };
   }
   return null;

@@ -35,7 +35,8 @@ export function resolveSpineFromCfi(
   }
 }
 
-const collectBodyCharacters = (body: HTMLElement): Array<MappedChar<EpubDomPosition>> => {
+/** A section body's text, normalized into worker-plan locator character space. */
+export const collectEpubBodyCharacters = (body: HTMLElement): Array<MappedChar<EpubDomPosition>> => {
   const doc = body.ownerDocument;
   const nodeFilter = doc.defaultView?.NodeFilter ?? NodeFilter;
   const walker = doc.createTreeWalker(body, nodeFilter.SHOW_TEXT);
@@ -59,44 +60,21 @@ const collectBodyCharacters = (body: HTMLElement): Array<MappedChar<EpubDomPosit
  */
 export function resolveNormalizedRangeStartOffset(
   range: Range,
-  normalizedCharacters: ReadonlyArray<MappedChar<EpubDomPosition>>,
+  positions: ReadonlyArray<EpubDomPosition>,
 ): number | null {
-  for (let index = 0; index < normalizedCharacters.length; index += 1) {
-    const position = normalizedCharacters[index]?.pos;
-    if (!position) continue;
-    try {
-      if (range.comparePoint(position.node, position.offset) >= 0) return index;
-    } catch {
-      return null;
+  // Positions are in document order, so the first one at or after the range
+  // start is found by bisection.
+  let low = 0;
+  let high = positions.length;
+  try {
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      const position = positions[mid];
+      if (range.comparePoint(position.node, position.offset) >= 0) high = mid;
+      else low = mid + 1;
     }
+  } catch {
+    return null;
   }
-  return normalizedCharacters.length;
-}
-
-/**
- * Resolve the committed rendition range to one stable spine coordinate.
- * The CFI identifies the spine item; the range start identifies the exact
- * normalized character offset in that item's DOM.
- */
-export function buildEpubRangeStartAnchor(
-  book: Book,
-  startCfi: string,
-  renderedRange: Range,
-): EpubSpineCoord | null {
-  const spine = resolveSpineFromCfi(book, startCfi);
-  if (!spine) return null;
-
-  const doc = renderedRange.startContainer.ownerDocument;
-  const body = doc?.body;
-  if (!body) return null;
-
-  const normalizedCharacters = collectBodyCharacters(body);
-  const charOffset = resolveNormalizedRangeStartOffset(renderedRange, normalizedCharacters);
-  if (charOffset === null) return null;
-
-  return {
-    spineHref: spine.href,
-    spineIndex: spine.index,
-    charOffset,
-  };
+  return low;
 }
