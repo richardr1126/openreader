@@ -186,7 +186,7 @@ export const publicApiSpec = {
       }, ['providerRef', 'providerType', 'ttsModel', 'voice', 'nativeSpeed']),
       SpeechRequest: object({ text: { ...string, minLength: 1, maxLength: API_SPEECH_MAX_TEXT_CHARS, description: 'The text to speak, read as written.' },
         provider: { ...string, maxLength: 200, description: 'Shared provider slug. Omit to use the saved provider.' },
-        model: { ...string, maxLength: 512, description: 'Model ID. Omit to use the saved model, or the default model of the named provider.' },
+        model: { ...string, maxLength: 256, description: 'Model ID. Omit to use the saved model, or the default model of the named provider.' },
         voice: { ...string, maxLength: 512, description: 'Voice ID within that provider and model. Omit to use the saved voice, or the first voice of the named provider. A named voice must be one the provider lists.' },
         modelSpeed: { type: 'number', minimum: 0.5, maximum: 3, description: 'Speaking rate the model generates at, for models that support one. Omit to use the saved voice speed.' },
       }, ['text']),

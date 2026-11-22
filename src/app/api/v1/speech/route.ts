@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { readApiJson } from '@/lib/server/api/body';
 import { resolveApiPrincipal } from '@/lib/server/api/principal';
 import { apiCatchResponse, apiErrorResponse } from '@/lib/server/api/responses';
 import { ComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
@@ -17,6 +18,10 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const SPEECH_ADMISSION_LEASE_SECONDS = 120;
+// Text is capped well below this; the cap only stops oversized bodies from being buffered.
+const SPEECH_MAX_BODY_BYTES = 32 * 1024;
+// Used when the worker reports a busy provider without a delay of its own.
+const WORKER_RETRY_AFTER_MS = 5_000;
 
 function limited(retryAfterMs: number) {
   return apiErrorResponse(429, 'COMPUTE_ADMISSION_RATE_LIMITED', 'Speech is temporarily limited. Try again shortly.', { retryAfterMs });
@@ -36,7 +41,7 @@ export async function POST(request: NextRequest) {
     if (!isComputeWorkerAvailable()) {
       return apiErrorResponse(503, 'COMPUTE_WORKER_REQUIRED', 'Compute worker is required for speech.');
     }
-    const body = parseSpeechBody(await request.json().catch(() => null));
+    const body = parseSpeechBody(await readApiJson(request, SPEECH_MAX_BODY_BYTES));
     if (body instanceof Response) return body;
     const settings = await resolveApiSpeechSettings(principal.userId, body);
     if (settings instanceof Response) return settings;
@@ -74,8 +79,9 @@ export async function POST(request: NextRequest) {
       if (!result.ok) {
         logger.warn({ event: 'tts.speech.worker_rejected', status: result.status, code: result.code }, 'Worker rejected speech');
         const status = result.status === 429 ? 429 : result.status === 400 ? 400 : 502;
+        const retryAfterMs = status === 429 ? result.retryAfterMs ?? WORKER_RETRY_AFTER_MS : null;
         return apiErrorResponse(status, result.code ?? 'SPEECH_FAILED', 'Speech is unavailable right now.',
-          result.retryAfterMs ? { retryAfterMs: result.retryAfterMs } : {});
+          retryAfterMs ? { retryAfterMs } : {});
       }
       state = 'finished';
       return new NextResponse(result.audio, {

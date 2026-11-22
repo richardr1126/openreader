@@ -38,7 +38,8 @@ export function parseSpeechBody(value: unknown): SpeechBody | Response {
   }
   const provider = optionalId(rec.provider, 200);
   if (provider === false) return invalid('provider must be a speech provider ID.');
-  const model = optionalId(rec.model, 512);
+  // The worker takes model IDs up to 256 characters; reject longer ones before usage is charged.
+  const model = optionalId(rec.model, 256);
   if (model === false) return invalid('model must be a speech model ID.');
   const voice = optionalId(rec.voice, 512);
   if (voice === false) return invalid('voice must be a voice ID.');

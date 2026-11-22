@@ -83,6 +83,7 @@ describe('POST /api/v1/speech', () => {
     ['an unknown field', { text: 'Hi.', settings: RESOLVED }],
     ['a bad speed', { text: 'Hi.', modelSpeed: 9 }],
     ['a blank voice', { text: 'Hi.', voice: ' ' }],
+    ['a model ID longer than the worker takes', { text: 'Hi.', model: 'm'.repeat(257) }],
   ])('rejects %s without charging', async (_name, body) => {
     const response = await POST(request(body));
     expect(response.status).toBe(400);
@@ -133,5 +134,18 @@ describe('POST /api/v1/speech', () => {
     const response = await POST(request({ text: 'Hi.' }));
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: { code: 'PROVIDER_UNAVAILABLE', message: 'Speech is unavailable right now.' } });
+  });
+
+  test('suggests a delay when a busy worker gives none', async () => {
+    hoisted.synthesize.mockResolvedValue({ ok: false, status: 429, code: 'PROVIDER_BUSY', retryAfterMs: null });
+    const response = await POST(request({ text: 'Hi.' }));
+    expect(response.status).toBe(429);
+    expect(response.headers.get('retry-after')).toBe('5');
+  });
+
+  test('refuses an oversized body before reading it all', async () => {
+    const response = await POST(request({ text: 'Hi.', pad: 'x'.repeat(40 * 1024) }));
+    expect(response.status).toBe(413);
+    expect(hoisted.reserve).not.toHaveBeenCalled();
   });
 });

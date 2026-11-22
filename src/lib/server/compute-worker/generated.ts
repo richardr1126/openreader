@@ -2734,7 +2734,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": string;
+                        "audio/mpeg": string;
                     };
                 };
                 /** @description Default Response */
@@ -2869,7 +2869,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": string;
+                        "audio/mpeg": string;
                     };
                 };
                 /** @description Default Response */

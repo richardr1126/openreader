@@ -12500,11 +12500,10 @@
           "200": {
             "description": "MP3 voice preview",
             "content": {
-              "application/json": {
+              "audio/mpeg": {
                 "schema": {
                   "type": "string",
-                  "format": "binary",
-                  "description": "MP3 voice preview"
+                  "format": "binary"
                 }
               }
             }
@@ -12737,11 +12736,10 @@
           "200": {
             "description": "MP3 speech",
             "content": {
-              "application/json": {
+              "audio/mpeg": {
                 "schema": {
                   "type": "string",
-                  "format": "binary",
-                  "description": "MP3 speech"
+                  "format": "binary"
                 }
               }
             }

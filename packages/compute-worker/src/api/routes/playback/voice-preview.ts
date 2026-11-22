@@ -51,6 +51,8 @@ export function classifyVoicePreviewError(error: unknown, what = 'Voice preview'
   return { status: 500, code: 'PREVIEW_FAILED', error: `${what} failed` };
 }
 
+const CLIP_RETRY_AFTER_SECONDS = 5;
+
 type ClipRoute = {
   schema: typeof ttsVoicePreviewRequestSchema | typeof ttsSpeechRequestSchema;
   limits: TtsClipLimits;
@@ -68,7 +70,10 @@ function clipRoute(context: ComputeWorkerRouteContext, route: ClipRoute) {
     schema: {
       body: jsonSchema(route.schema),
       response: {
-        200: { type: 'string', format: 'binary', description: `MP3 ${route.what.toLowerCase()}` },
+        200: {
+          description: `MP3 ${route.what.toLowerCase()}`,
+          content: { 'audio/mpeg': { schema: { type: 'string', format: 'binary' } } },
+        },
         400: errorResponseSchema,
         429: errorResponseSchema,
         500: errorResponseSchema,
@@ -111,6 +116,8 @@ function clipRoute(context: ComputeWorkerRouteContext, route: ClipRoute) {
         characters: parsed.data.text.length,
         durationMs: Date.now() - startedAt,
       }, `${route.event}.failed`);
+      // A busy or rate-limited provider has no delay of its own to pass on; suggest one.
+      if (classified.status === 429) reply.header('Retry-After', String(CLIP_RETRY_AFTER_SECONDS));
       reply.code(classified.status);
       return { error: classified.error, code: classified.code };
     }
