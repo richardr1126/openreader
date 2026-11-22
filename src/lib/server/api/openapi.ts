@@ -184,7 +184,7 @@ export const publicApiSpec = {
         voiceCustomization: object({ pieceCharacterLimit: { type: ['integer', 'null'], minimum: 50, maximum: 450 },
           piecePauseMilliseconds: { type: ['integer', 'null'], minimum: 0, maximum: 2000 }, blockPauseMilliseconds: { type: ['integer', 'null'], minimum: 0, maximum: 2000 } }, []),
       }, ['providerRef', 'providerType', 'ttsModel', 'voice', 'nativeSpeed']),
-      SpeechRequest: { ...object({ text: { ...string, minLength: 1, maxLength: API_SPEECH_MAX_TEXT_CHARS, description: `The text to speak. Surrounding whitespace is trimmed first, and the trimmed text must be 1 to ${API_SPEECH_MAX_TEXT_CHARS} UTF-16 code units (characters outside the Basic Multilingual Plane, such as emoji, count as 2).` },
+      SpeechRequest: { ...object({ text: { ...string, minLength: 1, description: `The text to speak. Surrounding whitespace is trimmed first, and the trimmed text must be 1 to ${API_SPEECH_MAX_TEXT_CHARS} UTF-16 code units (characters outside the Basic Multilingual Plane, such as emoji, count as 2).` },
         provider: { ...string, maxLength: 200, description: 'Shared provider slug. Omit to use the saved provider.' },
         model: { ...string, maxLength: 256, description: 'Model ID. Omit to use the saved model, or the default model of the named provider.' },
         voice: { ...string, maxLength: 512, description: 'Voice ID within that provider and model. Omit to use the saved voice, or the first voice of the named provider. A named voice must be one the provider lists.' },
