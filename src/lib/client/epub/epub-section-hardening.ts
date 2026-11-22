@@ -9,10 +9,24 @@
  * event handlers, and `javascript:` URLs are removed, and a Content Security
  * Policy forbidding script and plugin content is pinned as the first element of
  * the head. Only the app's own listeners, which live in the parent realm, run.
+ *
+ * The same policy keeps opening a book offline: epub.js serves packaged
+ * resources as blob or data URLs, so only those and the app's own origin load.
+ * Remote images, stylesheets, imports and fonts never request their host.
+ * Inline styles stay allowed for publisher and reader appearance sheets.
  */
 
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
-export const EPUB_SECTION_POLICY = "script-src 'none'; object-src 'none'; frame-src 'none'";
+export const EPUB_SECTION_POLICY = [
+  "default-src 'self' blob: data:",
+  "style-src 'self' blob: data: 'unsafe-inline'",
+  "script-src 'none'",
+  "object-src 'none'",
+  "frame-src 'none'",
+].join('; ');
+// Hints open connections or fetch outside the policy's reach and serve no
+// purpose in a section frame.
+const RESOURCE_HINTS = new Set(['preconnect', 'dns-prefetch', 'prefetch', 'preload', 'modulepreload', 'prerender']);
 const URL_ATTRIBUTES = new Set(['href', 'src', 'xlink:href', 'action', 'formaction', 'data']);
 
 export function hardenEpubSection(doc: Document): void {
@@ -22,6 +36,23 @@ export function hardenEpubSection(doc: Document): void {
   for (const element of Array.from(root.querySelectorAll('*'))) {
     const name = element.localName.toLowerCase();
     if (name === 'script' || name === 'object' || name === 'embed' || name === 'iframe') {
+      element.remove();
+      continue;
+    }
+    if (name === 'link') {
+      const rels = (element.getAttribute('rel') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      const kept = rels.filter((rel) => !RESOURCE_HINTS.has(rel));
+      if (kept.length !== rels.length) {
+        if (kept.length === 0) {
+          element.remove();
+          continue;
+        }
+        element.setAttribute('rel', kept.join(' '));
+      }
+    }
+    // A refresh navigates the section frame without script, and no policy
+    // directive governs that navigation.
+    if (name === 'meta' && element.getAttribute('http-equiv')?.trim().toLowerCase() === 'refresh') {
       element.remove();
       continue;
     }
@@ -47,4 +78,9 @@ export function hardenEpubSection(doc: Document): void {
   meta.setAttribute('http-equiv', 'Content-Security-Policy');
   meta.setAttribute('content', EPUB_SECTION_POLICY);
   head.insertBefore(meta, head.firstChild);
+  // Browsers resolve link hosts ahead of a click, which also reveals the book.
+  const dnsPrefetch = doc.createElementNS(head.namespaceURI ?? XHTML_NS, 'meta');
+  dnsPrefetch.setAttribute('http-equiv', 'x-dns-prefetch-control');
+  dnsPrefetch.setAttribute('content', 'off');
+  head.insertBefore(dnsPrefetch, meta.nextSibling);
 }

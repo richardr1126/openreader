@@ -33,6 +33,36 @@ describe('hardenEpubSection', () => {
     expect(doc.getElementsByTagName('img')[0].getAttribute('src')).toBe('cover.jpg');
   });
 
+  it('removes refresh navigation but keeps ordinary metadata', () => {
+    const doc = parseSection(
+      '<p>Text.</p>',
+      '<meta http-equiv=" Refresh " content="0;url=https://tracker.example/open"/>'
+      + '<meta name="author" content="Ada"/><title>Chapter</title>',
+    );
+
+    hardenEpubSection(doc);
+
+    const metas = Array.from(doc.getElementsByTagName('meta'));
+    expect(metas.some((meta) => meta.getAttribute('http-equiv')?.trim().toLowerCase() === 'refresh')).toBe(false);
+    expect(metas.some((meta) => meta.getAttribute('name') === 'author')).toBe(true);
+  });
+
+  it('removes resource hints and turns off link prefetching', () => {
+    const doc = parseSection(
+      '<p>Text.</p>',
+      '<link rel="preconnect" href="https://tracker.example"/><link rel="DNS-Prefetch" href="//tracker.example"/>'
+      + '<link rel="stylesheet preload" as="style" href="book.css"/><title>Chapter</title>',
+    );
+
+    hardenEpubSection(doc);
+
+    const links = Array.from(doc.getElementsByTagName('link'));
+    expect(links.map((link) => [link.getAttribute('rel'), link.getAttribute('href')])).toEqual([['stylesheet', 'book.css']]);
+    const prefetch = Array.from(doc.getElementsByTagName('meta'))
+      .find((meta) => meta.getAttribute('http-equiv') === 'x-dns-prefetch-control');
+    expect(prefetch?.getAttribute('content')).toBe('off');
+  });
+
   it('pins the script-free policy as the first element of the head', () => {
     const doc = parseSection('<p>Text.</p>');
 

@@ -28,6 +28,8 @@ export interface AppConfigValues {
   epubTheme: boolean;
   /** Space, arrow and speed keys control playback in readers. */
   playbackShortcuts: boolean;
+  /** Markdown shows images hosted online, which tells their host it was opened. */
+  loadRemoteImages: boolean;
   /** PDF/EPUB show their laid-out pages; off reads the plan as flowing text. */
   pdfShowsLayout: boolean;
   epubShowsLayout: boolean;
@@ -77,6 +79,7 @@ export function getAppConfigDefaults(): AppConfigValues {
     voice: '',
     epubTheme: false,
     playbackShortcuts: true,
+    loadRemoteImages: false,
     pdfShowsLayout: true,
     epubShowsLayout: true,
     pdfSkipBlockKinds: [...DEFAULT_PDF_SKIP_BLOCK_KINDS],

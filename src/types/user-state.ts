@@ -8,6 +8,7 @@ export const SYNCED_PREFERENCE_KEYS = [
   'voice',
   'epubTheme',
   'playbackShortcuts',
+  'loadRemoteImages',
   'pdfShowsLayout',
   'epubShowsLayout',
   'pdfSkipBlockKinds',

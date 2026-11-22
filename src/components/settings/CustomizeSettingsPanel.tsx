@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useConfig } from '@/contexts/ConfigContext';
 import { getCustomThemeColors, type CustomThemeColors, useTheme } from '@/contexts/ThemeContext';
-import { KeyboardIcon } from '@/components/icons/Icons';
+import { ImageIcon, KeyboardIcon } from '@/components/icons/Icons';
 import { SaveBar, Section, SegmentedControl, SettingRow, Switch } from '@/components/ui';
 import { normalizeHighlightAppearance, normalizeTypography } from '@/lib/shared/reader-appearance';
 import { getHighlightVisibility, resolveReaderPresentation, type ReaderPresentation } from '@/lib/shared/reader-presentation';
@@ -108,6 +108,12 @@ export function CustomizeSettingsPanel() {
           <dt><kbd className="rounded border border-line-soft bg-surface px-1.5 py-0.5 font-mono text-[11px] text-foreground">{keys}</kbd></dt><dd>{action}</dd>
         </div>)}
       </dl>}
+    </Section>
+    <Section title="Remote content" variant="group">
+      <SettingRow label="Load remote images" icon={<ImageIcon />} controlClassName="w-auto"
+        info="Markdown documents can show images hosted online. Loading one tells its host that you opened the document.">
+        <Switch ariaLabel="Load remote images" checked={reader.loadRemoteImages} onChange={(loadRemoteImages) => setReaderDraft((current) => ({ ...current, loadRemoteImages }))} />
+      </SettingRow>
     </Section>
     {(dirty || saving) && <SaveBar saving={saving} onDiscard={discard} onSave={() => void save()} />}
   </fieldset>;

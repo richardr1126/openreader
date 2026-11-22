@@ -1050,6 +1050,16 @@ export function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+export function ImageIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <OutlineIcon {...props}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <circle cx="9" cy="9.5" r="1.5" />
+      <path d="m20.5 15.5-4.5-4.5-8.5 8.5" />
+    </OutlineIcon>
+  );
+}
+
 export function ScissorsIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <OutlineIcon {...props}>
