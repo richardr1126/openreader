@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
+import { useConfig } from '@/contexts/ConfigContext';
+import { ImageIcon } from '@/components/icons/Icons';
+import { Button } from '@/components/ui';
 import { READER_FONT_FAMILIES } from '@/lib/shared/reader-appearance';
 import type { HtmlBlock } from '@openreader/tts/html-blocks';
 import {
@@ -27,9 +30,15 @@ import type { ReaderType } from '@/types/user-state';
  */
 export type TextBlockFormat = 'markdown' | 'text';
 
-// An uploaded Markdown file packages no images, so any image is remote.
-// Fetching one would reveal the reader to its host merely by opening the file.
-const MARKDOWN_COMPONENTS: Components = { img: () => null };
+// An uploaded Markdown file packages no images, so any image is remote, and
+// fetching one tells its host the document was opened. Images stay hidden until
+// the reader loads them for this document or always loads them.
+const MARKDOWN_IMAGE = /!\[[^\]]*\]\s*[([]/;
+const HIDDEN_IMAGES: Components = { img: () => null };
+const REMOTE_IMAGES: Components = {
+  // eslint-disable-next-line @next/next/no-img-element
+  img: ({ src, alt, title }) => <img src={src} alt={alt ?? ''} title={title} loading="lazy" referrerPolicy="no-referrer" />,
+};
 
 interface HTMLViewerProps {
   className?: string;
@@ -95,6 +104,12 @@ export function HTMLViewer({
 
   const readySegmentRef = useRef<string | null>(null);
 
+  const { loadRemoteImages, updateConfig } = useConfig();
+  // The block list loaded for this document, once its images were allowed.
+  const [imagesAllowedFor, setImagesAllowedFor] = useState<readonly HtmlBlock[] | null>(null);
+  const hasImages = useMemo(() => format === 'markdown' && blocks.some(block => MARKDOWN_IMAGE.test(block.raw)), [blocks, format]);
+  const showImages = hasImages && (loadRemoteImages || imagesAllowedFor === blocks);
+
   // Tap a sentence to play from it. A tap resolves within its block's own
   // sentences, keyed exactly as the blocks' anchor ids.
   const segmentsByBlock = useMemo(() => indexSegmentsBySource(playbackSegments), [playbackSegments]);
@@ -153,6 +168,7 @@ export function HTMLViewer({
     }
   }, [
     blocks,
+    showImages,
     followingNarration,
     readerNavigationRevision,
     highlightEnabled,
@@ -186,6 +202,7 @@ export function HTMLViewer({
     highlightHtmlWord(container, currentSentenceAlignment, currentWordIndex);
   }, [
     blocks,
+    showImages,
     // The sentence effect rebuilds the region (and clears the word) on these.
     followingNarration,
     readerNavigationRevision,
@@ -216,7 +233,7 @@ export function HTMLViewer({
   // component often and must not re-render a whole book.
   const { typography } = useReaderAppearance();
   const renderedBlocks = useMemo(() => (
-    <div key={blockListId(blocks)}>
+    <div key={`${blockListId(blocks)}:${showImages}`}>
       {blocks.map((block) => (
         <div
           key={block.anchorId}
@@ -225,17 +242,33 @@ export function HTMLViewer({
           className="openreader-html-block"
         >
           {format === 'markdown' ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>{block.raw}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={showImages ? REMOTE_IMAGES : HIDDEN_IMAGES}>{block.raw}</ReactMarkdown>
           ) : (
             <p>{block.plainText}</p>
           )}
         </div>
       ))}
     </div>
-  ), [blocks, format]);
+  ), [blocks, format, showImages]);
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
+      {hasImages && !showImages && (
+        <div role="group" aria-label="Remote images" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft bg-surface-sunken px-4 py-2 text-xs text-soft">
+          <ImageIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <p className="m-0 min-w-0 flex-1">
+            <span className="font-medium text-foreground">Images hidden.</span>{' '}
+            Loading them tells their host that you opened this document.
+          </p>
+          <div className="flex items-center gap-1.5">
+            <Button size="xs" variant="ghost" onClick={() => {
+              setImagesAllowedFor(blocks);
+              void updateConfig({ loadRemoteImages: true }).catch(() => undefined);
+            }}>Always load</Button>
+            <Button size="xs" variant="outline" onClick={() => setImagesAllowedFor(blocks)}>Load images</Button>
+          </div>
+        </div>
+      )}
       <div ref={scrollRef} tabIndex={0} role="region" aria-label="Document text" className="flex-1 overflow-auto" data-testid="text-reader"
         onWheel={() => setFollowingNarration(false)}
         onTouchMove={() => setFollowingNarration(false)}

@@ -19,6 +19,7 @@ interface ConfigContextType {
   voice: string;
   epubTheme: boolean;
   playbackShortcuts: boolean;
+  loadRemoteImages: boolean;
   pdfShowsLayout: boolean;
   epubShowsLayout: boolean;
   pdfSkipBlockKinds: AppConfigValues['pdfSkipBlockKinds'];
@@ -101,6 +102,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
       voice: config.voice,
       epubTheme: config.epubTheme,
       playbackShortcuts: config.playbackShortcuts,
+      loadRemoteImages: config.loadRemoteImages,
       pdfShowsLayout: config.pdfShowsLayout,
       epubShowsLayout: config.epubShowsLayout,
       pdfSkipBlockKinds: config.pdfSkipBlockKinds,

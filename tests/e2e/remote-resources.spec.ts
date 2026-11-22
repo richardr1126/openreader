@@ -40,7 +40,27 @@ test('opening local documents never requests their remote resources', async ({ p
   await expect(page.getByText('The lamp turned through the night.', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByRole('img', { name: 'Remote image', exact: true })).toHaveCount(0);
-
+  const remoteImage = page.getByRole('img', { name: 'Remote image', exact: true });
+  await expect(remoteImage).toHaveCount(0);
   expect(remoteRequests).toEqual([]);
+
+  // Loading images applies to this visit; reopening hides them again.
+  const imagesBar = page.getByRole('group', { name: 'Remote images', exact: true });
+  await imagesBar.getByRole('button', { name: 'Load images', exact: true }).click();
+  await expect(remoteImage).toHaveCount(1);
+  await expect.poll(() => remoteRequests).toContain(`https://${REMOTE_HOST}/pixel.png`);
+  await page.reload();
+  await expect(page.getByText('The lamp turned through the night.', { exact: true })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(remoteImage).toHaveCount(0);
+
+  // Always loading them is a reader setting that persists.
+  await imagesBar.getByRole('button', { name: 'Always load', exact: true }).click();
+  await expect(remoteImage).toHaveCount(1);
+  await page.reload();
+  await expect(remoteImage).toHaveCount(1, { timeout: 30_000 });
+  await expect(imagesBar).toHaveCount(0);
+  await page.goto('/app/settings?section=customize');
+  await expect(page.getByRole('switch', { name: 'Load remote images', exact: true })).toBeChecked();
 });

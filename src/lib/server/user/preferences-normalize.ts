@@ -142,6 +142,7 @@ export function sanitizePreferencesPatch(
         break;
       case 'epubTheme':
       case 'playbackShortcuts':
+      case 'loadRemoteImages':
       case 'pdfShowsLayout':
       case 'epubShowsLayout':
       case 'pdfHighlightEnabled':
