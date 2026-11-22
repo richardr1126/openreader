@@ -44,8 +44,8 @@ const redirectResponse = { description: 'Follow the short-lived signed storage U
 const eventsResponse = { description: 'SSE snapshot frames from the authorized operation. Reconnect after disconnect; streams are bounded to 300 seconds.',
   content: { 'text/event-stream': { schema: { type: 'string' } } } };
 const audiobookBody = object({ provider: { ...string, maxLength: 200, description: 'Shared provider slug. Omit to use the saved provider.' },
-  model: { ...string, maxLength: 512, description: 'Model ID. Omit to use the saved model, or the default model of the named provider.' },
-  voice: { ...string, description: 'Voice ID within that provider and model. Omit to use the saved voice, or the first voice of the named provider. A named voice must be one the provider lists.' },
+  model: { ...string, maxLength: 512, description: 'Model ID, at most 256 UTF-16 code units (emoji count as 2). Omit to use the saved model, or the default model of the named provider.' },
+  voice: { ...string, description: 'Voice ID within that provider and model, at most 512 UTF-16 code units. Omit to use the saved voice, or the first voice of the named provider. A named voice must be one the provider lists.' },
   modelSpeed: { type: 'number', minimum: 0.5, maximum: 3, description: 'Speaking rate the model generates at, for models that support one. Omit to use the saved voice speed. Unlike speed, it changes the generated audio.' },
   format: { ...enumeration('mp3', 'm4b'), default: 'mp3' }, speed: { type: 'number', minimum: 0.5, maximum: 3, default: 1 },
   chapter: { type: ['integer', 'null'], minimum: 0, description: 'Zero-based index. A chapter builds already-settled audio; it does not start generation.' },

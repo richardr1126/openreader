@@ -84,6 +84,8 @@ describe('POST /api/v1/speech', () => {
     ['a bad speed', { text: 'Hi.', modelSpeed: 9 }],
     ['a blank voice', { text: 'Hi.', voice: ' ' }],
     ['a model ID longer than the worker takes', { text: 'Hi.', model: 'm'.repeat(257) }],
+    // 129 code points pass the schema's maxLength, but they are 258 UTF-16 units.
+    ['a model ID over 256 UTF-16 units', { text: 'Hi.', model: '\u{1F600}'.repeat(129) }],
   ])('rejects %s without charging', async (_name, body) => {
     const response = await POST(request(body));
     expect(response.status).toBe(400);
