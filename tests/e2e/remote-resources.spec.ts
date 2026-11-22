@@ -40,7 +40,7 @@ test('opening local documents never requests their remote resources', async ({ p
   await expect(page.getByText('The lamp turned through the night.', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  const remoteImage = page.getByRole('img', { name: 'Remote image', exact: true });
+  const remoteImage = page.getByRole('img', { name: 'Remote [pixel] image', exact: true });
   await expect(remoteImage).toHaveCount(0);
   expect(remoteRequests).toEqual([]);
 

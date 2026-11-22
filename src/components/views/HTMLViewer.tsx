@@ -33,8 +33,9 @@ export type TextBlockFormat = 'markdown' | 'text';
 // An uploaded Markdown file packages no images, so any image is remote, and
 // fetching one tells its host the document was opened. Images stay hidden until
 // the reader loads them for this document or always loads them.
-const MARKDOWN_IMAGE = /!\[[^\]]*\]\s*[([]/;
-const HIDDEN_IMAGES: Components = { img: () => null };
+// A hidden image leaves an empty marker, so the parser that renders the text
+// also decides whether there are images to offer, and no text node shifts.
+const HIDDEN_IMAGES: Components = { img: () => <span data-hidden-image hidden /> };
 const REMOTE_IMAGES: Components = {
   // eslint-disable-next-line @next/next/no-img-element
   img: ({ src, alt, title }) => <img src={src} alt={alt ?? ''} title={title} loading="lazy" referrerPolicy="no-referrer" />,
@@ -107,8 +108,8 @@ export function HTMLViewer({
   const { loadRemoteImages, updateConfig } = useConfig();
   // The block list loaded for this document, once its images were allowed.
   const [imagesAllowedFor, setImagesAllowedFor] = useState<readonly HtmlBlock[] | null>(null);
-  const hasImages = useMemo(() => format === 'markdown' && blocks.some(block => MARKDOWN_IMAGE.test(block.raw)), [blocks, format]);
-  const showImages = hasImages && (loadRemoteImages || imagesAllowedFor === blocks);
+  const showImages = format === 'markdown' && (loadRemoteImages || imagesAllowedFor === blocks);
+  const [hasHiddenImages, setHasHiddenImages] = useState(false);
 
   // Tap a sentence to play from it. A tap resolves within its block's own
   // sentences, keyed exactly as the blocks' anchor ids.
@@ -250,10 +251,13 @@ export function HTMLViewer({
       ))}
     </div>
   ), [blocks, format, showImages]);
+  useLayoutEffect(() => {
+    setHasHiddenImages(Boolean(contentRef.current?.querySelector('[data-hidden-image]')));
+  }, [renderedBlocks]);
 
   return (
     <div className={`flex flex-col h-full ${className}`}>
-      {hasImages && !showImages && (
+      {hasHiddenImages && (
         <div role="group" aria-label="Remote images" className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line-soft bg-surface-sunken px-4 py-2 text-xs text-soft">
           <ImageIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
           <p className="m-0 min-w-0 flex-1">
