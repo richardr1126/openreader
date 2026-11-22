@@ -85,6 +85,10 @@ export const resolveRenderedPageStart = (
   endCfi: string,
 ): (EpubSpineCoord & { hasReadableText: boolean }) | null => {
   for (const map of maps) {
+    // Contents.range resolves only the document-local path, so a section
+    // with the same structure would accept another section's CFI.
+    const { cfiBase } = map.content;
+    if (cfiBase && !startCfi.startsWith(`epubcfi(${cfiBase}!`)) continue;
     let start: Range | null = null;
     try {
       start = map.content.range(startCfi);
@@ -151,14 +155,19 @@ export const resolveVisibleSegmentRange = (
  * direction. Narration follows a segment by its start, so a sentence that runs
  * onto the next page would be heard there while this one stays up; the page
  * turns instead on the first spoken word it does not show, as the iOS reader
- * does. Both rects are in the same (top-level) coordinate space.
+ * does. Both rects are in the same (top-level) coordinate space. Right-to-left
+ * books lay the next page out to the left.
  */
 export const isRectPastViewport = (
-  word: Pick<DOMRect, 'left' | 'top' | 'width' | 'height'>,
-  viewport: Pick<DOMRect, 'right' | 'bottom'>,
+  word: Pick<DOMRect, 'left' | 'right' | 'top' | 'width' | 'height'>,
+  viewport: Pick<DOMRect, 'left' | 'right' | 'bottom'>,
+  direction?: string,
 ): boolean => (
   (word.width > 0 || word.height > 0)
-  && (word.left >= viewport.right - 1 || word.top >= viewport.bottom - 1)
+  && (
+    word.top >= viewport.bottom - 1
+    || (direction === 'rtl' ? word.right <= viewport.left + 1 : word.left >= viewport.right - 1)
+  )
 );
 
 /** A range's first line box, in top-level page coordinates. */

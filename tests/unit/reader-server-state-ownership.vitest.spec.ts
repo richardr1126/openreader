@@ -213,7 +213,9 @@ describe('reader server-state ownership', () => {
     expect(pdfViewer).not.toContain('setTextLayerRenderRevision');
     expect(pdfViewer).not.toContain('onRenderSuccess={() =>');
     expect(pdfViewer).not.toContain('onRenderTextLayerSuccess={() =>');
-    expect(pdfViewer).toContain('const layoutKey = `${renderScale}:${viewType}:${currDocPage}`');
+    // Canvases repaint with the displayed pages; the text layer follows the current page.
+    expect(pdfViewer).toContain("const canvasLayoutKey = `${renderScale}:${viewType}:${viewType === 'scroll' ? 'all' : `${leftPage}:${rightPage ?? ''}`}`");
+    expect(pdfViewer).toContain('const layoutKey = `${canvasLayoutKey}:${currDocPage}`');
     expect(pdfViewer).not.toContain('`${zoomLevel}:${containerWidth}:${containerHeight}');
     expect(pdfViewer).not.toContain('markViewerReady');
     expect(pdfPage).not.toContain('deriveReaderLoadState');

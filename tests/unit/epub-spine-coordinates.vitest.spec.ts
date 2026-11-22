@@ -106,7 +106,7 @@ describe('EPUB CFI spine coordinates', () => {
     const book = makeFakeBook([{ index: 4, href: 'chapter.xhtml', cfiBase: '/6/8' }]);
     const rendition = {
       book,
-      getContents: () => [{ document: doc, sectionIndex: 4, range: () => range }],
+      getContents: () => [{ document: doc, sectionIndex: 4, cfiBase: '/6/8', range: () => range }],
     } as unknown as Rendition;
 
     const maps = buildRenderedTextMaps(rendition);
@@ -118,6 +118,8 @@ describe('EPUB CFI spine coordinates', () => {
       charOffset: 6,
       hasReadableText: true,
     });
+    // Contents.range ignores the spine step, so another section must not claim the CFI.
+    expect(resolveRenderedPageStart(maps, 'epubcfi(/6/10!/4:8)', 'epubcfi(/6/10!/4:12)')).toBeNull();
     // An unchanged section document keeps its map.
     expect(buildRenderedTextMaps(rendition, maps)[0]).toBe(maps[0]);
   });

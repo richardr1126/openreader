@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import type { ParsedPdfDocument } from '../../src/types/parsed-pdf';
-import { pdfSegmentPageAt, resolvePdfSegmentPageParts } from '../../src/lib/client/pdf/segment-pages';
+import { pdfPartWordRange, pdfSegmentPageAt, resolvePdfSegmentPageParts } from '../../src/lib/client/pdf/segment-pages';
 
 const tailText = 'He kept the light alive, and on cold nights he stayed awake until the dawn';
 const continuation = 'broke over the grey water.';
@@ -54,5 +54,14 @@ describe('PDF segment page parts', () => {
       .map((part) => part.page)).toEqual([1]);
     expect(resolvePdfSegmentPageParts(stitched, locator, 'Text the block does not contain.'))
       .toEqual([{ page: 1, start: 0, end: 32, text: 'Text the block does not contain.' }]);
+  });
+});
+
+describe('PDF page word range', () => {
+  test('selects the spoken words that start within a page part', () => {
+    const part = { page: 2, start: 10, end: 30, text: 'x' };
+    const spans = [{ start: 0 }, { start: 6 }, null, { start: 10 }, { start: 22 }, { start: 30 }];
+    expect(pdfPartWordRange(spans, part)).toEqual({ first: 3, last: 4 });
+    expect(pdfPartWordRange([{ start: 0 }], part)).toBeNull();
   });
 });

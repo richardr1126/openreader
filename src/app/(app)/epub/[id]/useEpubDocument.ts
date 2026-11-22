@@ -520,19 +520,25 @@ export function useEpubDocument(
     navigateRendition(location, intent);
   }, [navigateRendition, setFollowingNarration]);
 
-  // One turn per spoken word: the turn re-renders before the next word ticks.
-  const followTurnWordRef = useRef<string | null>(null);
+  // One turn per displayed page: a word spoken while that turn is still
+  // relocating must not queue a second one past the page being read.
+  const followTurnFromPageRef = useRef<string | null>(null);
   const followSpokenWord = useCallback<EpubDocumentState['followSpokenWord']>((segment, alignment, wordIndex) => {
     if (!followingNarrationRef.current) return;
+    const rendition = renditionRef.current as unknown as {
+      manager?: { container?: HTMLElement };
+      location?: { start?: { cfi?: string } };
+      settings?: { direction?: string };
+    } | undefined;
+    const viewport = rendition?.manager?.container;
+    const pageStart = rendition?.location?.start?.cfi ?? null;
+    if (!viewport || !pageStart || followTurnFromPageRef.current === pageStart) return;
+    // The turn has landed; a later return to that page may turn it again.
+    followTurnFromPageRef.current = null;
     const word = resolveWordRange(alignment, wordIndex, segment);
-    const viewport = (renditionRef.current as unknown as { manager?: { container?: HTMLElement } } | undefined)
-      ?.manager?.container;
-    if (!word || !viewport) return;
-    const turnKey = `${word.key}::${wordIndex}`;
-    if (followTurnWordRef.current === turnKey) return;
-    const rect = rangeViewportRect(word.range);
-    if (!rect || !isRectPastViewport(rect, viewport.getBoundingClientRect())) return;
-    followTurnWordRef.current = turnKey;
+    const rect = word ? rangeViewportRect(word.range) : null;
+    if (!rect || !isRectPastViewport(rect, viewport.getBoundingClientRect(), rendition?.settings?.direction)) return;
+    followTurnFromPageRef.current = pageStart;
     navigateRendition('next', 'playback-follow');
   }, [followingNarrationRef, navigateRendition, resolveWordRange]);
 

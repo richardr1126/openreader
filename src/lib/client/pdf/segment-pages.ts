@@ -9,7 +9,9 @@ export type PdfSegmentPagePart = {
   text: string;
 };
 
-const normalize = (text: string): string => text.replace(/\s+/g, ' ').trim();
+/** The segment text the part offsets index into. */
+export const normalizePdfSegmentText = (text: string): string => text.replace(/\s+/g, ' ').trim();
+const normalize = normalizePdfSegmentText;
 
 /**
  * Where a segment's text lies on each page, in reading order.
@@ -79,4 +81,22 @@ export function pdfSegmentPageAt(parts: readonly PdfSegmentPagePart[], offset: n
     page = part.page;
   }
   return page;
+}
+
+/**
+ * The spoken words a page shows: the first and last alignment word whose span,
+ * in segment-text offsets, starts within the page's part.
+ */
+export function pdfPartWordRange(
+  wordSpans: ReadonlyArray<{ start: number } | null>,
+  part: PdfSegmentPagePart,
+): { first: number; last: number } | null {
+  let first = -1;
+  let last = -1;
+  wordSpans.forEach((span, index) => {
+    if (!span || span.start < part.start || span.start >= part.end) return;
+    if (first < 0) first = index;
+    last = index;
+  });
+  return first < 0 ? null : { first, last };
 }

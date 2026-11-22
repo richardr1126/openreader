@@ -14,7 +14,13 @@ import { resolvePdfBlockAtPoint } from '@/lib/client/pdf';
 import { indexSegmentsBySource, resolvePointInUnit } from '@/lib/client/reader/segment-hit';
 import { bindTapToSeek } from '@/lib/client/reader/tap-to-seek';
 import { useLatestRef } from '@/hooks/useLatestRef';
-import { pdfSegmentPageAt, resolvePdfSegmentPageParts } from '@/lib/client/pdf/segment-pages';
+import {
+  normalizePdfSegmentText,
+  pdfPartWordRange,
+  pdfSegmentPageAt,
+  resolvePdfSegmentPageParts,
+} from '@/lib/client/pdf/segment-pages';
+import { pdfLocatorPage } from '@/lib/client/tts/playback-selection';
 import { locateAlignmentWordSpans } from '@/lib/client/highlight-token-alignment';
 
 interface PDFViewerProps {
@@ -102,32 +108,29 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     () => resolvePdfSegmentPageParts(parsedDocument, currentSegment?.ownerLocator, currentSentence),
     [parsedDocument, currentSegment, currentSentence],
   );
+  // Parts only leave the locator page for a block stitched across a break.
+  const locatorPage = pdfLocatorPage(currentSegment?.ownerLocator);
+  const leavesLocatorPage = segmentPageParts.some((part) => part.page !== locatorPage);
   const segmentWordSpans = useMemo(
-    () => (segmentPageParts.length > 1 && currentSentenceAlignment
-      ? locateAlignmentWordSpans(currentSentenceAlignment.words, currentSentence.replace(/\s+/g, ' ').trim(), resolvedLanguage)
+    () => (leavesLocatorPage && currentSentenceAlignment
+      ? locateAlignmentWordSpans(currentSentenceAlignment.words, normalizePdfSegmentText(currentSentence), resolvedLanguage)
       : null),
-    [segmentPageParts, currentSentenceAlignment, currentSentence, resolvedLanguage],
+    [leavesLocatorPage, currentSentenceAlignment, currentSentence, resolvedLanguage],
   );
   const spokenWordOffset = currentWordIndex !== null && currentWordIndex !== undefined && currentWordIndex >= 0
     ? segmentWordSpans?.[currentWordIndex]?.start ?? 0
     : 0;
-  const spokenPage = segmentPageParts.length > 1 ? pdfSegmentPageAt(segmentPageParts, spokenWordOffset) : null;
+  const spokenPage = leavesLocatorPage ? pdfSegmentPageAt(segmentPageParts, spokenWordOffset) : null;
   const renderedPagePart = segmentPageParts.find((part) => part.page === currDocPage) ?? null;
   // The spoken words this page shows, as a slice of the segment alignment.
   const renderedPageWords = useMemo(() => {
     if (!renderedPagePart || !currentSentenceAlignment) return null;
     if (!segmentWordSpans) return { first: 0, alignment: currentSentenceAlignment };
-    let first = -1;
-    let last = -1;
-    segmentWordSpans.forEach((span, index) => {
-      if (!span || span.start < renderedPagePart.start || span.start >= renderedPagePart.end) return;
-      if (first < 0) first = index;
-      last = index;
-    });
-    if (first < 0) return null;
+    const range = pdfPartWordRange(segmentWordSpans, renderedPagePart);
+    if (!range) return null;
     return {
-      first,
-      alignment: { ...currentSentenceAlignment, words: currentSentenceAlignment.words.slice(first, last + 1) },
+      first: range.first,
+      alignment: { ...currentSentenceAlignment, words: currentSentenceAlignment.words.slice(range.first, range.last + 1) },
     };
   }, [renderedPagePart, currentSentenceAlignment, segmentWordSpans]);
 
@@ -199,10 +202,21 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const [renderScale, setRenderScale] = useState(nextScale);
   if (Math.abs(nextScale - renderScale) > 0.01) setRenderScale(nextScale);
 
+  // Calculate which pages to show based on viewType
+  const leftPage = viewType === 'dual'
+    ? (currDocPage % 2 === 0 ? currDocPage - 1 : currDocPage)
+    : currDocPage;
+  const rightPage = viewType === 'dual'
+    ? (currDocPage % 2 === 0 ? currDocPage : currDocPage + 1)
+    : null;
+
   // Renderer readiness follows the props that can actually make React-PDF
   // repaint. Raw container dimensions are deliberately excluded: if they
   // change without changing the stabilized scale, no render callback will fire.
-  const layoutKey = `${renderScale}:${viewType}:${currDocPage}`;
+  // Canvases repaint only when the displayed pages change; moving the current
+  // page within a spread, or in scroll mode, moves only the text layer.
+  const canvasLayoutKey = `${renderScale}:${viewType}:${viewType === 'scroll' ? 'all' : `${leftPage}:${rightPage ?? ''}`}`;
+  const layoutKey = `${canvasLayoutKey}:${currDocPage}`;
   const selectedSegmentKey = playbackPlanSegmentCount === 0
     ? 'empty'
     : currentSegment
@@ -216,6 +230,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const readySurfaceKeyRef = useRef<string | null>(null);
   const failedSurfaceKeyRef = useRef<string | null>(null);
   const activeLayoutKeyRef = useLatestRef(layoutKey);
+  const activeCanvasLayoutKeyRef = useLatestRef(canvasLayoutKey);
 
   const commitSurfacePart = useCallback((
     key: string | null,
@@ -238,21 +253,23 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   }, [activeSurfaceKeyRef, onError]);
 
   // Track page turns so we can keep the previous canvas visible until the new one paints.
-  const lastRenderedLayoutKeyRef = useRef<string>('');
+  const lastRenderedCanvasLayoutKeyRef = useRef<string>('');
   useEffect(() => {
-    if (layoutKey !== lastRenderedLayoutKeyRef.current) {
+    if (canvasLayoutKey !== lastRenderedCanvasLayoutKeyRef.current) {
       setIsPageRendering(true);
+      return;
     }
-  }, [layoutKey]);
+    commitSurfacePart(surfaceKey, 'canvas');
+  }, [canvasLayoutKey, commitSurfacePart, surfaceKey]);
 
   // Keep these callbacks stable. React-PDF includes them in the canvas/text
   // render effects, so allocating a new callback during the state update below
   // causes the layer to render again and can form an infinite callback loop.
   const handlePageRenderSuccess = useCallback(() => {
-    lastRenderedLayoutKeyRef.current = activeLayoutKeyRef.current;
+    lastRenderedCanvasLayoutKeyRef.current = activeCanvasLayoutKeyRef.current;
     setIsPageRendering(false);
     commitSurfacePart(activeSurfaceKeyRef.current, 'canvas');
-  }, [activeLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart]);
+  }, [activeCanvasLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart]);
 
   const handleTextLayerRenderSuccess = useCallback(() => {
     const readyLayoutKey = activeLayoutKeyRef.current;
@@ -467,14 +484,6 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     scheduleWordTimeout,
     isPageRendering
   ]);
-
-  // Calculate which pages to show based on viewType
-  const leftPage = viewType === 'dual'
-    ? (currDocPage % 2 === 0 ? currDocPage - 1 : currDocPage)
-    : currDocPage;
-  const rightPage = viewType === 'dual'
-    ? (currDocPage % 2 === 0 ? currDocPage : currDocPage + 1)
-    : null;
 
   // React-PDF can resize the active page again when its text layer commits.
   // Keep commanded navigation authoritative through that reflow, then let

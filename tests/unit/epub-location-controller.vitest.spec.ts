@@ -83,8 +83,8 @@ describe('EPUB location controller helpers', () => {
 });
 
 describe('EPUB spoken-word page follow', () => {
-  const viewport = { right: 800, bottom: 560 };
-  const word = (left: number, top = 100) => ({ left, top, width: 40, height: 18 });
+  const viewport = { left: 0, right: 800, bottom: 560 };
+  const word = (left: number, top = 100) => ({ left, right: left + 40, top, width: 40, height: 18 });
 
   test('turns on a word laid out past the visible page', () => {
     expect(isRectPastViewport(word(760), viewport)).toBe(false);
@@ -92,7 +92,13 @@ describe('EPUB spoken-word page follow', () => {
     expect(isRectPastViewport(word(100, 600), viewport)).toBe(true);
   });
 
+  test('turns a right-to-left book on a word laid out to the left', () => {
+    expect(isRectPastViewport(word(-120), viewport, 'rtl')).toBe(true);
+    expect(isRectPastViewport(word(810), viewport, 'rtl')).toBe(false);
+    expect(isRectPastViewport(word(100), viewport, 'rtl')).toBe(false);
+  });
+
   test('ignores words with no layout', () => {
-    expect(isRectPastViewport({ left: 900, top: 0, width: 0, height: 0 }, viewport)).toBe(false);
+    expect(isRectPastViewport({ left: 900, right: 900, top: 0, width: 0, height: 0 }, viewport)).toBe(false);
   });
 });
