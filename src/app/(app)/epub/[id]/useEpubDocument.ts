@@ -522,11 +522,14 @@ export function useEpubDocument(
 
   // One turn at a time: a word spoken while a turn is still relocating must
   // not queue a second one past the page being read. Once the page has moved,
-  // the spoken word lies inside it again, so no page marker is needed.
-  const followTurnPendingRef = useRef(false);
+  // the spoken word lies inside it again, so no page marker is needed. The
+  // guard names the rendition that turned: a replaced rendition's navigation
+  // may never settle, and must neither block nor release a newer turn.
+  const followTurnRenditionRef = useRef<unknown>(null);
   const followSpokenWord = useCallback<EpubDocumentState['followSpokenWord']>((segment, alignment, wordIndex) => {
-    if (!followingNarrationRef.current || followTurnPendingRef.current) return;
-    const rendition = renditionRef.current as unknown as {
+    const current = renditionRef.current;
+    if (!followingNarrationRef.current || !current || followTurnRenditionRef.current === current) return;
+    const rendition = current as unknown as {
       manager?: { container?: HTMLElement };
       settings?: { direction?: string };
     } | undefined;
@@ -537,8 +540,10 @@ export function useEpubDocument(
     if (!rect || !isRectPastViewport(rect, viewport.getBoundingClientRect(), rendition?.settings?.direction)) return;
     const turn = navigateRendition('next', 'playback-follow');
     if (!turn) return;
-    followTurnPendingRef.current = true;
-    void turn.finally(() => { followTurnPendingRef.current = false; });
+    followTurnRenditionRef.current = current;
+    void turn.finally(() => {
+      if (followTurnRenditionRef.current === current) followTurnRenditionRef.current = null;
+    });
   }, [followingNarrationRef, navigateRendition, resolveWordRange]);
 
   // Plain-text reading mode has no rendition to commit a placement, so the
