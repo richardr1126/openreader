@@ -47,6 +47,22 @@ describe('hardenEpubSection', () => {
     expect(metas.some((meta) => meta.getAttribute('name') === 'author')).toBe(true);
   });
 
+  it('removes resource hints and turns off link prefetching', () => {
+    const doc = parseSection(
+      '<p>Text.</p>',
+      '<link rel="preconnect" href="https://tracker.example"/><link rel="DNS-Prefetch" href="//tracker.example"/>'
+      + '<link rel="stylesheet" href="book.css"/><title>Chapter</title>',
+    );
+
+    hardenEpubSection(doc);
+
+    const links = Array.from(doc.getElementsByTagName('link'));
+    expect(links.map((link) => link.getAttribute('rel'))).toEqual(['stylesheet']);
+    const prefetch = Array.from(doc.getElementsByTagName('meta'))
+      .find((meta) => meta.getAttribute('http-equiv') === 'x-dns-prefetch-control');
+    expect(prefetch?.getAttribute('content')).toBe('off');
+  });
+
   it('pins the script-free policy as the first element of the head', () => {
     const doc = parseSection('<p>Text.</p>');
 

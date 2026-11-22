@@ -24,6 +24,9 @@ export const EPUB_SECTION_POLICY = [
   "object-src 'none'",
   "frame-src 'none'",
 ].join('; ');
+// Hints open connections or fetch outside the policy's reach and serve no
+// purpose in a section frame.
+const RESOURCE_HINTS = new Set(['preconnect', 'dns-prefetch', 'prefetch', 'preload', 'modulepreload', 'prerender']);
 const URL_ATTRIBUTES = new Set(['href', 'src', 'xlink:href', 'action', 'formaction', 'data']);
 
 export function hardenEpubSection(doc: Document): void {
@@ -33,6 +36,10 @@ export function hardenEpubSection(doc: Document): void {
   for (const element of Array.from(root.querySelectorAll('*'))) {
     const name = element.localName.toLowerCase();
     if (name === 'script' || name === 'object' || name === 'embed' || name === 'iframe') {
+      element.remove();
+      continue;
+    }
+    if (name === 'link' && (element.getAttribute('rel') ?? '').toLowerCase().split(/\s+/).some((rel) => RESOURCE_HINTS.has(rel))) {
       element.remove();
       continue;
     }
@@ -64,4 +71,9 @@ export function hardenEpubSection(doc: Document): void {
   meta.setAttribute('http-equiv', 'Content-Security-Policy');
   meta.setAttribute('content', EPUB_SECTION_POLICY);
   head.insertBefore(meta, head.firstChild);
+  // Browsers resolve link hosts ahead of a click, which also reveals the book.
+  const dnsPrefetch = doc.createElementNS(head.namespaceURI ?? XHTML_NS, 'meta');
+  dnsPrefetch.setAttribute('http-equiv', 'x-dns-prefetch-control');
+  dnsPrefetch.setAttribute('content', 'off');
+  head.insertBefore(dnsPrefetch, meta.nextSibling);
 }

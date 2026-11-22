@@ -56,7 +56,10 @@ test('opening local documents never requests their remote resources', async ({ p
   await expect(remoteImage).toHaveCount(0);
 
   // Always loading them is a reader setting that persists.
+  const preferenceSave = page.waitForResponse((response) => response.request().method() === 'PUT'
+    && new URL(response.url()).pathname === '/api/user/state/preferences');
   await imagesBar.getByRole('button', { name: 'Always load', exact: true }).click();
+  expect((await preferenceSave).ok()).toBe(true);
   await expect(remoteImage).toHaveCount(1);
   await page.reload();
   await expect(remoteImage).toHaveCount(1, { timeout: 30_000 });

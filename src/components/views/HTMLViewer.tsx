@@ -8,6 +8,7 @@ import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { useConfig } from '@/contexts/ConfigContext';
 import { ImageIcon } from '@/components/icons/Icons';
 import { Button } from '@/components/ui';
+import toast from 'react-hot-toast';
 import { READER_FONT_FAMILIES } from '@/lib/shared/reader-appearance';
 import type { HtmlBlock } from '@openreader/tts/html-blocks';
 import {
@@ -267,7 +268,9 @@ export function HTMLViewer({
           <div className="flex items-center gap-1.5">
             <Button size="xs" variant="ghost" onClick={() => {
               setImagesAllowedFor(blocks);
-              void updateConfig({ loadRemoteImages: true }).catch(() => undefined);
+              void updateConfig({ loadRemoteImages: true }).catch(() => {
+                toast.error('Could not save. Images load for this document only.');
+              });
             }}>Always load</Button>
             <Button size="xs" variant="outline" onClick={() => setImagesAllowedFor(blocks)}>Load images</Button>
           </div>
