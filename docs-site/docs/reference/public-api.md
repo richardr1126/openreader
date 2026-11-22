@@ -181,6 +181,24 @@ provider/model as the audiobook settings. Listing another catalogue does not
 change saved settings. Personal voice recordings, previews, provider management
 and live playback remain private app features.
 
+## Speech
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data '{"text":"Hello there."}' \
+  --output hello.mp3 \
+  https://reader.example/api/v1/speech
+```
+
+`POST /api/v1/speech` needs `audio:generate` and returns `audio/mpeg` for up to
+2000 characters of `text`. It speaks with the caller's saved speech provider, model,
+voice and voice speed; optional `provider`, `model`, `voice` and `modelSpeed` (0.5 to 3)
+select others under the same rules as an audiobook request. The characters count
+against the caller's speech limits, and a limited request returns `429` with
+`Retry-After`. Nothing is saved: the audio is not cached and does not appear in the
+library. Split longer text into pieces and request them in order.
+
 ## Audiobooks
 
 ```bash

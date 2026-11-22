@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { isTtsProviderType, type TtsProviderType } from '@openreader/tts/provider-catalog';
-import { TTS_VOICE_PREVIEW_MAX_TEXT_CHARS } from '../jobs/playback/voice-preview';
+import { TTS_SPEECH_MAX_TEXT_CHARS, TTS_VOICE_PREVIEW_MAX_TEXT_CHARS } from '../jobs/playback/voice-preview';
 
 const bboxSchema = z.tuple([z.number(), z.number(), z.number(), z.number()]);
 const parsedPdfBlockKindSchema = z.enum([
@@ -182,6 +182,11 @@ export const ttsVoicePreviewRequestSchema = z.object({
     }).strict().optional(),
   }).strict(),
   text: z.string().trim().min(1).max(TTS_VOICE_PREVIEW_MAX_TEXT_CHARS),
+}).strict();
+
+/** One in-memory clip of API speech: the preview's request with room for a paragraph or two. */
+export const ttsSpeechRequestSchema = ttsVoicePreviewRequestSchema.extend({
+  text: z.string().trim().min(1).max(TTS_SPEECH_MAX_TEXT_CHARS),
 }).strict();
 
 export const ttsPlaybackCursorUpdateSchema = z.object({

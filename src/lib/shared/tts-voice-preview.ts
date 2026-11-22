@@ -5,6 +5,8 @@ import {
 
 /** Server-side cap on preview text; mirrors the worker's request schema. */
 export const TTS_VOICE_PREVIEW_MAX_TEXT_CHARS = 300;
+/** Server-side cap on one API speech request (`POST /api/v1/speech`); mirrors the worker's request schema. */
+export const API_SPEECH_MAX_TEXT_CHARS = 2000;
 /** The browser trims the reader's sentence to this before asking for a preview. */
 export const TTS_VOICE_PREVIEW_TARGET_CHARS = 200;
 

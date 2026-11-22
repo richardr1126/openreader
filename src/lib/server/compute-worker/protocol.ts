@@ -34,6 +34,8 @@ export type TtsPlaybackRequest =
   & { generationExtent?: 'window' | 'document' };
 export type TtsVoicePreviewRequest =
   paths['/v1/tts-playback/voice-previews']['post']['requestBody']['content']['application/json'];
+export type TtsSpeechRequest =
+  paths['/v1/tts/speech']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionPrepareRequest =
   paths['/v1/tts-playback/sessions/prepare']['post']['requestBody']['content']['application/json'];
 export type TtsPlaybackSessionPrepareResponse =

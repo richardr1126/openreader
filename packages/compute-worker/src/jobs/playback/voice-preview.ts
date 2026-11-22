@@ -12,11 +12,33 @@ export const TTS_VOICE_PREVIEW_MAX_AUDIO_BYTES = 2 * 1024 * 1024;
 /** Upper bound on one preview's synthesis, below the playback segment timeout. */
 export const TTS_VOICE_PREVIEW_TIMEOUT_MS = 30_000;
 
+/** Bounds on one in-memory clip: its text, its audio and its synthesis time. */
+export interface TtsClipLimits {
+  maxTextChars: number;
+  maxAudioBytes: number;
+  timeoutMs: number;
+}
+
+export const TTS_VOICE_PREVIEW_LIMITS: TtsClipLimits = {
+  maxTextChars: TTS_VOICE_PREVIEW_MAX_TEXT_CHARS,
+  maxAudioBytes: TTS_VOICE_PREVIEW_MAX_AUDIO_BYTES,
+  timeoutMs: TTS_VOICE_PREVIEW_TIMEOUT_MS,
+};
+
+/** API speech speaks a paragraph or two (a chat reply, a podcast line), never a document. */
+export const TTS_SPEECH_MAX_TEXT_CHARS = 2000;
+export const TTS_SPEECH_LIMITS: TtsClipLimits = {
+  maxTextChars: TTS_SPEECH_MAX_TEXT_CHARS,
+  // About ten minutes of 128 kbps MP3, far more than 2000 characters take to say.
+  maxAudioBytes: 10 * 1024 * 1024,
+  timeoutMs: 90_000,
+};
+
 export class TtsVoicePreviewTooLargeError extends Error {
   readonly code = 'PREVIEW_AUDIO_TOO_LARGE';
 
   constructor() {
-    super('Voice preview audio exceeded its size limit');
+    super('Speech audio exceeded its size limit');
     this.name = 'TtsVoicePreviewTooLargeError';
   }
 }
@@ -36,20 +58,21 @@ export interface TtsVoicePreviewDeps {
 }
 
 /**
- * Synthesizes a short voice sample in memory and returns it. A preview never
- * touches the document's canonical timeline, segment cache, or object
- * storage: nothing is persisted, so it cannot be mistaken for playback audio.
- * Provider credentials come from the app's credential broker and stay inside
- * this call.
+ * Synthesizes a short clip (a voice sample, or API speech) in memory and
+ * returns it. A clip never touches a document's canonical timeline, segment
+ * cache, or object storage: nothing is persisted, so it cannot be mistaken
+ * for playback audio. Provider credentials come from the app's credential
+ * broker and stay inside this call.
  */
 export async function synthesizeTtsVoicePreview(
   input: { settings: TTSSegmentSettings; text: string; userId?: string },
   deps: TtsVoicePreviewDeps,
   signal?: AbortSignal,
+  limits: TtsClipLimits = TTS_VOICE_PREVIEW_LIMITS,
 ): Promise<Buffer> {
   const text = input.text.trim();
-  if (!text || text.length > TTS_VOICE_PREVIEW_MAX_TEXT_CHARS) {
-    throw new Error('Voice preview text is empty or too long');
+  if (!text || text.length > limits.maxTextChars) {
+    throw new Error('Speech text is empty or too long');
   }
   const creds = await deps.resolveCredentials(input.settings.providerRef, signal ? { signal } : {});
   const settings = resolveEffectiveTtsSettings(input.settings, creds);
@@ -58,7 +81,7 @@ export async function synthesizeTtsVoicePreview(
   const release = deps.acquireProviderCapacity
     ? await deps.acquireProviderCapacity({ providerRef: creds.providerRef, characters: text.length, signal })
     : async () => undefined;
-  const timeoutMs = Math.min(deps.synthesisTimeoutMs, TTS_VOICE_PREVIEW_TIMEOUT_MS);
+  const timeoutMs = Math.min(deps.synthesisTimeoutMs, limits.timeoutMs);
   try {
     const audio = await withAbortableTimeout(
       (synthesisSignal) => deps.synthesize({
@@ -79,7 +102,7 @@ export async function synthesizeTtsVoicePreview(
       'tts voice preview synthesis',
       signal,
     );
-    if (audio.byteLength > TTS_VOICE_PREVIEW_MAX_AUDIO_BYTES) throw new TtsVoicePreviewTooLargeError();
+    if (audio.byteLength > limits.maxAudioBytes) throw new TtsVoicePreviewTooLargeError();
     return audio;
   } finally {
     await release().catch(() => undefined);

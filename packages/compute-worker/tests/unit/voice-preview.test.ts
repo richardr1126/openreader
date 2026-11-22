@@ -3,6 +3,8 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { TtsCredentialBrokerResponse } from '@openreader/tts/credential-broker';
 import {
   synthesizeTtsVoicePreview,
+  TTS_SPEECH_LIMITS,
+  TTS_SPEECH_MAX_TEXT_CHARS,
   TTS_VOICE_PREVIEW_MAX_AUDIO_BYTES,
   TtsVoicePreviewTooLargeError,
   type TtsVoicePreviewDeps,
@@ -188,5 +190,53 @@ describe('voice preview route', () => {
     });
     expect(response.statusCode).toBe(502);
     expect(response.body).not.toContain(API_KEY);
+  });
+});
+
+describe('speech route', () => {
+  const apps: ReturnType<typeof Fastify>[] = [];
+
+  afterEach(async () => {
+    await Promise.all(apps.splice(0).map((app) => app.close()));
+  });
+
+  function appWith(d: TtsVoicePreviewDeps) {
+    const app = Fastify();
+    apps.push(app);
+    registerVoicePreviewRoutes({ app, ttsVoicePreview: d } as unknown as ComputeWorkerRouteContext);
+    return app;
+  }
+
+  test('speaks a paragraph too long for a preview, within its own timeout', async () => {
+    const { deps: d } = deps();
+    const app = appWith(d);
+    const text = 'A sentence of a chat reply. '.repeat(60).trim();
+    expect(text.length).toBeGreaterThan(300);
+    const response = await app.inject({ method: 'POST', url: '/v1/tts/speech', payload: { settings: SETTINGS, text } });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toBe('audio/mpeg');
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(d.synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({ text }),
+      expect.any(AbortSignal),
+      { ttsUpstreamTimeoutMs: TTS_SPEECH_LIMITS.timeoutMs },
+    );
+  });
+
+  test('rejects text past its limit', async () => {
+    const app = appWith(deps().deps);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/tts/speech',
+      payload: { settings: SETTINGS, text: 'x'.repeat(TTS_SPEECH_MAX_TEXT_CHARS + 1) },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  test('names speech, not a preview, in its errors', async () => {
+    const app = appWith(deps({ synthesize: vi.fn(async () => { throw new Error('boom'); }) }).deps);
+    const response = await app.inject({ method: 'POST', url: '/v1/tts/speech', payload: { settings: SETTINGS, text: 'Hi.' } });
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toEqual({ error: 'Speech failed', code: 'PREVIEW_FAILED' });
   });
 });
