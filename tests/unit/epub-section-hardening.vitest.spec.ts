@@ -51,13 +51,13 @@ describe('hardenEpubSection', () => {
     const doc = parseSection(
       '<p>Text.</p>',
       '<link rel="preconnect" href="https://tracker.example"/><link rel="DNS-Prefetch" href="//tracker.example"/>'
-      + '<link rel="stylesheet" href="book.css"/><title>Chapter</title>',
+      + '<link rel="stylesheet preload" as="style" href="book.css"/><title>Chapter</title>',
     );
 
     hardenEpubSection(doc);
 
     const links = Array.from(doc.getElementsByTagName('link'));
-    expect(links.map((link) => link.getAttribute('rel'))).toEqual(['stylesheet']);
+    expect(links.map((link) => [link.getAttribute('rel'), link.getAttribute('href')])).toEqual([['stylesheet', 'book.css']]);
     const prefetch = Array.from(doc.getElementsByTagName('meta'))
       .find((meta) => meta.getAttribute('http-equiv') === 'x-dns-prefetch-control');
     expect(prefetch?.getAttribute('content')).toBe('off');

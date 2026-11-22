@@ -39,9 +39,16 @@ export function hardenEpubSection(doc: Document): void {
       element.remove();
       continue;
     }
-    if (name === 'link' && (element.getAttribute('rel') ?? '').toLowerCase().split(/\s+/).some((rel) => RESOURCE_HINTS.has(rel))) {
-      element.remove();
-      continue;
+    if (name === 'link') {
+      const rels = (element.getAttribute('rel') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+      const kept = rels.filter((rel) => !RESOURCE_HINTS.has(rel));
+      if (kept.length !== rels.length) {
+        if (kept.length === 0) {
+          element.remove();
+          continue;
+        }
+        element.setAttribute('rel', kept.join(' '));
+      }
     }
     // A refresh navigates the section frame without script, and no policy
     // directive governs that navigation.

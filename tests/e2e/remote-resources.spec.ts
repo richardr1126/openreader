@@ -43,6 +43,8 @@ test('opening local documents never requests their remote resources', async ({ p
   const remoteImage = page.getByRole('img', { name: 'Remote [pixel] image', exact: true });
   await expect(remoteImage).toHaveCount(0);
   expect(remoteRequests).toEqual([]);
+  // Same-origin images reach only this app and always show.
+  await expect(page.getByRole('img', { name: 'App icon', exact: true })).toBeVisible();
 
   // Loading images applies to this visit; reopening hides them again.
   const imagesBar = page.getByRole('group', { name: 'Remote images', exact: true });

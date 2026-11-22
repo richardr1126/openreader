@@ -31,15 +31,30 @@ import type { ReaderType } from '@/types/user-state';
  */
 export type TextBlockFormat = 'markdown' | 'text';
 
-// An uploaded Markdown file packages no images, so any image is remote, and
-// fetching one tells its host the document was opened. Images stay hidden until
-// the reader loads them for this document or always loads them.
+// Fetching an image from another origin tells its host the document was
+// opened, so those stay hidden until the reader loads them for this document or
+// always loads them. Same-origin images reach only this app.
 // A hidden image leaves an empty marker, so the parser that renders the text
 // also decides whether there are images to offer, and no text node shifts.
-const HIDDEN_IMAGES: Components = { img: () => <span data-hidden-image hidden /> };
-const REMOTE_IMAGES: Components = {
+function isRemoteImage(src: string | undefined): boolean {
+  if (!src) return false;
+  try {
+    return new URL(src, window.location.href).origin !== window.location.origin;
+  } catch {
+    return false;
+  }
+}
+function MarkdownImage({ src, alt, title }: { src?: string; alt?: string; title?: string }) {
   // eslint-disable-next-line @next/next/no-img-element
-  img: ({ src, alt, title }) => <img src={src} alt={alt ?? ''} title={title} loading="lazy" referrerPolicy="no-referrer" />,
+  return <img src={src} alt={alt ?? ''} title={title} loading="lazy" referrerPolicy="no-referrer" />;
+}
+const HIDDEN_IMAGES: Components = {
+  img: ({ src, alt, title }) => isRemoteImage(typeof src === 'string' ? src : undefined)
+    ? <span data-hidden-image hidden />
+    : <MarkdownImage src={typeof src === 'string' ? src : undefined} alt={alt} title={title} />,
+};
+const REMOTE_IMAGES: Components = {
+  img: ({ src, alt, title }) => <MarkdownImage src={typeof src === 'string' ? src : undefined} alt={alt} title={title} />,
 };
 
 interface HTMLViewerProps {
