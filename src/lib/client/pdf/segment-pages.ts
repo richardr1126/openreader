@@ -22,11 +22,16 @@ const normalize = normalizePdfSegmentText;
  * reader turn on the first word spoken on the next page and highlight only the
  * words a rendered page shows. A block on one page, or one whose fragment text
  * cannot be placed in the block text, is a single part on the locator page.
+ *
+ * `blockOffset` is where the segment starts in the raw block text (the plan
+ * segment's start anchor); it picks the right copy of a sentence the block
+ * repeats.
  */
 export function resolvePdfSegmentPageParts(
   parsedDocument: ParsedPdfDocument | null | undefined,
   locator: TTSSegmentLocator | null | undefined,
   segmentText: string | null | undefined,
+  blockOffset?: number,
 ): PdfSegmentPagePart[] {
   if (!locator || locator.readerType !== 'pdf' || typeof locator.page !== 'number') return [];
   const text = normalize(segmentText ?? '');
@@ -53,7 +58,7 @@ export function resolvePdfSegmentPageParts(
   }
   if (pageStarts.length < 2) return whole;
 
-  const segmentStart = blockText.indexOf(text);
+  const segmentStart = findSegmentStart(blockText, text, block.text, blockOffset);
   if (segmentStart < 0) return whole;
   const segmentEnd = segmentStart + text.length;
 
@@ -71,6 +76,19 @@ export function resolvePdfSegmentPageParts(
     parts.push({ page, start: start + lead, end: start + lead + trimmed.length, text: trimmed });
   });
   return parts.length ? parts : whole;
+}
+
+function findSegmentStart(blockText: string, text: string, rawBlockText: string, blockOffset?: number): number {
+  const first = blockText.indexOf(text);
+  if (first < 0 || typeof blockOffset !== 'number') return first;
+  // Normalizing only collapses whitespace, so the raw offset maps to roughly
+  // the same place; the nearest copy is the one being spoken.
+  const hint = normalize(rawBlockText.slice(0, blockOffset)).length;
+  let best = first;
+  for (let at = first; at >= 0; at = blockText.indexOf(text, at + 1)) {
+    if (Math.abs(at - hint) < Math.abs(best - hint)) best = at;
+  }
+  return best;
 }
 
 /** The page that shows the character at `offset` of the segment text. */

@@ -46,39 +46,33 @@ export function useEPUBLocationController({
 }: UseEpubLocationControllerParams): (
   location: EpubLocation | TTSSegmentLocator,
   intent?: EpubLocationChangeIntent,
-) => void {
+) => Promise<boolean> | undefined {
   const locatorNavigationStateRef = useRef({
     pending: null as PendingLocatorNavigation | null,
     running: false,
   });
 
-  const safeRenditionNavigate = useCallback((navigation: 'next' | 'prev' | 'display', location?: string) => {
+  // Resolves once the navigation settles: true when the rendition moved,
+  // false when it could not.
+  const safeRenditionNavigate = useCallback((
+    navigation: 'next' | 'prev' | 'display',
+    location?: string,
+  ): Promise<boolean> => {
     const book = bookRef.current;
     const rendition = renditionRef.current;
-    if (!book?.isOpen || !rendition) return false;
-
-    const guardNavigationPromise = (promiseLike: unknown): void => {
-      const promise = Promise.resolve(promiseLike);
-      void promise.catch((error) => {
-        console.warn(`EPUB rendition ${navigation} failed:`, error);
-      });
-    };
+    if (!book?.isOpen || !rendition || (navigation === 'display' && !location)) return Promise.resolve(false);
 
     try {
-      if (navigation === 'display') {
-        if (!location) return false;
-        guardNavigationPromise(rendition.display(location));
-        return true;
-      }
-      if (navigation === 'next') {
-        guardNavigationPromise(rendition.next());
-        return true;
-      }
-      guardNavigationPromise(rendition.prev());
-      return true;
+      const navigated = navigation === 'display'
+        ? rendition.display(location)
+        : navigation === 'next' ? rendition.next() : rendition.prev();
+      return Promise.resolve(navigated).then(() => true, (error: unknown) => {
+        console.warn(`EPUB rendition ${navigation} failed:`, error);
+        return false;
+      });
     } catch (error) {
       console.warn(`EPUB rendition ${navigation} failed:`, error);
-      return false;
+      return Promise.resolve(false);
     }
   }, [bookRef, renditionRef]);
 
@@ -120,7 +114,7 @@ export function useEPUBLocationController({
   const handleLocationChanged = useCallback((
     location: EpubLocation | TTSSegmentLocator,
     intent: EpubLocationChangeIntent = 'manual',
-  ) => {
+  ): Promise<boolean> | undefined => {
     if (isEpubLocatorTarget(location)) {
       if (!isEpubSetOnceRef.current) {
         setIsEpub(true);
@@ -142,8 +136,7 @@ export function useEPUBLocationController({
         isEpubSetOnceRef.current = true;
       }
       placementIntentRef.current = intent;
-      safeRenditionNavigate(location === 'next' ? 'next' : 'prev');
-      return;
+      return safeRenditionNavigate(location === 'next' ? 'next' : 'prev');
     }
 
     if (!bookRef.current?.isOpen || !renditionRef.current) return;

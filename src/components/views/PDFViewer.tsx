@@ -105,7 +105,14 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   // A sentence that runs over a page break is split by page. Narration turns to
   // the page of the word being spoken, and each page highlights only its words.
   const segmentPageParts = useMemo(
-    () => resolvePdfSegmentPageParts(parsedDocument, currentSegment?.ownerLocator, currentSentence),
+    () => resolvePdfSegmentPageParts(
+      parsedDocument,
+      currentSegment?.ownerLocator,
+      currentSentence,
+      currentSegment?.startAnchor.sourceKey === currentSegment?.ownerSourceKey
+        ? currentSegment?.startAnchor.offset
+        : undefined,
+    ),
     [parsedDocument, currentSegment, currentSentence],
   );
   // Parts only leave the locator page for a block stitched across a break.

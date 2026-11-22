@@ -57,6 +57,30 @@ describe('PDF segment page parts', () => {
   });
 });
 
+test('places the copy of a repeated sentence that the segment starts at', () => {
+  const repeated = 'the dawn broke.';
+  const doc = {
+    pages: [{
+      pageNumber: 1,
+      width: 612,
+      height: 792,
+      blocks: [{
+        id: 'b1',
+        kind: 'text',
+        text: `${repeated} Then night, and the dawn broke.`,
+        fragments: [
+          { page: 1, bbox: [0, 600, 500, 700], text: `${repeated} Then night, and the dawn`, readingOrder: 3 },
+          { page: 2, bbox: [0, 40, 500, 120], text: 'broke.', readingOrder: 0 },
+        ],
+      }],
+    }],
+  } as unknown as ParsedPdfDocument;
+  const blockText = doc.pages[0].blocks[0].text;
+  expect(resolvePdfSegmentPageParts(doc, locator, repeated, 0).map((part) => part.page)).toEqual([1]);
+  expect(resolvePdfSegmentPageParts(doc, locator, repeated, blockText.lastIndexOf(repeated))
+    .map((part) => part.page)).toEqual([1, 2]);
+});
+
 describe('PDF page word range', () => {
   test('selects the spoken words that start within a page part', () => {
     const part = { page: 2, start: 10, end: 30, text: 'x' };

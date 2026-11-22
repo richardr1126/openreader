@@ -517,29 +517,28 @@ export function useEpubDocument(
   });
   const handleLocationChanged = useCallback<typeof navigateRendition>((location, intent = 'manual') => {
     if (intent === 'manual') setFollowingNarration(false);
-    navigateRendition(location, intent);
+    return navigateRendition(location, intent);
   }, [navigateRendition, setFollowingNarration]);
 
-  // One turn per displayed page: a word spoken while that turn is still
-  // relocating must not queue a second one past the page being read.
-  const followTurnFromPageRef = useRef<string | null>(null);
+  // One turn at a time: a word spoken while a turn is still relocating must
+  // not queue a second one past the page being read. Once the page has moved,
+  // the spoken word lies inside it again, so no page marker is needed.
+  const followTurnPendingRef = useRef(false);
   const followSpokenWord = useCallback<EpubDocumentState['followSpokenWord']>((segment, alignment, wordIndex) => {
-    if (!followingNarrationRef.current) return;
+    if (!followingNarrationRef.current || followTurnPendingRef.current) return;
     const rendition = renditionRef.current as unknown as {
       manager?: { container?: HTMLElement };
-      location?: { start?: { cfi?: string } };
       settings?: { direction?: string };
     } | undefined;
     const viewport = rendition?.manager?.container;
-    const pageStart = rendition?.location?.start?.cfi ?? null;
-    if (!viewport || !pageStart || followTurnFromPageRef.current === pageStart) return;
-    // The turn has landed; a later return to that page may turn it again.
-    followTurnFromPageRef.current = null;
+    if (!viewport) return;
     const word = resolveWordRange(alignment, wordIndex, segment);
     const rect = word ? rangeViewportRect(word.range) : null;
     if (!rect || !isRectPastViewport(rect, viewport.getBoundingClientRect(), rendition?.settings?.direction)) return;
-    followTurnFromPageRef.current = pageStart;
-    navigateRendition('next', 'playback-follow');
+    const turn = navigateRendition('next', 'playback-follow');
+    if (!turn) return;
+    followTurnPendingRef.current = true;
+    void turn.finally(() => { followTurnPendingRef.current = false; });
   }, [followingNarrationRef, navigateRendition, resolveWordRange]);
 
   // Plain-text reading mode has no rendition to commit a placement, so the
