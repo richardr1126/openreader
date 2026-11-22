@@ -33,6 +33,20 @@ describe('hardenEpubSection', () => {
     expect(doc.getElementsByTagName('img')[0].getAttribute('src')).toBe('cover.jpg');
   });
 
+  it('removes refresh navigation but keeps ordinary metadata', () => {
+    const doc = parseSection(
+      '<p>Text.</p>',
+      '<meta http-equiv=" Refresh " content="0;url=https://tracker.example/open"/>'
+      + '<meta name="author" content="Ada"/><title>Chapter</title>',
+    );
+
+    hardenEpubSection(doc);
+
+    const metas = Array.from(doc.getElementsByTagName('meta'));
+    expect(metas.some((meta) => meta.getAttribute('http-equiv')?.trim().toLowerCase() === 'refresh')).toBe(false);
+    expect(metas.some((meta) => meta.getAttribute('name') === 'author')).toBe(true);
+  });
+
   it('pins the script-free policy as the first element of the head', () => {
     const doc = parseSection('<p>Text.</p>');
 

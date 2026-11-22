@@ -36,6 +36,12 @@ export function hardenEpubSection(doc: Document): void {
       element.remove();
       continue;
     }
+    // A refresh navigates the section frame without script, and no policy
+    // directive governs that navigation.
+    if (name === 'meta' && element.getAttribute('http-equiv')?.trim().toLowerCase() === 'refresh') {
+      element.remove();
+      continue;
+    }
     for (const attribute of Array.from(element.attributes)) {
       const attributeName = attribute.name.toLowerCase();
       if (attributeName.startsWith('on')) {
