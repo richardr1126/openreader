@@ -12500,11 +12500,246 @@
           "200": {
             "description": "MP3 voice preview",
             "content": {
-              "application/json": {
+              "audio/mpeg": {
                 "schema": {
                   "type": "string",
-                  "format": "binary",
-                  "description": "MP3 voice preview"
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": {}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tts/speech": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "settings": {
+                    "type": "object",
+                    "properties": {
+                      "providerRef": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "providerType": {
+                        "type": "string"
+                      },
+                      "ttsModel": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 256
+                      },
+                      "voice": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 512
+                      },
+                      "nativeSpeed": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 3
+                      },
+                      "ttsInstructions": {
+                        "type": "string",
+                        "maxLength": 4000
+                      },
+                      "ttsModelOptions": {
+                        "type": "string",
+                        "maxLength": 16384
+                      },
+                      "language": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "voiceCustomization": {
+                        "type": "object",
+                        "properties": {
+                          "pieceCharacterLimit": {
+                            "type": "integer",
+                            "minimum": 50,
+                            "maximum": 450,
+                            "nullable": true
+                          },
+                          "piecePauseMilliseconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2000,
+                            "nullable": true
+                          },
+                          "blockPauseMilliseconds": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 2000,
+                            "nullable": true
+                          }
+                        },
+                        "required": [
+                          "pieceCharacterLimit",
+                          "piecePauseMilliseconds",
+                          "blockPauseMilliseconds"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": [
+                      "providerRef",
+                      "providerType",
+                      "ttsModel",
+                      "voice",
+                      "nativeSpeed"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "settings",
+                  "text"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "MP3 speech",
+            "content": {
+              "audio/mpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }

@@ -1,6 +1,7 @@
 import { BRACKETED_TEXT_MODES } from '@openreader/tts/speech-text';
 import { PARSED_PDF_BLOCK_KINDS } from '@/types/parsed-pdf';
 import { API_SCOPE_LABELS } from '@/lib/shared/api-scopes';
+import { API_SPEECH_MAX_TEXT_CHARS } from '@/lib/shared/tts-voice-preview';
 
 type Schema = Record<string, unknown>;
 const string = { type: 'string' };
@@ -109,6 +110,10 @@ export const publicApiSpec = {
     '/providers': { get: operation('listProviders', 'List enabled speech providers and the models this instance allows', 'documents:read', { '200': response('Every enabled provider; nextCursor is null. Keys and base URLs are never included.', ref('ProviderList')) }) },
     '/voices': { get: operation('listVoices', 'List voices for an enabled speech provider and model', 'documents:read', { '200': response('Entire provider/model catalogue with display names, then the caller\'s cloned voices for that provider and model; nextCursor is null. IDs remain provider-native strings.', ref('VoiceList')) },
       { parameters: [parameter('provider', 'query', { ...string, maxLength: 200 }, false, 'Shared provider slug; omitted follows the caller\'s saved speech provider, then the instance default.'), parameter('model', 'query', { ...string, maxLength: 512 }, false, 'Omitted follows saved model selection when provider is omitted, otherwise the configured provider model policy.')] }) },
+    '/speech': { post: operation('createSpeech', 'Speak a short text with the caller\'s speech provider and voice', 'audio:generate', {
+      '200': { description: 'MP3 audio of the text, made once and stored nowhere.', content: { 'audio/mpeg': { schema: { type: 'string', format: 'binary' } } } },
+      '503': { ...errorResponse, description: 'COMPUTE_WORKER_REQUIRED or PROVIDER_UNAVAILABLE: speech can\'t be made right now.' },
+    }, { requestBody: body(ref('SpeechRequest')), description: 'For apps that read short text aloud, such as a chat reply or a podcast line. Uses the saved provider, model, voice and speed unless the request names them. The characters count against compute limits like any synthesis. Nothing is added to the library; split longer text into several requests.' }) },
     '/documents/{id}/audiobooks': { parameters: [parameter('id', 'path', docId)],
       get: operation('listAudiobooks', 'List a document\'s audiobooks, most recently requested first', 'documents:read', { '200': response('A page of audiobooks; listing never starts or resumes one.', object({ data: array(ref('Audiobook')), nextCursor: nullableString })) },
         { parameters: [parameter('limit', 'query', { type: 'integer', minimum: 1, maximum: 50, default: 20 }), parameter('cursor', 'query')] }),
@@ -179,6 +184,12 @@ export const publicApiSpec = {
         voiceCustomization: object({ pieceCharacterLimit: { type: ['integer', 'null'], minimum: 50, maximum: 450 },
           piecePauseMilliseconds: { type: ['integer', 'null'], minimum: 0, maximum: 2000 }, blockPauseMilliseconds: { type: ['integer', 'null'], minimum: 0, maximum: 2000 } }, []),
       }, ['providerRef', 'providerType', 'ttsModel', 'voice', 'nativeSpeed']),
+      SpeechRequest: { ...object({ text: { ...string, minLength: 1, description: `The text to speak. Surrounding whitespace is trimmed first, and the trimmed text must be 1 to ${API_SPEECH_MAX_TEXT_CHARS} UTF-16 code units (characters outside the Basic Multilingual Plane, such as emoji, count as 2).` },
+        provider: { ...string, maxLength: 200, description: 'Shared provider slug. Omit to use the saved provider.' },
+        model: { ...string, maxLength: 256, description: 'Model ID, at most 256 UTF-16 code units (emoji count as 2). Omit to use the saved model, or the default model of the named provider.' },
+        voice: { ...string, maxLength: 512, description: 'Voice ID within that provider and model, at most 512 UTF-16 code units. Omit to use the saved voice, or the first voice of the named provider. A named voice must be one the provider lists.' },
+        modelSpeed: { type: 'number', minimum: 0.5, maximum: 3, description: 'Speaking rate the model generates at, for models that support one. Omit to use the saved voice speed.' },
+      }, ['text']), additionalProperties: false },
       AudiobookRequest: audiobookBody,
       Audiobook: object({ id: string, documentId: docId, status: { ...enumeration(...generationStates, 'building', 'waiting', 'ready', 'cancelled'), description: 'cancelled: someone stopped the request. A POST with the same settings resumes it from the cached audio.' },
         progress: { type: ['number', 'null'], minimum: 0, maximum: 1 },

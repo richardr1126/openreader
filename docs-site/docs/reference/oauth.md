@@ -92,7 +92,7 @@ and `redirect_uris` to 20 entries; larger values return `invalid_client_metadata
 | --- | --- |
 | `documents:read` | Read identity/limits, documents, folders, speech providers, voices and audiobook status/files |
 | `documents:write` | Create, upload, rename, move and delete owned documents and folders |
-| `audio:generate` | Start and stop audiobook generation |
+| `audio:generate` | Start and stop audiobook generation, and speak short text with `POST /api/v1/speech` |
 | `offline_access` | Obtain a refresh token so access can continue without a browser login |
 
 Scopes do not imply one another. Request `documents:read` along with

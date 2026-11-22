@@ -31,6 +31,7 @@ import type {
   TtsPlaybackCacheReclaimResponse,
   UserStorageUsageReport,
   UserStorageUsageRequest,
+  TtsSpeechRequest,
   TtsVoicePreviewRequest,
   ComputeOperation,
   TtsPlaybackCachedVariants,
@@ -387,7 +388,23 @@ export class ComputeWorkerClient {
     input: TtsVoicePreviewRequest,
     init?: { signal?: AbortSignal },
   ): Promise<TtsVoicePreviewResult> {
-    const response = await fetch(`${this.baseUrl}/v1/tts-playback/voice-previews`, {
+    return this.synthesizeClip('/v1/tts-playback/voice-previews', input, init);
+  }
+
+  /** Speaks a paragraph or two for an API caller, in memory like a preview. */
+  async synthesizeTtsSpeech(
+    input: TtsSpeechRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<TtsVoicePreviewResult> {
+    return this.synthesizeClip('/v1/tts/speech', input, init);
+  }
+
+  private async synthesizeClip(
+    path: string,
+    input: TtsVoicePreviewRequest | TtsSpeechRequest,
+    init?: { signal?: AbortSignal },
+  ): Promise<TtsVoicePreviewResult> {
+    const response = await fetch(`${this.baseUrl}${path}`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${this.token}`,

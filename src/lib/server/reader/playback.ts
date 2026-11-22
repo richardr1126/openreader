@@ -43,6 +43,37 @@ export async function resolveDefaultPlaybackRequest(
   documentLanguage?: string | null,
   selection: SpeechSelection = {},
 ): Promise<ParsedTtsPlaybackRequestBody | { error: string; invalid?: true }> {
+  const speech = await resolveSpeechSettings(scope.userId, settings, storedPreferences, documentLanguage, selection);
+  if ('error' in speech) return speech;
+  const { preferences, language } = speech;
+  return {
+    documentId,
+    settings: speech.settings,
+    startLocation: {},
+    maxBlockLength: settings.playback?.maxSegmentLength ?? preferences.ttsSegmentMaxBlockLength,
+    language,
+    ...(scope.readerType === 'pdf'
+      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds }
+      : {}),
+  };
+}
+
+/**
+ * The speech settings for a user's saved voice and a document's settings, or
+ * for no document at all (pass default document settings). A selection
+ * replaces the saved provider, model, voice and speed.
+ */
+export async function resolveSpeechSettings(
+  userId: string,
+  settings: ReturnType<typeof mergeDocumentSettings>,
+  storedPreferences: Record<string, unknown>,
+  documentLanguage?: string | null,
+  selection: SpeechSelection = {},
+): Promise<{
+  settings: ParsedTtsPlaybackRequestBody['settings'];
+  language: string;
+  preferences: ReturnType<typeof resolveSpeechPreferences>['preferences'];
+} | { error: string; invalid?: true }> {
   const [runtimeConfig, providers] = await Promise.all([
     getResolvedRuntimeConfig(),
     listAdminProviders(),
@@ -77,7 +108,7 @@ export async function resolveDefaultPlaybackRequest(
   // audio cache. Plans may be shared by different voices; the plan's settings
   // hash therefore cannot identify the initial cached-audio view.
   if (selection.voice?.startsWith('clone:')) {
-    const clones = await listClonedVoices(scope.userId);
+    const clones = await listClonedVoices(userId);
     if (!clones.some(({ id, providerRef, model: cloneModel }) => id === selection.voice && providerRef === provider.providerRef && cloneModel === model)) {
       return { error: 'That voice is not available for this provider and model. Use one from the list of voices.', invalid: true };
     }
@@ -128,7 +159,8 @@ export async function resolveDefaultPlaybackRequest(
     voice,
   });
   return {
-    documentId,
+    preferences,
+    language,
     settings: {
       providerRef: provider.providerRef,
       providerType: provider.providerType,
@@ -146,12 +178,6 @@ export async function resolveDefaultPlaybackRequest(
       speechText: normalizeSpeechText({ ...preferences.speechText, ...settings.speechText }),
       voiceCustomization: effectiveVoiceCustomization({ ...preferences.voiceCustomization, ...settings.voiceCustomization }, provider.providerType),
     },
-    startLocation: {},
-    maxBlockLength: settings.playback?.maxSegmentLength ?? preferences.ttsSegmentMaxBlockLength,
-    language,
-    ...(scope.readerType === 'pdf'
-      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds }
-      : {}),
   };
 }
 
