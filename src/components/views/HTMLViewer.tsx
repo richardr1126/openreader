@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
@@ -26,6 +26,10 @@ import type { ReaderType } from '@/types/user-state';
  * where every character stays literal.
  */
 export type TextBlockFormat = 'markdown' | 'text';
+
+// An uploaded Markdown file packages no images, so any image is remote.
+// Fetching one would reveal the reader to its host merely by opening the file.
+const MARKDOWN_COMPONENTS: Components = { img: () => null };
 
 interface HTMLViewerProps {
   className?: string;
@@ -221,7 +225,7 @@ export function HTMLViewer({
           className="openreader-html-block"
         >
           {format === 'markdown' ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.raw}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>{block.raw}</ReactMarkdown>
           ) : (
             <p>{block.plainText}</p>
           )}

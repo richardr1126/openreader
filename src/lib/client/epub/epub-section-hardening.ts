@@ -9,10 +9,21 @@
  * event handlers, and `javascript:` URLs are removed, and a Content Security
  * Policy forbidding script and plugin content is pinned as the first element of
  * the head. Only the app's own listeners, which live in the parent realm, run.
+ *
+ * The same policy keeps opening a book offline: epub.js serves packaged
+ * resources as blob or data URLs, so only those and the app's own origin load.
+ * Remote images, stylesheets, imports and fonts never request their host.
+ * Inline styles stay allowed for publisher and reader appearance sheets.
  */
 
 const XHTML_NS = 'http://www.w3.org/1999/xhtml';
-export const EPUB_SECTION_POLICY = "script-src 'none'; object-src 'none'; frame-src 'none'";
+export const EPUB_SECTION_POLICY = [
+  "default-src 'self' blob: data:",
+  "style-src 'self' blob: data: 'unsafe-inline'",
+  "script-src 'none'",
+  "object-src 'none'",
+  "frame-src 'none'",
+].join('; ');
 const URL_ATTRIBUTES = new Set(['href', 'src', 'xlink:href', 'action', 'formaction', 'data']);
 
 export function hardenEpubSection(doc: Document): void {
