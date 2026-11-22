@@ -21,9 +21,11 @@ import {
   type EpubLocationChangeIntent,
   type EpubPlacementIntent,
 } from '@/lib/client/epub/location-controller';
-import { createRangeCfi } from '@/lib/client/epub';
 import {
   buildRenderedTextMaps,
+  isRectPastViewport,
+  rangeViewportRect,
+  resolveRenderedPageStart,
   type EpubRenderedTextMap,
 } from '@/lib/client/epub/epub-rendered-text-maps';
 import {
@@ -36,8 +38,6 @@ import {
   type EpubCommittedLocation,
   type EpubPlacementLifecycle,
 } from '@/lib/client/epub/plan-backed-placement';
-import { buildEpubRangeStartAnchor } from '@/lib/client/epub/spine-coordinates';
-import { normalizeTtsLocationKey } from '@openreader/tts/locator';
 import { normalizeOptionalLanguageTag } from '@openreader/tts/language';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 import type { EPUBDocument } from '@/types/documents';
@@ -91,6 +91,11 @@ export interface EpubDocumentState {
     segment: CanonicalTtsSegment | null | undefined
   ) => void;
   clearWordHighlights: () => void;
+  followSpokenWord: (
+    segment: CanonicalTtsSegment | null | undefined,
+    alignment: TTSSentenceAlignment | undefined,
+    wordIndex: number | null | undefined,
+  ) => void;
 }
 
 /**
@@ -165,6 +170,7 @@ export function useEpubDocument(
     highlightSegment,
     clearWordHighlights,
     highlightWordIndex,
+    resolveWordRange,
     setRenderedTextMaps,
   } = useEPUBHighlighting({
     appearance: useReaderAppearance().highlights,
@@ -227,38 +233,32 @@ export function useEpubDocument(
         return;
       }
 
-      const rangeCfi = createRangeCfi(startCfi, endCfi);
-      const range = await book.getRange(rangeCfi);
-      if (!ownsPlacement()) return;
-      if (!range) throw new Error('EPUB.js could not resolve the committed location to rendered text.');
-
-      const textContent = range.toString().trim();
-      const startAnchor = buildEpubRangeStartAnchor(book, startCfi, range);
-      if (!ownsPlacement()) return;
-      if (!startAnchor) {
+      const previousMaps = renderedTextMapsRef.current;
+      const maps = buildRenderedTextMaps(rendition, previousMaps);
+      const pageStart = resolveRenderedPageStart(maps, startCfi, endCfi);
+      if (!pageStart) {
         throw new Error('The rendered EPUB position could not be mapped to a stable spine anchor.');
       }
 
       const locator: TTSSegmentLocator = {
         readerType: 'epub',
-        spineHref: startAnchor.spineHref,
-        spineIndex: startAnchor.spineIndex,
-        charOffset: startAnchor.charOffset,
+        spineHref: pageStart.spineHref,
+        spineIndex: pageStart.spineIndex,
+        charOffset: pageStart.charOffset,
       };
-      setRenderedTextMaps(buildRenderedTextMaps(
-        rendition,
-        rangeCfi,
-        normalizeTtsLocationKey(startCfi),
-        startAnchor,
-      ));
-      // Rendered maps are part of the surface commit. They live in refs for
-      // range lookup, so publish an explicit revision that makes an unchanged
-      // selected ordinal repaint against the newly committed rendition.
-      setRenderedTextRevision((revision) => revision + 1);
+      const mapsChanged = maps.length !== previousMaps.length
+        || maps.some((map, index) => map !== previousMaps[index]);
+      if (mapsChanged) {
+        setRenderedTextMaps(maps);
+        // Rendered maps are part of the surface commit. They live in refs for
+        // range lookup, so publish an explicit revision that makes an unchanged
+        // selected ordinal repaint against the newly committed rendition.
+        setRenderedTextRevision((revision) => revision + 1);
+      }
 
       const result = reconcileEpubRenderedAnchorRef.current({
         locator,
-        hasReadableText: Boolean(textContent),
+        hasReadableText: pageStart.hasReadableText,
         shouldPause: false,
         preservePlaybackCursor,
       });
@@ -517,8 +517,34 @@ export function useEpubDocument(
   });
   const handleLocationChanged = useCallback<typeof navigateRendition>((location, intent = 'manual') => {
     if (intent === 'manual') setFollowingNarration(false);
-    navigateRendition(location, intent);
+    return navigateRendition(location, intent);
   }, [navigateRendition, setFollowingNarration]);
+
+  // One turn at a time: a word spoken while a turn is still relocating must
+  // not queue a second one past the page being read. Once the page has moved,
+  // the spoken word lies inside it again, so no page marker is needed. The
+  // guard names the rendition that turned: a replaced rendition's navigation
+  // may never settle, and must neither block nor release a newer turn.
+  const followTurnRenditionRef = useRef<unknown>(null);
+  const followSpokenWord = useCallback<EpubDocumentState['followSpokenWord']>((segment, alignment, wordIndex) => {
+    const current = renditionRef.current;
+    if (!followingNarrationRef.current || !current || followTurnRenditionRef.current === current) return;
+    const rendition = current as unknown as {
+      manager?: { container?: HTMLElement };
+      settings?: { direction?: string };
+    } | undefined;
+    const viewport = rendition?.manager?.container;
+    if (!viewport) return;
+    const word = resolveWordRange(alignment, wordIndex, segment);
+    const rect = word ? rangeViewportRect(word.range) : null;
+    if (!rect || !isRectPastViewport(rect, viewport.getBoundingClientRect(), rendition?.settings?.direction)) return;
+    const turn = navigateRendition('next', 'playback-follow');
+    if (!turn) return;
+    followTurnRenditionRef.current = current;
+    void turn.finally(() => {
+      if (followTurnRenditionRef.current === current) followTurnRenditionRef.current = null;
+    });
+  }, [followingNarrationRef, navigateRendition, resolveWordRange]);
 
   // Plain-text reading mode has no rendition to commit a placement, so the
   // saved cursor anchors playback directly against the plan.
@@ -589,6 +615,7 @@ export function useEpubDocument(
     clearHighlights,
     highlightWordIndex,
     clearWordHighlights,
+    followSpokenWord,
   }), [
     currDocData,
     currDocName,
@@ -607,5 +634,6 @@ export function useEpubDocument(
     clearHighlights,
     highlightWordIndex,
     clearWordHighlights,
+    followSpokenWord,
   ]);
 }

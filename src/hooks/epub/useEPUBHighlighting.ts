@@ -45,6 +45,11 @@ type UseEpubHighlightingResult = {
     wordIndex: number | null | undefined,
     segment: CanonicalTtsSegment | null | undefined
   ) => void;
+  resolveWordRange: (
+    alignment: TTSSentenceAlignment | undefined,
+    wordIndex: number | null | undefined,
+    segment: CanonicalTtsSegment | null | undefined
+  ) => { key: string; range: Range } | null;
   setRenderedTextMaps: (maps: EpubRenderedTextMap[]) => void;
   resetHighlightState: () => void;
 };
@@ -123,110 +128,93 @@ export function useEPUBHighlighting({
     return true;
   }, [clearPaintedHighlight, epubHighlightEnabled, epubWordHighlightEnabled, paintHighlight, renderedTextMapsRef, segmentBackground]);
 
-  const highlightWordIndex = useCallback((
+  // Resolves a spoken word to its rendered range, independent of whether the
+  // word layer is painted: the page follow needs it either way.
+  const resolveWordRange = useCallback((
     alignment: TTSSentenceAlignment | undefined,
     wordIndex: number | null | undefined,
-    segment: CanonicalTtsSegment | null | undefined
-  ) => {
-    if (!epubWordHighlightEnabled) {
-      clearWordHighlights();
-      return;
+    segment: CanonicalTtsSegment | null | undefined,
+  ): { key: string; range: Range } | null => {
+    const words = alignment?.words ?? [];
+    if (!segment || wordIndex === null || wordIndex === undefined || wordIndex < 0 || wordIndex >= words.length) {
+      return null;
     }
-    if (!alignment) {
-      clearWordHighlights();
-      return;
-    }
-    if (wordIndex === null || wordIndex === undefined || wordIndex < 0) {
-      clearWordHighlights();
-      return;
-    }
-
-    const words = alignment.words || [];
-    if (!words.length || wordIndex >= words.length) {
-      clearWordHighlights();
-      return;
-    }
-
-    if (!segment) {
-      clearWordHighlights();
-      return;
-    }
-
     const resolved = resolveVisibleSegmentRange(renderedTextMapsRef.current, segment);
-    if (!resolved) {
-      clearWordHighlights();
-      return;
-    }
+    if (!resolved) return null;
 
     // Map each spoken word onto the rendered region with the shared token-
     // sequence aligner (same primitive as the HTML and PDF viewers). The region
     // text is the *rendered* text, so a returned span's offsets are already
     // indices into the char map — no canonical-vs-rendered coordinate drift.
     // Spans are relative to resolved.startOffset.
-    const regionText = resolved.map.text.slice(resolved.startOffset, resolved.endOffset);
-    const cacheKey = [
+    const key = [
       segment.key,
-      wordColor,
-      wordOpacity,
       resolved.map.sourceKey,
       resolved.startOffset,
       resolved.endOffset,
       words.length,
       // Word texts (not timings) drive the span mapping, so include them: a
       // re-aligned segment with the same count still invalidates the cache.
-      words.map((word) => word.text).join(''),
+      words.map((word) => word.text).join(''),
     ].join('::');
-    if (wordRangeCacheRef.current?.key !== cacheKey) {
+    if (wordRangeCacheRef.current?.key !== key) {
       wordRangeCacheRef.current = {
-        key: cacheKey,
-        spans: locateAlignmentWordSpans(words, regionText),
+        key,
+        spans: locateAlignmentWordSpans(
+          words,
+          resolved.map.text.slice(resolved.startOffset, resolved.endOffset),
+        ),
         ranges: new Array(words.length).fill(undefined),
       };
     }
     const cache = wordRangeCacheRef.current;
-
     const span = cache.spans[wordIndex];
-    if (!span) {
+    if (!span) return null;
+
+    let range = cache.ranges[wordIndex];
+    if (range === undefined) {
+      range = createRangeFromMappedOffsets(
+        resolved.map,
+        resolved.startOffset + span.start,
+        resolved.startOffset + span.end,
+      );
+      cache.ranges[wordIndex] = range;
+    }
+    return range ? { key, range } : null;
+  }, [renderedTextMapsRef]);
+
+  const highlightWordIndex = useCallback((
+    alignment: TTSSentenceAlignment | undefined,
+    wordIndex: number | null | undefined,
+    segment: CanonicalTtsSegment | null | undefined
+  ) => {
+    const word = epubWordHighlightEnabled ? resolveWordRange(alignment, wordIndex, segment) : null;
+    if (!word || wordIndex === null || wordIndex === undefined) {
       clearWordHighlights();
       return;
     }
 
-    let wordRange = cache.ranges[wordIndex];
-    if (wordRange === undefined) {
-      const absStart = resolved.startOffset + span.start;
-      const absEnd = resolved.startOffset + span.end;
-      wordRange = createRangeFromMappedOffsets(resolved.map, absStart, absEnd);
-      cache.ranges[wordIndex] = wordRange;
-      if (!wordRange) {
-        clearWordHighlights();
-        return;
-      }
-    }
-    if (!wordRange) {
-      clearWordHighlights();
-      return;
-    }
-
+    const key = `${word.key}::${wordColor}::${wordOpacity}`;
     const active = activeWordHighlightRef.current;
-    if (active && active.key === cacheKey && active.wordIndex === wordIndex) return;
+    if (active && active.key === key && active.wordIndex === wordIndex) return;
 
     if (paintHighlight(
-      wordRange,
+      word.range,
       EPUB_WORD_HIGHLIGHT,
       `background-color: ${highlightBackground({ ...DEFAULT_HIGHLIGHT_APPEARANCE, wordColor, wordOpacity }, 'word', resolvePrimaryHighlightColor(), 0.4)};`,
       1,
     )) {
-      activeWordHighlightRef.current = { key: cacheKey, wordIndex };
+      activeWordHighlightRef.current = { key, wordIndex };
       return;
     }
     clearWordHighlights();
   }, [
     clearWordHighlights,
     epubWordHighlightEnabled,
+    paintHighlight,
+    resolveWordRange,
     wordColor,
     wordOpacity,
-    paintHighlight,
-    renderedTextMapsRef,
   ]);
 
   const setRenderedTextMaps = useCallback((maps: EpubRenderedTextMap[]) => {
@@ -264,6 +252,7 @@ export function useEPUBHighlighting({
     highlightSegment,
     clearWordHighlights,
     highlightWordIndex,
+    resolveWordRange,
     setRenderedTextMaps,
     resetHighlightState,
   };

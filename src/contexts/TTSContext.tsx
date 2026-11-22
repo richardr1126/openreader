@@ -103,6 +103,8 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   followingNarrationRef: Readonly<{ current: boolean }>;
   setFollowingNarration: (enabled: boolean) => void;
   returnToNarration: () => void;
+  /** Move the view to a locator while it follows narration; a no-op once the reader browses away. */
+  syncPlaybackLocator: (locator: TTSSegmentLocator | null) => void;
   readerNavigationRevision: number;
   browseToLocation: (location: TTSLocation) => void;
   togglePlay: () => void;
@@ -619,6 +621,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const value = useMemo(() => ({
     documentId,
     followingNarration, followingNarrationRef, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
+    syncPlaybackLocator,
     isPlaying,
     isProcessing,
     canSkip,
@@ -669,6 +672,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     activeReaderType,
   }), [
     followingNarration, setFollowingNarration, returnToNarration, readerNavigationRevision, browseToLocation,
+    syncPlaybackLocator,
     isPlaying,
     documentId,
     isProcessing,
