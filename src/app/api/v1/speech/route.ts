@@ -79,9 +79,8 @@ export async function POST(request: NextRequest) {
       if (!result.ok) {
         logger.warn({ event: 'tts.speech.worker_rejected', status: result.status, code: result.code }, 'Worker rejected speech');
         const status = result.status === 429 ? 429 : result.status === 400 ? 400 : 502;
-        const retryAfterMs = status === 429 ? result.retryAfterMs ?? WORKER_RETRY_AFTER_MS : null;
         return apiErrorResponse(status, result.code ?? 'SPEECH_FAILED', 'Speech is unavailable right now.',
-          retryAfterMs ? { retryAfterMs } : {});
+          status === 429 ? { retryAfterMs: result.retryAfterMs ?? WORKER_RETRY_AFTER_MS } : {});
       }
       state = 'finished';
       return new NextResponse(result.audio, {

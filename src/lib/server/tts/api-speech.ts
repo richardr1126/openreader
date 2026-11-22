@@ -32,6 +32,7 @@ export function parseSpeechBody(value: unknown): SpeechBody | Response {
   const rec = value as Record<string, unknown>;
   const unknown = Object.keys(rec).find((key) => !FIELDS.has(key));
   if (unknown) return invalid(`Unknown field ${unknown}.`);
+  // Counted in UTF-16 units, as the worker and usage limits count it; the OpenAPI schema says so.
   const text = typeof rec.text === 'string' ? rec.text.trim() : '';
   if (!text || text.length > API_SPEECH_MAX_TEXT_CHARS) {
     return invalid(`text must be 1 to ${API_SPEECH_MAX_TEXT_CHARS} characters.`);
