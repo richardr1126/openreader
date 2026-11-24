@@ -61,7 +61,11 @@ const config = {
     minimumSystemVersion: '12.0',
   },
   win: { target: 'nsis' },
-  nsis: { oneClick: false, allowToChangeInstallationDirectory: true },
+  nsis: {
+    oneClick: false,
+    allowToChangeInstallationDirectory: true,
+    include: path.join(desktopDir, 'installer.nsh'),
+  },
   // The static AppImage runtime, which needs no libfuse2 on the system. The
   // default is still the legacy one in electron-builder 26.
   toolsets: { appimage: '1.0.3' },
