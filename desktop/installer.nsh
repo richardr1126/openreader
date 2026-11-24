@@ -60,14 +60,16 @@ FunctionEnd
         ClearErrors
         Rename "$openReaderOldRuntime" "$INSTDIR\resources\runtime"
         ${If} ${Errors}
-          MessageBox MB_OK|MB_ICONEXCLAMATION "Could not restore the previous OpenReader program files. They remain at $openReaderOldRuntime."
+          StrCpy $R1 "Could not restore the previous OpenReader program files. They remain at $openReaderOldRuntime."
+          DetailPrint "$R1"
+          MessageBox MB_OK|MB_ICONEXCLAMATION "$R1" /SD IDOK
         ${EndIf}
       ${EndIf}
     ${EndIf}
   ${EndIf}
 
   ${If} $R0 != 0
-    MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0"
+    MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed): $R0" /SD IDOK
     DetailPrint "Uninstall was not successful. Uninstaller error code: $R0."
     SetErrorLevel 2
     Quit
