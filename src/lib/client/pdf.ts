@@ -116,7 +116,52 @@ type HighlightPatternOptions = {
   useBlockGeometryOnly?: boolean;
   language?: string;
   follow?: boolean;
+  preferWord?: boolean;
 };
+
+type HighlightRect = Pick<DOMRect, 'top' | 'bottom' | 'left' | 'right'>;
+
+function followHighlight(container: HTMLElement, rects: readonly HighlightRect[]): void {
+  const first = rects[0];
+  const { clientHeight, clientWidth, scrollTop, scrollLeft } = container;
+  if (!first || !clientHeight || !clientWidth) return;
+
+  const viewport = container.getBoundingClientRect();
+  const top = viewport.top + container.clientTop;
+  const left = viewport.left + container.clientLeft;
+  const bottom = top + clientHeight;
+  const right = left + clientWidth;
+  let { top: targetTop, bottom: targetBottom, left: targetLeft, right: targetRight } = first;
+  for (const rect of rects) {
+    targetTop = Math.min(targetTop, rect.top);
+    targetBottom = Math.max(targetBottom, rect.bottom);
+    targetLeft = Math.min(targetLeft, rect.left);
+    targetRight = Math.max(targetRight, rect.right);
+  }
+  // With an oversized segment, use the first line as the fallback anchor.
+  if (targetBottom - targetTop > clientHeight) {
+    targetTop = first.top;
+    targetBottom = first.bottom;
+  }
+  if (targetRight - targetLeft > clientWidth) {
+    targetLeft = first.left;
+    targetRight = Math.min(first.right, first.left + clientWidth);
+  }
+
+  // Allow for fractional range coordinates and integer scroll positions.
+  const outsideVertically = targetTop < top - 1 || targetBottom > bottom + 1;
+  const outsideHorizontally = targetLeft < left - 1 || targetRight > right + 1;
+  if (!outsideVertically && !outsideHorizontally) return;
+
+  // Leave room for subsequent lines and avoid restarting a scroll animation
+  // as more words arrive or the user starts browsing.
+  const verticalInset = Math.max(0, Math.min(clientHeight / 3, (clientHeight - (targetBottom - targetTop)) / 2));
+  const nextTop = outsideVertically ? scrollTop + targetTop - top - verticalInset : scrollTop;
+  const nextLeft = outsideHorizontally
+    ? scrollLeft + (targetLeft < left ? targetLeft - left : targetRight - right)
+    : scrollLeft;
+  container.scrollTo({ top: nextTop, left: nextLeft, behavior: 'instant' });
+}
 
 function getHighlightLayerForPage(pageElement: HTMLElement): {
   layer: HTMLElement;
@@ -174,7 +219,7 @@ function highlightParsedBlockGeometry(
   }
   if (!targetBlock) return false;
 
-  let firstRect: { top: number; left: number } | null = null;
+  let followRect: HighlightRect | null = null;
   let drewAny = false;
 
   for (const fragment of targetBlock.fragments) {
@@ -207,26 +252,19 @@ function highlightParsedBlockGeometry(
     highlight.style.height = `${height}px`;
     layer.appendChild(highlight);
 
-    if (!firstRect) {
-      firstRect = { top: pageRect.top + top, left: pageRect.left + left };
+    if (!followRect || fragment.page === locator.page) {
+      followRect = {
+        top: pageRect.top + top,
+        bottom: pageRect.top + top + height,
+        left: pageRect.left + left,
+        right: pageRect.left + left + width,
+      };
     }
     drewAny = true;
   }
 
-  if (!drewAny || !firstRect || !follow) return drewAny;
-
-  const containerRect = container.getBoundingClientRect();
-  const visibleTop = container.scrollTop;
-  const visibleBottom = visibleTop + containerRect.height;
-  const elementTop = firstRect.top - containerRect.top + container.scrollTop;
-
-  if (elementTop < visibleTop || elementTop > visibleBottom) {
-    container.scrollTo({
-      top: elementTop - containerRect.height / 3,
-      behavior: 'smooth',
-    });
-  }
-  return true;
+  if (followRect && follow) followHighlight(container, [followRect]);
+  return drewAny;
 }
 
 function resolveParsedBlock(
@@ -401,13 +439,6 @@ export function highlightPattern(
   }
 
   const spanNodes = collectSpanNodesForParsedBlock(container, parsedDocument, locator) ?? [];
-
-  if (!spanNodes.length) {
-    if (useBlockGeometryOnly) {
-      return highlightParsedBlockGeometry(containerRef, parsedDocument, locator, options?.follow);
-    }
-    return false;
-  }
   lastSpanNodes = spanNodes;
 
   const tokens: PDFToken[] = [];
@@ -429,15 +460,10 @@ export function highlightPattern(
     }
   });
 
-  if (!tokens.length) return false;
   lastTokens = tokens;
-
-  if (useBlockGeometryOnly) {
-    lastSentenceTokenWindow = {
-      start: 0,
-      end: tokens.length - 1,
-    };
-    return highlightParsedBlockGeometry(containerRef, parsedDocument, locator, options?.follow);
+  if (!tokens.length) {
+    return Boolean(useBlockGeometryOnly
+      && highlightParsedBlockGeometry(containerRef, parsedDocument, locator, options?.follow));
   }
 
   const patternLen = cleanPattern.length;
@@ -522,8 +548,6 @@ export function highlightPattern(
       });
     }
 
-    if (!highlightRanges.length) return false;
-
     // Create overlay rectangles for each range, relative to its page text layer
     const scrollIntoViewRects: DOMRect[] = [];
 
@@ -535,7 +559,7 @@ export function highlightPattern(
 
         const rects = Array.from(range.getClientRects());
         scrollIntoViewRects.push(...rects);
-        if (!paintSegment) return;
+        if (!paintSegment || useBlockGeometryOnly) return;
 
         const highlightTarget = getOrCreateHighlightLayer(span);
         if (!highlightTarget) return;
@@ -561,25 +585,12 @@ export function highlightPattern(
       }
     });
 
-    if (!scrollIntoViewRects.length) return false;
-    if (options?.follow === false) return true;
-
-    // Scroll the first highlighted rect into view if needed
-    const containerRect = container.getBoundingClientRect();
-    const visibleTop = container.scrollTop;
-    const visibleBottom = visibleTop + containerRect.height;
-
-    const firstRect = scrollIntoViewRects[0];
-    const elementTop =
-      firstRect.top - containerRect.top + container.scrollTop;
-
-    if (elementTop < visibleTop || elementTop > visibleBottom) {
-      container.scrollTo({
-        top: elementTop - containerRect.height / 3,
-        behavior: 'smooth',
-      });
+    const follow = options?.follow !== false;
+    if (follow && !options?.preferWord) followHighlight(container, scrollIntoViewRects);
+    if (useBlockGeometryOnly) {
+      return highlightParsedBlockGeometry(containerRef, parsedDocument, locator, follow && !scrollIntoViewRects.length);
     }
-    return true;
+    return scrollIntoViewRects.length > 0;
   };
 
   const tokenTexts = tokens.map((t) => t.text);
@@ -601,7 +612,8 @@ export function highlightWordIndex(
   alignment: TTSSentenceAlignment | undefined,
   wordIndex: number | null | undefined,
   sentence: string | null | undefined,
-  containerRef: React.RefObject<HTMLDivElement>
+  containerRef: React.RefObject<HTMLDivElement>,
+  { follow = false, paintWord = true }: { follow?: boolean; paintWord?: boolean } = {},
 ) {
   clearWordHighlights();
 
@@ -648,10 +660,11 @@ export function highlightWordIndex(
   const tokenRange = lastSentenceWordToTokenRangeMap[wordIndex];
   if (!tokenRange) return;
 
+  const wordRects: DOMRect[] = [];
   for (let tokenIndex = tokenRange.start; tokenIndex <= tokenRange.end; tokenIndex += 1) {
     const token = lastTokens[tokenIndex];
     const span = lastSpanNodes[token.spanIndex];
-    if (!span) continue;
+    if (!span || !container.contains(span)) continue;
 
     const node = token.textNode;
     if (!node || node.nodeType !== Node.TEXT_NODE) continue;
@@ -660,13 +673,14 @@ export function highlightWordIndex(
       const range = document.createRange();
       range.setStart(node, token.startOffset);
       range.setEnd(node, token.endOffset);
+      const rects = Array.from(range.getClientRects());
+      if (follow) wordRects.push(...rects);
+      if (!paintWord) continue;
 
       const highlightTarget = getOrCreateHighlightLayer(span);
       if (!highlightTarget) continue;
 
       const { layer: highlightLayer, pageRect } = highlightTarget;
-      const rects = Array.from(range.getClientRects());
-
       rects.forEach((rect) => {
         const highlight = document.createElement('div');
         highlight.className = 'pdf-word-highlight-overlay';
@@ -685,6 +699,7 @@ export function highlightWordIndex(
       // Ignore range errors
     }
   }
+  if (follow) followHighlight(container, wordRects);
 }
 
 // Debounce for PDF viewer

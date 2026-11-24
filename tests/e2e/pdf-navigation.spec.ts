@@ -105,3 +105,38 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole('link', { name: 'sample.pdf', exact: true })).toBeVisible();
 });
+
+test('PDF narration reveals the highlight on the right of a zoomed mixed-size spread', async ({ page }) => {
+  test.setTimeout(150_000);
+  await enterAnonymousLibrary(page);
+  await uploadLibraryFiles(page, resolve('tests/files/mixed-size-spreads.pdf'));
+  await page.getByRole('link', { name: 'mixed-size-spreads.pdf', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'mixed-size-spreads.pdf', exact: true }))
+    .toBeVisible({ timeout: 120_000 });
+
+  await page.getByRole('button', { name: 'Open settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Document settings', exact: true });
+  await expect(settings).toBeInViewport({ ratio: 1 });
+  await settings.getByRole('button', { name: 'Page mode', exact: true }).click();
+  await page.getByRole('option', { name: 'Two pages', exact: true }).click();
+  await settings.getByRole('button', { name: 'Save', exact: true }).click();
+  await settings.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const zoom = page.getByLabel('Zoom controls', { exact: true });
+  const zoomIn = zoom.getByRole('button', { name: 'Zoom in', exact: true });
+  for (let step = 0; step < 10; step += 1) await zoomIn.click();
+  await expect(zoom).toContainText('200%');
+  await page.keyboard.press('Escape');
+
+  const position = page.getByRole('slider', { name: 'Playback position', exact: true });
+  await expect.poll(async () => Number(await position.getAttribute('max'))).toBeGreaterThan(0);
+  await position.press('End');
+  await position.press('Enter');
+  await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
+  const highlight = page.getByRole('region', { name: 'PDF page 2', exact: true })
+    .getByTestId('pdf-sentence-highlight').first();
+  await expect(highlight).toBeInViewport({ ratio: 0.95 });
+  await expect(page.getByRole('button', { name: 'Follow narration', exact: true }))
+    .toHaveAttribute('aria-pressed', 'true');
+});

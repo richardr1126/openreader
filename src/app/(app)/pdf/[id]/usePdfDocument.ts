@@ -13,7 +13,6 @@ import {
   useEffect,
   useCallback,
   useMemo,
-  RefObject,
   useRef,
 } from 'react';
 
@@ -34,10 +33,6 @@ import {
 } from '@/types/document-settings';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
-
-import type {
-  TTSSentenceAlignment,
-} from '@/types/tts';
 import type { PDFDocument } from '@/types/documents';
 
 /**
@@ -64,12 +59,7 @@ export interface PdfDocumentState {
   highlightPattern: typeof highlightPattern;
   clearHighlights: () => void;
   clearWordHighlights: () => void;
-  highlightWordIndex: (
-    alignment: TTSSentenceAlignment | undefined,
-    wordIndex: number | null | undefined,
-    sentence: string | null | undefined,
-    containerRef: RefObject<HTMLDivElement>
-  ) => void;
+  highlightWordIndex: typeof highlightWordIndex;
 }
 
 /**
