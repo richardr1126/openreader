@@ -23,8 +23,18 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   const nextPage = page.getByRole('button', { name: 'Next page', exact: true });
   const pageOne = page.getByRole('region', { name: 'PDF page 1', exact: true });
   const pageTwo = page.getByRole('region', { name: 'PDF page 2', exact: true });
+  const reader = page.locator('.pdf-viewer');
+  const pager = page.getByRole('group', { name: 'Reading position', exact: true });
+  const expectPagerBelowReader = async () => {
+    await expect(pager).toBeVisible();
+    await expect.poll(async () => {
+      const [readerBox, pagerBox] = await Promise.all([reader.boundingBox(), pager.boundingBox()]);
+      return readerBox && pagerBox ? pagerBox.y - (readerBox.y + readerBox.height) : -Infinity;
+    }).toBeGreaterThanOrEqual(0);
+  };
 
   await expect(pageOne).toBeInViewport();
+  await expectPagerBelowReader();
   await expect(previousPage).toBeDisabled();
   const playbackPosition = page.getByRole('slider', { name: 'Playback position', exact: true });
   const originalPosition = await playbackPosition.inputValue();
@@ -57,6 +67,7 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   const zoomControls = page.getByLabel('Zoom controls', { exact: true });
   await zoomControls.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await expect(zoomControls).toContainText('110%');
+  await expectPagerBelowReader();
   await zoomControls.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await expect(zoomControls).toContainText('100%');
   await page.keyboard.press('Escape');
@@ -82,6 +93,7 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   await readerSettings.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(pageOne).toBeInViewport();
   await expect(pageTwo).toBeInViewport();
+  await expectPagerBelowReader();
 
   await openReaderSettings();
   await pageMode.click();
@@ -91,6 +103,7 @@ test('anonymous user navigates PDF pages, zoom, and page modes', async ({ page }
   await readerSettings.getByRole('button', { name: 'Close', exact: true }).click();
 
   await expect(pageOne).toBeInViewport();
+  await expectPagerBelowReader();
   await nextPage.click();
   await expect(page.getByRole('button', { name: '2 / 2', exact: true })).toBeVisible();
   await expect(pageTwo).toBeInViewport();

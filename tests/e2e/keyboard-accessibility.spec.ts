@@ -16,6 +16,37 @@ test('keyboard user controls reader panels and playback shortcuts', async ({ pag
   const playButton = page.getByRole('button', { name: 'Play', exact: true });
   await expect(playButton).toHaveAttribute('aria-keyshortcuts', 'Space');
 
+  const follow = page.getByRole('button', { name: 'Follow narration', exact: true });
+  await follow.focus();
+  await page.keyboard.press('Space');
+  await expect(follow).toHaveAttribute('aria-pressed', 'false');
+  await expect(follow).toBeFocused();
+  await follow.click();
+  await expect(follow).toHaveAttribute('aria-pressed', 'true');
+
+  // Hold audio startup so the play/pause shortcut can be tested without a TTS provider.
+  const preparation = Promise.withResolvers<void>();
+  await page.route('**/api/tts/stream/sessions', async (route) => {
+    await preparation.promise;
+    await route.abort();
+  });
+  const cancelLoading = page.getByRole('button', { name: 'Cancel playback loading', exact: true });
+  const expectSpaceControlsPlayback = async () => {
+    await page.keyboard.press('Space');
+    await expect(cancelLoading).toBeVisible();
+    await page.keyboard.press('Space');
+    await expect(playButton).toBeVisible();
+  };
+  try {
+    await expectSpaceControlsPlayback();
+    await expect(follow).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Skip forward', exact: true }).click();
+    await expectSpaceControlsPlayback();
+  } finally {
+    preparation.resolve();
+    await page.unrouteAll({ behavior: 'wait' });
+  }
+
   const openContents = page.getByRole('button', { name: 'Open contents', exact: true });
   await openContents.focus();
   await page.keyboard.press('Enter');
@@ -42,4 +73,8 @@ test('keyboard user controls reader panels and playback shortcuts', async ({ pag
   await page.goto(bookUrl);
   await expect(playButton).toBeVisible();
   await expect(playButton).not.toHaveAttribute('aria-keyshortcuts', /.+/);
+  await follow.focus();
+  await page.keyboard.press('Space');
+  await expect(follow).toHaveAttribute('aria-pressed', 'false');
+  await expect(playButton).toBeVisible();
 });
