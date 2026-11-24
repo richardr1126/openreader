@@ -1,6 +1,6 @@
 {
   "name": "openreader",
-  "version": "5.5.2",
+  "version": "5.5.3",
   "private": true,
   "packageManager": "pnpm@12.18.0",
   "scripts": {
