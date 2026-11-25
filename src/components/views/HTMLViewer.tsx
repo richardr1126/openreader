@@ -245,7 +245,7 @@ export function HTMLViewer({
 
   // Saved highlights paint after the sentence and word wraps above, which
   // split and rejoin the text nodes their ranges sit on.
-  const { highlights: savedHighlights, declarations: savedDeclarations, reportSelection } = useReaderHighlights();
+  const { highlights: savedHighlights, declarations: savedDeclarations, selectionSink } = useReaderHighlights();
   useLayoutEffect(() => {
     const container = contentRef.current;
     if (!container) return;
@@ -282,8 +282,8 @@ export function HTMLViewer({
       const { segmentsByBlock: index, resolvedLanguage: language } = selectionStateRef.current;
       const units = Array.from(container.querySelectorAll<HTMLElement>('.openreader-html-block'));
       return resolveSelectionInUnits(range, units, (unit) => [unit], (unit) => index.get(unit.id) ?? [], language);
-    }, reportSelection);
-  }, [reportSelection, selectionStateRef]);
+    }, selectionSink);
+  }, [selectionSink, selectionStateRef]);
 
   // Real cleanup on unmount — tear down any leftover wraps. The empty deps
   // ensure this only fires when HTMLViewer itself unmounts (route change,

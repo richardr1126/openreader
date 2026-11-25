@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -27,18 +28,26 @@ export type ReaderSelection = {
   clear: () => void;
 };
 
+/** Where a reader sends its selection. */
+export type SelectionSink = {
+  /** The settled selection, which places the Highlight button. */
+  report: (selection: ReaderSelection | null) => void;
+  /** Adds a reader of the live selection, for a key pressed before it settles. Returns the removal. */
+  addSource: (read: () => ReaderSelection | null) => () => void;
+};
+
 type ReaderHighlightsValue = {
   /** Highlights placed in the current plan, in reading order. */
   highlights: readonly ResolvedHighlight[];
   /** CSS declarations for the saved highlight paint. */
   declarations: string;
-  reportSelection: (selection: ReaderSelection | null) => void;
+  selectionSink: SelectionSink;
 };
 
 const NO_HIGHLIGHTS: ReaderHighlightsValue = {
   highlights: [],
   declarations: '',
-  reportSelection: () => {},
+  selectionSink: { report: () => {}, addSource: () => () => {} },
 };
 
 const ReaderHighlightsContext = createContext<ReaderHighlightsValue>(NO_HIGHLIGHTS);
@@ -69,19 +78,26 @@ export function ReaderHighlightsProvider({
   const [selection, setSelection] = useState<ReaderSelection | null>(null);
   const { playbackShortcuts } = useConfig();
 
-  const reportSelection = useCallback((next: ReaderSelection | null) => setSelection(next), []);
+  const sourcesRef = useRef(new Set<() => ReaderSelection | null>());
+  const selectionSink = useMemo<SelectionSink>(() => ({
+    report: setSelection,
+    addSource: (read) => {
+      sourcesRef.current.add(read);
+      return () => sourcesRef.current.delete(read);
+    },
+  }), []);
   // Only a selection entirely inside one highlight offers to remove it.
-  const covering = selection
-    ? highlights.find((entry) => entry.start <= selection.start && entry.end >= selection.end) ?? null
-    : null;
+  const coveringOf = useCallback((target: ReaderSelection) => (
+    highlights.find((entry) => entry.start <= target.start && entry.end >= target.end) ?? null
+  ), [highlights]);
+  const covering = selection ? coveringOf(selection) : null;
 
-  const applySelection = useCallback(() => {
-    if (!selection) return;
-    if (covering) unhighlightRange(selection.start, selection.end);
-    else highlightRange(selection.start, selection.end);
-    selection.clear();
+  const apply = useCallback((target: ReaderSelection) => {
+    if (coveringOf(target)) unhighlightRange(target.start, target.end);
+    else highlightRange(target.start, target.end);
+    target.clear();
     setSelection(null);
-  }, [covering, highlightRange, selection, unhighlightRange]);
+  }, [coveringOf, highlightRange, unhighlightRange]);
 
   const toggleCurrentSentence = useCallback(() => {
     if (currentSentenceOrdinal === null) return;
@@ -92,21 +108,30 @@ export function ReaderHighlightsProvider({
     }
   }, [currentSentenceOrdinal, highlightRange, highlights, unhighlightRange]);
 
+  // The live selection, not the settled one: H can come before it settles.
+  const onHighlightKey = useCallback(() => {
+    for (const read of sourcesRef.current) {
+      const live = read();
+      if (live) return apply(live);
+    }
+    toggleCurrentSentence();
+  }, [apply, toggleCurrentSentence]);
+
   useHighlightKeyboardControl({
     enabled: enabled && playbackShortcuts,
-    onHighlight: selection ? applySelection : toggleCurrentSentence,
+    onHighlight: onHighlightKey,
   });
 
   const value = useMemo(
-    () => (enabled ? { highlights, declarations, reportSelection } : NO_HIGHLIGHTS),
-    [declarations, enabled, highlights, reportSelection],
+    () => (enabled ? { highlights, declarations, selectionSink } : NO_HIGHLIGHTS),
+    [declarations, enabled, highlights, selectionSink],
   );
 
   return (
     <ReaderHighlightsContext.Provider value={value}>
       {children}
       {enabled && selection ? (
-        <SelectionAction selection={selection} removes={covering !== null} onActivate={applySelection} />
+        <SelectionAction selection={selection} removes={covering !== null} onActivate={() => apply(selection)} />
       ) : null}
     </ReaderHighlightsContext.Provider>
   );
@@ -146,41 +171,43 @@ function SelectionAction({
 }
 
 /**
- * Report the selection in `doc` through `resolve`, which maps it to whole
- * sentences or null. `offset` moves a frame document's rects into the top
- * viewport. Returns the unbind.
+ * Report the selection in `doc` to `sink` through `resolve`, which maps it to
+ * whole sentences or null. `offset` moves a frame document's rects into the
+ * top viewport. Returns the unbind.
  */
 export function bindSelectionReporting(
   doc: Document,
   resolve: (range: Range) => { start: number; end: number } | null,
-  report: (selection: ReaderSelection | null) => void,
+  sink: SelectionSink,
   offset?: () => { x: number; y: number },
 ): () => void {
   const view = doc.defaultView;
   if (!view) return () => {};
   let timer: ReturnType<typeof setTimeout> | null = null;
   let reported = false;
-  const update = () => {
-    timer = null;
+  const read = (): ReaderSelection | null => {
     const selection = doc.getSelection();
     const range = selection && !selection.isCollapsed && selection.rangeCount > 0 && selection.toString().trim()
       ? selection.getRangeAt(0)
       : null;
     const ordinals = range ? resolve(range) : null;
-    if (!range || !ordinals) {
-      if (reported) report(null);
-      reported = false;
-      return;
-    }
+    if (!range || !ordinals) return null;
     const bounds = range.getBoundingClientRect();
     const { x, y } = offset?.() ?? { x: 0, y: 0 };
-    reported = true;
-    report({
+    return {
       ...ordinals,
       rect: { left: bounds.left + x, top: bounds.top + y, right: bounds.right + x, bottom: bounds.bottom + y },
       clear: () => selection?.removeAllRanges(),
-    });
+    };
   };
+  const report = sink.report;
+  const update = () => {
+    timer = null;
+    const next = read();
+    if (next || reported) report(next);
+    reported = next !== null;
+  };
+  const removeSource = sink.addSource(read);
   // Settle while a selection is dragged or scrolled rather than chase it.
   const schedule = () => {
     if (timer !== null) clearTimeout(timer);
@@ -191,6 +218,7 @@ export function bindSelectionReporting(
   view.addEventListener('resize', schedule);
   return () => {
     if (timer !== null) clearTimeout(timer);
+    removeSource();
     doc.removeEventListener('selectionchange', schedule);
     doc.removeEventListener('scroll', schedule, true);
     view.removeEventListener('resize', schedule);

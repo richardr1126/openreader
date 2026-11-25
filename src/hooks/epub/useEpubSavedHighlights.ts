@@ -59,7 +59,7 @@ export function useEpubSavedHighlights({
   renderedTextRevision: number;
 }) {
   const { playbackSegments } = useTTS();
-  const { highlights, declarations, reportSelection } = useReaderHighlights();
+  const { highlights, declarations, selectionSink } = useReaderHighlights();
   const spansBySpine = useMemo(() => indexEpubSegmentSpans(playbackSegments), [playbackSegments]);
   const spansRef = useLatestRef(spansBySpine);
 
@@ -101,12 +101,12 @@ export function useEpubSavedHighlights({
         }
         return start === null || end === null ? null : { start, end };
       },
-      reportSelection,
+      selectionSink,
       () => {
         const frame = doc.defaultView?.frameElement?.getBoundingClientRect();
         return { x: frame?.left ?? 0, y: frame?.top ?? 0 };
       },
     ));
     return () => unbinders.forEach((unbind) => unbind());
-  }, [renderedTextMapsRef, renderedTextRevision, reportSelection, spansRef]);
+  }, [renderedTextMapsRef, renderedTextRevision, selectionSink, spansRef]);
 }

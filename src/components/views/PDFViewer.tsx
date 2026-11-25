@@ -177,7 +177,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     });
   }, [tapStateRef]);
 
-  const { highlights: savedHighlights, declarations: savedDeclarations, reportSelection } = useReaderHighlights();
+  const { highlights: savedHighlights, declarations: savedDeclarations, selectionSink } = useReaderHighlights();
 
   // A selection on the text layer offers to highlight the sentences it covers,
   // resolved within each parsed block it crosses.
@@ -206,8 +206,8 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
         ([key]) => index.get(key) ?? [],
         language,
       );
-    }, reportSelection);
-  }, [reportSelection, tapStateRef]);
+    }, selectionSink);
+  }, [selectionSink, tapStateRef]);
 
   // IMPORTANT:
   // - pdf.js may transfer/detach ArrayBuffers when sending them to its worker, so we must clone.

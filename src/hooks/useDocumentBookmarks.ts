@@ -159,8 +159,13 @@ export function useDocumentBookmarks(documentId: string) {
     const startSegment = playbackSegments.find((segment) => segment.ordinal === start);
     const endSegment = playbackSegments.find((segment) => segment.ordinal === end);
     if (!startSegment || !endSegment) return;
-    for (const entry of overlapping) removeMutate(entry.highlight.id);
-    createMutate(highlightInputForSegments({ start: startSegment, end: endSegment, id: crypto.randomUUID() }));
+    // The merged highlight is saved before the ones it replaces are removed,
+    // so a failed save leaves them as they were rather than losing them.
+    createMutate(highlightInputForSegments({ start: startSegment, end: endSegment, id: crypto.randomUUID() }), {
+      onSuccess: () => {
+        for (const entry of overlapping) removeMutate(entry.highlight.id);
+      },
+    });
   }, [createMutate, highlights, playbackSegments, removeMutate, toggleBusy]);
 
   /** Remove every highlight covering a sentence in `[from, to]`. */
