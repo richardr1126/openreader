@@ -73,11 +73,14 @@ describe('admin user directory query', () => {
 
   test('matches % and _ in a search literally', async () => {
     sqlite.exec(`INSERT INTO user (id, name, email, email_verified, is_anonymous, is_admin, admin_source, access_status, created_at, updated_at)
-      VALUES ('underscore', 'Ann', 'ann_lee@example.test', 1, 0, 0, 'none', 'active', 7000, 7000)`);
+      VALUES ('underscore', 'Ann', 'ann_lee@example.test', 1, 0, 0, 'none', 'active', 7000, 7000),
+        ('percent', '100% Club', 'club@example.test', 1, 0, 0, 'none', 'active', 7001, 7001),
+        ('thousand', 'Room 1000', 'room@example.test', 1, 0, 0, 'none', 'active', 7002, 7002)`);
     expect((await listAdminUsers({ search: 'ann_lee' })).users.map((user) => user.id)).toEqual(['underscore']);
     expect((await listAdminUsers({ search: 'n_l' })).users.map((user) => user.id)).toEqual(['underscore']);
     // An unescaped _ would match any character, and % anything.
     expect((await listAdminUsers({ search: 'owner_example' })).users).toEqual([]);
-    expect((await listAdminUsers({ search: '100%' })).users).toEqual([]);
+    // Unescaped, '100%' would also match 'Room 1000'.
+    expect((await listAdminUsers({ search: '100%' })).users.map((user) => user.id)).toEqual(['percent']);
   });
 });
