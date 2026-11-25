@@ -1,8 +1,14 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, type MouseEvent } from 'react';
 
 const EPUB_KEY_EVENT = 'openreader:epub-keydown';
+
+/** One-click reader actions release focus so the next Space controls playback.
+ * Keep the native focus behavior when activated from the keyboard. */
+export function releasePointerClickFocus(event: MouseEvent<HTMLButtonElement>) {
+  if (event.detail > 0) event.currentTarget.blur();
+}
 
 /** EPUB keyboard events stay inside its frame. Preserve the original target
  * and cancellation state so the same shortcut policy applies in every reader. */

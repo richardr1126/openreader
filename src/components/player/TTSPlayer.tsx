@@ -26,7 +26,7 @@ import {
   timelineFraction,
 } from '@/lib/client/tts/playback-timeline-track';
 import { useDocumentArtworkUrl, useMediaSession } from '@/hooks/audio/useMediaSession';
-import { usePlaybackKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
+import { releasePointerClickFocus, usePlaybackKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
 import { useConfig } from '@/contexts/ConfigContext';
 
 /** How long the Undo chip stays after a committed scrub. */
@@ -66,7 +66,7 @@ function PlaybackLoadingRing() {
 export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel, navigator }: {
   /** Opens the reader's voice panel; the reader page owns which sidebar is open. */
   onOpenVoicePanel: () => void;
-  /** The reader's page or section stepper, floated above the dock's top edge. */
+  /** Page or section navigation in the dock above the scrubber. */
   navigator?: ReactNode;
   /** Shown by the OS media controls (lock screen, hardware keys). */
   documentTitle?: string;
@@ -199,9 +199,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           role="group"
           aria-label="Reading position"
           className={cn(
-            // Bottom-aligned with the Undo chip, which sits on the scrubber's top edge.
-            // Collapses while the navigator renders nothing, e.g. before the plan is ready.
-            'absolute bottom-full left-1/2 z-40 mb-[18px] flex h-7 empty:hidden -translate-x-1/2 items-center rounded-full border border-line-soft bg-surface-solid px-0.5 text-xs text-soft shadow-elev-2 transition-opacity duration-fast ease-standard sm:mb-[13px]',
+            'mx-auto my-1 flex h-7 w-fit items-center rounded-full border border-line-soft bg-surface-solid px-0.5 text-xs text-soft shadow-elev-2 transition-opacity duration-fast ease-standard',
             // The scrub preview's time label takes this space while dragging.
             previewSec !== null && 'pointer-events-none opacity-0',
           )}
@@ -210,8 +208,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <ReaderFollowControls />
         </div>
       ) : null}
-      {/* Top Edge Scrubber bar */}
-      <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:top-[-5px] sm:h-2.5">
+      <div className="group/scrubber relative z-40 h-5 sm:h-2.5">
         {/* Rail: the whole document. Foreground-mixed so it stays visible in dark themes. */}
         <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--foreground)_16%,transparent)] transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]" />
 
@@ -298,8 +295,6 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             aria-label="Undo scrub"
             className={cn(
               'absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-elev-2 hover:border-accent-line hover:text-accent',
-              // The chip floats over the page, so its hover wash is mixed into the surface;
-              // the translucent accent-wash would let a light page show through.
               'hover:bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface-solid))]',
               focusRing,
               motionColors,
@@ -333,6 +328,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         <div className="col-start-2 row-start-2 flex items-center gap-2 sm:gap-1.5">
           <Tooltip label="Skip backward" shortcut={playbackShortcuts ? '←' : undefined} side="top">
             <IconButton
+              onClickCapture={playbackShortcuts ? releasePointerClickFocus : undefined}
               onClick={skipBackward}
               aria-label="Skip backward"
               aria-keyshortcuts={playbackShortcuts ? 'ArrowLeft' : undefined}
@@ -364,6 +360,7 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
 
           <Tooltip label="Skip forward" shortcut={playbackShortcuts ? '→' : undefined} side="top">
             <IconButton
+              onClickCapture={playbackShortcuts ? releasePointerClickFocus : undefined}
               onClick={skipForward}
               aria-label="Skip forward"
               aria-keyshortcuts={playbackShortcuts ? 'ArrowRight' : undefined}

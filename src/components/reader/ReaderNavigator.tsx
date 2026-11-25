@@ -3,7 +3,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useConfig } from '@/contexts/ConfigContext';
 import { useTTS } from '@/contexts/TTSContext';
-import { usePageTurnKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
+import { releasePointerClickFocus, usePageTurnKeyboardControls } from '@/hooks/audio/usePlaybackKeyboardControls';
 import { ChevronLeftIcon, ChevronRightIcon, CrosshairIcon, ReturnIcon } from '@/components/icons/Icons';
 import {
   IconButton, Input, PopoverRoot, PopoverSurface, PopoverTrigger, Tooltip, cn,
@@ -13,12 +13,14 @@ const pillStepButton = 'h-6 w-6 rounded-full';
 
 export function ReaderFollowControls() {
   const { followingNarration, setFollowingNarration, returnToNarration } = useTTS();
+  const { playbackShortcuts } = useConfig();
   return (
     <div className="flex items-center gap-0.5 border-l border-line-soft pl-0.5">
       <Tooltip label="Follow narration" side="top">
         <IconButton
           aria-label="Follow narration"
           aria-pressed={followingNarration}
+          onClickCapture={playbackShortcuts ? releasePointerClickFocus : undefined}
           onClick={() => setFollowingNarration(!followingNarration)}
           size="sm"
           className={cn(pillStepButton, 'aria-pressed:bg-accent-wash aria-pressed:text-accent')}
@@ -37,11 +39,7 @@ export function ReaderFollowControls() {
   );
 }
 
-/**
- * The reader's position cluster: previous · position · next. The player dock
- * floats it above its top edge, so it stays beside playback without taking a
- * toolbar row from the reading surface.
- */
+/** Previous · position · next controls for the reader's player dock. */
 export function ReaderPager({
   unit,
   onPrevious,
@@ -65,6 +63,7 @@ export function ReaderPager({
     <div className="flex items-center gap-0.5">
       <Tooltip label={`Previous ${unit}`} shortcut={playbackShortcuts ? '⇧←' : undefined} side="top">
         <IconButton
+          onClickCapture={playbackShortcuts ? releasePointerClickFocus : undefined}
           onClick={onPrevious}
           disabled={!canPrevious}
           aria-label={`Previous ${unit}`}
@@ -78,6 +77,7 @@ export function ReaderPager({
       {position}
       <Tooltip label={`Next ${unit}`} shortcut={playbackShortcuts ? '⇧→' : undefined} side="top">
         <IconButton
+          onClickCapture={playbackShortcuts ? releasePointerClickFocus : undefined}
           onClick={onNext}
           disabled={!canNext}
           aria-label={`Next ${unit}`}
