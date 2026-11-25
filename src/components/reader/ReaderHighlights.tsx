@@ -92,9 +92,13 @@ export function ReaderHighlightsProvider({
   ), [highlights]);
   const covering = selection ? coveringOf(selection) : null;
 
+  // A selection that can't be taken yet (a save in flight, or saved
+  // highlights still loading) stays selected to try again.
   const apply = useCallback((target: ReaderSelection) => {
-    if (coveringOf(target)) unhighlightRange(target.start, target.end);
-    else highlightRange(target.start, target.end);
+    const accepted = coveringOf(target)
+      ? unhighlightRange(target.start, target.end)
+      : highlightRange(target.start, target.end);
+    if (!accepted) return;
     target.clear();
     setSelection(null);
   }, [coveringOf, highlightRange, unhighlightRange]);

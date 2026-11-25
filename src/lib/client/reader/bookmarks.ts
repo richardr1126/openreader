@@ -1,5 +1,4 @@
 import { isHighlight, type CreateDocumentBookmarkInput, type DocumentBookmark } from '@/types/bookmarks';
-import { resolveReadingPositionOrdinal } from '@/lib/shared/reading-position';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 export const BOOKMARK_SNIPPET_DISPLAY_LENGTH = 200;
@@ -62,23 +61,23 @@ export type ResolvedHighlight = {
 };
 
 /**
- * Place each highlight in the plan, resolving both ends the way reading
- * progress resolves, in reading order. A highlight whose ends no longer
- * resolve is left out rather than painted somewhere it was not.
+ * Place each highlight in the plan by the keys of its first and last
+ * sentence, in reading order. Unlike reading progress there is no nearest
+ * match: a highlight with an end the plan does not hold (re-planned, or not
+ * prepared yet) is left out rather than painted, or copied, short or
+ * somewhere it was not.
  */
 export function resolveHighlights(
   plan: readonly PlanSegment[],
   bookmarks: readonly DocumentBookmark[],
 ): ResolvedHighlight[] {
+  const ordinalOf = new Map(plan.map((segment) => [segment.key, segment.ordinal]));
   const resolved: ResolvedHighlight[] = [];
   for (const highlight of bookmarks) {
-    if (!isHighlight(highlight)) continue;
-    const start = resolveReadingPositionOrdinal(plan, highlight);
-    const end = resolveReadingPositionOrdinal(plan, {
-      segmentKey: highlight.endSegmentKey,
-      segmentOrdinal: highlight.endSegmentOrdinal ?? highlight.segmentOrdinal,
-    });
-    if (start === null || end === null) continue;
+    if (!isHighlight(highlight) || highlight.endSegmentKey === null) continue;
+    const start = ordinalOf.get(highlight.segmentKey);
+    const end = ordinalOf.get(highlight.endSegmentKey);
+    if (start === undefined || end === undefined) continue;
     resolved.push({ highlight, start: Math.min(start, end), end: Math.max(start, end) });
   }
   return resolved.sort((a, b) => a.start - b.start || a.end - b.end);

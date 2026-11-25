@@ -103,6 +103,41 @@ export function useDocumentBookmarks(documentId: string) {
     onSettled: settle,
   });
 
+  // One operation, so the rows a merge replaces are removed even if the reader
+  // closes before the new row is saved. The new row is saved first: a failed
+  // save leaves the originals as they were.
+  const merge = useMutation({
+    mutationFn: async ({ input, replaced }: { input: CreateDocumentBookmarkInput; replaced: string[] }) => {
+      const created = await createDocumentBookmark(documentId, input);
+      for (const id of replaced) await deleteDocumentBookmark(documentId, id);
+      return created;
+    },
+    onMutate: async ({ input, replaced }) => {
+      const previous = await snapshot();
+      const now = Date.now();
+      const optimistic: DocumentBookmark = {
+        ...input,
+        id: input.id ?? '',
+        documentId,
+        label: input.label ?? null,
+        endSegmentKey: input.endSegmentKey ?? null,
+        endSegmentOrdinal: input.endSegmentOrdinal ?? null,
+        createdAtMs: now,
+        updatedAtMs: now,
+      };
+      queryClient.setQueryData<DocumentBookmark[]>(key, (rows = []) => [
+        optimistic,
+        ...rows.filter((row) => !replaced.includes(row.id)),
+      ]);
+      return { previous };
+    },
+    onError: (error, input, context) => {
+      restore(error, input, context);
+      toast.error(errorMessage(error, 'Failed to save highlight'));
+    },
+    onSettled: settle,
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => deleteDocumentBookmark(documentId, id),
     onMutate: async (id) => {
@@ -127,9 +162,12 @@ export function useDocumentBookmarks(documentId: string) {
 
   const { mutate: createMutate } = create;
   const { mutate: removeMutate } = remove;
+  const { mutate: mergeMutate } = merge;
   // A toggle while the previous one is in flight would race its request
   // (a delete reaching the server before the create it undoes).
-  const toggleBusy = create.isPending || remove.isPending;
+  const toggleBusy = create.isPending || remove.isPending || merge.isPending;
+  // Until the saved rows have loaded, a range can't be merged with them.
+  const rangeBusy = toggleBusy || !query.isSuccess;
   const toggleCurrent = useCallback(() => {
     if (toggleBusy) return;
     if (currentBookmark) {
@@ -149,30 +187,27 @@ export function useDocumentBookmarks(documentId: string) {
 
   /**
    * Highlight the sentences from `from` through `to`. A range that overlaps
-   * existing highlights merges with them into one.
+   * existing highlights merges with them into one. False when it can't be
+   * taken yet, so the caller keeps the reader's selection.
    */
-  const highlightRange = useCallback((from: number, to: number) => {
-    if (toggleBusy) return;
-    const { start, end, absorbed: overlapping, label } = mergeHighlightRange(highlights, from, to);
+  const highlightRange = useCallback((from: number, to: number): boolean => {
+    if (rangeBusy) return false;
+    const { start, end, absorbed, label } = mergeHighlightRange(highlights, from, to);
     const startSegment = playbackSegments.find((segment) => segment.ordinal === start);
     const endSegment = playbackSegments.find((segment) => segment.ordinal === end);
-    if (!startSegment || !endSegment) return;
-    // The merged highlight is saved before the ones it replaces are removed,
-    // so a failed save leaves them as they were rather than losing them.
+    if (!startSegment || !endSegment) return false;
     const input = highlightInputForSegments({ start: startSegment, end: endSegment, id: crypto.randomUUID() });
-    createMutate(label ? { ...input, label } : input, {
-      onSuccess: () => {
-        for (const entry of overlapping) removeMutate(entry.highlight.id);
-      },
-    });
-  }, [createMutate, highlights, playbackSegments, removeMutate, toggleBusy]);
+    mergeMutate({ input: label ? { ...input, label } : input, replaced: absorbed.map((entry) => entry.highlight.id) });
+    return true;
+  }, [highlights, mergeMutate, playbackSegments, rangeBusy]);
 
-  /** Remove every highlight covering a sentence in `[from, to]`. */
-  const unhighlightRange = useCallback((from: number, to: number) => {
-    if (toggleBusy) return;
+  /** Remove every highlight covering a sentence in `[from, to]`. False when it can't be taken yet. */
+  const unhighlightRange = useCallback((from: number, to: number): boolean => {
+    if (rangeBusy) return false;
     const [low, high] = from <= to ? [from, to] : [to, from];
     for (const entry of highlightsOverlapping(highlights, low, high)) removeMutate(entry.highlight.id);
-  }, [highlights, removeMutate, toggleBusy]);
+    return true;
+  }, [highlights, rangeBusy, removeMutate]);
 
   return {
     bookmarks,

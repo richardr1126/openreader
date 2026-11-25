@@ -337,12 +337,13 @@ export function rangeForOrdinalsInUnit(
   if (tokens.length === 0) return null;
   const windows = candidateWindows(candidates, tokens.map((token) => token.text), language);
   const range = rangeForTokens(tokens, windows[first][0], windows[last][1]);
-  // Take in the closing punctuation the last word token leaves out.
+  // Take in the closing punctuation the last word token leaves out, stopping
+  // at the next word for scripts that don't space their sentences.
   const end = tokens[windows[last][1]];
   if (range && end) {
     const text = end.node.nodeValue ?? '';
     let offset = end.end;
-    while (offset < text.length && !/\s/u.test(text[offset])) offset += 1;
+    while (offset < text.length && !/[\s\p{L}\p{N}]/u.test(text[offset])) offset += 1;
     range.setEnd(end.node, offset);
   }
   return range;
@@ -413,6 +414,8 @@ export function resolveSelectionInUnits<Unit>(
   for (let index = 0; start === null && index < touched.length; index += 1) start = boundary(touched[index], 'start');
   let end: number | null = null;
   for (let index = touched.length - 1; end === null && index >= 0; index -= 1) end = boundary(touched[index], 'end');
-  if (start === null || end === null) return null;
-  return start <= end ? { start, end } : { start: end, end: start };
+  // Snapping inward can cross over: a selection of only the punctuation
+  // between two sentences takes in neither.
+  if (start === null || end === null || start > end) return null;
+  return { start, end };
 }
