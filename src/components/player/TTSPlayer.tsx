@@ -66,7 +66,7 @@ function PlaybackLoadingRing() {
 export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = true, hasReadableContent = true, documentTitle, onOpenVoicePanel, navigator }: {
   /** Opens the reader's voice panel; the reader page owns which sidebar is open. */
   onOpenVoicePanel: () => void;
-  /** Page or section navigation in the dock above the scrubber. */
+  /** Page or section navigation, placed in the dock beside the time. */
   navigator?: ReactNode;
   /** Shown by the OS media controls (lock screen, hardware keys). */
   documentTitle?: string;
@@ -194,21 +194,8 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
       statusMessage={shownModelDownload?.statusMessage}
     />
     <section aria-label="Playback controls" className="sticky bottom-0 z-30 w-full border-t border-line-soft bg-surface-solid shadow-[0_-10px_30px_color-mix(in_srgb,var(--background)_45%,transparent)] backdrop-blur-xs sm:shadow-none" data-app-ttsbar>
-      {navigator ? (
-        <div
-          role="group"
-          aria-label="Reading position"
-          className={cn(
-            'mx-auto my-1 flex h-7 w-fit items-center rounded-full border border-line-soft bg-surface-solid px-0.5 text-xs text-soft shadow-elev-2 transition-opacity duration-fast ease-standard',
-            // The scrub preview's time label takes this space while dragging.
-            previewSec !== null && 'pointer-events-none opacity-0',
-          )}
-        >
-          {navigator}
-          <ReaderFollowControls />
-        </div>
-      ) : null}
-      <div className="group/scrubber relative z-40 h-5 sm:h-2.5">
+      {/* Top Edge Scrubber bar */}
+      <div className="group/scrubber absolute -top-2.5 left-0 right-0 z-40 h-5 sm:top-[-5px] sm:h-2.5">
         {/* Rail: the whole document. Foreground-mixed so it stays visible in dark themes. */}
         <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--foreground)_16%,transparent)] transition-[height] duration-fast group-hover/scrubber:h-[4px] group-active/scrubber:h-[4px] sm:h-[2px]" />
 
@@ -295,6 +282,8 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
             aria-label="Undo scrub"
             className={cn(
               'absolute bottom-full right-3 mb-2 inline-flex items-center gap-1 rounded-full border border-line-soft bg-surface-solid px-2.5 py-0.5 text-[11px] font-medium text-foreground shadow-elev-2 hover:border-accent-line hover:text-accent',
+              // The chip floats over the page, so its hover wash is mixed into the surface;
+              // the translucent accent-wash would let a light page show through.
               'hover:bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface-solid))]',
               focusRing,
               motionColors,
@@ -372,13 +361,24 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           </Tooltip>
         </div>
 
-        {/* Right side: timer and buffer display */}
-        <div className="contents sm:flex sm:flex-1 sm:items-center sm:justify-end sm:gap-3">
+        {/* Right side: reading position, timer and buffer display. On narrow
+            screens the position sits in the first row, above the transport. */}
+        <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:items-center sm:justify-end sm:gap-3">
+          {navigator ? (
+            <div
+              role="group"
+              aria-label="Reading position"
+              className="col-start-2 row-start-1 flex h-6 items-center justify-self-center text-xs text-soft"
+            >
+              {navigator}
+              <ReaderFollowControls />
+            </div>
+          ) : null}
           {/* Announces state changes made from shortcuts; the visible line owns the detail. */}
           <span role="status" className="sr-only">
             {hasReadableContent ? (playbackControl.isPending ? 'Loading' : playbackPhase === 'playing' && isPlaying ? 'Playing' : 'Paused') : null}
           </span>
-          <div className="col-span-2 col-start-1 row-start-1 justify-self-start whitespace-nowrap font-mono text-[11px] tabular-nums text-soft select-none">
+          <div className="col-start-1 row-start-1 justify-self-start whitespace-nowrap font-mono text-[11px] tabular-nums text-soft select-none">
             {hasReadableContent
               ? `${formatPlaybackTime(shownSec)} / ${durationLabel}`
               : 'No readable text'}
