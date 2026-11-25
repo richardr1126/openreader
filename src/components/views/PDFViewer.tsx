@@ -2,7 +2,7 @@
 
 import { RefObject, useCallback, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Document, Page } from 'react-pdf';
-import type { Dest } from 'react-pdf/src/shared/types.js';
+import type { Dest, OnPageLoadSuccess } from 'react-pdf/src/shared/types.js';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
@@ -53,7 +53,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollPageRefs = useRef(new Map<number, HTMLDivElement>());
   const scrollSyncedPageRef = useRef<number | null>(null);
-  const programmaticScrollPageRef = useRef<number | null>(null);
+  const commandedScrollTopRef = useRef<number | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   const [isPageRendering, setIsPageRendering] = useState(false);
   const [textLayerReadyLayoutKey, setTextLayerReadyLayoutKey] = useState('');
@@ -71,6 +71,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const {
     browseToLocation,
     followingNarration,
+    followingNarrationRef,
     setFollowingNarration,
     readerNavigationRevision,
     resolvedLanguage,
@@ -141,6 +142,10 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     };
   }, [renderedPagePart, currentSentenceAlignment, segmentWordSpans]);
 
+  const pageWordIndex = (currentWordIndex ?? -1) - (renderedPageWords?.first ?? 0);
+  const hasSpokenWord = Boolean(renderedPageWords?.alignment.words[pageWordIndex]?.text);
+  const followSpokenWord = followingNarration && hasSpokenWord;
+
   useLayoutEffect(() => {
     if (!followingNarration || spokenPage === null || spokenPage === currDocPage) return;
     const locator = currentSegment?.ownerLocator;
@@ -183,32 +188,6 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     }
   }, [currDocId, currDocData]);
 
-  const [pageWidth, setPageWidth] = useState<number>(595); // default A4 width
-  const [pageHeight, setPageHeight] = useState<number>(842); // default A4 height
-
-  const calculateScale = useCallback((width = pageWidth, height = pageHeight): number => {
-    const margin = viewType === 'dual' ? 48 : 24;
-    const effectiveContainerWidth = containerWidth || width + margin;
-    const effectiveContainerHeight = containerHeight || window.innerHeight;
-    const targetWidth = viewType === 'dual'
-      ? (effectiveContainerWidth - margin) / 2
-      : effectiveContainerWidth - margin;
-    const targetHeight = effectiveContainerHeight - margin;
-    const scaleByWidth = Math.max(0.1, targetWidth / width);
-
-    if (viewType === 'scroll') {
-      return scaleByWidth * 0.75 * (zoomLevel / 100);
-    }
-
-    const scaleByHeight = Math.max(0.1, targetHeight / height);
-    return Math.min(scaleByWidth, scaleByHeight) * (zoomLevel / 100);
-  }, [containerWidth, containerHeight, zoomLevel, pageWidth, pageHeight, viewType]);
-
-  // Sub-percent changes keep the rendered scale so the canvas does not repaint.
-  const nextScale = calculateScale();
-  const [renderScale, setRenderScale] = useState(nextScale);
-  if (Math.abs(nextScale - renderScale) > 0.01) setRenderScale(nextScale);
-
   // Calculate which pages to show based on viewType
   const leftPage = viewType === 'dual'
     ? (currDocPage % 2 === 0 ? currDocPage - 1 : currDocPage)
@@ -216,6 +195,48 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   const rightPage = viewType === 'dual'
     ? (currDocPage % 2 === 0 ? currDocPage : currDocPage + 1)
     : null;
+
+  const parsedPageByNumber = useMemo(() => {
+    const map = new Map<number, ParsedPdfPage>();
+    for (const page of parsedDocument?.pages ?? []) map.set(page.pageNumber, page);
+    return map;
+  }, [parsedDocument]);
+  const [fallbackSize, setFallbackSize] = useState({ width: 595, height: 842 });
+  const handlePageLoadSuccess = useCallback<OnPageLoadSuccess>((page) => {
+    if (!parsedPageByNumber.has(page.pageNumber)) {
+      const { width, height } = page.getViewport({ scale: 1 });
+      setFallbackSize({ width, height });
+    }
+  }, [parsedPageByNumber]);
+
+  // A spread fits as a unit. Keep the same scale when narration moves from
+  // one page to the other, even if the pages have different dimensions.
+  const leftSize = parsedPageByNumber.get(viewType === 'scroll' ? 1 : leftPage);
+  const rightSize = rightPage !== null && rightPage <= (currDocPages ?? 0)
+    ? parsedPageByNumber.get(rightPage)
+    : null;
+  const leftWidth = leftSize?.width || fallbackSize.width;
+  const width = viewType === 'dual' ? leftWidth + (rightSize?.width || leftWidth) : leftWidth;
+  const height = Math.max(leftSize?.height || fallbackSize.height, rightSize?.height ?? 0);
+  const margin = viewType === 'dual' ? 48 : 24;
+  const fitWidth = Math.max(0.1, ((containerWidth || width + margin) - margin) / width);
+  const fitHeight = Math.max(0.1, ((containerHeight || window.innerHeight) - margin) / height);
+  const nextScale = (viewType === 'scroll' ? fitWidth * 0.75 : Math.min(fitWidth, fitHeight)) * zoomLevel / 100;
+
+  // Sub-percent changes keep the rendered scale so the canvas does not repaint.
+  const [renderScale, setRenderScale] = useState(nextScale);
+  if (Math.abs(nextScale - renderScale) > 0.01) setRenderScale(nextScale);
+
+  function pageSlotSize(pageNumber: number) {
+    const page = parsedPageByNumber.get(pageNumber);
+    if (!page || page.width <= 0 || page.height <= 0) return undefined;
+    // Reserve the canvas footprint before either page renders. In a spread,
+    // the right page must keep its position when the left canvas arrives.
+    return {
+      minWidth: Math.floor(page.width * renderScale),
+      minHeight: Math.floor(page.height * renderScale),
+    };
+  }
 
   // Renderer readiness follows the props that can actually make React-PDF
   // repaint. Raw container dimensions are deliberately excluded: if they
@@ -269,22 +290,20 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     commitSurfacePart(surfaceKey, 'canvas');
   }, [canvasLayoutKey, commitSurfacePart, surfaceKey]);
 
-  // Keep these callbacks stable. React-PDF includes them in the canvas/text
-  // render effects, so allocating a new callback during the state update below
-  // causes the layer to render again and can form an infinite callback loop.
+  // Associate completion with the layout that started the render. An older
+  // canvas or text layer can finish while a new spread or zoom is rendering.
   const handlePageRenderSuccess = useCallback(() => {
-    lastRenderedCanvasLayoutKeyRef.current = activeCanvasLayoutKeyRef.current;
+    if (canvasLayoutKey !== activeCanvasLayoutKeyRef.current) return;
+    lastRenderedCanvasLayoutKeyRef.current = canvasLayoutKey;
     setIsPageRendering(false);
     commitSurfacePart(activeSurfaceKeyRef.current, 'canvas');
-  }, [activeCanvasLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart]);
+  }, [activeCanvasLayoutKeyRef, activeSurfaceKeyRef, canvasLayoutKey, commitSurfacePart]);
 
   const handleTextLayerRenderSuccess = useCallback(() => {
-    const readyLayoutKey = activeLayoutKeyRef.current;
-    setTextLayerReadyLayoutKey((currentKey) => (
-      currentKey === readyLayoutKey ? currentKey : readyLayoutKey
-    ));
+    if (layoutKey !== activeLayoutKeyRef.current) return;
+    setTextLayerReadyLayoutKey(layoutKey);
     commitSurfacePart(activeSurfaceKeyRef.current, 'text');
-  }, [activeLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart]);
+  }, [activeLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart, layoutKey]);
 
   useEffect(() => {
     committedSurfacePartsRef.current.clear();
@@ -368,11 +387,12 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
         containerRef as RefObject<HTMLDivElement>,
         {
           parsedDocument,
-          locator: activeLocator,
+          locator: { ...activeLocator, page: renderedPagePart.page },
           paintSegment: pdfHighlightEnabled,
           useBlockGeometryOnly,
           language: resolvedLanguage,
-          follow: followingNarration,
+          follow: followingNarrationRef.current,
+          preferWord: followSpokenWord,
         },
       );
       if (seq !== sentenceHighlightSeqRef.current) return;
@@ -394,6 +414,8 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     activeSurfaceKeyRef,
     currDocText,
     followingNarration,
+    followingNarrationRef,
+    followSpokenWord,
     readerNavigationRevision,
     currDocPage,
     currentSentence,
@@ -415,25 +437,12 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     reportSurfaceCommitError,
   ]);
 
-  // Word highlighting uses the prepared segment mapping independently of its background.
+  // The timed word owns following when available, including with segment-only paint.
   useEffect(() => {
     clearWordHighlightTimeouts();
 
-    if (!pdfWordHighlightEnabled || !renderedPagePart || !renderedPageWords) {
-      clearWordHighlights();
-      return;
-    }
-
-    if (currentWordIndex === null || currentWordIndex === undefined || currentWordIndex < 0) {
-      clearWordHighlights();
-      return;
-    }
-
-    const pageWordIndex = currentWordIndex - renderedPageWords.first;
-    const wordEntry = renderedPageWords.alignment.words[pageWordIndex];
-    const wordText = wordEntry?.text || null;
-
-    if (!wordText) {
+    if ((!pdfWordHighlightEnabled && !(pdfHighlightEnabled && followSpokenWord))
+      || !renderedPagePart || !renderedPageWords || !hasSpokenWord) {
       clearWordHighlights();
       return;
     }
@@ -455,10 +464,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
         renderedPageWords.alignment,
         pageWordIndex,
         renderedPagePart.text,
-        containerRef as RefObject<HTMLDivElement>
+        containerRef as RefObject<HTMLDivElement>,
+        { follow: followingNarrationRef.current && followSpokenWord, paintWord: pdfWordHighlightEnabled },
       );
 
-      if (isLayoutChange) {
+      if (isLayoutChange && pdfWordHighlightEnabled) {
         // If we don't see a word overlay yet, the sentence highlight worker may not
         // have produced `lastSentenceTokenWindow` (or the text layer isn't ready).
         const overlayCount = container.querySelectorAll('.pdf-word-highlight-overlay').length;
@@ -478,7 +488,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     tryApplyWord(0);
     return cleanup;
   }, [
-    currentWordIndex,
+    pageWordIndex,
+    hasSpokenWord,
+    followSpokenWord,
+    followingNarrationRef,
+    readerNavigationRevision,
     renderedPagePart,
     renderedPageWords,
     pdfHighlightEnabled,
@@ -492,14 +506,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     isPageRendering
   ]);
 
-  // React-PDF can resize the active page again when its text layer commits.
-  // Keep commanded navigation authoritative through that reflow, then let
-  // ordinary scroll events resume synchronizing the visible page to playback.
+  // Page slots are sized before React-PDF paints. Place a commanded page
+  // once so subsequent text-layer updates don't overwrite narration scroll.
   useLayoutEffect(() => {
-    if (viewType !== 'scroll') {
-      programmaticScrollPageRef.current = null;
-      return;
-    }
+    commandedScrollTopRef.current = null;
+    if (viewType !== 'scroll') return;
     if (scrollSyncedPageRef.current === currDocPage) {
       scrollSyncedPageRef.current = null;
       return;
@@ -509,47 +520,18 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     const page = scrollPageRefs.current.get(currDocPage);
     if (!container || !page) return;
 
-    programmaticScrollPageRef.current = currDocPage;
-    let frame: number | null = null;
-    let remainingAttempts = 300;
-    const alignRequestedPage = () => {
-      if (programmaticScrollPageRef.current !== currDocPage) return;
+    if (scrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(scrollFrameRef.current);
+      scrollFrameRef.current = null;
+    }
 
-      const containerRect = container.getBoundingClientRect();
-      const pageRect = page.getBoundingClientRect();
-      container.scrollTo({
-        top: container.scrollTop + pageRect.top - containerRect.top,
-        behavior: 'auto',
-      });
-
-      const alignedPageRect = page.getBoundingClientRect();
-      const overlap = Math.max(
-        0,
-        Math.min(containerRect.bottom, alignedPageRect.bottom)
-          - Math.max(containerRect.top, alignedPageRect.top),
-      );
-      if (
-        alignedPageRect.height > 0
-        && overlap > 0
-        && textLayerReadyLayoutKey === layoutKey
-      ) {
-        programmaticScrollPageRef.current = null;
-        return;
-      }
-
-      remainingAttempts -= 1;
-      if (remainingAttempts > 0) {
-        frame = window.requestAnimationFrame(alignRequestedPage);
-      } else {
-        programmaticScrollPageRef.current = null;
-      }
-    };
-
-    alignRequestedPage();
-    return () => {
-      if (frame !== null) window.cancelAnimationFrame(frame);
-    };
-  }, [currDocPage, layoutKey, textLayerReadyLayoutKey, viewType]);
+    const previousTop = container.scrollTop;
+    container.scrollTo({
+      top: previousTop + page.getBoundingClientRect().top - container.getBoundingClientRect().top,
+      behavior: 'instant',
+    });
+    if (container.scrollTop !== previousTop) commandedScrollTopRef.current = container.scrollTop;
+  }, [currDocPage, currDocPages, viewType]);
 
   useEffect(() => () => {
     if (scrollFrameRef.current !== null) {
@@ -558,12 +540,16 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
   }, []);
 
   const handleScroll = useCallback(() => {
-    if (viewType !== 'scroll' || followingNarration || scrollFrameRef.current !== null) return;
+    const commandedTop = commandedScrollTopRef.current;
+    commandedScrollTopRef.current = null;
+    // A short final page can be less visible than its neighbor after a page
+    // command because the container clamps the scroll at the document end.
+    if (commandedTop === containerRef.current?.scrollTop) return;
+    if (viewType !== 'scroll' || followingNarrationRef.current || scrollFrameRef.current !== null) return;
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null;
-      if (programmaticScrollPageRef.current !== null) return;
       const container = containerRef.current;
-      if (!container) return;
+      if (!container || followingNarrationRef.current) return;
 
       const containerRect = container.getBoundingClientRect();
       let visiblePage = currDocPage;
@@ -585,15 +571,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       scrollSyncedPageRef.current = visiblePage;
       browseToLocation(visiblePage);
     });
-  }, [currDocPage, browseToLocation, followingNarration, viewType]);
-
-  const parsedPageByNumber = useMemo(() => {
-    const map = new Map<number, ParsedPdfPage>();
-    for (const page of parsedDocument?.pages ?? []) {
-      map.set(page.pageNumber, page);
-    }
-    return map;
-  }, [parsedDocument]);
+  }, [currDocPage, browseToLocation, followingNarrationRef, viewType]);
 
   const parsedOverlayByPage = useMemo(() => {
     const map = new Map<number, Array<{
@@ -737,7 +715,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
       onScroll={handleScroll}
       onWheel={() => setFollowingNarration(false)}
       onTouchMove={() => setFollowingNarration(false)}
-      className="flex flex-col items-center overflow-auto w-full px-6 h-full pdf-viewer"
+      className="flex flex-col items-center-safe overflow-auto w-full px-6 h-full pdf-viewer"
     >
       <Document
         key={currDocId || 'pdf'}
@@ -776,6 +754,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                   role="region"
                   aria-label={`PDF page ${i + 1}`}
                   className="relative"
+                  style={pageSlotSize(i + 1)}
                 >
                   <Page
                     key={`page_${i + 1}`}
@@ -788,10 +767,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                     onRenderError={reportSurfaceCommitError}
                     onRenderTextLayerSuccess={i + 1 === currDocPage ? handleTextLayerRenderSuccess : undefined}
                     onRenderTextLayerError={reportSurfaceCommitError}
-                    onLoadSuccess={(page) => {
-                      setPageWidth(page.originalWidth);
-                      setPageHeight(page.originalHeight);
-                    }}
+                    onLoadSuccess={handlePageLoadSuccess}
                   />
                   {renderParsedOverlay(i + 1)}
                 </div>
@@ -799,9 +775,9 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
             </div>
           ) : (
             // Single/Dual page mode
-            <div className="flex justify-center gap-4">
+            <div key={viewType} className="flex justify-center gap-4">
               {currDocPages && leftPage > 0 && (
-                <div role="region" aria-label={`PDF page ${leftPage}`} className="relative">
+                <div role="region" aria-label={`PDF page ${leftPage}`} className="relative" style={pageSlotSize(leftPage)}>
                   <Page
                     key={`page_${leftPage}`}
                     pageNumber={leftPage}
@@ -813,16 +789,13 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                     onRenderError={reportSurfaceCommitError}
                     onRenderTextLayerSuccess={leftPage === currDocPage ? handleTextLayerRenderSuccess : undefined}
                     onRenderTextLayerError={reportSurfaceCommitError}
-                    onLoadSuccess={(page) => {
-                      setPageWidth(page.originalWidth);
-                      setPageHeight(page.originalHeight);
-                    }}
+                    onLoadSuccess={handlePageLoadSuccess}
                   />
                   {renderParsedOverlay(leftPage)}
                 </div>
               )}
               {currDocPages && rightPage && rightPage <= currDocPages && viewType === 'dual' && (
-                <div role="region" aria-label={`PDF page ${rightPage}`} className="relative">
+                <div role="region" aria-label={`PDF page ${rightPage}`} className="relative" style={pageSlotSize(rightPage)}>
                   <Page
                     key={`page_${rightPage}`}
                     pageNumber={rightPage}
@@ -834,10 +807,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
                     onRenderError={reportSurfaceCommitError}
                     onRenderTextLayerSuccess={rightPage === currDocPage ? handleTextLayerRenderSuccess : undefined}
                     onRenderTextLayerError={reportSurfaceCommitError}
-                    onLoadSuccess={(page) => {
-                      setPageWidth(page.originalWidth);
-                      setPageHeight(page.originalHeight);
-                    }}
+                    onLoadSuccess={handlePageLoadSuccess}
                   />
                   {renderParsedOverlay(rightPage)}
                 </div>
