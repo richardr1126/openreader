@@ -18,6 +18,7 @@ import { useFeatureFlag } from '@/contexts/RuntimeConfigContext';
 import { mergeDocumentSettings } from '@/lib/shared/document-settings';
 import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
 import { useHtmlDocument } from './useHtmlDocument';
+import { ReaderHighlightsProvider } from '@/components/reader/ReaderHighlights';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import { ReadingProgress } from '@/components/reader/ReaderNavigator';
@@ -105,7 +106,7 @@ function HtmlReader({
   }, [rendererReady, activeSidebar]);
 
   return (
-    <>
+    <ReaderHighlightsProvider documentId={routeDocumentId} enabled={rendererReady}>
       <ReaderHeaderActions target={headerActions}>
         {rendererReady ? (
           <div className="flex items-center gap-3">
@@ -120,6 +121,7 @@ function HtmlReader({
                 onToggleContents: () => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents'),
                 sentenceBookmark,
                 onViewBookmarks: () => setActiveSidebar('bookmarks'),
+                onViewHighlights: () => setActiveSidebar('highlights'),
                 zoom: {
                   value: padPct,
                   onIncrease: () => setPadPct(p => Math.min(p + 10, 100)),
@@ -189,6 +191,6 @@ function HtmlReader({
           });
         }}
       />
-    </>
+    </ReaderHighlightsProvider>
   );
 }

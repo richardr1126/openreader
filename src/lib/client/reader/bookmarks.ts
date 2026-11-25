@@ -1,4 +1,5 @@
-import type { CreateDocumentBookmarkInput, DocumentBookmark } from '@/types/bookmarks';
+import { isHighlight, type CreateDocumentBookmarkInput, type DocumentBookmark } from '@/types/bookmarks';
+import { resolveReadingPositionOrdinal } from '@/lib/shared/reading-position';
 import type { CanonicalTtsSegment } from '@openreader/tts/segment-plan';
 
 export const BOOKMARK_SNIPPET_DISPLAY_LENGTH = 200;
@@ -23,13 +24,96 @@ export function bookmarkInputForSegment(input: {
   };
 }
 
-/** The bookmark on this plan sentence, matched by content key. */
+/** The bookmark (never a highlight) on this plan sentence, matched by content key. */
 export function findBookmarkForSegment(
   bookmarks: readonly DocumentBookmark[],
   segment: Pick<CanonicalTtsSegment, 'key'> | null | undefined,
 ): DocumentBookmark | null {
   if (!segment) return null;
-  return bookmarks.find((bookmark) => bookmark.segmentKey === segment.key) ?? null;
+  return bookmarks.find((bookmark) => !isHighlight(bookmark) && bookmark.segmentKey === segment.key) ?? null;
+}
+
+type PlanSegment = Pick<CanonicalTtsSegment, 'key' | 'ordinal' | 'text'>;
+
+/** The create body for highlighting the sentences from `start` through `end`. */
+export function highlightInputForSegments(input: {
+  start: CanonicalTtsSegment;
+  end: CanonicalTtsSegment;
+  id: string;
+}): CreateDocumentBookmarkInput {
+  const [start, end] = input.start.ordinal <= input.end.ordinal
+    ? [input.start, input.end]
+    : [input.end, input.start];
+  return {
+    id: input.id,
+    segmentKey: start.key,
+    segmentOrdinal: start.ordinal,
+    endSegmentKey: end.key,
+    endSegmentOrdinal: end.ordinal,
+    snippet: truncateBookmarkSnippet(start.text),
+  };
+}
+
+/** A highlight placed in the current plan: its first and last sentence ordinals. */
+export type ResolvedHighlight = {
+  highlight: DocumentBookmark;
+  start: number;
+  end: number;
+};
+
+/**
+ * Place each highlight in the plan, resolving both ends the way reading
+ * progress resolves, in reading order. A highlight whose ends no longer
+ * resolve is left out rather than painted somewhere it was not.
+ */
+export function resolveHighlights(
+  plan: readonly PlanSegment[],
+  bookmarks: readonly DocumentBookmark[],
+): ResolvedHighlight[] {
+  const resolved: ResolvedHighlight[] = [];
+  for (const highlight of bookmarks) {
+    if (!isHighlight(highlight)) continue;
+    const start = resolveReadingPositionOrdinal(plan, highlight);
+    const end = resolveReadingPositionOrdinal(plan, {
+      segmentKey: highlight.endSegmentKey,
+      segmentOrdinal: highlight.endSegmentOrdinal ?? highlight.segmentOrdinal,
+    });
+    if (start === null || end === null) continue;
+    resolved.push({ highlight, start: Math.min(start, end), end: Math.max(start, end) });
+  }
+  return resolved.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+/** The highlights covering any sentence in `[from, to]`. */
+export function highlightsOverlapping(
+  highlights: readonly ResolvedHighlight[],
+  from: number,
+  to: number,
+): ResolvedHighlight[] {
+  return highlights.filter((entry) => entry.start <= to && entry.end >= from);
+}
+
+/** The full text of a highlight's sentences, joined as they are read. */
+export function highlightText(plan: readonly PlanSegment[], entry: Pick<ResolvedHighlight, 'start' | 'end'>): string {
+  return plan
+    .filter((segment) => segment.ordinal >= entry.start && segment.ordinal <= entry.end)
+    .map((segment) => segment.text.replace(/\s+/gu, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** Every highlight as a Markdown quote, in reading order, under the document title. */
+export function highlightsToMarkdown(
+  title: string,
+  plan: readonly PlanSegment[],
+  highlights: readonly ResolvedHighlight[],
+): string {
+  const blocks = highlights.map((entry) => {
+    const quote = `> ${highlightText(plan, entry)}`;
+    const label = entry.highlight.label?.trim();
+    return label ? `${quote}\n\n${label}` : quote;
+  });
+  return [`# ${title.trim() || 'Highlights'}`, ...blocks].join('\n\n') + '\n';
 }
 
 const RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [

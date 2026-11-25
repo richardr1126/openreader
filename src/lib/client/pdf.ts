@@ -342,6 +342,21 @@ function collectSpanNodesForParsedBlock(
   return collected.length > 0 ? collected : null;
 }
 
+/** The text-layer spans rendering one parsed block, keyed `pdf:<page>:<blockId>`. */
+export function pdfBlockSpans(
+  container: HTMLElement,
+  parsedDocument: ParsedPdfDocument,
+  sourceKey: string,
+): HTMLElement[] | null {
+  const match = /^pdf:(\d+):(.+)$/u.exec(sourceKey);
+  if (!match) return null;
+  return collectSpanNodesForParsedBlock(container, parsedDocument, {
+    readerType: 'pdf',
+    page: Number(match[1]),
+    blockId: match[2],
+  });
+}
+
 /**
  * The parsed block under a viewport point, with the text-layer spans that
  * render it. Blocks are plan source units keyed `pdf:<page>:<blockId>`, so

@@ -13,6 +13,8 @@ export type BookmarkRow = {
   documentId: string;
   segmentKey: string;
   segmentOrdinal: number;
+  endSegmentKey: string | null;
+  endSegmentOrdinal: number | null;
   label: string | null;
   snippet: string;
   createdAt: number | null;
@@ -25,6 +27,8 @@ export const bookmarkSelection = {
   documentId: userDocumentBookmarks.documentId,
   segmentKey: userDocumentBookmarks.segmentKey,
   segmentOrdinal: userDocumentBookmarks.segmentOrdinal,
+  endSegmentKey: userDocumentBookmarks.endSegmentKey,
+  endSegmentOrdinal: userDocumentBookmarks.endSegmentOrdinal,
   label: userDocumentBookmarks.label,
   snippet: userDocumentBookmarks.snippet,
   createdAt: userDocumentBookmarks.createdAt,
@@ -35,6 +39,8 @@ export type ParsedBookmarkCreate = {
   id: string | null;
   segmentKey: string;
   segmentOrdinal: number;
+  endSegmentKey: string | null;
+  endSegmentOrdinal: number | null;
   label: string | null;
   snippet: string;
 };
@@ -75,6 +81,16 @@ export function parseBookmarkCreateBody(body: unknown): ParseResult<ParsedBookma
   const position = parseReadingPositionInput(record);
   if (!position) return { ok: false, error: 'Invalid segment position' };
 
+  // A highlight names its last sentence too, at or after its first.
+  let end: { endSegmentKey: string | null; endSegmentOrdinal: number | null } = { endSegmentKey: null, endSegmentOrdinal: null };
+  if (record.endSegmentKey !== undefined || record.endSegmentOrdinal !== undefined) {
+    const endPosition = parseReadingPositionInput({ segmentKey: record.endSegmentKey, segmentOrdinal: record.endSegmentOrdinal });
+    if (!endPosition || endPosition.segmentOrdinal < position.segmentOrdinal) {
+      return { ok: false, error: 'Invalid highlight end' };
+    }
+    end = { endSegmentKey: endPosition.segmentKey, endSegmentOrdinal: endPosition.segmentOrdinal };
+  }
+
   const label = normalizeBookmarkLabel(record.label);
   if (label === false) return { ok: false, error: 'Invalid label' };
 
@@ -83,7 +99,7 @@ export function parseBookmarkCreateBody(body: unknown): ParseResult<ParsedBookma
 
   return {
     ok: true,
-    value: { id, ...position, label: label ?? null, snippet },
+    value: { id, ...position, ...end, label: label ?? null, snippet },
   };
 }
 
@@ -94,6 +110,8 @@ export function toDocumentBookmark(row: BookmarkRow): DocumentBookmark {
     documentId: row.documentId,
     segmentKey: row.segmentKey,
     segmentOrdinal: Number(row.segmentOrdinal),
+    endSegmentKey: row.endSegmentOrdinal === null ? null : row.endSegmentKey,
+    endSegmentOrdinal: row.endSegmentOrdinal === null ? null : Number(row.endSegmentOrdinal),
     label: row.label ?? null,
     snippet: row.snippet ?? '',
     createdAtMs: Number(row.createdAt ?? 0),

@@ -12,17 +12,28 @@ import {
   renameDocumentBookmark,
 } from '@/lib/client/api/bookmarks';
 import { queryKeys } from '@/lib/client/query-keys';
-import { bookmarkInputForSegment, findBookmarkForSegment } from '@/lib/client/reader/bookmarks';
-import type { CreateDocumentBookmarkInput, DocumentBookmark } from '@/types/bookmarks';
+import {
+  bookmarkInputForSegment,
+  findBookmarkForSegment,
+  highlightInputForSegments,
+  highlightsOverlapping,
+  resolveHighlights,
+} from '@/lib/client/reader/bookmarks';
+import { isHighlight, type CreateDocumentBookmarkInput, type DocumentBookmark } from '@/types/bookmarks';
+
+function isHighlightInput(input: CreateDocumentBookmarkInput): boolean {
+  return input.endSegmentOrdinal !== undefined;
+}
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
 /**
- * The document's bookmarks (newest first) and the bookmark on the current
- * playback sentence. Mutations update the list optimistically and roll back
- * on failure; every reader and the bookmarks panel share one cache entry.
+ * The document's bookmarks (newest first), its highlights (in reading order)
+ * and the bookmark on the current playback sentence. Both live in one cache
+ * entry that every reader and panel share; mutations update it optimistically
+ * and roll back on failure.
  */
 export function useDocumentBookmarks(documentId: string) {
   const { data: session, isPending } = useAuthSession();
@@ -36,7 +47,9 @@ export function useDocumentBookmarks(documentId: string) {
     queryFn: ({ signal }) => listDocumentBookmarks(documentId, { signal }),
     enabled: !isPending && Boolean(documentId),
   });
-  const bookmarks = useMemo(() => query.data ?? [], [query.data]);
+  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const bookmarks = useMemo(() => rows.filter((row) => !isHighlight(row)), [rows]);
+  const highlights = useMemo(() => resolveHighlights(playbackSegments, rows), [playbackSegments, rows]);
 
   const snapshot = useCallback(async () => {
     await queryClient.cancelQueries({ queryKey: key });
@@ -57,6 +70,8 @@ export function useDocumentBookmarks(documentId: string) {
         id: input.id ?? '',
         documentId,
         label: input.label ?? null,
+        endSegmentKey: input.endSegmentKey ?? null,
+        endSegmentOrdinal: input.endSegmentOrdinal ?? null,
         createdAtMs: now,
         updatedAtMs: now,
       };
@@ -65,7 +80,7 @@ export function useDocumentBookmarks(documentId: string) {
     },
     onError: (error, input, context) => {
       restore(error, input, context);
-      toast.error(errorMessage(error, 'Failed to add bookmark'));
+      toast.error(errorMessage(error, isHighlightInput(input) ? 'Failed to add highlight' : 'Failed to add bookmark'));
     },
     onSettled: settle,
   });
@@ -96,7 +111,7 @@ export function useDocumentBookmarks(documentId: string) {
     },
     onError: (error, id, context) => {
       restore(error, id, context);
-      toast.error(errorMessage(error, 'Failed to delete bookmark'));
+      toast.error(errorMessage(error, 'Failed to delete'));
     },
     onSettled: settle,
   });
@@ -131,8 +146,35 @@ export function useDocumentBookmarks(documentId: string) {
     onToggle: toggleCurrent,
   }), [currentSegment, isCurrentBookmarked, toggleCurrent]);
 
+  /**
+   * Highlight the sentences from `from` through `to`. A range that overlaps
+   * existing highlights merges with them into one.
+   */
+  const highlightRange = useCallback((from: number, to: number) => {
+    if (toggleBusy) return;
+    const [low, high] = from <= to ? [from, to] : [to, from];
+    const overlapping = highlightsOverlapping(highlights, low, high);
+    const start = Math.min(low, ...overlapping.map((entry) => entry.start));
+    const end = Math.max(high, ...overlapping.map((entry) => entry.end));
+    const startSegment = playbackSegments.find((segment) => segment.ordinal === start);
+    const endSegment = playbackSegments.find((segment) => segment.ordinal === end);
+    if (!startSegment || !endSegment) return;
+    for (const entry of overlapping) removeMutate(entry.highlight.id);
+    createMutate(highlightInputForSegments({ start: startSegment, end: endSegment, id: crypto.randomUUID() }));
+  }, [createMutate, highlights, playbackSegments, removeMutate, toggleBusy]);
+
+  /** Remove every highlight covering a sentence in `[from, to]`. */
+  const unhighlightRange = useCallback((from: number, to: number) => {
+    if (toggleBusy) return;
+    const [low, high] = from <= to ? [from, to] : [to, from];
+    for (const entry of highlightsOverlapping(highlights, low, high)) removeMutate(entry.highlight.id);
+  }, [highlights, removeMutate, toggleBusy]);
+
   return {
     bookmarks,
+    highlights,
+    highlightRange,
+    unhighlightRange,
     isLoading: isPending || query.isPending,
     isError: query.isError,
     /** The header toggle for the current playback sentence. */

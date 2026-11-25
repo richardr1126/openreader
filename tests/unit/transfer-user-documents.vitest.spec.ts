@@ -40,6 +40,8 @@ describe('transferUserDocuments', () => {
         document_id TEXT NOT NULL,
         segment_key TEXT NOT NULL,
         segment_ordinal INTEGER NOT NULL,
+        end_segment_key TEXT,
+        end_segment_ordinal INTEGER,
         label TEXT,
         snippet TEXT NOT NULL DEFAULT '',
         created_at INTEGER NOT NULL DEFAULT 0,

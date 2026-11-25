@@ -11,9 +11,10 @@ description: Keys for playback, navigation, and selecting documents.
 | ← / → | Skip back or forward one sentence |
 | Shift+← / Shift+→ | Previous or next page (PDF) or section |
 | `<` / `>` | Slower or faster playback |
+| H | Highlight the selected text, or the sentence being read |
 | Esc | Close the open side panel |
 
-The playback keys work while the reader has focus, including inside an EPUB. They are ignored while you type in a field or use a menu, slider or dialog. Turn them off with **Keyboard shortcuts** in **Settings → Customize**.
+The reader keys work while the reader has focus, including inside an EPUB. They are ignored while you type in a field or use a menu, slider or dialog. Turn them off with **Keyboard shortcuts** in **Settings → Customize**.
 
 ## Library
 

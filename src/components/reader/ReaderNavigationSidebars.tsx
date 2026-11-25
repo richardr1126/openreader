@@ -1,14 +1,14 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import toast from 'react-hot-toast';
 import { useTTS } from '@/contexts/TTSContext';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import { ReaderSidebarShell } from '@/components/reader/ReaderSidebarShell';
-import { IconButton, Input, SearchField } from '@/components/ui';
+import { Button, IconButton, Input, SearchField } from '@/components/ui';
 import { PencilIcon, SearchIcon } from '@/components/icons/Icons';
 import { TrashIcon } from '@/components/doclist/window/finderIcons';
-import { formatBookmarkAge } from '@/lib/client/reader/bookmarks';
+import { formatBookmarkAge, highlightText, highlightsToMarkdown } from '@/lib/client/reader/bookmarks';
 import { resolveReadingPositionOrdinal } from '@/lib/shared/reading-position';
 import type { DocumentBookmark } from '@/types/bookmarks';
 import {
@@ -22,14 +22,14 @@ import {
   type OutlineEntry,
 } from '@/lib/client/reader/chapters';
 
-export type ReaderNavigationPanel = 'contents' | 'bookmarks';
+export type ReaderNavigationPanel = 'contents' | 'bookmarks' | 'highlights';
 
 export function isReaderNavigationPanel(value: string | null): value is ReaderNavigationPanel {
-  return value === 'contents' || value === 'bookmarks';
+  return value === 'contents' || value === 'bookmarks' || value === 'highlights';
 }
 
 /**
- * Contents (with find in book at its top) and bookmarks for every reader. Each resolves to a
+ * Contents (with find in book at its top), bookmarks and highlights for every reader. Each resolves to a
  * worker-plan ordinal and seeks through the same command as tapping a
  * sentence, so none creates a playback session or moves the view
  * independently of the playback cursor.
@@ -68,6 +68,16 @@ export function ReaderNavigationSidebars({
         bodyClassName="flex-1 overflow-y-auto px-2 py-2"
       >
         <BookmarksPanel documentId={documentId} />
+      </ReaderSidebarShell>
+      <ReaderSidebarShell
+        isOpen={open === 'highlights'}
+        onClose={onClose}
+        ariaLabel="Highlights"
+        title="Highlights"
+        panelClassName="w-full sm:w-[24rem]"
+        bodyClassName="flex-1 min-h-0 flex flex-col"
+      >
+        <HighlightsPanel documentId={documentId} documentTitle={documentTitle} />
       </ReaderSidebarShell>
     </>
   );
@@ -327,5 +337,73 @@ function BookmarkRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+function HighlightsPanel({ documentId, documentTitle }: { documentId: string; documentTitle: string }) {
+  const { playbackSegments, skipToOrdinal } = useTTS();
+  const { highlights, isLoading, isError, remove } = useDocumentBookmarks(documentId);
+
+  const copyAll = async () => {
+    try {
+      await navigator.clipboard.writeText(highlightsToMarkdown(documentTitle, playbackSegments, highlights));
+      toast.success('Highlights copied as Markdown');
+    } catch {
+      toast.error('Could not copy highlights');
+    }
+  };
+
+  let body: ReactNode;
+  if (isLoading) body = <p className="px-2 py-4 text-xs text-soft">Loading highlights…</p>;
+  else if (isError && highlights.length === 0) body = <p className="px-2 py-4 text-xs text-soft">Highlights could not be loaded.</p>;
+  else if (highlights.length === 0) {
+    body = (
+      <p className="px-2 py-4 text-xs leading-relaxed text-soft">
+        No highlights yet. Select text and choose Highlight, or press H to highlight the sentence being read.
+      </p>
+    );
+  } else {
+    body = (
+      <ol className="space-y-0.5" aria-label="Highlights">
+        {highlights.map((entry) => {
+          const text = highlightText(playbackSegments, entry);
+          return (
+            <li key={entry.highlight.id} className="group flex items-start gap-1 rounded-md hover:bg-surface-sunken">
+              <button
+                type="button"
+                onClick={() => skipToOrdinal(entry.start)}
+                className="min-w-0 flex-1 border-l-2 border-[var(--reader-mark-color,#facc15)] px-2 py-1.5 text-left text-xs leading-relaxed text-foreground"
+              >
+                {text || entry.highlight.snippet}
+              </button>
+              <div className="shrink-0 py-1.5 pr-1">
+                <IconButton
+                  tone="danger"
+                  size="sm"
+                  aria-label={`Delete highlight ${entry.highlight.snippet}`}
+                  title="Delete"
+                  onClick={() => remove(entry.highlight.id)}
+                >
+                  <TrashIcon aria-hidden="true" className="h-3.5 w-3.5" />
+                </IconButton>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    );
+  }
+
+  return (
+    <>
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">{body}</div>
+      {highlights.length > 0 ? (
+        <div className="border-t border-line-soft px-4 py-3">
+          <Button size="sm" className="w-full" onClick={() => { void copyAll(); }}>
+            Copy all as Markdown
+          </Button>
+        </div>
+      ) : null}
+    </>
   );
 }

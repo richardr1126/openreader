@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import {
   BookmarkIcon,
   BookmarksListIcon,
+  HighlighterIcon,
   ContentsSearchIcon,
   DotsHorizontalIcon,
   DownloadIcon,
@@ -37,6 +38,7 @@ export interface ReaderHeaderControls {
   onToggleContents: () => void;
   sentenceBookmark: SentenceBookmarkControl;
   onViewBookmarks: () => void;
+  onViewHighlights: () => void;
   zoom: ZoomSetting;
 }
 
@@ -164,6 +166,10 @@ export function DocumentHeaderMenu({
                     <PanelRow onClick={() => { reader.onViewBookmarks(); close(); }}>
                       <BookmarksListIcon aria-hidden="true" className="h-4 w-4" />
                       View bookmarks
+                    </PanelRow>
+                    <PanelRow onClick={() => { reader.onViewHighlights(); close(); }}>
+                      <HighlighterIcon aria-hidden="true" className="h-4 w-4" />
+                      View highlights
                     </PanelRow>
                   </div>
                   <div className="flex items-center justify-between gap-2 border-t border-line-soft py-1 pl-3 pr-1.5 text-xs text-foreground">

@@ -208,6 +208,9 @@ export const userDocumentBookmarks = sqliteTable('user_document_bookmarks', {
   documentId: text('document_id').notNull(),
   segmentKey: text('segment_key').notNull(),
   segmentOrdinal: integer('segment_ordinal').notNull(),
+  // Set only on a highlight: the last sentence it covers, positioned the same way.
+  endSegmentKey: text('end_segment_key'),
+  endSegmentOrdinal: integer('end_segment_ordinal'),
   label: text('label'),
   snippet: text('snippet').notNull().default(''),
   createdAt: integer('created_at').notNull().default(SQLITE_NOW_MS),

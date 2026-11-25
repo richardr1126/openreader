@@ -22,6 +22,7 @@ import { epubTocOutline, findEpubTocTitle } from '@/lib/client/epub/toc-titles';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { PlanTextReader } from '@/components/views/HTMLViewer';
 import { ReaderPager, ReaderPosition, ReadingProgress } from '@/components/reader/ReaderNavigator';
+import { ReaderHighlightsProvider } from '@/components/reader/ReaderHighlights';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import type { TtsExportChapterProgress } from '@/types/tts-export';
@@ -134,7 +135,7 @@ function EpubReader({
   }, [padPct]);
 
   return (
-    <>
+    <ReaderHighlightsProvider documentId={routeDocumentId} enabled={rendererReady}>
       <ReaderHeaderActions target={headerActions}>
         {rendererReady ? (
           <div className="flex items-center gap-3">
@@ -149,6 +150,7 @@ function EpubReader({
                 onToggleContents: () => toggleNavigationPanel('contents'),
                 sentenceBookmark,
                 onViewBookmarks: () => setActiveSidebar('bookmarks'),
+                onViewHighlights: () => setActiveSidebar('highlights'),
                 zoom: {
                   value: padPct,
                   onIncrease: () => setWidth(Math.min(padPct + 10, 100)),
@@ -232,6 +234,6 @@ function EpubReader({
           });
         }}
       />
-    </>
+    </ReaderHighlightsProvider>
   );
 }

@@ -28,6 +28,7 @@ import { usePdfDocument } from './usePdfDocument';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { PlanTextReader } from '@/components/views/HTMLViewer';
 import { PageJumpControl, ReaderPager } from '@/components/reader/ReaderNavigator';
+import { ReaderHighlightsProvider } from '@/components/reader/ReaderHighlights';
 import { ReaderNavigationSidebars, isReaderNavigationPanel, type ReaderNavigationPanel } from '@/components/reader/ReaderNavigationSidebars';
 import { useDocumentBookmarks } from '@/hooks/useDocumentBookmarks';
 import { usePdfOutline } from '@/hooks/pdf/usePdfOutline';
@@ -148,7 +149,7 @@ function PdfReader({
   }, [restartBootstrap, routeDocumentId]);
 
   return (
-    <>
+    <ReaderHighlightsProvider documentId={routeDocumentId} enabled={rendererReady}>
       <ReaderHeaderActions target={headerActions}>
         {rendererReady ? (
           <div className="flex items-center gap-2">
@@ -163,6 +164,7 @@ function PdfReader({
                 onToggleContents: () => setActiveSidebar((prev) => prev === 'contents' ? null : 'contents'),
                 sentenceBookmark,
                 onViewBookmarks: () => setActiveSidebar('bookmarks'),
+                onViewHighlights: () => setActiveSidebar('highlights'),
                 zoom: readerShowsLayout ? {
                   value: zoomLevel,
                   onIncrease: () => setZoomLevel(prev => Math.min(prev + 10, 300)),
@@ -268,6 +270,6 @@ function PdfReader({
         confirmText={FORCE_REPARSE_CONFIRM_TEXT}
         cancelText="Cancel"
       />
-    </>
+    </ReaderHighlightsProvider>
   );
 }

@@ -34,12 +34,12 @@ const PDF_ID = 'a'.repeat(64);
 const EPUB_ID = 'b'.repeat(64);
 const OTHER_USERS_ID = 'c'.repeat(64);
 
-const migration = readFileSync(
-  join(process.cwd(), 'packages/database/migrations/sqlite/0021_ios_parity.sql'),
+const migrations = ['0021_ios_parity', '0029_highlights'].map((name) => readFileSync(
+  join(process.cwd(), `packages/database/migrations/sqlite/${name}.sql`),
   'utf8',
-);
+));
 
-/** The pre-migration shape of the tables the ios_parity migration touches. */
+/** The pre-migration shape of the tables the ios_parity and highlights migrations touch. */
 function createDatabase() {
   const sqlite = new Database(':memory:');
   sqlite.exec(`
@@ -69,7 +69,7 @@ function createDatabase() {
       PRIMARY KEY (user_id, document_id)
     );
   `);
-  sqlite.exec(migration);
+  for (const migration of migrations) sqlite.exec(migration);
   sqlite.exec(`
     INSERT INTO user (id) VALUES ('reader'), ('someone-else');
     INSERT INTO documents (id, user_id, name, type, size, last_modified, file_path, author, language)
@@ -173,6 +173,22 @@ describe('document bookmarks API', () => {
     expect(retry.status).toBe(200);
     expect((await retry.json()).bookmark.snippet).toBe('Once');
     expect((await create(EPUB_ID, body)).status).toBe(409);
+  });
+
+  test('stores a highlight over a run of sentences and rejects a reversed end', async () => {
+    const response = await create(PDF_ID, {
+      segmentKey: 'v7:a', segmentOrdinal: 4, endSegmentKey: 'v7:c', endSegmentOrdinal: 6, snippet: 'Start.',
+    });
+    expect(response.status).toBe(201);
+    expect((await response.json()).bookmark).toMatchObject({
+      segmentKey: 'v7:a', segmentOrdinal: 4, endSegmentKey: 'v7:c', endSegmentOrdinal: 6,
+    });
+    const plain = await (await create(PDF_ID, { segmentKey: 'k', segmentOrdinal: 0, snippet: 'x' })).json();
+    expect(plain.bookmark).toMatchObject({ endSegmentKey: null, endSegmentOrdinal: null });
+    expect((await create(PDF_ID, {
+      segmentKey: 'v7:a', segmentOrdinal: 4, endSegmentKey: 'v7:z', endSegmentOrdinal: 3, snippet: 'x',
+    })).status).toBe(400);
+    expect((await create(PDF_ID, { segmentKey: 'v7:a', segmentOrdinal: 4, endSegmentOrdinal: 5, snippet: 'x' })).status).toBe(400);
   });
 
   test('rejects invalid input and documents the user does not own', async () => {

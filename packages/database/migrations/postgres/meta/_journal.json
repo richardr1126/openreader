@@ -204,6 +204,13 @@
       "when": 1794174649876,
       "tag": "0028_audiobook_cancelled",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795589908451,
+      "tag": "0029_highlights",
+      "breakpoints": true
     }
   ]
 }

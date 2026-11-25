@@ -14,13 +14,18 @@ export interface HighlightAppearance {
   wordColor: string;
   segmentOpacity: number;
   wordOpacity: number;
+  /** Saved highlights: always a fixed color, independent of the narration layers. */
+  markColor: string;
+  markOpacity: number;
 }
+type NarrationHighlight = Pick<HighlightAppearance, 'segmentColor' | 'wordColor' | 'segmentOpacity' | 'wordOpacity'>;
 export const DEFAULT_TYPOGRAPHY: ReaderTypography = {
   fontFamily: 'default', sizePercent: 100, lineMultiplier: 1.5,
   paragraphSpacing: 1, letterSpacing: 0, readingWidth: 100, alignment: 'default',
 };
 export const DEFAULT_HIGHLIGHT_APPEARANCE: HighlightAppearance = {
   segmentColor: 'theme', wordColor: 'theme', segmentOpacity: 0.22, wordOpacity: 0.55,
+  markColor: '#facc15', markOpacity: 0.4,
 };
 export const TYPOGRAPHY_RANGES = {
   sizePercent: [75, 160, 5], lineMultiplier: [1.1, 2.2, 0.1],
@@ -52,7 +57,8 @@ export function normalizeHighlightOverride(value: unknown): Partial<HighlightApp
   for (const key of ['segmentColor', 'wordColor'] as const) {
     if (typeof rec[key] === 'string' && /^(theme|#[\da-f]{6})$/i.test(rec[key] as string)) out[key] = (rec[key] as string).toLowerCase();
   }
-  for (const key of ['segmentOpacity', 'wordOpacity'] as const) {
+  if (typeof rec.markColor === 'string' && /^#[\da-f]{6}$/i.test(rec.markColor)) out.markColor = rec.markColor.toLowerCase();
+  for (const key of ['segmentOpacity', 'wordOpacity', 'markOpacity'] as const) {
     if (typeof rec[key] === 'number' && Number.isFinite(rec[key])) out[key] = Math.max(0, Math.min(1, rec[key] as number));
   }
   return out;
@@ -60,8 +66,9 @@ export function normalizeHighlightOverride(value: unknown): Partial<HighlightApp
 export function normalizeHighlightAppearance(value: unknown): HighlightAppearance {
   return { ...DEFAULT_HIGHLIGHT_APPEARANCE, ...normalizeHighlightOverride(value) };
 }
-export const HIGHLIGHT_PRESETS: Record<string, HighlightAppearance> = {
-  Theme: DEFAULT_HIGHLIGHT_APPEARANCE,
+/** Presets style narration only; the saved highlight color is kept. */
+export const HIGHLIGHT_PRESETS: Record<string, NarrationHighlight> = {
+  Theme: { segmentColor: 'theme', wordColor: 'theme', segmentOpacity: 0.22, wordOpacity: 0.55 },
   Amber: { segmentColor: '#fbbf24', wordColor: '#f59e0b', segmentOpacity: 0.2, wordOpacity: 0.5 },
   Ocean: { segmentColor: '#38bdf8', wordColor: '#2563eb', segmentOpacity: 0.2, wordOpacity: 0.5 },
   Mint: { segmentColor: '#4ade80', wordColor: '#10b981', segmentOpacity: 0.2, wordOpacity: 0.5 },
@@ -70,7 +77,7 @@ export const READER_FONT_FAMILIES: Record<ReaderTypography['fontFamily'], string
   default: '', serif: 'Georgia, "Times New Roman", serif', sans: 'system-ui, sans-serif',
   rounded: 'ui-rounded, system-ui, sans-serif', mono: 'ui-monospace, monospace',
 };
-export function highlightBackground(appearance: HighlightAppearance, layer: 'segment' | 'word', fallbackColor = 'var(--accent)', fallbackOpacity?: number): string {
+export function highlightBackground(appearance: HighlightAppearance, layer: 'segment' | 'word' | 'mark', fallbackColor = 'var(--accent)', fallbackOpacity?: number): string {
   const color = appearance[`${layer}Color`];
   const opacity = appearance[`${layer}Opacity`];
   const baseline = DEFAULT_HIGHLIGHT_APPEARANCE[`${layer}Opacity`];

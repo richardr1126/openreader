@@ -27,6 +27,7 @@ vi.mock('@/lib/client/epub/epub-rendered-text-maps', () => ({
 }));
 vi.mock('@/lib/client/highlight-range-painter', () => ({
   paintRangeHighlight: epub.paint,
+  paintRangeHighlights: () => true,
   clearRangeHighlight: epub.clear,
 }));
 

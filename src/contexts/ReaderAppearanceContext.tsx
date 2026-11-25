@@ -26,6 +26,7 @@ export function ReaderAppearanceProvider({ settings, update, children, readerTyp
     style[`--reader-${layer}-color`] = appearance[`${layer}Color`] === 'theme' ? undefined : appearance[`${layer}Color`];
     style[`--reader-${layer}-opacity`] = appearance[`${layer}Opacity`] === DEFAULT_HIGHLIGHT_APPEARANCE[`${layer}Opacity`] ? undefined : String(appearance[`${layer}Opacity`]);
   }
+  style['--reader-mark-color'] = appearance.markColor;
   return <ReaderAppearanceContext.Provider value={{ settings, update, readerType }}><div className="contents" style={style as CSSProperties}>{children}</div></ReaderAppearanceContext.Provider>;
 }
 export function useReaderAppearance(readerType?: ReaderType) {
