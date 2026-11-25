@@ -169,26 +169,28 @@ function pruneOnnxRuntime() {
  * Windows installer and uninstaller must stay within MAX_PATH to move.
  */
 function pruneDevelopmentFiles() {
-  const unused = /\.(d\.[cm]?ts|map)$/;
   let count = 0;
   for (const part of ['bootstrap', 'embedded-compute-worker']) {
-    const modules = path.join(runtimeDir, part, 'node_modules');
-    for (const entry of fs.readdirSync(modules, { withFileTypes: true, recursive: true })) {
-      if (entry.isFile() && unused.test(entry.name)) {
-        fs.rmSync(path.join(entry.parentPath, entry.name));
-        count += 1;
-      }
-    }
-    removeEmptyDirectories(modules);
+    count += pruneDirectory(path.join(runtimeDir, part, 'node_modules'));
   }
   console.log(`[stage] removed ${count} type declaration and source map files`);
 }
 
-function removeEmptyDirectories(dir) {
+// pnpm links packages into each other's node_modules, so walk real directories
+// only; a recursive readdir follows those links and lists files twice.
+function pruneDirectory(dir) {
+  let count = 0;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) removeEmptyDirectories(path.join(dir, entry.name));
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      count += pruneDirectory(entryPath);
+    } else if (entry.isFile() && /\.(d\.[cm]?ts|map)$/.test(entry.name)) {
+      fs.rmSync(entryPath);
+      count += 1;
+    }
   }
   if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+  return count;
 }
 
 async function stageBinary(name, binaryName) {
