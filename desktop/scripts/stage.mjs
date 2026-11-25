@@ -163,6 +163,34 @@ function pruneOnnxRuntime() {
   if (!kept) throw new Error(`onnxruntime-node has no ${target} build, so voices and word timing cannot run there.`);
 }
 
+/**
+ * Type declarations and dependency source maps are never loaded at runtime.
+ * They are thousands of files, and the deepest paths in the runtime, which the
+ * Windows installer and uninstaller must stay within MAX_PATH to move.
+ */
+function pruneDevelopmentFiles() {
+  const unused = /\.(d\.[cm]?ts|map)$/;
+  let count = 0;
+  for (const part of ['bootstrap', 'embedded-compute-worker']) {
+    const modules = path.join(runtimeDir, part, 'node_modules');
+    for (const entry of fs.readdirSync(modules, { withFileTypes: true, recursive: true })) {
+      if (entry.isFile() && unused.test(entry.name)) {
+        fs.rmSync(path.join(entry.parentPath, entry.name));
+        count += 1;
+      }
+    }
+    removeEmptyDirectories(modules);
+  }
+  console.log(`[stage] removed ${count} type declaration and source map files`);
+}
+
+function removeEmptyDirectories(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) removeEmptyDirectories(path.join(dir, entry.name));
+  }
+  if (fs.readdirSync(dir).length === 0) fs.rmdirSync(dir);
+}
+
 async function stageBinary(name, binaryName) {
   const pin = pins[name].targets[target];
   if (!pin) throw new Error(`No ${name} pinned for ${target} in desktop/runtime-binaries.json`);
@@ -203,6 +231,7 @@ async function main() {
   stageApp();
   stageDeployments();
   pruneOnnxRuntime();
+  pruneDevelopmentFiles();
   await stageBinary('nats', 'nats-server');
   await stageBinary('weed', 'weed');
   stageFfmpeg(ffmpegDir);
