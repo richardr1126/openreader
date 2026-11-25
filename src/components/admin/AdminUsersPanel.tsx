@@ -386,6 +386,8 @@ export function AdminUsersPanel() {
               const isSelf = user.id === session?.user?.id;
               const expanded = expandedId === user.id;
               const busy = bulkBusy || updateMutation.isPending || deleteMutation.isPending;
+              // Row actions name their user: several rows can offer the same action.
+              const rowName = user.isAnonymous ? user.id : accountName(user);
               return (
                 <article key={user.id} className={selectedIds.has(user.id) ? 'group bg-accent-wash' : 'group'}>
                   <div className={`p-3 ${columns}`}>
@@ -394,7 +396,7 @@ export function AdminUsersPanel() {
                         checked={selectedIds.has(user.id)}
                         disabled={isSelf}
                         onChange={(event) => toggleOne(user.id, event.target.checked)}
-                        aria-label={`Select ${user.isAnonymous ? user.id : accountName(user)}`}
+                        aria-label={`Select ${rowName}`}
                         className="shrink-0"
                       />
                       <button type="button" onClick={() => setExpandedId(expanded ? null : user.id)} className="min-w-0 flex-1 text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-accent">
@@ -435,14 +437,14 @@ export function AdminUsersPanel() {
                         </label>
                       ) : null}
                       {!user.isAnonymous && user.accessStatus === 'pending' ? (
-                        <Button size="xs" variant="primary" disabled={busy} onClick={() => updateMutation.mutate({ id: user.id, changes: { accessStatus: 'active' } })}>Approve</Button>
+                        <Button size="xs" variant="primary" aria-label={`Approve ${rowName}`} disabled={busy} onClick={() => updateMutation.mutate({ id: user.id, changes: { accessStatus: 'active' } })}>Approve</Button>
                       ) : null}
                       {!user.isAnonymous && user.accessStatus !== 'pending' && !isSelf ? (
-                        <Button size="xs" variant="outline" disabled={busy} onClick={() => updateMutation.mutate({ id: user.id, changes: { accessStatus: user.accessStatus === 'suspended' ? 'active' : 'suspended' } })}>
+                        <Button size="xs" variant="outline" aria-label={`${user.accessStatus === 'suspended' ? 'Restore' : 'Suspend'} ${rowName}`} disabled={busy} onClick={() => updateMutation.mutate({ id: user.id, changes: { accessStatus: user.accessStatus === 'suspended' ? 'active' : 'suspended' } })}>
                           {user.accessStatus === 'suspended' ? 'Restore' : 'Suspend'}
                         </Button>
                       ) : null}
-                      {!isSelf ? <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" disabled={busy || deletionTracked} onClick={() => setDeleteTarget(user)}>Delete</Button> : null}
+                      {!isSelf ? <Button size="xs" variant="ghost" className="text-danger hover:bg-danger-wash hover:text-danger" aria-label={`Delete ${rowName}`} disabled={busy || deletionTracked} onClick={() => setDeleteTarget(user)}>Delete</Button> : null}
                     </div>
                   </div>
 
