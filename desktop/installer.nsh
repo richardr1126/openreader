@@ -100,7 +100,12 @@ FunctionEnd
       Call un.restoreFiles
       Pop $R0
       ${If} $openReaderOldRuntime != ""
+        ClearErrors
         Rename "$openReaderOldRuntime" "$INSTDIR\resources\runtime"
+        ${If} ${Errors}
+          DetailPrint "Could not restore the OpenReader program files. They remain at $openReaderOldRuntime."
+          Abort "Could not restore the OpenReader program files. They remain at $openReaderOldRuntime."
+        ${EndIf}
       ${EndIf}
       Abort `Can't rename "$INSTDIR" to "$PLUGINSDIR\old-install".`
     ${EndIf}
