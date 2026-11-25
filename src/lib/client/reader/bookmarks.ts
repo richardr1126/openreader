@@ -93,6 +93,31 @@ export function highlightsOverlapping(
   return highlights.filter((entry) => entry.start <= to && entry.end >= from);
 }
 
+/**
+ * The highlight `[from, to]` makes once joined with every highlight it
+ * touches, including ones reached only through another, and the labels those
+ * carried, distinct and in reading order.
+ */
+export function mergeHighlightRange(
+  highlights: readonly ResolvedHighlight[],
+  from: number,
+  to: number,
+): { start: number; end: number; absorbed: ResolvedHighlight[]; label: string | null } {
+  let start = Math.min(from, to);
+  let end = Math.max(from, to);
+  let absorbed: ResolvedHighlight[] = [];
+  for (;;) {
+    absorbed = highlightsOverlapping(highlights, start, end);
+    const nextStart = Math.min(start, ...absorbed.map((entry) => entry.start));
+    const nextEnd = Math.max(end, ...absorbed.map((entry) => entry.end));
+    if (nextStart === start && nextEnd === end) break;
+    start = nextStart;
+    end = nextEnd;
+  }
+  const labels = [...new Set(absorbed.map((entry) => entry.highlight.label?.trim()).filter((label): label is string => Boolean(label)))];
+  return { start, end, absorbed, label: labels.length > 0 ? labels.join('\n').slice(0, 200) : null };
+}
+
 /** The full text of a highlight's sentences, joined as they are read. */
 export function highlightText(plan: readonly PlanSegment[], entry: Pick<ResolvedHighlight, 'start' | 'end'>): string {
   return plan

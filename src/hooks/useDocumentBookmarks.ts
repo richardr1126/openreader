@@ -17,6 +17,7 @@ import {
   findBookmarkForSegment,
   highlightInputForSegments,
   highlightsOverlapping,
+  mergeHighlightRange,
   resolveHighlights,
 } from '@/lib/client/reader/bookmarks';
 import { isHighlight, type CreateDocumentBookmarkInput, type DocumentBookmark } from '@/types/bookmarks';
@@ -152,16 +153,14 @@ export function useDocumentBookmarks(documentId: string) {
    */
   const highlightRange = useCallback((from: number, to: number) => {
     if (toggleBusy) return;
-    const [low, high] = from <= to ? [from, to] : [to, from];
-    const overlapping = highlightsOverlapping(highlights, low, high);
-    const start = Math.min(low, ...overlapping.map((entry) => entry.start));
-    const end = Math.max(high, ...overlapping.map((entry) => entry.end));
+    const { start, end, absorbed: overlapping, label } = mergeHighlightRange(highlights, from, to);
     const startSegment = playbackSegments.find((segment) => segment.ordinal === start);
     const endSegment = playbackSegments.find((segment) => segment.ordinal === end);
     if (!startSegment || !endSegment) return;
     // The merged highlight is saved before the ones it replaces are removed,
     // so a failed save leaves them as they were rather than losing them.
-    createMutate(highlightInputForSegments({ start: startSegment, end: endSegment, id: crypto.randomUUID() }), {
+    const input = highlightInputForSegments({ start: startSegment, end: endSegment, id: crypto.randomUUID() });
+    createMutate(label ? { ...input, label } : input, {
       onSuccess: () => {
         for (const entry of overlapping) removeMutate(entry.highlight.id);
       },

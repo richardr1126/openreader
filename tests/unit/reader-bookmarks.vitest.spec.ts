@@ -8,6 +8,7 @@ import {
   highlightInputForSegments,
   highlightsToMarkdown,
   highlightText,
+  mergeHighlightRange,
   resolveHighlights,
   truncateBookmarkSnippet,
 } from '@/lib/client/reader/bookmarks';
@@ -120,6 +121,18 @@ describe('highlights', () => {
     const resolved = resolveHighlights(plan, [moved, bookmark({ id: 'mark' }), highlight('a', 0, 1)]);
     expect(resolved.map(({ highlight: row, start, end }) => [row.id, start, end])).toEqual([['a', 0, 1], ['b', 3, 4]]);
     expect(findBookmarkForSegment([highlight('a', 0, 1)], plan[0])).toBeNull();
+  });
+
+  test('merges through chained overlaps and keeps their labels', () => {
+    const resolved = resolveHighlights(plan, [
+      highlight('a', 1, 2, { label: 'First' }),
+      highlight('b', 2, 3, { label: 'Second' }),
+      highlight('c', 4, 4),
+    ]);
+    const merged = mergeHighlightRange(resolved, 0, 1);
+    expect([merged.start, merged.end, merged.label]).toEqual([0, 3, 'First\nSecond']);
+    expect(merged.absorbed.map(({ highlight: row }) => row.id)).toEqual(['a', 'b']);
+    expect(mergeHighlightRange(resolved, 4, 4).label).toBeNull();
   });
 
   test('joins the full text and exports Markdown quotes', () => {
