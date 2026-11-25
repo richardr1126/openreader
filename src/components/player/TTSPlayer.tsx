@@ -364,7 +364,8 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         {/* Right side: reading position, timer and buffer display. On narrow
             screens this is the whole first row, timer first, laid out as one
             flex row so a long timer pushes the position aside instead of
-            covering it. */}
+            covering it. The row has no room for a chip beside both, so there a
+            pending status takes the timer's place and the buffer chip is left out. */}
         <div className="col-span-3 row-start-1 flex min-w-0 items-center gap-2 sm:flex-1 sm:justify-end sm:gap-3">
           {navigator ? (
             <div
@@ -380,18 +381,18 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <span role="status" className="sr-only">
             {hasReadableContent ? (playbackControl.isPending ? 'Loading' : playbackPhase === 'playing' && isPlaying ? 'Playing' : 'Paused') : null}
           </span>
-          <div className="-order-1 shrink-0 whitespace-nowrap font-mono sm:order-none text-[11px] tabular-nums text-soft select-none">
+          <div className={cn('-order-1 min-w-0 truncate font-mono sm:order-none sm:shrink-0 text-[11px] tabular-nums text-soft select-none', hasReadableContent && playbackControl.statusText && 'hidden sm:block')}>
             {hasReadableContent
               ? `${formatPlaybackTime(shownSec)} / ${durationLabel}`
               : 'No readable text'}
           </div>
           {hasReadableContent && playbackControl.statusText ? (
-            <div className={cn('shrink-0 whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium text-accent', !navigator && 'ms-auto sm:ms-0')}>
+            <div className="-order-1 shrink-0 whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium text-accent sm:order-none">
               {playbackControl.statusText}
             </div>
           ) : aheadBuffer && isPlaying && (
             <div
-              className={cn('shrink-0 whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-accent', !navigator && 'ms-auto sm:ms-0')}
+              className="hidden shrink-0 whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-accent sm:block"
               aria-label={`${Math.floor(aheadBuffer.wallMs / 1000)} seconds ready ahead`}
             >
               {`${Math.floor(aheadBuffer.wallMs / 1000)}s ahead`}
