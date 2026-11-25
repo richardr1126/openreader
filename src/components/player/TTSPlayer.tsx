@@ -362,13 +362,15 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
         </div>
 
         {/* Right side: reading position, timer and buffer display. On narrow
-            screens the position sits in the first row, above the transport. */}
-        <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:items-center sm:justify-end sm:gap-3">
+            screens this is the whole first row, timer first, laid out as one
+            flex row so a long timer pushes the position aside instead of
+            covering it. */}
+        <div className="col-span-3 row-start-1 flex min-w-0 items-center gap-2 sm:flex-1 sm:justify-end sm:gap-3">
           {navigator ? (
             <div
               role="group"
               aria-label="Reading position"
-              className="col-start-2 row-start-1 flex h-6 items-center justify-self-center text-xs text-soft"
+              className="mx-auto flex h-6 shrink-0 items-center text-xs text-soft sm:mx-0"
             >
               {navigator}
               <ReaderFollowControls />
@@ -378,18 +380,18 @@ export default function TTSPlayer({ isPlaybackReady: rendererPlaybackReady = tru
           <span role="status" className="sr-only">
             {hasReadableContent ? (playbackControl.isPending ? 'Loading' : playbackPhase === 'playing' && isPlaying ? 'Playing' : 'Paused') : null}
           </span>
-          <div className="col-start-1 row-start-1 justify-self-start whitespace-nowrap font-mono text-[11px] tabular-nums text-soft select-none">
+          <div className="-order-1 shrink-0 whitespace-nowrap font-mono sm:order-none text-[11px] tabular-nums text-soft select-none">
             {hasReadableContent
               ? `${formatPlaybackTime(shownSec)} / ${durationLabel}`
               : 'No readable text'}
           </div>
           {hasReadableContent && playbackControl.statusText ? (
-            <div className="col-start-3 row-start-1 justify-self-end whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium text-accent">
+            <div className={cn('shrink-0 whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium text-accent', !navigator && 'ms-auto sm:ms-0')}>
               {playbackControl.statusText}
             </div>
           ) : aheadBuffer && isPlaying && (
             <div
-              className="col-start-3 row-start-1 justify-self-end whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-accent"
+              className={cn('shrink-0 whitespace-nowrap rounded-full bg-accent-wash px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-accent', !navigator && 'ms-auto sm:ms-0')}
               aria-label={`${Math.floor(aheadBuffer.wallMs / 1000)} seconds ready ahead`}
             >
               {`${Math.floor(aheadBuffer.wallMs / 1000)}s ahead`}
