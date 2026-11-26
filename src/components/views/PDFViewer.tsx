@@ -10,8 +10,11 @@ import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { usePDFResize } from '@/hooks/pdf/usePDFResize';
 import type { PdfDocumentState } from '@/app/(app)/pdf/[id]/usePdfDocument';
 import type { ParsedPdfBlock, ParsedPdfPage } from '@/types/parsed-pdf';
-import { resolvePdfBlockAtPoint } from '@/lib/client/pdf';
-import { indexSegmentsBySource, resolvePointInUnit } from '@/lib/client/reader/segment-hit';
+import { pdfBlockSpans, resolvePdfBlockAtPoint } from '@/lib/client/pdf';
+import { indexSegmentsBySource, resolvePointInUnit, resolveSelectionInUnits } from '@/lib/client/reader/segment-hit';
+import { highlightsOverlapping } from '@/lib/client/reader/bookmarks';
+import { paintSavedHighlights } from '@/lib/client/reader/saved-highlights';
+import { bindSelectionReporting, useReaderHighlights } from '@/components/reader/ReaderHighlights';
 import { bindTapToSeek } from '@/lib/client/reader/tap-to-seek';
 import { useLatestRef } from '@/hooks/useLatestRef';
 import {
@@ -174,6 +177,38 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     });
   }, [tapStateRef]);
 
+  const { highlights: savedHighlights, declarations: savedDeclarations, selectionSink } = useReaderHighlights();
+
+  // A selection on the text layer offers to highlight the sentences it covers,
+  // resolved within each parsed block it crosses.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    return bindSelectionReporting(container.ownerDocument, (range) => {
+      if (!container.contains(range.commonAncestorContainer)) return null;
+      const { segmentsByBlock: index, parsedDocument: parsed, resolvedLanguage: language } = tapStateRef.current;
+      if (!parsed) return null;
+      const units = new Map<string, HTMLElement[]>();
+      for (const span of container.querySelectorAll<HTMLElement>('.react-pdf__Page__textContent span')) {
+        if (!range.intersectsNode(span)) continue;
+        const rect = span.getBoundingClientRect();
+        const unit = resolvePdfBlockAtPoint(container, parsed, {
+          clientX: (rect.left + rect.right) / 2,
+          clientY: (rect.top + rect.bottom) / 2,
+          target: span,
+        });
+        if (unit && !units.has(unit.sourceKey)) units.set(unit.sourceKey, unit.spans);
+      }
+      return resolveSelectionInUnits(
+        range,
+        Array.from(units),
+        ([, spans]) => spans,
+        ([key]) => index.get(key) ?? [],
+        language,
+      );
+    }, selectionSink);
+  }, [selectionSink, tapStateRef]);
+
   // IMPORTANT:
   // - pdf.js may transfer/detach ArrayBuffers when sending them to its worker, so we must clone.
   // - react-pdf warns if `file` changes by reference but is deep-equal to the previous value.
@@ -279,6 +314,34 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     failedSurfaceKeyRef.current = key;
     onError?.(error);
   }, [activeSurfaceKeyRef, onError]);
+
+  // Saved highlights paint on the text layer once it is ready for this layout;
+  // narration paints with overlays, so these ranges stay valid until it rebuilds.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !parsedDocument) return;
+    if (isPageRendering || textLayerReadyLayoutKey !== layoutKey) return;
+    const units = function* () {
+      for (const [key, candidates] of segmentsByBlock) {
+        if (candidates.length === 0) continue;
+        const first = candidates[0].ordinal;
+        const last = candidates[candidates.length - 1].ordinal;
+        if (highlightsOverlapping(savedHighlights, first, last).length === 0) continue;
+        const spans = pdfBlockSpans(container, parsedDocument, key);
+        if (spans) yield { roots: spans, candidates };
+      }
+    };
+    paintSavedHighlights(container.ownerDocument, units(), savedHighlights, savedDeclarations, resolvedLanguage);
+  }, [
+    isPageRendering,
+    layoutKey,
+    parsedDocument,
+    resolvedLanguage,
+    savedDeclarations,
+    savedHighlights,
+    segmentsByBlock,
+    textLayerReadyLayoutKey,
+  ]);
 
   // Track page turns so we can keep the previous canvas visible until the new one paints.
   const lastRenderedCanvasLayoutKeyRef = useRef<string>('');

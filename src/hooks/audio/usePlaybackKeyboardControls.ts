@@ -102,3 +102,14 @@ export function usePageTurnKeyboardControls({
     });
   }, [enabled, onPrevious, onNext, canPrevious, canNext]);
 }
+
+/** H highlights the selected text, or the sentence being read. */
+export function useHighlightKeyboardControl({ enabled, onHighlight }: {
+  enabled: boolean;
+  onHighlight: () => void;
+}) {
+  useEffect(() => {
+    if (!enabled) return;
+    return listenForReaderKeys((event) => (event.key === 'h' || event.key === 'H' ? onHighlight : undefined));
+  }, [enabled, onHighlight]);
+}

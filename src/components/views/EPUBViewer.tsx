@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useLayoutEffect, useRef, useCallback, useSta
 import type { Book, NavItem, Rendition } from 'epubjs';
 import { useTTS, useTTSHighlight } from '@/contexts/TTSContext';
 import { useEPUBTheme } from '@/hooks/epub/useEPUBTheme';
+import { useEpubSavedHighlights } from '@/hooks/epub/useEpubSavedHighlights';
 import { useReaderAppearance } from '@/contexts/ReaderAppearanceContext';
 import { useEPUBResize } from '@/hooks/epub/useEPUBResize';
 import type { EpubDocumentState } from '@/app/(app)/epub/[id]/useEpubDocument';
@@ -20,6 +21,7 @@ interface EPUBViewerProps {
     | 'isPlaybackReady'
     | 'placementLifecycle'
     | 'renderedTextRevision'
+    | 'renderedTextMapsRef'
     | 'handleLocationChanged'
     | 'bookRef'
     | 'renditionRef'
@@ -107,6 +109,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
+    renderedTextMapsRef,
     handleLocationChanged,
     bookRef,
     renditionRef,
@@ -134,6 +137,7 @@ export function EPUBViewer({ className = '', epubState, onReady, onError }: EPUB
   useEPUBTheme(epubTheme, activeRendition, typography, () => {
     void refreshRenderedPlacement({ preservePlaybackCursor: true });
   });
+  useEpubSavedHighlights({ renderedTextMapsRef, renderedTextRevision });
   const containerRef = useRef<HTMLDivElement>(null);
   const { isResizing, setIsResizing, dimensions } = useEPUBResize(containerRef);
 

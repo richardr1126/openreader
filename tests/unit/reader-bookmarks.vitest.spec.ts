@@ -5,6 +5,11 @@ import {
   bookmarkInputForSegment,
   findBookmarkForSegment,
   formatBookmarkAge,
+  highlightInputForSegments,
+  highlightsToMarkdown,
+  highlightText,
+  mergeHighlightRange,
+  resolveHighlights,
   truncateBookmarkSnippet,
 } from '@/lib/client/reader/bookmarks';
 import type { DocumentBookmark } from '@/types/bookmarks';
@@ -32,6 +37,8 @@ function bookmark(overrides: Partial<DocumentBookmark>): DocumentBookmark {
     snippet: 'snippet',
     segmentKey: 'key-0',
     segmentOrdinal: 0,
+    endSegmentKey: null,
+    endSegmentOrdinal: null,
     createdAtMs: 0,
     updatedAtMs: 0,
     ...overrides,
@@ -84,5 +91,55 @@ describe('formatBookmarkAge', () => {
     expect(formatBookmarkAge(now - 86_400_000, now, 'en')).toBe('yesterday');
     expect(formatBookmarkAge(now - 15 * 86_400_000, now, 'en')).toBe('2 weeks ago');
     expect(formatBookmarkAge(now + 60_000, now, 'en')).toBe('just now');
+  });
+});
+
+describe('highlights', () => {
+  const plan = [0, 1, 2, 3, 4].map((ordinal) => segment(ordinal, null, `Sentence  ${ordinal}.`));
+  const highlight = (id: string, start: number, end: number, extra: Partial<DocumentBookmark> = {}) => bookmark({
+    id,
+    segmentKey: `key-${start}`,
+    segmentOrdinal: start,
+    endSegmentKey: `key-${end}`,
+    endSegmentOrdinal: end,
+    ...extra,
+  });
+
+  test('builds an ordered create body from either selection direction', () => {
+    expect(highlightInputForSegments({ start: plan[3], end: plan[1], id: ID })).toEqual({
+      id: ID,
+      segmentKey: 'key-1',
+      segmentOrdinal: 1,
+      endSegmentKey: 'key-3',
+      endSegmentOrdinal: 3,
+      snippet: 'Sentence 1.',
+    });
+  });
+
+  test('resolves highlights by key in reading order and skips bookmarks', () => {
+    const moved = highlight('b', 3, 4, { segmentOrdinal: 0, endSegmentOrdinal: 1 });
+    const resolved = resolveHighlights(plan, [moved, bookmark({ id: 'mark' }), highlight('a', 0, 1)]);
+    expect(resolved.map(({ highlight: row, start, end }) => [row.id, start, end])).toEqual([['a', 0, 1], ['b', 3, 4]]);
+    expect(findBookmarkForSegment([highlight('a', 0, 1)], plan[0])).toBeNull();
+  });
+
+  test('merges through chained overlaps and keeps their labels', () => {
+    const resolved = resolveHighlights(plan, [
+      highlight('a', 1, 2, { label: 'First' }),
+      highlight('b', 2, 3, { label: 'Second' }),
+      highlight('c', 4, 4),
+    ]);
+    const merged = mergeHighlightRange(resolved, 0, 1);
+    expect([merged.start, merged.end, merged.label]).toEqual([0, 3, 'First\nSecond']);
+    expect(merged.absorbed.map(({ highlight: row }) => row.id)).toEqual(['a', 'b']);
+    expect(mergeHighlightRange(resolved, 4, 4).label).toBeNull();
+  });
+
+  test('joins the full text and exports Markdown quotes', () => {
+    const resolved = resolveHighlights(plan, [highlight('a', 1, 2, { label: 'Note' }), highlight('b', 4, 4)]);
+    expect(highlightText(plan, resolved[0])).toBe('Sentence 1. Sentence 2.');
+    expect(highlightsToMarkdown('Book', plan, resolved)).toBe(
+      '# Book\n\n> Sentence 1. Sentence 2.\n\nNote\n\n> Sentence 4.\n',
+    );
   });
 });

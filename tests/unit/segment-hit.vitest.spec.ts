@@ -2,6 +2,7 @@ import { parseHTML } from 'linkedom';
 import { describe, expect, it } from 'vitest';
 
 import {
+  closingPunctuationEnd,
   collectTextTokens,
   createTapGuard,
   indexSegmentsBySource,
@@ -12,6 +13,15 @@ import {
 import { normalizePlaybackPlan, playbackPlanToCanonicalSegments } from '@/lib/shared/playback-plan';
 
 const words = (text: string) => text.split(/\s+/).filter(Boolean);
+
+describe('closingPunctuationEnd', () => {
+  it('takes in closing punctuation up to the next word', () => {
+    expect(closingPunctuationEnd('One!" Two!', 3)).toBe(5);
+    expect(closingPunctuationEnd('One!Two!', 3)).toBe(4);
+    expect(closingPunctuationEnd('One!\u{20000}!', 3)).toBe(4);
+    expect(closingPunctuationEnd('end?!', 3)).toBe(5);
+  });
+});
 
 describe('pickSegmentForToken', () => {
   const candidates = [

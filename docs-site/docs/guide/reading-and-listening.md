@@ -87,7 +87,7 @@ The reading preview shows the result before you save. With **Default / publisher
 
 ### Highlights
 
-Choose a preset (**Theme**, **Amber**, **Ocean** or **Mint**), or set the segment and word colors and opacity separately. You can turn off the segment highlight and keep the word highlight, or the other way round.
+Choose a preset (**Theme**, **Amber**, **Ocean** or **Mint**), or set the segment and word colors and opacity separately. **Saved highlights** sets the color of the passages you highlight, yellow by default. You can turn off the segment highlight and keep the word highlight, or the other way round.
 
 ### Advanced
 
@@ -106,9 +106,10 @@ Choose a preset (**Theme**, **Amber**, **Ocean** or **Mint**), or set the segmen
 
 A book you have changed keeps its own setting; everything else follows the defaults.
 
-## Contents and bookmarks
+## Contents, bookmarks and highlights
 
 - **Contents** in the reader header lists the chapters or pages. Choose one to go there, or use **Find in book** to search the text and jump to a match.
 - **⋯ → Save bookmark** bookmarks the current sentence. **Bookmarks** lists your bookmarks so you can jump back, rename or delete them.
+- **Highlights**: select text and choose **Highlight**, or press **H** to highlight the sentence being read. A highlight covers every sentence the selection touches; one overlapping an existing highlight joins it. Select inside a highlight to remove it. **⋯ → View highlights** lists each highlight in full, jumps to it, and **Copy all as Markdown** copies them as quotes. Set the color under **Saved highlights** in the highlight settings.
 
-Your reading position, bookmarks and settings are saved to your account and follow you to other devices.
+Your reading position, bookmarks, highlights and settings are saved to your account and follow you to other devices.

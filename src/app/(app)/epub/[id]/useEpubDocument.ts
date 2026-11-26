@@ -72,6 +72,8 @@ export interface EpubDocumentState {
   isPlaybackReady: boolean;
   placementLifecycle: EpubPlacementLifecycle;
   renderedTextRevision: number;
+  /** The committed text maps of the rendered sections; `renderedTextRevision` changes with them. */
+  renderedTextMapsRef: RefObject<EpubRenderedTextMap[]>;
   refreshRenderedPlacement: RefreshRenderedPlacement;
   failPlacement: (error: Error) => void;
   bookRef: RefObject<Book | null>;
@@ -603,6 +605,7 @@ export function useEpubDocument(
     isPlaybackReady,
     placementLifecycle,
     renderedTextRevision,
+    renderedTextMapsRef,
     refreshRenderedPlacement,
     failPlacement,
     bookRef,

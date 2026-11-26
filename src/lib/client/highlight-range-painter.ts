@@ -21,10 +21,7 @@ type HighlightWindow = Window & {
 function paintsExactly(highlight: RangeHighlight, range: Range): boolean {
   if (highlight.size !== 1) return false;
   const [painted] = highlight.values();
-  return painted.startContainer === range.startContainer
-    && painted.startOffset === range.startOffset
-    && painted.endContainer === range.endContainer
-    && painted.endOffset === range.endOffset;
+  return sameBoundaries(painted, range);
 }
 
 /**
@@ -42,7 +39,38 @@ export function paintRangeHighlight(
   const document = range.startContainer.nodeType === 9
     ? range.startContainer as Document
     : range.startContainer.ownerDocument;
-  if (!document) return false;
+  return document ? paintRangeHighlights(document, name, [range], declarations, priority) : false;
+}
+
+function sameBoundaries(a: AbstractRange, b: AbstractRange): boolean {
+  return a.startContainer === b.startContainer
+    && a.startOffset === b.startOffset
+    && a.endContainer === b.endContainer
+    && a.endOffset === b.endOffset;
+}
+
+function paintsExactlyAll(highlight: RangeHighlight, ranges: readonly Range[]): boolean {
+  if (highlight.size !== ranges.length) return false;
+  if (ranges.length === 1) return paintsExactly(highlight, ranges[0]);
+  let index = 0;
+  for (const painted of highlight.values()) {
+    if (!sameBoundaries(painted, ranges[index])) return false;
+    index += 1;
+  }
+  return true;
+}
+
+/**
+ * Paint every range under one highlight name in a document, replacing what
+ * that name painted before. An empty list clears it.
+ */
+export function paintRangeHighlights(
+  document: Document,
+  name: string,
+  ranges: readonly Range[],
+  declarations: string,
+  priority = 0,
+): boolean {
   const view = document.defaultView as HighlightWindow | null;
   const registry = view?.CSS?.highlights;
   const Highlight = view?.Highlight;
@@ -62,16 +90,16 @@ export function paintRangeHighlight(
 
   // Register each highlight once and only ever update its ranges. Replacing
   // or unregistering a highlight leaves stale paint in WebKit (bugs 321567,
-  // 266250), and every range mutation repaints, so an unchanged range is left
+  // 266250), and every range mutation repaints, so unchanged ranges are left
   // alone rather than cleared and re-added.
   const existingHighlight = registry.get(name);
   if (existingHighlight) {
     if (existingHighlight.priority !== priority) existingHighlight.priority = priority;
-    if (paintsExactly(existingHighlight, range)) return true;
+    if (paintsExactlyAll(existingHighlight, ranges)) return true;
     existingHighlight.clear();
-    existingHighlight.add(range);
+    for (const range of ranges) existingHighlight.add(range);
   } else {
-    const highlight = new Highlight(range);
+    const highlight = new Highlight(...ranges);
     highlight.priority = priority;
     registry.set(name, highlight);
   }

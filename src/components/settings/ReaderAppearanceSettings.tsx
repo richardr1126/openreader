@@ -35,6 +35,8 @@ const SPACING_PRESETS = [
 const WIDTH_PRESETS = [{ label: 'Compact', value: 60 }, { label: 'Balanced', value: 80 }, { label: 'Full', value: 100 }] as const;
 /** The highlighted segment, split around the word being spoken. */
 const PREVIEW_SEGMENT = ['The afternoon light fell across the page. There was ', 'time', ' to pause, and room for the story to unfold.'] as const;
+/** The opening sentence of the first paragraph after the segment, shown as a saved highlight. */
+const PREVIEW_MARK = 'Outside, the street had gone quiet.';
 const PREVIEW_PARAGRAPHS = [
   'Outside, the street had gone quiet. A kettle ticked as it cooled, and somewhere a door closed softly, the way doors do when no one wants to be the reason for a sound.',
   'She turned the page and kept going. The chapter was longer than she remembered, but the words came easily now, one sentence leaning into the next.',
@@ -124,6 +126,7 @@ const APPEARANCE_ROWS: Record<string, { icon: ReactNode; info?: string }> = {
   Preset: { icon: <PaletteIcon />, info: 'Theme follows the app’s accent color; the others use fixed colors.' },
   Segment: { icon: <HighlighterIcon />, info: 'A segment is the passage narrated as one piece. It is often a paragraph or a few sentences, not a single sentence.' },
   Word: { icon: <TextCursorIcon /> },
+  'Saved highlights': { icon: <HighlighterIcon />, info: 'Passages you highlight while reading.' },
 };
 
 // Block flex, not inline: glyphs of different heights would otherwise shift each segment's text baseline.
@@ -235,7 +238,9 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           <p aria-label="Highlight preview" className="-mx-1 rounded-sm px-1" style={{ marginBottom: `${draft.paragraphSpacing}em`, backgroundColor: presentation.highlightSegment ? highlightBackground(draft, 'segment') : undefined }}>
             {PREVIEW_SEGMENT[0]}<span className="rounded-sm" style={{ backgroundColor: presentation.highlightWords ? highlightBackground(draft, 'word') : undefined }}>{PREVIEW_SEGMENT[1]}</span>{PREVIEW_SEGMENT[2]}
           </p>
-          {PREVIEW_PARAGRAPHS.map((text) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>{text}</p>)}
+          {PREVIEW_PARAGRAPHS.map((text, index) => <p key={text} style={{ marginBottom: `${draft.paragraphSpacing}em` }}>
+            {index === 0 ? <><span className="rounded-sm" style={{ backgroundColor: highlightBackground(draft, 'mark') }}>{PREVIEW_MARK}</span>{text.slice(PREVIEW_MARK.length)}</> : text}
+          </p>)}
         </div>
       </div>
       {showTypography && <Row label="Font family" actions={resetField('typography', ['fontFamily'], 'Use global font family')}>
@@ -281,16 +286,16 @@ export function ReaderAppearanceSettings({ scope = 'global', showTypography = tr
           value={Object.entries(HIGHLIGHT_PRESETS).find(([, preset]) => Object.entries(preset).every(([key, value]) => draft[key as keyof HighlightAppearance] === value))?.[0] ?? ''}
           onChange={(name) => change('highlightAppearance', HIGHLIGHT_PRESETS[name])}
           options={Object.entries(HIGHLIGHT_PRESETS).map(([name, preset]) => ({ value: name, label: segmentLabel(
-            <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full border border-current" style={{ backgroundColor: highlightBackground({ ...preset, wordOpacity: 1 }, 'word') }} />, name) }))} />
+            <span aria-hidden className="h-2.5 w-2.5 shrink-0 rounded-full border border-current" style={{ backgroundColor: highlightBackground({ ...DEFAULT_HIGHLIGHT_APPEARANCE, ...preset, wordOpacity: 1 }, 'word') }} />, name) }))} />
       </Row>
-      {(['segment', 'word'] as const).map((layer) => {
+      {(['segment', 'word', 'mark'] as const).map((layer) => {
         const colorKey = `${layer}Color` as const, opacityKey = `${layer}Opacity` as const;
-        const title = layer === 'segment' ? 'Segment' : 'Word';
+        const title = layer === 'segment' ? 'Segment' : layer === 'word' ? 'Word' : 'Saved highlights';
         const actions = <>
-          {draft[colorKey] !== 'theme' && <button type="button" aria-label={`Use theme ${layer} color`} title="Use theme color"
+          {layer !== 'mark' && draft[colorKey] !== 'theme' && <button type="button" aria-label={`Use theme ${layer} color`} title="Use theme color"
             className="inline-flex h-5 w-5 items-center justify-center rounded text-faint hover:text-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-accent"
             onClick={() => change('highlightAppearance', { [colorKey]: 'theme' })}><PaletteIcon className="h-3 w-3" aria-hidden /></button>}
-          {resetField('highlightAppearance', [colorKey, opacityKey], `Use global ${layer} highlight`)}
+          {resetField('highlightAppearance', [colorKey, opacityKey], layer === 'mark' ? 'Use global saved highlight color' : `Use global ${layer} highlight`)}
         </>;
         // The swatch sits left of the column so the opacity stepper lines up with the typography steppers.
         const color = <ColorPicker label={title} field="accent" value={draft[colorKey] === 'theme' ? '#ef4444' : draft[colorKey]}

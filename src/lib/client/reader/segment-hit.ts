@@ -193,6 +193,18 @@ function proportionalWindows(candidateTokens: string[][], unitTokenCount: number
   return windows;
 }
 
+/** Each candidate's inclusive token window within one unit's rendered tokens. */
+function candidateWindows(
+  candidates: readonly SeekCandidate[],
+  unitTokenTexts: readonly string[],
+  language?: string,
+): Array<[number, number]> {
+  if (candidates.length === 1) return [[0, unitTokenTexts.length - 1]];
+  const unitTokens = unitTokenTexts.map(normalizeHighlightToken);
+  const candidateTokens = candidates.map((candidate) => tokenize(candidate.text, language));
+  return exactWindows(candidateTokens, unitTokens) ?? proportionalWindows(candidateTokens, unitTokens.length);
+}
+
 /**
  * Resolve the plan segment a token belongs to among the consecutive segments
  * read from one rendered unit.
@@ -204,14 +216,7 @@ export function pickSegmentForToken(
   language?: string,
 ): SegmentHit | null {
   if (candidates.length === 0 || tokenIndex < 0 || tokenIndex >= unitTokenTexts.length) return null;
-  if (candidates.length === 1) {
-    return { ordinal: candidates[0].ordinal, startToken: 0, endToken: unitTokenTexts.length - 1 };
-  }
-  const unitTokens = unitTokenTexts.map(normalizeHighlightToken);
-  const candidateTokens = candidates.map((candidate) => tokenize(candidate.text, language));
-  const windows = exactWindows(candidateTokens, unitTokens)
-    ?? proportionalWindows(candidateTokens, unitTokens.length);
-
+  const windows = candidateWindows(candidates, unitTokenTexts, language);
   let best = 0;
   let bestDistance = Number.POSITIVE_INFINITY;
   windows.forEach(([start, end], index) => {
@@ -311,4 +316,114 @@ export function resolvePointInUnit(
   const hit = pickSegmentForToken(candidates, tokens.map((token) => token.text), tokenIndex, language);
   if (!hit) return null;
   return { ordinal: hit.ordinal, range: rangeForTokens(tokens, hit.startToken, hit.endToken) };
+}
+
+/**
+ * The rendered extent of the unit's sentences whose ordinals fall in
+ * `[from, to]`, or null when none of them is in this unit.
+ */
+export function rangeForOrdinalsInUnit(
+  roots: readonly Node[],
+  candidates: readonly SeekCandidate[],
+  from: number,
+  to: number,
+  language?: string,
+): Range | null {
+  const first = candidates.findIndex((candidate) => candidate.ordinal >= from && candidate.ordinal <= to);
+  if (first < 0) return null;
+  let last = first;
+  while (last + 1 < candidates.length && candidates[last + 1].ordinal <= to) last += 1;
+  const tokens = collectTextTokens(roots, language);
+  if (tokens.length === 0) return null;
+  const windows = candidateWindows(candidates, tokens.map((token) => token.text), language);
+  const range = rangeForTokens(tokens, windows[first][0], windows[last][1]);
+  // Take in the closing punctuation the last word token leaves out.
+  const end = tokens[windows[last][1]];
+  if (range && end) range.setEnd(end.node, closingPunctuationEnd(end.node.nodeValue ?? '', end.end));
+  return range;
+}
+
+/**
+ * The end of the punctuation run starting at `offset`, stopping at whitespace
+ * or the next word for scripts that don't space their sentences. Scans by code
+ * point, so a letter outside the BMP also ends the run.
+ */
+export function closingPunctuationEnd(text: string, offset: number): number {
+  let end = offset;
+  for (const char of text.slice(offset)) {
+    if (/[\s\p{L}\p{N}]/u.test(char)) break;
+    end += char.length;
+  }
+  return end;
+}
+
+/**
+ * The sentence a selection boundary falls in. At a caret between words the
+ * `start` edge takes the following word and the `end` edge the preceding one,
+ * so the snapped selection never takes in a sentence nothing was selected in;
+ * null when no word of the unit lies on the selected side.
+ */
+export function ordinalAtCaretInUnit(
+  roots: readonly Node[],
+  candidates: readonly SeekCandidate[],
+  caret: CaretPosition,
+  edge: 'start' | 'end',
+  language?: string,
+): number | null {
+  if (candidates.length === 0 || roots.length === 0) return null;
+  const tokens = collectTextTokens(roots, language);
+  if (tokens.length === 0) return null;
+  const doc = roots[0].ownerDocument ?? (roots[0] as Document);
+  const at = doc.createRange();
+  try {
+    at.setStart(caret.node, caret.offset);
+  } catch {
+    return null;
+  }
+  const tokenIndex = edge === 'start'
+    ? tokens.findIndex((token) => at.comparePoint(token.node, token.end) > 0)
+    : tokens.findLastIndex((token) => at.comparePoint(token.node, token.start) < 0);
+  // A start after the unit's last word, or an end before its first, selects nothing here.
+  if (tokenIndex < 0) return null;
+  return pickSegmentForToken(candidates, tokens.map((token) => token.text), tokenIndex, language)?.ordinal ?? null;
+}
+
+/**
+ * The first and last sentence a selection covers among the rendered units it
+ * crosses, each unit with its own plan sentences. A boundary outside every
+ * unit (in a margin) snaps to the nearest unit edge the selection reaches.
+ */
+export function resolveSelectionInUnits<Unit>(
+  range: Range,
+  units: readonly Unit[],
+  unitRoots: (unit: Unit) => readonly Node[],
+  candidatesFor: (unit: Unit) => readonly SeekCandidate[],
+  language?: string,
+): { start: number; end: number } | null {
+  const touched = units.filter((unit) => {
+    const candidates = candidatesFor(unit);
+    return candidates.length > 0 && unitRoots(unit).some((root) => range.intersectsNode(root));
+  });
+  if (touched.length === 0) return null;
+  const boundary = (unit: Unit, edge: 'start' | 'end') => {
+    const roots = unitRoots(unit);
+    const node = edge === 'start' ? range.startContainer : range.endContainer;
+    const inside = roots.some((root) => root === node || root.contains(node));
+    const caret: CaretPosition = inside
+      ? { node, offset: edge === 'start' ? range.startOffset : range.endOffset }
+      : edge === 'start'
+        ? { node: roots[0], offset: 0 }
+        : { node: roots[roots.length - 1], offset: roots[roots.length - 1].childNodes.length };
+    return ordinalAtCaretInUnit(roots, candidatesFor(unit), caret, edge, language);
+  };
+  // A selection ending at the very start of a unit touches it without
+  // selecting any of its words, so look inward from each end.
+  let start: number | null = null;
+  for (let index = 0; start === null && index < touched.length; index += 1) start = boundary(touched[index], 'start');
+  let end: number | null = null;
+  for (let index = touched.length - 1; end === null && index >= 0; index -= 1) end = boundary(touched[index], 'end');
+  // Snapping inward can cross over: a selection of only the punctuation
+  // between two sentences takes in neither.
+  if (start === null || end === null || start > end) return null;
+  return { start, end };
 }

@@ -105,6 +105,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
         documentId,
         segmentKey: input.segmentKey,
         segmentOrdinal: input.segmentOrdinal,
+        endSegmentKey: input.endSegmentKey,
+        endSegmentOrdinal: input.endSegmentOrdinal,
         label: input.label,
         snippet: input.snippet,
         createdAt: now,

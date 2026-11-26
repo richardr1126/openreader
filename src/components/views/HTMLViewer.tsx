@@ -18,7 +18,14 @@ import {
   highlightHtmlWord,
   scrollSentenceIntoView,
 } from '@/lib/client/html/highlight';
-import { indexSegmentsBySource, resolvePointInUnit, segmentSourceKey } from '@/lib/client/reader/segment-hit';
+import {
+  indexSegmentsBySource,
+  resolvePointInUnit,
+  resolveSelectionInUnits,
+  segmentSourceKey,
+} from '@/lib/client/reader/segment-hit';
+import { paintSavedHighlights } from '@/lib/client/reader/saved-highlights';
+import { bindSelectionReporting, useReaderHighlights } from '@/components/reader/ReaderHighlights';
 import { bindTapToSeek } from '@/lib/client/reader/tap-to-seek';
 import { buildPlanTextBlocks } from '@/lib/client/reader/plan-text-blocks';
 import { useLatestRef } from '@/hooks/useLatestRef';
@@ -235,6 +242,48 @@ export function HTMLViewer({
     currentSentenceAlignment,
     currentWordIndex,
   ]);
+
+  // Saved highlights paint after the sentence and word wraps above, which
+  // split and rejoin the text nodes their ranges sit on.
+  const { highlights: savedHighlights, declarations: savedDeclarations, selectionSink } = useReaderHighlights();
+  useLayoutEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    const units = function* () {
+      for (const [key, candidates] of segmentsByBlock) {
+        const block = container.ownerDocument.getElementById(key);
+        if (block && container.contains(block)) yield { roots: [block], candidates };
+      }
+    };
+    paintSavedHighlights(container.ownerDocument, units(), savedHighlights, savedDeclarations, resolvedLanguage);
+  }, [
+    blocks,
+    showImages,
+    followingNarration,
+    readerNavigationRevision,
+    highlightEnabled,
+    wordHighlightEnabled,
+    currentSentence,
+    currentSentenceAlignment,
+    currentWordIndex,
+    resolvedLanguage,
+    segmentsByBlock,
+    savedHighlights,
+    savedDeclarations,
+  ]);
+
+  // A selection over the text offers to highlight the sentences it covers.
+  const selectionStateRef = useLatestRef({ segmentsByBlock, resolvedLanguage });
+  useEffect(() => {
+    const container = contentRef.current;
+    if (!container) return;
+    return bindSelectionReporting(container.ownerDocument, (range) => {
+      if (!container.contains(range.commonAncestorContainer)) return null;
+      const { segmentsByBlock: index, resolvedLanguage: language } = selectionStateRef.current;
+      const units = Array.from(container.querySelectorAll<HTMLElement>('.openreader-html-block'));
+      return resolveSelectionInUnits(range, units, (unit) => [unit], (unit) => index.get(unit.id) ?? [], language);
+    }, selectionSink);
+  }, [selectionSink, selectionStateRef]);
 
   // Real cleanup on unmount — tear down any leftover wraps. The empty deps
   // ensure this only fires when HTMLViewer itself unmounts (route change,

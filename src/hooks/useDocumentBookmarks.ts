@@ -12,17 +12,29 @@ import {
   renameDocumentBookmark,
 } from '@/lib/client/api/bookmarks';
 import { queryKeys } from '@/lib/client/query-keys';
-import { bookmarkInputForSegment, findBookmarkForSegment } from '@/lib/client/reader/bookmarks';
-import type { CreateDocumentBookmarkInput, DocumentBookmark } from '@/types/bookmarks';
+import {
+  bookmarkInputForSegment,
+  findBookmarkForSegment,
+  highlightInputForSegments,
+  highlightsOverlapping,
+  mergeHighlightRange,
+  resolveHighlights,
+} from '@/lib/client/reader/bookmarks';
+import { isHighlight, type CreateDocumentBookmarkInput, type DocumentBookmark } from '@/types/bookmarks';
+
+function isHighlightInput(input: CreateDocumentBookmarkInput): boolean {
+  return input.endSegmentOrdinal !== undefined;
+}
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
 /**
- * The document's bookmarks (newest first) and the bookmark on the current
- * playback sentence. Mutations update the list optimistically and roll back
- * on failure; every reader and the bookmarks panel share one cache entry.
+ * The document's bookmarks (newest first), its highlights (in reading order)
+ * and the bookmark on the current playback sentence. Both live in one cache
+ * entry that every reader and panel share; mutations update it optimistically
+ * and roll back on failure.
  */
 export function useDocumentBookmarks(documentId: string) {
   const { data: session, isPending } = useAuthSession();
@@ -36,7 +48,11 @@ export function useDocumentBookmarks(documentId: string) {
     queryFn: ({ signal }) => listDocumentBookmarks(documentId, { signal }),
     enabled: !isPending && Boolean(documentId),
   });
-  const bookmarks = useMemo(() => query.data ?? [], [query.data]);
+  const rows = useMemo(() => query.data ?? [], [query.data]);
+  const bookmarks = useMemo(() => rows.filter((row) => !isHighlight(row)), [rows]);
+  const highlights = useMemo(() => resolveHighlights(playbackSegments, rows), [playbackSegments, rows]);
+  // Saved highlights the current text can't place (still preparing, or re-planned).
+  const unplacedHighlights = rows.filter(isHighlight).length - highlights.length;
 
   const snapshot = useCallback(async () => {
     await queryClient.cancelQueries({ queryKey: key });
@@ -57,6 +73,8 @@ export function useDocumentBookmarks(documentId: string) {
         id: input.id ?? '',
         documentId,
         label: input.label ?? null,
+        endSegmentKey: input.endSegmentKey ?? null,
+        endSegmentOrdinal: input.endSegmentOrdinal ?? null,
         createdAtMs: now,
         updatedAtMs: now,
       };
@@ -65,7 +83,7 @@ export function useDocumentBookmarks(documentId: string) {
     },
     onError: (error, input, context) => {
       restore(error, input, context);
-      toast.error(errorMessage(error, 'Failed to add bookmark'));
+      toast.error(errorMessage(error, isHighlightInput(input) ? 'Failed to add highlight' : 'Failed to add bookmark'));
     },
     onSettled: settle,
   });
@@ -87,6 +105,44 @@ export function useDocumentBookmarks(documentId: string) {
     onSettled: settle,
   });
 
+  // One operation, so the rows a merge replaces are removed even if the reader
+  // closes before the new row is saved. The new row is saved first: a failed
+  // save leaves the originals as they were.
+  const merge = useMutation({
+    mutationFn: async ({ input, replaced }: { input: CreateDocumentBookmarkInput; replaced: string[] }) => {
+      const created = await createDocumentBookmark(documentId, input);
+      // Every replaced row is tried, so one failure leaves no others behind.
+      const deleted = await Promise.allSettled(replaced.map((id) => deleteDocumentBookmark(documentId, id)));
+      const failed = deleted.find((result) => result.status === 'rejected');
+      if (failed) throw failed.reason;
+      return created;
+    },
+    onMutate: async ({ input, replaced }) => {
+      const previous = await snapshot();
+      const now = Date.now();
+      const optimistic: DocumentBookmark = {
+        ...input,
+        id: input.id ?? '',
+        documentId,
+        label: input.label ?? null,
+        endSegmentKey: input.endSegmentKey ?? null,
+        endSegmentOrdinal: input.endSegmentOrdinal ?? null,
+        createdAtMs: now,
+        updatedAtMs: now,
+      };
+      queryClient.setQueryData<DocumentBookmark[]>(key, (rows = []) => [
+        optimistic,
+        ...rows.filter((row) => !replaced.includes(row.id)),
+      ]);
+      return { previous };
+    },
+    onError: (error, input, context) => {
+      restore(error, input, context);
+      toast.error(errorMessage(error, 'Failed to save highlight'));
+    },
+    onSettled: settle,
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => deleteDocumentBookmark(documentId, id),
     onMutate: async (id) => {
@@ -96,7 +152,7 @@ export function useDocumentBookmarks(documentId: string) {
     },
     onError: (error, id, context) => {
       restore(error, id, context);
-      toast.error(errorMessage(error, 'Failed to delete bookmark'));
+      toast.error(errorMessage(error, 'Failed to delete'));
     },
     onSettled: settle,
   });
@@ -111,9 +167,12 @@ export function useDocumentBookmarks(documentId: string) {
 
   const { mutate: createMutate } = create;
   const { mutate: removeMutate } = remove;
+  const { mutate: mergeMutate } = merge;
   // A toggle while the previous one is in flight would race its request
   // (a delete reaching the server before the create it undoes).
-  const toggleBusy = create.isPending || remove.isPending;
+  const toggleBusy = create.isPending || remove.isPending || merge.isPending;
+  // Until the saved rows have loaded, a range can't be merged with them.
+  const rangeBusy = toggleBusy || !query.isSuccess;
   const toggleCurrent = useCallback(() => {
     if (toggleBusy) return;
     if (currentBookmark) {
@@ -131,8 +190,36 @@ export function useDocumentBookmarks(documentId: string) {
     onToggle: toggleCurrent,
   }), [currentSegment, isCurrentBookmarked, toggleCurrent]);
 
+  /**
+   * Highlight the sentences from `from` through `to`. A range that overlaps
+   * existing highlights merges with them into one. False when it can't be
+   * taken yet, so the caller keeps the reader's selection.
+   */
+  const highlightRange = useCallback((from: number, to: number): boolean => {
+    if (rangeBusy) return false;
+    const { start, end, absorbed, label } = mergeHighlightRange(highlights, from, to);
+    const startSegment = playbackSegments.find((segment) => segment.ordinal === start);
+    const endSegment = playbackSegments.find((segment) => segment.ordinal === end);
+    if (!startSegment || !endSegment) return false;
+    const input = highlightInputForSegments({ start: startSegment, end: endSegment, id: crypto.randomUUID() });
+    mergeMutate({ input: label ? { ...input, label } : input, replaced: absorbed.map((entry) => entry.highlight.id) });
+    return true;
+  }, [highlights, mergeMutate, playbackSegments, rangeBusy]);
+
+  /** Remove every highlight covering a sentence in `[from, to]`. False when it can't be taken yet. */
+  const unhighlightRange = useCallback((from: number, to: number): boolean => {
+    if (rangeBusy) return false;
+    const [low, high] = from <= to ? [from, to] : [to, from];
+    for (const entry of highlightsOverlapping(highlights, low, high)) removeMutate(entry.highlight.id);
+    return true;
+  }, [highlights, rangeBusy, removeMutate]);
+
   return {
     bookmarks,
+    highlights,
+    unplacedHighlights,
+    highlightRange,
+    unhighlightRange,
     isLoading: isPending || query.isPending,
     isError: query.isError,
     /** The header toggle for the current playback sentence. */
