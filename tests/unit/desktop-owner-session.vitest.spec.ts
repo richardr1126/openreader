@@ -50,6 +50,7 @@ function realUsers() {
 async function loadAuth(token: string | undefined): Promise<void> {
   if (token === undefined) delete process.env.DESKTOP_LAUNCH_TOKEN;
   else process.env.DESKTOP_LAUNCH_TOKEN = token;
+  await closeAppDatabase();
   vi.resetModules();
   authModule = await import('@/lib/server/auth/auth');
 }

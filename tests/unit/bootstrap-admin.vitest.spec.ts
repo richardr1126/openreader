@@ -89,6 +89,7 @@ describe('first administrator bootstrap', () => {
     database.close();
     process.env.BOOTSTRAP_ADMIN_EMAIL = 'replacement@example.test';
     process.env.BOOTSTRAP_ADMIN_PASSWORD = 'replacement-secret-2026';
+    await closeAppDatabase();
     vi.resetModules();
     ({ ensureInitialAdmin } = await import('@/lib/server/auth/bootstrap-admin'));
     await ensureInitialAdmin();
