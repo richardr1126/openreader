@@ -29,8 +29,8 @@ const TABLE = [
   'w\tcoma\tkˈoma',
 ].join('\n');
 
-const phonemes = (text: string) =>
-  new LearnedG2P('es', TABLE).phonemize(text).tokens.map((token) => token.phonemes).join(' ');
+const phonemes = (text: string, table = TABLE) =>
+  new LearnedG2P('es', table).phonemize(text).tokens.map((token) => token.phonemes).join(' ');
 
 describe('learned G2P', () => {
   test('changes a word edge only where its neighbour calls for it', () => {
@@ -46,6 +46,12 @@ describe('learned G2P', () => {
 
   test('guesses unknown words from the rules and changes their last sound', () => {
     expect(phonemes('mesas mesa')).toBe('mˈesaz mˈesa');
+  });
+
+  test('reads CRLF tables without adding carriage returns to phonemes', () => {
+    const table = TABLE.replaceAll('\n', '\r\n');
+    expect(phonemes('la de', table)).toBe('la ðˈe');
+    expect(phonemes('mesas mesa', table)).toBe('mˈesaz mˈesa');
   });
 
   test('keeps punctuation as its own tokens with the original spacing', () => {

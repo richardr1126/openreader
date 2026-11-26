@@ -43,7 +43,7 @@ export class LetterToSound {
     let fallbackVowel: string | null = null;
     const skeleton = Array.from({ length: 8 }, () => new Map<string, string>());
     const stress = Array.from({ length: 8 }, () => new Map<string, string>());
-    for (const line of tsv.split('\n')) {
+    for (const line of tsv.split(/\r?\n/)) {
       if (!line) continue;
       const first = line.indexOf('\t');
       if (first < 0) continue;
