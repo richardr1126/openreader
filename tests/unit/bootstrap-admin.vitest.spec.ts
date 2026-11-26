@@ -45,7 +45,9 @@ beforeAll(async () => {
   ({ ensureInitialAdmin } = await import('@/lib/server/auth/bootstrap-admin'));
 });
 
-afterAll(() => {
+afterAll(async () => {
+  // Windows cannot remove a database file the app connection still holds open.
+  (await import('@openreader/database')).db.$client.close();
   for (const [name, value] of [
     ['SQLITE_DB_PATH', originalEnv.path],
     ['BOOTSTRAP_ADMIN_EMAIL', originalEnv.email],

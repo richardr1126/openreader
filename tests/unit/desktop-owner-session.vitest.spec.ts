@@ -62,7 +62,9 @@ beforeAll(async () => {
   await runMigrations({ cwd: directory, env: { ...process.env, SQLITE_DB_PATH: databasePath, POSTGRES_URL: '' } });
 });
 
-afterAll(() => {
+afterAll(async () => {
+  // Windows cannot remove a database file the app connection still holds open.
+  (await import('@openreader/database')).db.$client.close();
   for (const [name, value] of [
     ['SQLITE_DB_PATH', originalEnv.path],
     ['DESKTOP_LAUNCH_TOKEN', originalEnv.token],

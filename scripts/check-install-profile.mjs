@@ -28,7 +28,7 @@ export function findInstallProfileViolations(root) {
   for (const file of files) {
     const lines = fs.readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, index) => {
-      if (PATTERN.test(line)) violations.push({ file: path.relative(root, file), line: index + 1 });
+      if (PATTERN.test(line)) violations.push({ file: path.relative(root, file).split(path.sep).join('/'), line: index + 1 });
     });
   }
   return violations;

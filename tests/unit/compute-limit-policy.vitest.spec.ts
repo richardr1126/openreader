@@ -45,7 +45,7 @@ describe('compute limit policy', () => {
     const plan = readFileSync(
       path.resolve(import.meta.dirname, '../../v5/COMPUTE_RATE_LIMITING_PLAN.md'),
       'utf8',
-    );
+    ).replace(/\r\n/g, '\n');
     const seedSection = plan.split('Both seed forms must support the complete policy document:')[1] ?? '';
     const jsonBlock = seedSection.match(/```json\n([\s\S]*?)\n```/)?.[1];
     expect(jsonBlock).toBeDefined();

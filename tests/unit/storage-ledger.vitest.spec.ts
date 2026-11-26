@@ -49,7 +49,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.presign.mockResolvedValue({ url: 'https://storage.example/upload', headers: {} });
 });
-afterAll(() => {
+afterAll(async () => {
+  // Windows cannot remove a database file the app connection still holds open.
+  (await import('@openreader/database')).db.$client.close();
   for (const key of ['SQLITE_DB_PATH', 'POSTGRES_URL', 'DESKTOP_LAUNCH_TOKEN', 'BASE_URL', 'AUTH_SECRET', 'COMPUTE_CREDENTIAL_BROKER_TOKEN']) {
     if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key];
   }

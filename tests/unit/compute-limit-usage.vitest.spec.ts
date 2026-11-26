@@ -86,7 +86,9 @@ beforeAll(async () => {
   ({ POST: completeOperation } = await import('@/app/api/internal/compute/limits/complete/route'));
 });
 
-afterAll(() => {
+afterAll(async () => {
+  // Windows cannot remove a database file the app connection still holds open.
+  (await import('@openreader/database')).db.$client.close();
   rmSync(databaseDirectory, { recursive: true, force: true });
 });
 
