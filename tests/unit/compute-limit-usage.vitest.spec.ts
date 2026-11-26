@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -87,8 +88,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Windows cannot remove a database file the app connection still holds open.
-  (await import('@openreader/database')).db.$client.close();
+  await closeAppDatabase();
   rmSync(databaseDirectory, { recursive: true, force: true });
 });
 

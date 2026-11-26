@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -76,8 +77,7 @@ beforeAll(async () => {
   clientId = (await registered.json()).client_id;
 });
 afterAll(async () => {
-  // Windows cannot remove a database file the app connection still holds open.
-  (await import('@openreader/database')).db.$client.close();
+  await closeAppDatabase();
   for (const key of ['SQLITE_DB_PATH', 'POSTGRES_URL', 'DESKTOP_LAUNCH_TOKEN', 'BASE_URL', 'DISABLE_AUTH_RATE_LIMIT', 'AUTH_SECRET']) {
     if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key];
   }

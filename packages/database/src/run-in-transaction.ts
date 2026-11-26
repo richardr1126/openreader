@@ -37,6 +37,14 @@ function getSqliteTransactionConnection() {
   return { db: sqliteTransactionDb, raw: sqliteTransactionRaw };
 }
 
+/** Close the dedicated SQLite transaction connection if it was opened. */
+export async function closeTransactionConnection(): Promise<void> {
+  await sqliteTransactionTail;
+  sqliteTransactionRaw?.close();
+  sqliteTransactionRaw = null;
+  sqliteTransactionDb = null;
+}
+
 /**
  * Run `fn` with a database connection, wrapped in a transaction on Postgres.
  *
