@@ -7,7 +7,8 @@ const srcRoot = path.join(root, 'src');
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs']);
 
 function source(relativePath: string): string {
-  return readFileSync(path.join(root, relativePath), 'utf8');
+  // Windows checkouts may convert line endings to CRLF.
+  return readFileSync(path.join(root, relativePath), 'utf8').replace(/\r\n/g, '\n');
 }
 
 function collectSourceFiles(dir: string): string[] {
@@ -119,7 +120,7 @@ describe('server-state architecture', () => {
     ]);
     const offenders = sourceFiles
       .filter((file) => localStorageCall.test(readFileSync(file, 'utf8')))
-      .map((file) => path.relative(root, file))
+      .map((file) => path.relative(root, file).split(path.sep).join('/'))
       .filter((file) => !allowed.has(file));
 
     expect(offenders).toEqual([]);

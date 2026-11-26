@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -62,7 +63,8 @@ beforeAll(async () => {
   auth = await (await import('@/lib/server/auth/auth')).getAuth();
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await closeAppDatabase();
   for (const [name, value] of [
     ['SQLITE_DB_PATH', originalEnv.path],
     ['POSTGRES_URL', originalEnv.postgres],

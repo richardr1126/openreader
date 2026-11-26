@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -86,7 +87,8 @@ beforeAll(async () => {
   ({ POST: completeOperation } = await import('@/app/api/internal/compute/limits/complete/route'));
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await closeAppDatabase();
   rmSync(databaseDirectory, { recursive: true, force: true });
 });
 

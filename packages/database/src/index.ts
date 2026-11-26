@@ -118,6 +118,16 @@ function getDrizzleDB() {
   return dbInstance;
 }
 
+/** Close the shared connection if it was opened, so its database file can be removed. */
+export async function closeDatabase(): Promise<void> {
+  const instance = dbInstance;
+  dbInstance = null;
+  seededUserIds.clear();
+  if (!instance) return;
+  if (dbIsPostgres) await instance.$client.end();
+  else instance.$client.close();
+}
+
 // Lazy proxy: the actual DB connection is only opened on first property access.
 // This prevents side effects (e.g. creating an empty sqlite3.db) when modules
 // import `db` but never use it, such as during Better Auth CLI schema generation.

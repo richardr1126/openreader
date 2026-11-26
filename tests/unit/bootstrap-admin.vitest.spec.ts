@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -45,7 +46,8 @@ beforeAll(async () => {
   ({ ensureInitialAdmin } = await import('@/lib/server/auth/bootstrap-admin'));
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await closeAppDatabase();
   for (const [name, value] of [
     ['SQLITE_DB_PATH', originalEnv.path],
     ['BOOTSTRAP_ADMIN_EMAIL', originalEnv.email],
@@ -87,6 +89,7 @@ describe('first administrator bootstrap', () => {
     database.close();
     process.env.BOOTSTRAP_ADMIN_EMAIL = 'replacement@example.test';
     process.env.BOOTSTRAP_ADMIN_PASSWORD = 'replacement-secret-2026';
+    await closeAppDatabase();
     vi.resetModules();
     ({ ensureInitialAdmin } = await import('@/lib/server/auth/bootstrap-admin'));
     await ensureInitialAdmin();

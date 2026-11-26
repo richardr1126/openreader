@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -31,7 +32,8 @@ beforeAll(async () => {
   await settings.setRuntimeConfigKey('allowAnonymousSessions', true);
   auth = await (await import('@/lib/server/auth/auth')).getAuth();
 });
-afterAll(() => {
+afterAll(async () => {
+  await closeAppDatabase();
   for (const key of ['SQLITE_DB_PATH', 'POSTGRES_URL', 'DESKTOP_LAUNCH_TOKEN', 'BASE_URL', 'DISABLE_AUTH_RATE_LIMIT', 'AUTH_SECRET']) {
     if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key];
   }

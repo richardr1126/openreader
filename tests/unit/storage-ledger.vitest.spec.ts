@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,7 +50,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.presign.mockResolvedValue({ url: 'https://storage.example/upload', headers: {} });
 });
-afterAll(() => {
+afterAll(async () => {
+  await closeAppDatabase();
   for (const key of ['SQLITE_DB_PATH', 'POSTGRES_URL', 'DESKTOP_LAUNCH_TOKEN', 'BASE_URL', 'AUTH_SECRET', 'COMPUTE_CREDENTIAL_BROKER_TOKEN']) {
     if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key];
   }

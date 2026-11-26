@@ -4,21 +4,25 @@ import { describe, expect, test } from 'vitest';
 
 import { resolveSqliteDatabasePath } from '@openreader/database/sqlite-path';
 
+// Absolute on every platform, including a drive letter on Windows.
+const workspace = path.resolve('/srv/openreader');
+
 describe('SQLite database path', () => {
   test('defaults to the workspace docstore', () => {
-    expect(resolveSqliteDatabasePath('/srv/openreader', {}))
-      .toBe(path.join('/srv/openreader', 'docstore', 'sqlite3.db'));
+    expect(resolveSqliteDatabasePath(workspace, {}))
+      .toBe(path.join(workspace, 'docstore', 'sqlite3.db'));
   });
 
   test('resolves a configured relative path against the application workspace', () => {
-    expect(resolveSqliteDatabasePath('/srv/openreader', { SQLITE_DB_PATH: 'state/openreader.db' }))
-      .toBe(path.join('/srv/openreader', 'state', 'openreader.db'));
+    expect(resolveSqliteDatabasePath(workspace, { SQLITE_DB_PATH: 'state/openreader.db' }))
+      .toBe(path.join(workspace, 'state', 'openreader.db'));
   });
 
   test('preserves an absolute path shared with packaged child processes', () => {
-    expect(resolveSqliteDatabasePath('/opt/openreader/embedded-compute-worker', {
-      SQLITE_DB_PATH: '/app/docstore/sqlite3.db',
-    })).toBe('/app/docstore/sqlite3.db');
+    const shared = path.resolve('/app/docstore/sqlite3.db');
+    expect(resolveSqliteDatabasePath(path.resolve('/opt/openreader/embedded-compute-worker'), {
+      SQLITE_DB_PATH: shared,
+    })).toBe(shared);
   });
 
   test('bootstrap pins one absolute path before migrations and child startup', () => {

@@ -1,3 +1,4 @@
+import { closeAppDatabase } from './helpers/close-app-database';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,6 +50,7 @@ function realUsers() {
 async function loadAuth(token: string | undefined): Promise<void> {
   if (token === undefined) delete process.env.DESKTOP_LAUNCH_TOKEN;
   else process.env.DESKTOP_LAUNCH_TOKEN = token;
+  await closeAppDatabase();
   vi.resetModules();
   authModule = await import('@/lib/server/auth/auth');
 }
@@ -62,7 +64,8 @@ beforeAll(async () => {
   await runMigrations({ cwd: directory, env: { ...process.env, SQLITE_DB_PATH: databasePath, POSTGRES_URL: '' } });
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await closeAppDatabase();
   for (const [name, value] of [
     ['SQLITE_DB_PATH', originalEnv.path],
     ['DESKTOP_LAUNCH_TOKEN', originalEnv.token],

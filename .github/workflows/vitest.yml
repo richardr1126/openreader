@@ -8,8 +8,14 @@ on:
 
 jobs:
   vitest-testing:
-    timeout-minutes: 20
-    runs-on: ubuntu-latest
+    name: vitest-testing (${{ matrix.os }})
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows runs the code the desktop app ships there (v5/DESKTOP_SHELL.md).
+        os: [ubuntu-latest, windows-2025]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -24,4 +30,5 @@ jobs:
       - name: Run Vitest suites
         run: pnpm test:unit
       - name: Verify compute worker contract and boundary
+        if: runner.os == 'Linux'
         run: pnpm compute:openapi:check && pnpm check:compute-boundary && pnpm check:install-profile
