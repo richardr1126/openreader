@@ -1,4 +1,5 @@
 *.tsx linguist-language=TypeScript
+packages/compute-worker/tests/fixtures/kokoro-g2p/*.tsv text eol=lf
 # Bundled model assets are verified by SHA-256 at runtime. Keep their bytes
 # exactly as committed so Windows checkouts (core.autocrlf) cannot rewrite them.
 packages/compute-worker/src/inference/*/assets/** -text
