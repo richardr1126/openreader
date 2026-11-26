@@ -337,16 +337,24 @@ export function rangeForOrdinalsInUnit(
   if (tokens.length === 0) return null;
   const windows = candidateWindows(candidates, tokens.map((token) => token.text), language);
   const range = rangeForTokens(tokens, windows[first][0], windows[last][1]);
-  // Take in the closing punctuation the last word token leaves out, stopping
-  // at the next word for scripts that don't space their sentences.
+  // Take in the closing punctuation the last word token leaves out.
   const end = tokens[windows[last][1]];
-  if (range && end) {
-    const text = end.node.nodeValue ?? '';
-    let offset = end.end;
-    while (offset < text.length && !/[\s\p{L}\p{N}]/u.test(text[offset])) offset += 1;
-    range.setEnd(end.node, offset);
-  }
+  if (range && end) range.setEnd(end.node, closingPunctuationEnd(end.node.nodeValue ?? '', end.end));
   return range;
+}
+
+/**
+ * The end of the punctuation run starting at `offset`, stopping at whitespace
+ * or the next word for scripts that don't space their sentences. Scans by code
+ * point, so a letter outside the BMP also ends the run.
+ */
+export function closingPunctuationEnd(text: string, offset: number): number {
+  let end = offset;
+  for (const char of text.slice(offset)) {
+    if (/[\s\p{L}\p{N}]/u.test(char)) break;
+    end += char.length;
+  }
+  return end;
 }
 
 /**

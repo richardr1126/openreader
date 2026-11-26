@@ -51,6 +51,8 @@ export function useDocumentBookmarks(documentId: string) {
   const rows = useMemo(() => query.data ?? [], [query.data]);
   const bookmarks = useMemo(() => rows.filter((row) => !isHighlight(row)), [rows]);
   const highlights = useMemo(() => resolveHighlights(playbackSegments, rows), [playbackSegments, rows]);
+  // Saved highlights the current text can't place (still preparing, or re-planned).
+  const unplacedHighlights = rows.filter(isHighlight).length - highlights.length;
 
   const snapshot = useCallback(async () => {
     await queryClient.cancelQueries({ queryKey: key });
@@ -215,6 +217,7 @@ export function useDocumentBookmarks(documentId: string) {
   return {
     bookmarks,
     highlights,
+    unplacedHighlights,
     highlightRange,
     unhighlightRange,
     isLoading: isPending || query.isPending,

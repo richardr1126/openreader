@@ -342,12 +342,17 @@ function BookmarkRow({
 
 function HighlightsPanel({ documentId, documentTitle }: { documentId: string; documentTitle: string }) {
   const { playbackSegments, skipToOrdinal } = useTTS();
-  const { highlights, isLoading, isError, remove } = useDocumentBookmarks(documentId);
+  const { highlights, unplacedHighlights, isLoading, isError, remove } = useDocumentBookmarks(documentId);
 
   const copyAll = async () => {
     try {
       await navigator.clipboard.writeText(highlightsToMarkdown(documentTitle, playbackSegments, highlights));
-      toast.success('Highlights copied as Markdown');
+      // A partial copy says what it left out rather than reporting success.
+      if (unplacedHighlights > 0) {
+        toast(`Copied ${highlights.length} highlights; ${unplacedHighlights} couldn’t be found in the text`);
+      } else {
+        toast.success('Highlights copied as Markdown');
+      }
     } catch {
       toast.error('Could not copy highlights');
     }
