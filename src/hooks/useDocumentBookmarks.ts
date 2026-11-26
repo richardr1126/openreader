@@ -109,7 +109,10 @@ export function useDocumentBookmarks(documentId: string) {
   const merge = useMutation({
     mutationFn: async ({ input, replaced }: { input: CreateDocumentBookmarkInput; replaced: string[] }) => {
       const created = await createDocumentBookmark(documentId, input);
-      for (const id of replaced) await deleteDocumentBookmark(documentId, id);
+      // Every replaced row is tried, so one failure leaves no others behind.
+      const deleted = await Promise.allSettled(replaced.map((id) => deleteDocumentBookmark(documentId, id)));
+      const failed = deleted.find((result) => result.status === 'rejected');
+      if (failed) throw failed.reason;
       return created;
     },
     onMutate: async ({ input, replaced }) => {
