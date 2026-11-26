@@ -66,6 +66,8 @@ const HARD_BOUNDARY_KINDS = new Set<ParsedPdfBlock['kind']>([
   'doc_title',
 ]);
 
+const GRAPHIC_KINDS = new Set<ParsedPdfBlock['kind']>(['chart', 'image', 'table', 'seal']);
+
 function findTailCandidateIndex(blocks: ParsedPdfBlock[]): number {
   for (let i = blocks.length - 1; i >= 0; i -= 1) {
     const block = blocks[i];
@@ -91,7 +93,10 @@ function hasHardBoundaryBetween(
 ): boolean {
   for (let i = startInclusive; i < endExclusive; i += 1) {
     const block = pageBlocks[i];
-    if (block && HARD_BOUNDARY_KINDS.has(block.kind)) return true;
+    if (!block) continue;
+    if (HARD_BOUNDARY_KINDS.has(block.kind)) return true;
+    // Moving text across a graphic that has its own text would change the spoken order.
+    if (GRAPHIC_KINDS.has(block.kind) && block.text.trim()) return true;
   }
   return false;
 }
