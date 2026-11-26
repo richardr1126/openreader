@@ -16,8 +16,11 @@ async function signUp(page: import('@playwright/test').Page, name: string, email
 test('admin approves a pending user and inspects the user directory', async ({ browser, page }, testInfo) => {
   test.setTimeout(90_000);
   const adminEmail = 'admin-e2e@example.test';
-  const readerEmail = `reader-e2e-${testInfo.project.name}@example.test`;
-  const readerName = `Reader ${testInfo.project.name}`;
+  // Unique per attempt: a retry or a repeated run must not collide with the
+  // account an earlier attempt signed up.
+  const runId = crypto.randomUUID().slice(0, 8);
+  const readerEmail = `reader-e2e-${testInfo.project.name}-${runId}@example.test`;
+  const readerName = `Reader ${testInfo.project.name} ${runId}`;
   await page.goto('/signin');
   await declineOptionalCookies(page);
   await page.getByPlaceholder('me@example.com').fill(adminEmail);
@@ -99,8 +102,8 @@ test('admin approves a pending user and inspects the user directory', async ({ b
   await catalogSwitch.click();
   await expect(catalogSave).toBeDisabled();
   // A saved setting resets to its seeded value from its own row. The setting is
-  // instance-wide and both browsers share one server, so only one project changes it.
-  if (testInfo.project.name === 'chromium') {
+  // instance-wide and every test shares one server, so only one run changes it.
+  if (testInfo.project.name === 'chromium' && testInfo.repeatEachIndex === 0) {
     await page.getByRole('button', { name: 'Providers', exact: true }).first().click();
     const retries = page.getByRole('spinbutton', { name: 'Retry attempts', exact: true });
     const seededRetries = await retries.inputValue();
@@ -144,7 +147,7 @@ test('admin approves a pending user and inspects the user directory', async ({ b
     await page.goto('/app/settings?section=users');
     await page.getByRole('searchbox', { name: 'Search users' }).fill(readerEmail);
     await expect(page.getByRole('checkbox', { name: `Select ${readerName}`, exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Approve', exact: true }).last().click();
+    await page.getByRole('button', { name: `Approve ${readerName}`, exact: true }).click();
     await expect(page.getByText('User updated')).toBeVisible();
 
     await reader.getByRole('button', { name: 'Sign in', exact: true }).click();

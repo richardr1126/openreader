@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, like, lt, max, notExists, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, max, notExists, or, sql, type AnyColumn } from 'drizzle-orm';
 import { db } from '@openreader/database';
 import { runInDbTransaction } from '@openreader/database/run-in-transaction';
 import { computeLimitEvents } from '@openreader/database/schema';
@@ -111,8 +111,10 @@ export async function listAdminUsers(input: {
   const status = input.status ?? 'all';
   const conditions = [];
   if (search) {
-    const pattern = `%${search.replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
-    conditions.push(or(like(user.email, pattern), like(user.name, pattern)));
+    const pattern = `%${search.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;
+    // SQLite has no default LIKE escape character, so name it for both dialects.
+    const contains = (column: AnyColumn) => sql`${column} like ${pattern} escape '\\'`;
+    conditions.push(or(contains(user.email), contains(user.name)));
   }
   if (kind === 'anonymous') conditions.push(eq(user.isAnonymous, true));
   if (kind === 'account') conditions.push(or(eq(user.isAnonymous, false), isNull(user.isAnonymous)));
