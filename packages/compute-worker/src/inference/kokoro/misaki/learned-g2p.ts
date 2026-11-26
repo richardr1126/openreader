@@ -103,7 +103,7 @@ export class LearnedG2P {
 
   constructor(readonly language: LearnedLanguage, tsv: string) {
     let finalStress = false;
-    for (const line of tsv.split('\n')) {
+    for (const line of tsv.split(/\r?\n/)) {
       const [kind, key, value, reading] = line.split('\t');
       if (kind === 'w' && key && value !== undefined) this.lexicon.set(key, value);
       else if (kind === 'e' && key && value !== undefined) this.edges.set(key, value);
