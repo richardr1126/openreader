@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import * as ort from 'onnxruntime-node';
 import {
   buildWordsFromTimestampedTokens,
-  extractTokenStartTimestamps,
+  extractTokenEndTimestamps,
 } from '../../../src/inference/whisper/timestamps';
 
 describe('whisper token timestamp alignment', () => {
@@ -24,7 +24,7 @@ describe('whisper token timestamp alignment', () => {
       'cross_attentions.0': new ort.Tensor('float32', data, [1, heads, seqLen, frames]),
     };
 
-    const ts = extractTokenStartTimestamps({
+    const ts = extractTokenEndTimestamps({
       crossAttentions: cross,
       decoderLayers: 6,
       alignmentHeads: [[0, 0]],
@@ -43,7 +43,7 @@ describe('whisper token timestamp alignment', () => {
     expect(ts[5]).toBeGreaterThanOrEqual(ts[4]);
   });
 
-  test('builds word timings from token timestamps with punctuation merge', () => {
+  test('starts each word where the previous token ended', () => {
     const tokenText: Record<number, string> = {
       100: ' hello',
       101: ' world',
@@ -62,11 +62,12 @@ describe('whisper token timestamp alignment', () => {
       100, 101, 102,
       timestampBeginTokenId + 50,
     ];
-    const starts = [0, 0, 0, 0, 0.1, 0.3, 0.5, 1.0];
+    // When each token ends: <|0.00|> at 0.1, " hello" at 0.3, " world" at 0.5, "!" at 0.6.
+    const ends = [0, 0, 0, 0.1, 0.3, 0.5, 0.6, 1.0];
 
     const words = buildWordsFromTimestampedTokens({
       tokens,
-      tokenStartTimestamps: starts,
+      tokenEndTimestamps: ends,
       tokenizer,
       eosTokenId: 50257,
       promptLength: 3,
@@ -75,11 +76,9 @@ describe('whisper token timestamp alignment', () => {
       language: 'en',
     });
 
-    expect(words.length).toBe(2);
-    expect(words[0].word.toLowerCase()).toContain('hello');
-    expect(words[1].word.toLowerCase()).toContain('world');
-    expect(words[1].word).toContain('!');
-    expect(words[0].startSec).toBeGreaterThanOrEqual(0);
-    expect(words[1].endSec).toBeGreaterThanOrEqual(words[1].startSec);
+    expect(words).toEqual([
+      { word: 'hello', startSec: 0.1, endSec: 0.3 },
+      { word: 'world!', startSec: 0.3, endSec: 0.6 },
+    ]);
   });
 });
