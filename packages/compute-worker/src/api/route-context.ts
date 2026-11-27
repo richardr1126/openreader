@@ -48,7 +48,7 @@ export interface OperationEventStreamLike {
 export interface OperationStateStoreLike extends ReconciliationStateStore {}
 
 export interface OrchestratorLike {
-  enqueueOrReuse(request: WorkerOperationRequest): Promise<WorkerOperationState>;
+  enqueueOrReuse(request: WorkerOperationRequest, options?: { replaceOpId?: string }): Promise<WorkerOperationState>;
   markFailedIfUnchanged?(input: {
     current: StreamedOperationState;
     expectedRevision: number;

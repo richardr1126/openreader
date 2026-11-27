@@ -59,6 +59,23 @@ async function readConversionMetadata(
   }
 }
 
+/**
+ * A succeeded layout operation whose layout was removed (for example by
+ * orphan cleanup) no longer describes the document. Only a confirmed missing
+ * object counts; a storage error leaves the operation in place.
+ */
+async function findSucceededPdfLayoutWithoutArtifact(
+  context: ComputeWorkerRouteContext,
+  input: typeof pdfOperationCreateSchema._output,
+): Promise<string | undefined> {
+  const index = await context.deps.operationStateStore.getOpIndex?.(buildPdfOperationKey(input));
+  const operation = index?.opId ? await context.deps.operationStateStore.getOpState(index.opId) : null;
+  if (operation?.status !== 'succeeded') return undefined;
+  const artifactKey = parsedPdfArtifactKey({ ...input, prefix: context.s3Prefix });
+  const exists = await context.deps.artifactExists?.(artifactKey).catch(() => true) ?? true;
+  return exists ? undefined : operation.opId;
+}
+
 function logAccepted(context: ComputeWorkerRouteContext, requestOp: WorkerOperationRequest, op: Awaited<ReturnType<ComputeWorkerRouteContext['deps']['orchestrator']['enqueueOrReuse']>>): void {
   context.app.log.info({
     kind: requestOp.kind,
@@ -93,7 +110,9 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
       },
     };
     await ensureOrphanedOpRecovery();
-    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
+      replaceOpId: await findSucceededPdfLayoutWithoutArtifact(context, parsed.data),
+    });
     reply.code(202);
     return toComputeOperation(op);
   });
@@ -167,7 +186,12 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
     });
     const hasArtifact = await deps.artifactExists?.(artifactKey) ?? false;
     const index = await deps.operationStateStore.getOpIndex?.(buildPdfOperationKey(parsed.data));
-    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    const indexed = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    // A succeeded operation without its layout is not reported, so the caller
+    // creates a new parse (see findSucceededPdfLayoutWithoutArtifact). Check
+    // again: the first check may predate the layout's publication.
+    const removed = indexed?.status === 'succeeded' && !hasArtifact && !await deps.artifactExists?.(artifactKey);
+    const operation = removed ? null : indexed;
     return {
       artifact: hasArtifact ? { objectKey: artifactKey } : null,
       operation: operation ? toComputeOperation(operation) : null,

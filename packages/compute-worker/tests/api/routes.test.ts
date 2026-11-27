@@ -474,6 +474,57 @@ describe('compute worker API routes', () => {
     });
   });
 
+  test('parses again when a succeeded layout operation has lost its layout', async () => {
+    const layoutRequest = (documentId: string, url: string) => runtime.app.inject({
+      method: 'POST',
+      url,
+      headers: AUTH,
+      payload: { documentId, namespace: null, documentObjectKey: `openreader/${documentId}.pdf` },
+    });
+    const artifactKey = (documentId: string) => `openreader/documents_v1/parsed_v2/${documentId}/pp-doclayoutv3-onnx%40800%2Bpdfjs%404.8.69.json`;
+    const succeeded = async (documentId: string) => {
+      const opId = (await layoutRequest(documentId, '/v1/pdf-layout/jobs')).json().opId as string;
+      fake.seedState({ ...fake.getState(opId)!, status: 'succeeded', result: { parsedObjectKey: artifactKey(documentId) } });
+      return opId;
+    };
+
+    // Orphan cleanup removed the layout: the old operation is neither reported nor reused.
+    const removed = 'e'.repeat(64);
+    const staleOpId = await succeeded(removed);
+    expect((await layoutRequest(removed, '/v1/pdf-layout/resolve')).json()).toEqual({ artifact: null, operation: null });
+    const replacement = (await layoutRequest(removed, '/v1/pdf-layout/jobs')).json();
+    expect(replacement).toMatchObject({ status: 'queued' });
+    expect(replacement.opId).not.toBe(staleOpId);
+    expect((await layoutRequest(removed, '/v1/pdf-layout/jobs')).json().opId).toBe(replacement.opId);
+    expect((await layoutRequest(removed, '/v1/pdf-layout/resolve')).json()).toMatchObject({
+      artifact: null,
+      operation: { opId: replacement.opId, status: 'queued' },
+    });
+
+    // A present layout keeps its operation, and a storage error is not treated as missing.
+    const kept = 'f'.repeat(64);
+    const keptOpId = await succeeded(kept);
+    fake.seedArtifact(artifactKey(kept));
+    expect((await layoutRequest(kept, '/v1/pdf-layout/resolve')).json()).toMatchObject({
+      artifact: { objectKey: artifactKey(kept) },
+      operation: { opId: keptOpId, status: 'succeeded' },
+    });
+    expect((await layoutRequest(kept, '/v1/pdf-layout/jobs')).json().opId).toBe(keptOpId);
+    fake.unreadableArtifactKeys.add(artifactKey(kept));
+    expect((await layoutRequest(kept, '/v1/pdf-layout/jobs')).json().opId).toBe(keptOpId);
+    expect((await layoutRequest(kept, '/v1/pdf-layout/resolve')).statusCode).toBe(500);
+
+    // A parse that publishes and succeeds during resolve keeps its operation, as upstream.
+    const finishing = 'b'.repeat(64);
+    const finishingOpId = await succeeded(finishing);
+    fake.publishedAfterCheckArtifactKeys.add(artifactKey(finishing));
+    expect((await layoutRequest(finishing, '/v1/pdf-layout/resolve')).json()).toMatchObject({
+      artifact: null,
+      operation: { opId: finishingOpId, status: 'succeeded' },
+    });
+    expect((await layoutRequest(finishing, '/v1/pdf-layout/jobs')).json().opId).toBe(finishingOpId);
+  });
+
   test('returns not found for unknown operation and event stream lookups', async () => {
     const opResponse = await runtime.app.inject({
       method: 'GET',

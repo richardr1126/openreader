@@ -35,12 +35,15 @@ export class FakeControlPlane {
   private readonly opIdByOpKey = new Map<string, string>();
   private readonly eventsByOpId = new Map<string, ComputeEvent[]>();
   private readonly artifactKeys = new Set<string>();
+  readonly unreadableArtifactKeys = new Set<string>();
+  /** Keys reported missing once, then present: a layout published right after the check. */
+  readonly publishedAfterCheckArtifactKeys = new Set<string>();
   private nextOpId = 1;
   readonly enqueuedRequests: WorkerOperationRequest[] = [];
 
   readonly deps = {
     orchestrator: {
-      enqueueOrReuse: async (request) => this.enqueueOrReuse(request),
+      enqueueOrReuse: async (request, options) => this.enqueueOrReuse(request, options?.replaceOpId),
       markFailedIfUnchanged: async (input) => this.compareAndSetFailed(input),
     },
     operationStateStore: {
@@ -69,7 +72,14 @@ export class FakeControlPlane {
         return () => undefined;
       },
     },
-    artifactExists: async (key) => this.artifactKeys.has(key),
+    artifactExists: async (key) => {
+      if (this.unreadableArtifactKeys.has(key)) throw new Error('storage unavailable');
+      if (this.publishedAfterCheckArtifactKeys.delete(key)) {
+        this.artifactKeys.add(key);
+        return false;
+      }
+      return this.artifactKeys.has(key);
+    },
   } satisfies ComputeWorkerRouteDeps;
 
   seedState(state: ComputeState): void {
@@ -92,10 +102,10 @@ export class FakeControlPlane {
     return this.stateByOpId.get(opId) ?? null;
   }
 
-  private async enqueueOrReuse(request: WorkerOperationRequest): Promise<ComputeState> {
+  private async enqueueOrReuse(request: WorkerOperationRequest, replaceOpId?: string): Promise<ComputeState> {
     this.enqueuedRequests.push(request);
     const existingId = this.opIdByOpKey.get(request.opKey);
-    if (existingId) {
+    if (existingId && existingId !== replaceOpId) {
       const existing = this.stateByOpId.get(existingId);
       if (existing) return existing;
     }

@@ -90,7 +90,11 @@ export class OperationOrchestrator implements OperationExecution {
     };
   }
 
-  async enqueueOrReuse(request: WorkerOperationRequest): Promise<WorkerOperationState> {
+  /** `replaceOpId` names an indexed operation to replace instead of reusing. */
+  async enqueueOrReuse(
+    request: WorkerOperationRequest,
+    options: { replaceOpId?: string } = {},
+  ): Promise<WorkerOperationState> {
     const opKey = request.opKey.trim();
 
     for (let attempt = 0; attempt < this.maxCasRetries; attempt += 1) {
@@ -103,7 +107,8 @@ export class OperationOrchestrator implements OperationExecution {
         continue;
       }
       const now = this.clock.now();
-      if (current && shouldReuseExistingOperation({ current, requestKind: request.kind, now, opStaleMs: this.opStaleMs })) {
+      if (current && current.opId !== options.replaceOpId
+        && shouldReuseExistingOperation({ current, requestKind: request.kind, now, opStaleMs: this.opStaleMs })) {
         return current;
       }
 

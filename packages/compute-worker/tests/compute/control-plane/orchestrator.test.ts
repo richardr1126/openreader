@@ -57,6 +57,34 @@ describe('operation orchestrator', () => {
     expect(queue.size('pdf_layout')).toBe(2);
   });
 
+  test('replaces only the named succeeded operation', async () => {
+    let nextId = 1;
+    const stateStore = new InMemoryOperationStateStore();
+    const orchestrator = new OperationOrchestrator({
+      queue: new InMemoryOperationQueue(),
+      stateStore,
+      eventStream: new InMemoryOperationEventStream(),
+      config: { opStaleMs: 2_000, maxCasRetries: 5 },
+      idFactory: { opId: () => `op-${nextId}`, jobId: () => `job-${nextId++}` },
+    });
+    const request = buildRequest('layout');
+    const succeed = async (op: { opId: string; jobId: string }) => {
+      await orchestrator.claimAttempt({ opId: op.opId, jobId: op.jobId, deliveryAttempt: 1, updatedAt: Date.now() });
+      await orchestrator.settleAttempt({ opId: op.opId, deliveryAttempt: 1, updatedAt: Date.now(), status: 'succeeded', result: {} });
+    };
+
+    const first = await orchestrator.enqueueOrReuse(request);
+    await succeed(first);
+    await expect(orchestrator.enqueueOrReuse(request)).resolves.toMatchObject({ opId: 'op-1' });
+
+    const replaced = await orchestrator.enqueueOrReuse(request, { replaceOpId: 'op-1' });
+    expect(replaced).toMatchObject({ opId: 'op-2', status: 'queued' });
+    await expect(orchestrator.enqueueOrReuse(request, { replaceOpId: 'op-1' })).resolves.toMatchObject({ opId: 'op-2' });
+    await succeed(replaced);
+    await expect(orchestrator.enqueueOrReuse(request, { replaceOpId: 'op-1' })).resolves.toMatchObject({ opId: 'op-2' });
+    expect(await stateStore.getOpIndex('layout')).toEqual({ opId: 'op-2' });
+  });
+
   test('survives transient CAS conflict and eventually creates operation', async () => {
     const queue = new InMemoryOperationQueue();
     const eventStream = new InMemoryOperationEventStream();
