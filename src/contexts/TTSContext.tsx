@@ -62,6 +62,7 @@ import type {
 import type { TTSSegmentLocator } from '@/types/client';
 import type { DocumentSettings, BookSpeechSettings } from '@/types/document-settings';
 import type { ReaderPlaybackPreparation } from '@/types/reader-bootstrap';
+import type { ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import { resolveBookVoice } from '@/lib/shared/document-settings';
 
 import type { ReaderType } from '@/types/user-state';
@@ -147,6 +148,8 @@ interface TTSContextType extends Omit<TTSPlaybackState, 'currentSentence' | 'cur
   clearSegmentCaches: () => void;
   /** Settings payload that identifies the document's current audio cache. */
   playbackPlanPayload: TtsPlaybackPlanPayload | null;
+  /** The server's PDF skip list for this book without an override, once a plan shows it. */
+  defaultPdfSkipBlockKinds: ParsedPdfBlockKind[] | null;
   /** Seek to a plan ordinal through the sentence-skip path; false if not in the plan. */
   skipToOrdinal: (ordinal: number) => boolean;
   playbackSegments: CanonicalTtsSegment[];
@@ -285,6 +288,11 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   const [audioSpeed, setAudioSpeed] = useState(audioPlayerSpeed);
   const ttsModel = configTTSModel;
   const [playbackPlanRequest, setPlaybackPlanRequest] = useState<TtsPlaybackPlanRequest | null>(null);
+  const [defaultPdfSkipBlockKinds, setDefaultPdfSkipBlockKinds] = useState<ParsedPdfBlockKind[] | null>(null);
+  // Only a plan built without a book override shows the default; keep the last one seen.
+  const recordDefaultPdfSkipBlockKinds = useCallback(({ pdf }: DocumentSettings, { request }: ReaderPlaybackPreparation) => {
+    if (pdf?.skipBlockKinds === undefined && request.planning?.skipBlockKinds) setDefaultPdfSkipBlockKinds(request.planning.skipBlockKinds);
+  }, []);
   const [readerSettings, setReaderSettings] = useState<DocumentSettings | null>(null);
   // The reader surface owns the acknowledged document settings; speech saves report back to it.
   const settingsSavedRef = useRef<(settings: DocumentSettings) => void>(() => {});
@@ -491,6 +499,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     setIsPlaying(false);
     resetPlaybackPlan();
     setPlaybackPlanRequest(null);
+    setDefaultPdfSkipBlockKinds(null);
     setDetectedDocumentLanguage(null);
     playbackAnchorRef.current = null;
     setPlaybackAnchor(null);
@@ -515,6 +524,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     stop();
     settingsSavedRef.current = input.onSettingsSaved;
     setReaderSettings(input.settings);
+    recordDefaultPdfSkipBlockKinds(input.settings, input.playback);
     setDetectedDocumentLanguage(input.documentLanguage);
     setIsEPUB(input.readerType === 'epub');
     setPlaybackPlanRequest({
@@ -550,6 +560,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
   }, [
     acceptBootstrapPlaybackPlan,
     playbackSegmentsRef,
+    recordDefaultPdfSkipBlockKinds,
     setSelectedOrdinal,
     stop,
   ]);
@@ -563,13 +574,14 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     abortAudio();
     setIsPlaying(false);
     setReaderSettings(input.settings);
+    recordDefaultPdfSkipBlockKinds(input.settings, input.playback);
     setDetectedDocumentLanguage(input.documentLanguage);
     setPlaybackPlanRequest({
       headers: { 'Content-Type': 'application/json', 'x-tts-provider': input.playback.request.settings.providerRef },
       payload: input.playback.request,
     });
     acceptBootstrapPlaybackPlan(input.plan, input.playback.seekLayout);
-  }, [abortAudio, acceptBootstrapPlaybackPlan]);
+  }, [abortAudio, acceptBootstrapPlaybackPlan, recordDefaultPdfSkipBlockKinds]);
 
   const reacquirePlaybackPlan = useCallback(async () => {
     if (!documentId) return;
@@ -666,6 +678,7 @@ export function TTSProvider({ children }: { children: ReactNode }): ReactElement
     resolvedLanguage,
     clearSegmentCaches,
     playbackPlanPayload: playbackPlanRequest?.payload ?? null,
+    defaultPdfSkipBlockKinds,
     skipToOrdinal, playbackSegments,
     registerLocationChangeHandler,
     setIsEPUB,

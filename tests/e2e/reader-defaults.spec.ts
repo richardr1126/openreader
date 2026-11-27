@@ -81,8 +81,15 @@ test('reader defaults inherit independently and speech saves preserve book displ
   await page.getByRole('button', { name: /^Voice:/ }).first().click();
   await voicePanel.getByRole('button', { name: 'PDF block kinds', exact: true }).click();
   await expect(header).toBeChecked();
+  // Hold the re-plan back: until it lands, the adopted plan still has the removed
+  // override, and the control must not show it.
+  let releaseReplan!: () => void;
+  const replanHeld = new Promise<void>(resolve => { releaseReplan = resolve; });
+  await page.route(/\/reader-bootstrap(\?|$)/, async route => { await replanHeld; await route.continue(); }, { times: 1 });
   await voicePanel.getByRole('button', { name: 'Use app default for PDF block kinds', exact: true }).click();
   await page.getByRole('button', { name: 'Change and regenerate', exact: true }).click();
+  await expect(header).not.toBeChecked();
+  releaseReplan();
   await expect(header).not.toBeChecked();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('region', { name: 'Document text', exact: true })).toBeVisible();
