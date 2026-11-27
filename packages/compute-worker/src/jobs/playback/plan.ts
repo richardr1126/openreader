@@ -21,7 +21,7 @@ import {
   parsedPdfArtifactKey,
   ttsPlaybackPlanArtifactKey,
 } from '../../storage/artifact-addressing';
-import type { ArtifactStorage } from '../../infrastructure/storage';
+import { PARSED_PDF_NARRATION_REVISION_METADATA, type ArtifactStorage } from '../../infrastructure/storage';
 import type { TtsPlaybackPlanCapableRequest } from './schemas';
 
 export type TtsPlaybackSegmentInput = {
@@ -209,7 +209,31 @@ export function resolvePlaybackStartOrdinal(
   return match.ordinal;
 }
 
-export function computePlaybackPlanSignature(request: TtsPlaybackPlanCapableRequest): string {
+/**
+ * The revision of a reparsed PDF layout, or null for a PDF still on its first
+ * layout and for other readers. A plan is derived from the layout, so a reparse
+ * must give narration a new plan rather than reuse the one built from the old
+ * layout. Old plans stay in place for the sessions and exports that hold them.
+ */
+export async function readPlaybackPlanLayoutRevision(
+  request: Pick<TtsPlaybackPlanCapableRequest, 'documentId' | 'readerType' | 'planning'>,
+  storage: Pick<ArtifactStorage, 'headObject'>,
+  s3Prefix: string,
+): Promise<string | null> {
+  const documentSource = request.planning.documentSource;
+  if (request.readerType !== 'pdf' || !documentSource || !storage.headObject) return null;
+  const head = await storage.headObject(parsedPdfArtifactKey({
+    documentId: request.documentId,
+    namespace: documentSource.namespace,
+    prefix: s3Prefix,
+  }));
+  return head?.metadata[PARSED_PDF_NARRATION_REVISION_METADATA] || null;
+}
+
+export function computePlaybackPlanSignature(
+  request: TtsPlaybackPlanCapableRequest,
+  layoutRevision: string | null,
+): string {
   const documentSource = request.planning.documentSource;
   return computeSegmentationSignature({
     maxBlockLength: request.planning.maxBlockLength ?? null,
@@ -220,9 +244,12 @@ export function computePlaybackPlanSignature(request: TtsPlaybackPlanCapableRequ
     // Plans contain user-scoped document text and settings metadata. Include
     // the storage owner in their stable identity so identical content owned by
     // different users cannot reuse an operation or artifact across scopes.
+    // A layout revision joins only when present, so a never-reparsed PDF keeps
+    // its existing plan identity.
     namespace: JSON.stringify([
       documentSource?.namespace ?? null,
       request.storageUserId,
+      ...(layoutRevision ? [layoutRevision] : []),
     ]),
   });
 }
@@ -306,7 +333,10 @@ export async function resolveAndPersistTtsPlaybackPlan(input: {
   plannedSegments: TtsPlaybackSegmentInput[];
   startOrdinal: number;
 }> {
-  const planSignature = computePlaybackPlanSignature(input.request);
+  const planSignature = computePlaybackPlanSignature(
+    input.request,
+    input.request.planObjectKey ? null : await readPlaybackPlanLayoutRevision(input.request, input.storage, input.s3Prefix),
+  );
   const computedPlanObjectKey = ttsPlaybackPlanArtifactKey({
     documentId: input.request.documentId,
     documentVersion: input.request.documentVersion,

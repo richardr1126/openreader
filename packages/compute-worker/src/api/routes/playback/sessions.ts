@@ -6,7 +6,7 @@ import {
   buildTtsPlaybackOperationKey,
   buildTtsPlaybackPlanOperationKey,
 } from '../../../operations/keys';
-import { computePlaybackPlanSignature } from '../../../jobs/playback/plan';
+import { computePlaybackPlanSignature, readPlaybackPlanLayoutRevision } from '../../../jobs/playback/plan';
 import { isInflightStatus, shouldReuseExistingOperation } from '../../../operations/state-machine';
 import { toComputeOperation } from '../../compute-operation';
 import type { PlaybackSessionController } from '../../playback/session-controller';
@@ -361,7 +361,7 @@ export function registerPlaybackJobRoutes(
     const planSignature = computePlaybackPlanSignature({
       ...parsed.data,
       sessionId: `plan:${parsed.data.documentId}:${parsed.data.settingsHash}`,
-    });
+    }, await readPlaybackPlanLayoutRevision(parsed.data, context.storage, context.s3Prefix));
     await ensureOrphanedOpRecovery();
     const index = await deps.operationStateStore.getOpIndex?.(buildTtsPlaybackPlanOperationKey({ ...parsed.data, planSignature }));
     const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
@@ -388,7 +388,7 @@ export function registerPlaybackJobRoutes(
     const planSignature = computePlaybackPlanSignature({
       ...parsed.data,
       sessionId: `plan:${parsed.data.documentId}:${parsed.data.settingsHash}`,
-    });
+    }, await readPlaybackPlanLayoutRevision(parsed.data, context.storage, context.s3Prefix));
     const requestOp: WorkerOperationRequest = {
       kind: 'tts_playback_plan',
       opKey: buildTtsPlaybackPlanOperationKey({

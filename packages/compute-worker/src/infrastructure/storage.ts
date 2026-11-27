@@ -17,6 +17,13 @@ export interface StoredObjectSummary {
   lastModifiedMs: number;
 }
 
+/**
+ * Set on a parsed PDF that replaced an earlier one (a forced reparse). Its value
+ * joins the narration plan identity, so narration replans from the new layout;
+ * a PDF's first layout carries none and keeps the plan identity it always had.
+ */
+export const PARSED_PDF_NARRATION_REVISION_METADATA = 'narration-revision';
+
 export interface ParsedPdfArtifactRevision {
   etag: string;
   operationId?: string;
@@ -287,7 +294,10 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ParsedPdfA
         Body: Buffer.from(JSON.stringify(parsed)),
         ContentType: 'application/json',
         ServerSideEncryption: 'AES256',
-        Metadata: { 'operation-id': options.operationId },
+        Metadata: {
+          'operation-id': options.operationId,
+          ...(options.expected ? { [PARSED_PDF_NARRATION_REVISION_METADATA]: options.operationId } : {}),
+        },
         ...(options.expected ? { IfMatch: options.expected.etag } : { IfNoneMatch: '*' }),
       }), { abortSignal: options.signal });
       return key;

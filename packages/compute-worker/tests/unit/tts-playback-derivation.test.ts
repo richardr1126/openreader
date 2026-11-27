@@ -9,6 +9,7 @@ import { parsedPdfArtifactKey } from '../../src/storage/artifact-addressing';
 
 const PREFIX = 'openreader';
 const DOCUMENT_ID = 'a'.repeat(64);
+const FIRST_LAYOUT_PLAN_SIGNATURE = '6a2a4c5cfffd99545cac1c185b608e10';
 
 function parsedPdfArtifact() {
   const page = (pageNumber: number, blocks: Array<{ id: string; kind: string; text: string }>) => ({
@@ -248,9 +249,11 @@ describe('worker-owned TTS playback source derivation', () => {
   test('plan signature ignores start position and voice/speed but varies with scope and segmentation knobs', () => {
     const fromTop = computePlaybackPlanSignature(
       baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
+      null,
     );
     const fromMid = computePlaybackPlanSignature(
       baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'section' } }),
+      null,
     );
     expect(fromMid).toBe(fromTop); // start position must not fork the plan
 
@@ -258,17 +261,25 @@ describe('worker-owned TTS playback source derivation', () => {
       ...baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
       settingsJson: { voice: 'echo', providerRef: 'p', providerType: 'openai', ttsModel: 'm', nativeSpeed: 2 },
     } as Parameters<typeof computePlaybackPlanSignature>[0];
-    expect(computePlaybackPlanSignature(differentVoice)).toBe(fromTop); // voice/speed don't affect the plan
+    expect(computePlaybackPlanSignature(differentVoice, null)).toBe(fromTop); // voice/speed don't affect the plan
 
     const differentOwner = {
       ...baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
       storageUserId: 'another-storage-owner',
     } as Parameters<typeof computePlaybackPlanSignature>[0];
-    expect(computePlaybackPlanSignature(differentOwner)).not.toBe(fromTop);
+    expect(computePlaybackPlanSignature(differentOwner, null)).not.toBe(fromTop);
 
     const biggerBlocks = computePlaybackPlanSignature(
       baseRequest({ maxBlockLength: 400, documentSource: { namespace: null, extent: 'document' } }),
+      null,
     );
     expect(biggerBlocks).not.toBe(fromTop); // segmentation knobs do
+
+    // A PDF on its first layout keeps the identity its plans already have.
+    expect(fromTop).toBe(FIRST_LAYOUT_PLAN_SIGNATURE);
+    expect(computePlaybackPlanSignature(
+      baseRequest({ maxBlockLength: 200, documentSource: { namespace: null, extent: 'document' } }),
+      'reparse-op',
+    )).not.toBe(fromTop);
   });
 });
