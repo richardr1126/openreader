@@ -103,4 +103,41 @@ describe('stitchCrossPageBlocks', () => {
     expect(stitched.pages[0]?.blocks[0]?.fragments).toHaveLength(1);
     expect(stitched.pages[1]?.blocks.map((b) => b.id)).toEqual(['b2']);
   });
+
+  test('keeps text on its own side of a graphic block that has text', () => {
+    const tableBetween = makeDoc(
+      [
+        makeBlock('b1', 'text', 'Before testing, use the following settings:', 1, 0),
+        makeBlock('b2', 'table', 'Station Alder Pressure 40 psi', 1, 1),
+      ],
+      [makeBlock('b3', 'text', '24 hours later, repeat the test at all three stations.', 2, 0)],
+    );
+    const chartFirst = makeDoc(
+      [makeBlock('b1', 'text', 'This sentence continues', 1, 0)],
+      [
+        makeBlock('b2', 'chart', 'April readings', 2, 0),
+        makeBlock('b3', 'text', 'into the next page.', 2, 1),
+      ],
+    );
+
+    for (const doc of [tableBetween, chartFirst]) {
+      const stitched = stitchCrossPageBlocks(doc);
+      expect(stitched.pages.flatMap((page) => page.blocks.map((block) => block.text)))
+        .toEqual(doc.pages.flatMap((page) => page.blocks.map((block) => block.text)));
+    }
+  });
+
+  test('still stitches across an empty graphic block', () => {
+    const doc = makeDoc(
+      [
+        makeBlock('b1', 'text', 'This sentence continues', 1, 0),
+        makeBlock('b2', 'image', '', 1, 1),
+      ],
+      [makeBlock('b3', 'text', 'into the next page.', 2, 0)],
+    );
+
+    const stitched = stitchCrossPageBlocks(doc);
+    expect(stitched.pages[0]?.blocks[0]?.text).toBe('This sentence continues into the next page.');
+    expect(stitched.pages[1]?.blocks).toHaveLength(0);
+  });
 });

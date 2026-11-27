@@ -110,13 +110,17 @@ export function mergeTextWithRegions(regions: LayoutRegion[], textItems: PdfText
     return Number.isFinite(min) ? min : Number.MAX_SAFE_INTEGER;
   };
 
-  const assignableRegions = regions
-    .map((region, index) => ({ region, index }))
-    .filter(({ region }) => TEXT_ASSIGNABLE_LABELS.has(region.label));
+  const indexedRegions = regions.map((region, index) => ({ region, index }));
+  const assignableRegions = indexedRegions.filter(({ region }) => TEXT_ASSIGNABLE_LABELS.has(region.label));
+  const graphicRegions = indexedRegions.filter(({ region }) => NON_TEXT_REGION_LABELS.has(region.label));
   const assignedByRegion = new Map<number, PdfTextItem[]>();
 
   for (const item of textItems) {
-    const candidates = assignableRegions.filter(({ region }) => contains(region, item));
+    // Text-like regions keep priority, so captions and prose that overlap a
+    // graphic stay in their own blocks. Remaining text inside a table, chart,
+    // image or seal belongs to that graphic block.
+    let candidates = assignableRegions.filter(({ region }) => contains(region, item));
+    if (candidates.length === 0) candidates = graphicRegions.filter(({ region }) => contains(region, item));
     if (candidates.length === 0) continue;
 
     candidates.sort((a, b) => {
@@ -149,8 +153,8 @@ export function mergeTextWithRegions(regions: LayoutRegion[], textItems: PdfText
     });
   }
 
-  for (const region of regions) {
-    if (!NON_TEXT_REGION_LABELS.has(region.label)) continue;
+  for (const { region } of graphicRegions) {
+    if (out.some((block) => block.region === region)) continue;
     out.push({
       region,
       text: '',
