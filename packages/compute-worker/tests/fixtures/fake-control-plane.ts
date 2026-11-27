@@ -36,8 +36,6 @@ export class FakeControlPlane {
   private readonly eventsByOpId = new Map<string, ComputeEvent[]>();
   private readonly artifactKeys = new Set<string>();
   readonly unreadableArtifactKeys = new Set<string>();
-  /** Keys reported missing once, then present: a layout published right after the check. */
-  readonly publishedAfterCheckArtifactKeys = new Set<string>();
   private nextOpId = 1;
   readonly enqueuedRequests: WorkerOperationRequest[] = [];
 
@@ -74,10 +72,6 @@ export class FakeControlPlane {
     },
     artifactExists: async (key) => {
       if (this.unreadableArtifactKeys.has(key)) throw new Error('storage unavailable');
-      if (this.publishedAfterCheckArtifactKeys.delete(key)) {
-        this.artifactKeys.add(key);
-        return false;
-      }
       return this.artifactKeys.has(key);
     },
   } satisfies ComputeWorkerRouteDeps;
