@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { afterEach, describe, expect, test } from 'vitest';
+import { registerDocumentJobRoutes } from '../../src/api/routes/document-jobs';
 import { registerHealthRoutes } from '../../src/api/routes/health';
 import { registerPlaybackExportRoutes, registerPlaybackExportSessionRoutes } from '../../src/api/routes/playback/exports';
 import { registerPlaybackSessionRoutes } from '../../src/api/routes/playback/sessions';
@@ -28,6 +29,61 @@ describe('compute worker domain route registrars', () => {
       body: JSON.stringify({ ok: true, natsConnected: false }),
     });
     await expect(app.inject({ method: 'GET', url: '/v1/operations/op-1' })).resolves.toMatchObject({ statusCode: 404 });
+  });
+
+  test('replaces a succeeded preview or DOCX conversion only once storage confirms its file is gone', async () => {
+    const documentId = 'c'.repeat(64);
+    const cases = [
+      {
+        url: '/v1/document-previews/jobs',
+        payload: {
+          documentId, namespace: null, documentType: 'pdf',
+          sourceObjectKey: `openreader/documents_v1/${documentId}`, sourceLastModifiedMs: 12345, previewKind: 'card',
+        },
+      },
+      {
+        url: '/v1/document-conversions/docx/jobs',
+        payload: {
+          conversionId: 'd'.repeat(64), namespace: null,
+          sourceObjectKey: 'openreader/document_uploads_temp_v1/users/user-1/upload.bin', sourceLastModifiedMs: 12345,
+          sourceContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', sourceEtag: 'source-etag',
+        },
+      },
+    ];
+    const missing = Object.assign(new Error('missing'), { name: 'NoSuchKey' });
+    const outcomes = [[missing, 'op-stale'], ['null', 'op-stale'], [new Error('storage unavailable'), undefined]] as const;
+    for (const { url, payload } of cases) {
+      for (const [read, replaceOpId] of outcomes) {
+        const app = Fastify();
+        apps.push(app);
+        const replaced: Array<string | undefined> = [];
+        registerDocumentJobRoutes({
+          app,
+          s3Prefix: 'openreader',
+          ensureOrphanedOpRecovery: async () => {},
+          storage: {
+            // Stored metadata that parses to null is invalid, like a missing file.
+            readObject: async () => { if (typeof read === 'string') return Buffer.from(read); throw read; },
+            objectExists: async () => { if (typeof read === 'string') return true; throw read; },
+          },
+          deps: {
+            operationStateStore: {
+              getOpIndex: async () => ({ opId: 'op-stale' }),
+              getOpState: async () => ({ opId: 'op-stale', status: 'succeeded' }),
+            },
+            orchestrator: {
+              enqueueOrReuse: async (request: { kind: string; opKey: string }, options: { replaceOpId?: string }) => {
+                replaced.push(options.replaceOpId);
+                return { ...request, opId: 'op-new', jobId: 'job-new', status: 'queued', queuedAt: 1, updatedAt: 1 };
+              },
+            },
+          },
+        } as unknown as ComputeWorkerRouteContext);
+
+        expect((await app.inject({ method: 'POST', url, payload })).statusCode).toBe(202);
+        expect(replaced).toEqual([replaceOpId]);
+      }
+    }
   });
 
   test('cancels an export session only for the run the caller observed', async () => {

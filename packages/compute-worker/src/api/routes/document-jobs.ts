@@ -1,4 +1,5 @@
 import { hashOpKey } from '../../infrastructure/nats-adapters';
+import { isNotFound } from '../../infrastructure/storage';
 import type { WorkerOperationRequest } from '../../operations/contracts';
 import {
   buildDocumentConversionOperationKey,
@@ -12,7 +13,7 @@ import {
 import type {
   DocumentConversionArtifactMetadata,
 } from '../../operations/contracts';
-import { readDocumentPreviewMetadata } from '../../storage/document-preview-metadata';
+import { inspectDocumentPreviewMetadata, readDocumentPreviewMetadata } from '../../storage/document-preview-metadata';
 import { toComputeOperation } from '../compute-operation';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
@@ -32,7 +33,15 @@ import {
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
 
-async function readConversionMetadata(
+function readConversionMetadata(
+  context: ComputeWorkerRouteContext,
+  input: typeof documentConversionResolveSchema._output,
+): Promise<DocumentConversionArtifactMetadata | null> {
+  return inspectConversionMetadata(context, input).catch(() => null);
+}
+
+/** Like readConversionMetadata, but a storage read that fails for another reason than a missing object rejects. */
+async function inspectConversionMetadata(
   context: ComputeWorkerRouteContext,
   input: typeof documentConversionResolveSchema._output,
 ): Promise<DocumentConversionArtifactMetadata | null> {
@@ -42,9 +51,9 @@ async function readConversionMetadata(
     prefix: context.s3Prefix,
   });
   try {
-    const parsed = JSON.parse(Buffer.from(await context.storage.readObject(key)).toString('utf8')) as DocumentConversionArtifactMetadata;
+    const parsed = JSON.parse(Buffer.from(await context.storage.readObject(key)).toString('utf8')) as DocumentConversionArtifactMetadata | null;
     if (
-      parsed.schemaVersion !== 1
+      parsed?.schemaVersion !== 1
       || parsed.conversionId !== input.conversionId
       || parsed.namespace !== input.namespace
       || parsed.sourceObjectKey !== input.sourceObjectKey
@@ -53,10 +62,48 @@ async function readConversionMetadata(
       || parsed.sourceEtag !== (input.sourceEtag ?? null)
       || parsed.status !== 'ready'
     ) return null;
-    return await context.storage.objectExists(parsed.objectKey).catch(() => false) ? parsed : null;
-  } catch {
-    return null;
+    return await context.storage.objectExists(parsed.objectKey) ? parsed : null;
+  } catch (error) {
+    if (isNotFound(error) || error instanceof SyntaxError) return null;
+    throw error;
   }
+}
+
+/** Whether an artifact is present, where a storage error counts as present: only a confirmed absence replaces an operation. */
+function presentUnlessMissing(exists: Promise<boolean>): Promise<boolean> {
+  return exists.catch(() => true);
+}
+
+async function readIndexedOperation(context: ComputeWorkerRouteContext, opKey: string) {
+  const index = await context.deps.operationStateStore.getOpIndex?.(opKey);
+  return index?.opId ? await context.deps.operationStateStore.getOpState(index.opId) : null;
+}
+
+/**
+ * A succeeded operation whose artifact was removed since (by orphan cleanup or
+ * expiry) no longer describes the document: resolve does not report it, and
+ * the next job replaces it instead of reusing it. Read the operation before
+ * the artifact, because an operation only succeeds once its artifact is
+ * published, so a missing artifact after that read was removed.
+ */
+function describesArtifact(operation: { status: string } | null, hasArtifact: boolean): boolean {
+  return operation?.status !== 'succeeded' || hasArtifact;
+}
+
+/** The indexed operation a new job replaces because its artifact is gone. */
+async function operationWithoutArtifact(
+  context: ComputeWorkerRouteContext,
+  opKey: string,
+  hasArtifact: () => Promise<boolean>,
+): Promise<string | undefined> {
+  const operation = await readIndexedOperation(context, opKey);
+  if (!operation || describesArtifact(operation, await hasArtifact())) return undefined;
+  return operation.opId;
+}
+
+function pdfLayoutExists(context: ComputeWorkerRouteContext, input: { documentId: string; namespace: string | null }) {
+  const artifactKey = parsedPdfArtifactKey({ ...input, prefix: context.s3Prefix });
+  return context.deps.artifactExists?.(artifactKey) ?? Promise.resolve(false);
 }
 
 function logAccepted(context: ComputeWorkerRouteContext, requestOp: WorkerOperationRequest, op: Awaited<ReturnType<ComputeWorkerRouteContext['deps']['orchestrator']['enqueueOrReuse']>>): void {
@@ -93,7 +140,11 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
       },
     };
     await ensureOrphanedOpRecovery();
-    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
+      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, () => presentUnlessMissing(
+        pdfLayoutExists(context, parsed.data),
+      )),
+    });
     reply.code(202);
     return toComputeOperation(op);
   });
@@ -115,7 +166,11 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
       payload: parsed.data,
     };
     await ensureOrphanedOpRecovery();
-    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
+      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, () => presentUnlessMissing(
+        inspectDocumentPreviewMetadata(context.storage, parsed.data, context.s3Prefix).then((artifact) => artifact !== null),
+      )),
+    });
     logAccepted(context, requestOp, op);
     reply.code(202);
     return toComputeOperation(op);
@@ -138,7 +193,11 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
       payload: parsed.data,
     };
     await ensureOrphanedOpRecovery();
-    const op = await deps.orchestrator.enqueueOrReuse(requestOp);
+    const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
+      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, () => presentUnlessMissing(
+        inspectConversionMetadata(context, parsed.data).then((artifact) => artifact !== null),
+      )),
+    });
     logAccepted(context, requestOp, op);
     reply.code(202);
     return toComputeOperation(op);
@@ -146,7 +205,7 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
 }
 
 export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteContext): void {
-  const { app, deps, ensureOrphanedOpRecovery, s3Prefix } = context;
+  const { app, ensureOrphanedOpRecovery, s3Prefix } = context;
 
   app.post('/v1/pdf-layout/resolve', {
     schema: {
@@ -160,17 +219,11 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
     await ensureOrphanedOpRecovery();
-    const artifactKey = parsedPdfArtifactKey({
-      documentId: parsed.data.documentId,
-      namespace: parsed.data.namespace,
-      prefix: s3Prefix,
-    });
-    const hasArtifact = await deps.artifactExists?.(artifactKey) ?? false;
-    const index = await deps.operationStateStore.getOpIndex?.(buildPdfOperationKey(parsed.data));
-    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
+    const operation = await readIndexedOperation(context, buildPdfOperationKey(parsed.data));
+    const hasArtifact = await pdfLayoutExists(context, parsed.data);
     return {
-      artifact: hasArtifact ? { objectKey: artifactKey } : null,
-      operation: operation ? toComputeOperation(operation) : null,
+      artifact: hasArtifact ? { objectKey: parsedPdfArtifactKey({ ...parsed.data, prefix: s3Prefix }) } : null,
+      operation: operation && describesArtifact(operation, hasArtifact) ? toComputeOperation(operation) : null,
     };
   });
 
@@ -186,10 +239,9 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
     await ensureOrphanedOpRecovery();
+    const operation = await readIndexedOperation(context, buildDocumentPreviewOperationKey(parsed.data));
     const artifact = await readDocumentPreviewMetadata(context.storage, parsed.data, context.s3Prefix);
-    const index = await deps.operationStateStore.getOpIndex?.(buildDocumentPreviewOperationKey(parsed.data));
-    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
-    return { artifact, operation: operation ? toComputeOperation(operation) : null };
+    return { artifact, operation: operation && describesArtifact(operation, artifact !== null) ? toComputeOperation(operation) : null };
   });
 
   app.post('/v1/document-conversions/docx/resolve', {
@@ -204,10 +256,9 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
       return { error: 'Invalid request body', issues: parsed.error.issues };
     }
     await ensureOrphanedOpRecovery();
+    const operation = await readIndexedOperation(context, buildDocumentConversionOperationKey(parsed.data));
     const artifact = await readConversionMetadata(context, parsed.data);
-    const index = await deps.operationStateStore.getOpIndex?.(buildDocumentConversionOperationKey(parsed.data));
-    const operation = index?.opId ? await deps.operationStateStore.getOpState(index.opId) : null;
-    return { artifact, operation: operation ? toComputeOperation(operation) : null };
+    return { artifact, operation: operation && describesArtifact(operation, artifact !== null) ? toComputeOperation(operation) : null };
   });
 
 }
