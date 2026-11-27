@@ -1,7 +1,12 @@
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
 import { expect, test } from 'vitest';
 import { createArtifactStorage } from '../../src/infrastructure/storage';
-import { readPlaybackPlanLayoutRevision, resolveAndPersistTtsPlaybackPlan } from '../../src/jobs/playback/plan';
+import {
+  computePlaybackPlanSignature,
+  readPlaybackPlanLayoutRevision,
+  resolveAndPersistTtsPlaybackPlan,
+} from '../../src/jobs/playback/plan';
+import { ttsPlaybackPlanArtifactKey } from '../../src/storage/artifact-addressing';
 
 const PREFIX = 'openreader';
 const DOCUMENT_ID = 'b'.repeat(64);
@@ -87,4 +92,31 @@ test('Force reparse gives narration a plan from the new layout and keeps the old
     request: { ...request, planObjectKey: before.planObjectKey }, storage, s3Prefix: PREFIX,
   });
   expect(held.plannedSegments.map((segment) => segment.text)).toEqual(['Edited block text.']);
+});
+
+test('a reparse that lands while a plan is derived moves the plan to the new layout identity', async () => {
+  const storage = memoryS3();
+  await storage.putParsedPdf(DOCUMENT_ID, null, layout('Old layout text.'), {
+    operationId: 'first-parse', expected: null, signal: AbortSignal.timeout(1_000),
+  });
+  const readObject = storage.readObject.bind(storage);
+  let reparsed = false;
+  storage.readObject = async (key, signal) => {
+    const body = await readObject(key, signal);
+    if (!reparsed && key.includes('parsed')) {
+      reparsed = true;
+      const revision = await storage.getParsedPdfRevision(DOCUMENT_ID, null, AbortSignal.timeout(1_000));
+      await storage.putParsedPdf(DOCUMENT_ID, null, layout('New layout text.'), {
+        operationId: 'reparse', expected: revision, signal: AbortSignal.timeout(1_000),
+      });
+    }
+    return body;
+  };
+  const plan = await resolveAndPersistTtsPlaybackPlan({ request, storage, s3Prefix: PREFIX });
+  expect(reparsed).toBe(true);
+  expect(plan.plannedSegments.map((segment) => segment.text)).toEqual(['New layout text.']);
+  // Nothing was stored under the first layout's plan identity.
+  expect(await storage.objectExists(ttsPlaybackPlanArtifactKey({
+    ...request, planSignature: computePlaybackPlanSignature(request, null), prefix: PREFIX,
+  }))).toBe(false);
 });

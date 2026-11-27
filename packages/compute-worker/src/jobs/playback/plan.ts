@@ -321,6 +321,8 @@ export async function readPersistedTtsPlaybackPlanSegments(
   });
 }
 
+const MAX_LAYOUT_REVISION_ATTEMPTS = 3;
+
 export async function resolveAndPersistTtsPlaybackPlan(input: {
   request: TtsPlaybackPlanCapableRequest;
   storage: ArtifactStorage;
@@ -333,39 +335,46 @@ export async function resolveAndPersistTtsPlaybackPlan(input: {
   plannedSegments: TtsPlaybackSegmentInput[];
   startOrdinal: number;
 }> {
-  const planSignature = computePlaybackPlanSignature(
-    input.request,
-    input.request.planObjectKey ? null : await readPlaybackPlanLayoutRevision(input.request, input.storage, input.s3Prefix),
-  );
-  const computedPlanObjectKey = ttsPlaybackPlanArtifactKey({
-    documentId: input.request.documentId,
-    documentVersion: input.request.documentVersion,
-    readerType: input.request.readerType,
-    planSignature,
-    prefix: input.s3Prefix,
-  });
-  const planObjectKey = input.request.planObjectKey ?? computedPlanObjectKey;
-  const write = await prepareArtifactWrite(input.storage, planObjectKey, input.attempt);
-  let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
-  if (!plannedSegments || plannedSegments.length === 0) {
-    plannedSegments = planTtsPlaybackSegments(
-      input.request,
-      await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix),
-    );
-    const computed = plannedSegments;
-    const winner = await publishOrAdoptArtifact(
-      () => persistTtsPlaybackPlan({ write, planObjectKey, request: input.request, segments: computed }),
-      () => readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey, input.request),
-      input.attempt,
-    );
-    plannedSegments = winner ?? computed;
+  const heldPlanObjectKey = input.request.planObjectKey;
+  const layoutRevision = () => heldPlanObjectKey
+    ? Promise.resolve(null)
+    : readPlaybackPlanLayoutRevision(input.request, input.storage, input.s3Prefix);
+  for (let tries = 1; ; tries += 1) {
+    const revision = await layoutRevision();
+    const planSignature = computePlaybackPlanSignature(input.request, revision);
+    const planObjectKey = heldPlanObjectKey ?? ttsPlaybackPlanArtifactKey({
+      documentId: input.request.documentId,
+      documentVersion: input.request.documentVersion,
+      readerType: input.request.readerType,
+      planSignature,
+      prefix: input.s3Prefix,
+    });
+    const write = await prepareArtifactWrite(input.storage, planObjectKey, input.attempt);
+    let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
+    if (!plannedSegments || plannedSegments.length === 0) {
+      const units = await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix);
+      // A reparse can replace the layout between reading its revision and its
+      // body. Each reparse has its own revision, so an unchanged revision proves
+      // the body belongs to the plan identity computed from it.
+      if (await layoutRevision() !== revision) {
+        if (tries < MAX_LAYOUT_REVISION_ATTEMPTS) continue;
+        throw new Error('The PDF layout changed while its reading plan was being prepared');
+      }
+      const computed = planTtsPlaybackSegments(input.request, units);
+      const winner = await publishOrAdoptArtifact(
+        () => persistTtsPlaybackPlan({ write, planObjectKey, request: input.request, segments: computed }),
+        () => readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey, input.request),
+        input.attempt,
+      );
+      plannedSegments = winner ?? computed;
+    }
+    return {
+      planObjectKey,
+      planSignature,
+      plannedSegments,
+      startOrdinal: input.requireStartOrdinal
+        ? resolvePlaybackStartOrdinal(plannedSegments, input.request)
+        : 0,
+    };
   }
-  return {
-    planObjectKey,
-    planSignature,
-    plannedSegments,
-    startOrdinal: input.requireStartOrdinal
-      ? resolvePlaybackStartOrdinal(plannedSegments, input.request)
-      : 0,
-  };
 }
