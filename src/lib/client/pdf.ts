@@ -1,5 +1,5 @@
 import { pdfjs } from 'react-pdf';
-import { TextLayer } from 'pdfjs-dist';
+import { TextLayer, type PDFDocumentProxy } from 'pdfjs-dist';
 import "core-js/proposals/promise-with-resolvers";
 import type { TTSSentenceAlignment } from '@/types/tts';
 import type { ParsedPdfDocument, ParsedPdfPage } from '@/types/parsed-pdf';
@@ -10,6 +10,7 @@ import {
   findBestHighlightTokenMatch,
   type HighlightTokenRange,
 } from '@/lib/client/highlight-token-alignment';
+import { pdfWordRects } from '@/lib/client/pdf/glyph-edges';
 
 export function shouldUseLegacyPdfBuild(userAgent: string): boolean {
   const isSafari = /^((?!chrome|android).)*safari/i.test(userAgent);
@@ -628,7 +629,11 @@ export function highlightWordIndex(
   wordIndex: number | null | undefined,
   sentence: string | null | undefined,
   containerRef: React.RefObject<HTMLDivElement>,
-  { follow = false, paintWord = true }: { follow?: boolean; paintWord?: boolean } = {},
+  {
+    follow = false,
+    paintWord = true,
+    pdfDocument,
+  }: { follow?: boolean; paintWord?: boolean; pdfDocument?: PDFDocumentProxy } = {},
 ) {
   clearWordHighlights();
 
@@ -688,7 +693,7 @@ export function highlightWordIndex(
       const range = document.createRange();
       range.setStart(node, token.startOffset);
       range.setEnd(node, token.endOffset);
-      const rects = Array.from(range.getClientRects());
+      const rects = pdfWordRects(span, range, pdfDocument);
       if (follow) wordRects.push(...rects);
       if (!paintWord) continue;
 

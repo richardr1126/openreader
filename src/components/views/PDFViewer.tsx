@@ -25,6 +25,7 @@ import {
 } from '@/lib/client/pdf/segment-pages';
 import { pdfLocatorPage } from '@/lib/client/tts/playback-selection';
 import { locateAlignmentWordSpans } from '@/lib/client/highlight-token-alignment';
+import { pdfPageCharEdges } from '@/lib/client/pdf/glyph-edges';
 
 interface PDFViewerProps {
   zoomLevel: number;
@@ -44,6 +45,7 @@ interface PDFViewerProps {
     | 'currDocPage'
     | 'parsedDocument'
     | 'parsedOverlayEnabled'
+    | 'pdfDocument'
   >;
 }
 
@@ -104,6 +106,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     currDocPage,
     parsedDocument,
     parsedOverlayEnabled,
+    pdfDocument,
   } = pdfState;
 
   // A sentence that runs over a page break is split by page. Narration turns to
@@ -366,7 +369,17 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     if (layoutKey !== activeLayoutKeyRef.current) return;
     setTextLayerReadyLayoutKey(layoutKey);
     commitSurfacePart(activeSurfaceKeyRef.current, 'text');
-  }, [activeLayoutKeyRef, activeSurfaceKeyRef, commitSurfacePart, layoutKey]);
+    // Start loading glyph edges so the page's first word box is exact.
+    if (pdfDocument && pdfWordHighlightEnabled) pdfPageCharEdges(pdfDocument, currDocPage);
+  }, [
+    activeLayoutKeyRef,
+    activeSurfaceKeyRef,
+    commitSurfacePart,
+    currDocPage,
+    layoutKey,
+    pdfDocument,
+    pdfWordHighlightEnabled,
+  ]);
 
   useEffect(() => {
     committedSurfacePartsRef.current.clear();
@@ -528,7 +541,11 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
         pageWordIndex,
         renderedPagePart.text,
         containerRef as RefObject<HTMLDivElement>,
-        { follow: followingNarrationRef.current && followSpokenWord, paintWord: pdfWordHighlightEnabled },
+        {
+          follow: followingNarrationRef.current && followSpokenWord,
+          paintWord: pdfWordHighlightEnabled,
+          pdfDocument,
+        },
       );
 
       if (isLayoutChange && pdfWordHighlightEnabled) {
@@ -562,6 +579,7 @@ export function PDFViewer({ zoomLevel, onReady, onError, pdfState }: PDFViewerPr
     pdfWordHighlightEnabled,
     clearWordHighlights,
     highlightWordIndex,
+    pdfDocument,
     layoutKey,
     textLayerReadyLayoutKey,
     clearWordHighlightTimeouts,
