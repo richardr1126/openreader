@@ -4,7 +4,20 @@ import type { VoiceCustomization } from '@openreader/tts/voice-customization';
 import type { ReaderTypography, HighlightAppearance } from '@/lib/shared/reader-appearance';
 import type { ReaderPresentation } from '@/lib/shared/reader-presentation';
 
-export const DEFAULT_PDF_SKIP_BLOCK_KINDS: ParsedPdfBlockKind[] = ['header', 'footer', 'footnote', 'vision_footnote'];
+/**
+ * What a PDF added before table and chart text was kept (#243) skips by
+ * default. Its narration was planned without that text, so keeping this list
+ * keeps its plan and cached audio.
+ */
+export const LEGACY_PDF_SKIP_BLOCK_KINDS: ParsedPdfBlockKind[] = ['header', 'footer', 'footnote', 'vision_footnote'];
+export const DEFAULT_PDF_SKIP_BLOCK_KINDS: ParsedPdfBlockKind[] = [...LEGACY_PDF_SKIP_BLOCK_KINDS, 'table', 'chart'];
+/** When #243 was merged; PDFs added from then on use the current default. */
+export const PDF_TABLE_TEXT_ADDED_AT_MS = Date.UTC(2026, 10, 27, 17, 46, 40);
+
+/** A PDF's default skip list, from when it was added. */
+export function defaultPdfSkipBlockKinds(createdAtMs: number | null | undefined): ParsedPdfBlockKind[] {
+  return [...(createdAtMs != null && createdAtMs >= PDF_TABLE_TEXT_ADDED_AT_MS ? DEFAULT_PDF_SKIP_BLOCK_KINDS : LEGACY_PDF_SKIP_BLOCK_KINDS)];
+}
 
 export interface DocumentSettings {
   schemaVersion: 1;

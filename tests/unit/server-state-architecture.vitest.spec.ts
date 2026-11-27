@@ -503,7 +503,7 @@ describe('server-state architecture', () => {
     expect(context).toContain('canStartPlayback: isPlaying &&');
     expect(context).not.toContain("activeReaderType === 'epub' && sentence.trim()");
     expect(context).not.toContain("activeReaderType !== 'epub' && playbackSegment?.key");
-    expect(source('src/lib/server/reader/playback.ts')).toContain('skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds');
+    expect(source('src/lib/server/reader/playback.ts')).toContain('resolvePdfSkipBlockKinds(');
     expect(clientTts).toContain('skipBlockKinds?: ParsedPdfBlockKind[]');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('readOptionalSkipBlockKinds(planningRec)');
     expect(source('src/lib/server/tts/playback-request.ts')).toContain('parsed.skipBlockKinds ?? await getDocumentSkipBlockKinds');

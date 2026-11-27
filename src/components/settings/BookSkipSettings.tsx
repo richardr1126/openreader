@@ -14,7 +14,7 @@ import { PdfBlockKindControls } from './PdfBlockKindControls';
  */
 export function BookSkipSettings({ pdf }: { pdf: boolean }) {
   const { speechText, pdfSkipBlockKinds } = useConfig();
-  const { bookSpeechSettings, setBookSpeechSettings } = useTTS();
+  const { bookSpeechSettings, setBookSpeechSettings, playbackPlanPayload } = useTTS();
   const { confirmPlanChange, planChangeDialog } = usePlanChangeConfirm();
   const bookSpeechText = bookSpeechSettings.speechText ?? {};
   const changeSpeechText = (change: Partial<SpeechTextOptions>, reset?: keyof SpeechTextOptions) => {
@@ -31,7 +31,8 @@ export function BookSkipSettings({ pdf }: { pdf: boolean }) {
   return <Section title="Skip when reading aloud" variant="group">
     <SpeechTextControls value={normalizeSpeechText({ ...speechText, ...bookSpeechText })}
       overrides={bookSpeechText} onChange={changeSpeechText} onReset={key => changeSpeechText({}, key)} />
-    {pdf && <PdfBlockKindControls value={bookSpeechSettings.pdf?.skipBlockKinds ?? pdfSkipBlockKinds}
+    {/* The server picks a PDF's default from when it was added, so show what its plan uses. */}
+    {pdf && <PdfBlockKindControls value={bookSpeechSettings.pdf?.skipBlockKinds ?? playbackPlanPayload?.planning?.skipBlockKinds ?? pdfSkipBlockKinds}
       onChange={skipBlockKinds => changeBlockKinds({ skipBlockKinds })}
       onReset={bookSpeechSettings.pdf?.skipBlockKinds !== undefined ? () => changeBlockKinds({}) : undefined} />}
     {planChangeDialog}
