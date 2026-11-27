@@ -51,9 +51,9 @@ async function inspectConversionMetadata(
     prefix: context.s3Prefix,
   });
   try {
-    const parsed = JSON.parse(Buffer.from(await context.storage.readObject(key)).toString('utf8')) as DocumentConversionArtifactMetadata;
+    const parsed = JSON.parse(Buffer.from(await context.storage.readObject(key)).toString('utf8')) as DocumentConversionArtifactMetadata | null;
     if (
-      parsed.schemaVersion !== 1
+      parsed?.schemaVersion !== 1
       || parsed.conversionId !== input.conversionId
       || parsed.namespace !== input.namespace
       || parsed.sourceObjectKey !== input.sourceObjectKey

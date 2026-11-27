@@ -60,9 +60,9 @@ export async function inspectDocumentPreviewMetadata(
       };
     }
     if (documentPreviewWidth(input.targetWidth) !== 400) return null;
-    const parsed = JSON.parse(Buffer.from(await storage.readObject(key)).toString('utf8')) as DocumentPreviewArtifactMetadata;
+    const parsed = JSON.parse(Buffer.from(await storage.readObject(key)).toString('utf8')) as DocumentPreviewArtifactMetadata | null;
     if (
-      parsed.schemaVersion !== 1
+      parsed?.schemaVersion !== 1
       || parsed.documentId !== input.documentId
       || parsed.namespace !== input.namespace
       || parsed.documentType !== input.documentType

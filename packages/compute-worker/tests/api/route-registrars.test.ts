@@ -51,8 +51,9 @@ describe('compute worker domain route registrars', () => {
       },
     ];
     const missing = Object.assign(new Error('missing'), { name: 'NoSuchKey' });
+    const outcomes = [[missing, 'op-stale'], ['null', 'op-stale'], [new Error('storage unavailable'), undefined]] as const;
     for (const { url, payload } of cases) {
-      for (const [readError, replaceOpId] of [[missing, 'op-stale'], [new Error('storage unavailable'), undefined]] as const) {
+      for (const [read, replaceOpId] of outcomes) {
         const app = Fastify();
         apps.push(app);
         const replaced: Array<string | undefined> = [];
@@ -60,7 +61,11 @@ describe('compute worker domain route registrars', () => {
           app,
           s3Prefix: 'openreader',
           ensureOrphanedOpRecovery: async () => {},
-          storage: { readObject: async () => { throw readError; }, objectExists: async () => { throw readError; } },
+          storage: {
+            // Stored metadata that parses to null is invalid, like a missing file.
+            readObject: async () => { if (typeof read === 'string') return Buffer.from(read); throw read; },
+            objectExists: async () => { if (typeof read === 'string') return true; throw read; },
+          },
           deps: {
             operationStateStore: {
               getOpIndex: async () => ({ opId: 'op-stale' }),
