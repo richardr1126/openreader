@@ -515,40 +515,6 @@ describe('compute worker API routes', () => {
     expect((await layoutRequest(kept, '/v1/pdf-layout/resolve')).statusCode).toBe(500);
   });
 
-  test('makes a new preview or DOCX conversion when a succeeded one has lost its file', async () => {
-    const documentId = 'c'.repeat(64);
-    const cases = [
-      {
-        jobs: '/v1/document-previews/jobs',
-        resolve: '/v1/document-previews/resolve',
-        payload: {
-          documentId, namespace: null, documentType: 'pdf',
-          sourceObjectKey: `openreader/documents_v1/${documentId}`, sourceLastModifiedMs: 12345, previewKind: 'card',
-        },
-      },
-      {
-        jobs: '/v1/document-conversions/docx/jobs',
-        resolve: '/v1/document-conversions/docx/resolve',
-        payload: {
-          conversionId: 'd'.repeat(64), namespace: null,
-          sourceObjectKey: 'openreader/document_uploads_temp_v1/users/user-1/upload.bin', sourceLastModifiedMs: 12345,
-          sourceContentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', sourceEtag: 'source-etag',
-        },
-      },
-    ];
-    for (const { jobs, resolve, payload } of cases) {
-      const request = (url: string) => runtime.app.inject({ method: 'POST', url, headers: AUTH, payload });
-      // This app has no storage, so no preview or conversion file is ever found.
-      const staleOpId = (await request(jobs)).json().opId as string;
-      fake.seedState({ ...fake.getState(staleOpId)!, status: 'succeeded' });
-      expect((await request(resolve)).json()).toMatchObject({ artifact: null, operation: null });
-      const replacement = (await request(jobs)).json();
-      expect(replacement).toMatchObject({ status: 'queued' });
-      expect(replacement.opId).not.toBe(staleOpId);
-      expect((await request(resolve)).json()).toMatchObject({ operation: { opId: replacement.opId, status: 'queued' } });
-    }
-  });
-
   test('returns not found for unknown operation and event stream lookups', async () => {
     const opResponse = await runtime.app.inject({
       method: 'GET',

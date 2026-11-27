@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { DOCUMENT_PREVIEW_RENDERER_VERSION, type DocumentPreviewArtifactMetadata, type DocumentPreviewJobRequest } from '../operations/contracts';
-import type { ArtifactStorage } from '../infrastructure/storage';
+import { isNotFound, type ArtifactStorage } from '../infrastructure/storage';
 import { buildDocumentPreviewOperationKey, documentPreviewWidth } from '../operations/keys';
 import { documentPreviewArtifactKey, documentPreviewMetadataArtifactKey } from './artifact-addressing';
 
@@ -17,7 +17,20 @@ export function documentPreviewObjectMetadata(input: DocumentPreviewJobRequest, 
   };
 }
 
-export async function readDocumentPreviewMetadata(
+export function readDocumentPreviewMetadata(
+  storage: ArtifactStorage,
+  input: DocumentPreviewJobRequest,
+  prefix: string,
+): Promise<DocumentPreviewArtifactMetadata | null> {
+  return inspectDocumentPreviewMetadata(storage, input, prefix).catch(() => null);
+}
+
+/**
+ * The preview's metadata, or null when it is missing or does not describe this
+ * preview. A storage read that fails for another reason rejects, so a caller
+ * can tell an unreadable preview from a missing one.
+ */
+export async function inspectDocumentPreviewMetadata(
   storage: ArtifactStorage,
   input: DocumentPreviewJobRequest,
   prefix: string,
@@ -62,7 +75,8 @@ export async function readDocumentPreviewMetadata(
       || parsed.status !== 'ready'
     ) return null;
     return head || await storage.objectExists(objectKey) ? parsed : null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (isNotFound(error) || error instanceof SyntaxError) return null;
+    throw error;
   }
 }

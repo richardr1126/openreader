@@ -1,4 +1,5 @@
 import { hashOpKey } from '../../infrastructure/nats-adapters';
+import { isNotFound } from '../../infrastructure/storage';
 import type { WorkerOperationRequest } from '../../operations/contracts';
 import {
   buildDocumentConversionOperationKey,
@@ -12,7 +13,7 @@ import {
 import type {
   DocumentConversionArtifactMetadata,
 } from '../../operations/contracts';
-import { readDocumentPreviewMetadata } from '../../storage/document-preview-metadata';
+import { inspectDocumentPreviewMetadata, readDocumentPreviewMetadata } from '../../storage/document-preview-metadata';
 import { toComputeOperation } from '../compute-operation';
 import type { ComputeWorkerRouteContext } from '../route-context';
 import {
@@ -32,7 +33,15 @@ import {
 
 const errorResponseSchema = jsonSchema(apiErrorResponseSchema);
 
-async function readConversionMetadata(
+function readConversionMetadata(
+  context: ComputeWorkerRouteContext,
+  input: typeof documentConversionResolveSchema._output,
+): Promise<DocumentConversionArtifactMetadata | null> {
+  return inspectConversionMetadata(context, input).catch(() => null);
+}
+
+/** Like readConversionMetadata, but a storage read that fails for another reason than a missing object rejects. */
+async function inspectConversionMetadata(
   context: ComputeWorkerRouteContext,
   input: typeof documentConversionResolveSchema._output,
 ): Promise<DocumentConversionArtifactMetadata | null> {
@@ -53,10 +62,16 @@ async function readConversionMetadata(
       || parsed.sourceEtag !== (input.sourceEtag ?? null)
       || parsed.status !== 'ready'
     ) return null;
-    return await context.storage.objectExists(parsed.objectKey).catch(() => false) ? parsed : null;
-  } catch {
-    return null;
+    return await context.storage.objectExists(parsed.objectKey) ? parsed : null;
+  } catch (error) {
+    if (isNotFound(error) || error instanceof SyntaxError) return null;
+    throw error;
   }
+}
+
+/** Whether an artifact is present, where a storage error counts as present: only a confirmed absence replaces an operation. */
+function presentUnlessMissing(exists: Promise<boolean>): Promise<boolean> {
+  return exists.catch(() => true);
 }
 
 async function readIndexedOperation(context: ComputeWorkerRouteContext, opKey: string) {
@@ -126,8 +141,9 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
     };
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
-      // A storage error is not a missing layout, so it keeps the operation.
-      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, () => pdfLayoutExists(context, parsed.data).catch(() => true)),
+      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, () => presentUnlessMissing(
+        pdfLayoutExists(context, parsed.data),
+      )),
     });
     reply.code(202);
     return toComputeOperation(op);
@@ -151,8 +167,8 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
     };
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
-      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, async () => (
-        await readDocumentPreviewMetadata(context.storage, parsed.data, context.s3Prefix) !== null
+      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, () => presentUnlessMissing(
+        inspectDocumentPreviewMetadata(context.storage, parsed.data, context.s3Prefix).then((artifact) => artifact !== null),
       )),
     });
     logAccepted(context, requestOp, op);
@@ -178,8 +194,8 @@ export function registerDocumentJobRoutes(context: ComputeWorkerRouteContext): v
     };
     await ensureOrphanedOpRecovery();
     const op = await deps.orchestrator.enqueueOrReuse(requestOp, {
-      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, async () => (
-        await readConversionMetadata(context, parsed.data) !== null
+      replaceOpId: await operationWithoutArtifact(context, requestOp.opKey, () => presentUnlessMissing(
+        inspectConversionMetadata(context, parsed.data).then((artifact) => artifact !== null),
       )),
     });
     logAccepted(context, requestOp, op);
