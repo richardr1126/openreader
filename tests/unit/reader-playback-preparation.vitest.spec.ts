@@ -118,7 +118,7 @@ describe('bootstrap playback preparation', () => {
     mocks.readPlan.mockResolvedValue(plan([0, 1], 'pdf'));
     const prepare = (settings = DEFAULT_DOCUMENT_SETTINGS) => resolveReaderPlayback(request, documentId,
       { ...scope, readerType: 'pdf' }, settings,
-      { ...preferences, ttsSegmentMaxBlockLength: 600, pdfSkipBlockKinds: ['header', 'footer'] });
+      { ...preferences, ttsSegmentMaxBlockLength: 600, pdfSkipBlockKinds: ['header', 'footer'] }, undefined, null);
     await prepare();
     expect(mocks.enqueue.mock.calls.at(-1)?.[0].planning).toMatchObject({ maxBlockLength: 600,
       documentSource: { skipBlockKinds: ['header', 'footer'] } });

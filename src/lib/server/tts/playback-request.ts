@@ -8,6 +8,7 @@ import { normalizeSpeechText, BRACKETED_TEXT_MODES } from '@openreader/tts/speec
 import { PARSED_PDF_BLOCK_KINDS, type ParsedPdfBlockKind } from '@/types/parsed-pdf';
 import type { TtsPlaybackPlanRequest, TtsPlaybackRequest } from '@/lib/server/compute-worker/protocol';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
+import { resolvePdfNarrationRevision } from '@/lib/server/tts/pdf-narration-revision';
 import type { TTSSegmentSettings } from '@/types/client';
 
 type PlaybackStartLocation = {
@@ -186,9 +187,14 @@ export function validateTtsPlaybackSessionStartOrdinal(
     : 'TTS playback session requires a worker-plan ordinal';
 }
 
+/**
+ * `narrationRevision` is the PDF layout revision the caller already holds. When
+ * it is omitted, the request's saved plan or the current layout supplies it.
+ */
 export async function buildTtsPlaybackPlanningInput(
   parsed: ParsedTtsPlaybackRequestBody,
   scope: ResolvedSegmentDocumentScope,
+  options: { narrationRevision?: string | null } = {},
 ): Promise<{
   settingsHash: string;
   settingsJson: string;
@@ -208,6 +214,11 @@ export async function buildTtsPlaybackPlanningInput(
   const enforceSourceBoundaries = scope.readerType === 'pdf'
     || scope.readerType === 'epub'
     || scope.readerType === 'html';
+  const narrationRevision = scope.readerType === 'pdf'
+    ? options.narrationRevision !== undefined
+      ? options.narrationRevision
+      : await resolvePdfNarrationRevision(parsed.documentId, scope, parsed.planObjectKey)
+    : null;
 
   // The audio settings hash must vary with segmentation, not just voice: changing
   // skipBlockKinds (etc.) changes which text lands at each ordinal, so reusing a
@@ -220,6 +231,7 @@ export async function buildTtsPlaybackPlanningInput(
     skipBlockKinds,
     isPlainText,
     namespace: null,
+    narrationRevision,
   });
 
   return {
@@ -235,6 +247,7 @@ export async function buildTtsPlaybackPlanningInput(
         skipBlockKinds,
         extent: planExtent,
         isPlainText,
+        ...(narrationRevision ? { narrationRevision } : {}),
       },
     },
   };

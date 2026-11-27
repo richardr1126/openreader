@@ -1,5 +1,5 @@
 import { hashOpKey } from '../../infrastructure/nats-adapters';
-import { isNotFound } from '../../infrastructure/storage';
+import { isNotFound, PARSED_PDF_NARRATION_REVISION_METADATA } from '../../infrastructure/storage';
 import type { WorkerOperationRequest } from '../../operations/contracts';
 import {
   buildDocumentConversionOperationKey,
@@ -220,9 +220,13 @@ export function registerDocumentResolutionRoutes(context: ComputeWorkerRouteCont
     }
     await ensureOrphanedOpRecovery();
     const operation = await readIndexedOperation(context, buildPdfOperationKey(parsed.data));
-    const hasArtifact = await pdfLayoutExists(context, parsed.data);
+    const artifactKey = parsedPdfArtifactKey({ ...parsed.data, prefix: s3Prefix });
+    // Where storage supports it, one HEAD gives both existence and the revision.
+    const head = context.storage.headObject ? await context.storage.headObject(artifactKey) : undefined;
+    const hasArtifact = head === undefined ? await pdfLayoutExists(context, parsed.data) : head !== null;
+    const narrationRevision = head?.metadata[PARSED_PDF_NARRATION_REVISION_METADATA];
     return {
-      artifact: hasArtifact ? { objectKey: parsedPdfArtifactKey({ ...parsed.data, prefix: s3Prefix }) } : null,
+      artifact: hasArtifact ? { objectKey: artifactKey, ...(narrationRevision ? { narrationRevision } : {}) } : null,
       operation: operation && describesArtifact(operation, hasArtifact) ? toComputeOperation(operation) : null,
     };
   });

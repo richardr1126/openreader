@@ -1,4 +1,5 @@
 import { STREAM_AUDIO_BYTES_PER_SECOND } from '@openreader/tts/audio-format';
+import { ttsPlaybackSettingsRevision } from '@openreader/tts/segments';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import { storageUserHash } from './prefix-cleanup';
 
@@ -23,6 +24,8 @@ export async function listCachedPlaybackVariants(input: {
   storageUserId: string;
   documentId: string;
   documentVersion: number;
+  /** When given, only audio for this PDF layout revision (null: none) is listed. */
+  narrationRevision?: string | null;
 }): Promise<CachedPlaybackVariant[]> {
   const { storage, s3Prefix, storageUserId, documentId } = input;
   const version = Math.max(0, Math.floor(input.documentVersion));
@@ -33,6 +36,8 @@ export async function listCachedPlaybackVariants(input: {
   const variants: CachedPlaybackVariant[] = [];
   for (const hash of hashes) {
     const settingsHash = hash.replace(/\/$/, '');
+    // Audio for another layout never counts toward the limit.
+    if (input.narrationRevision !== undefined && ttsPlaybackSettingsRevision(settingsHash) !== input.narrationRevision) continue;
     let segments = 0;
     let bytes = 0;
     let updatedAt = 0;

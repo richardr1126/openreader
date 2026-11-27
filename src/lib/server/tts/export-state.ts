@@ -41,9 +41,16 @@ function isInflight(status: string | null | undefined): boolean {
   return status === 'queued' || status === 'running';
 }
 
+/** The worker found that a reparse replaced the PDF layout an audiobook's plan needs. */
+const PDF_LAYOUT_CHANGED_ISSUE: TtsExportIssue = {
+  code: 'PDF_LAYOUT_CHANGED',
+  message: 'This PDF was reparsed after the audiobook was requested. Request the audiobook again.',
+};
+
 export function exportOperationIssue(operation: ComputeOperation | null | undefined): TtsExportIssue | null {
   if (operation?.status !== 'failed') return null;
   const error = operation.error as { message?: unknown; code?: unknown } | null | undefined;
+  if (error?.code === PDF_LAYOUT_CHANGED_ISSUE.code) return PDF_LAYOUT_CHANGED_ISSUE;
   return {
     code: typeof error?.code === 'string' ? error.code : null,
     message: typeof error?.message === 'string' ? error.message : null,

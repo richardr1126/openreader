@@ -9,7 +9,11 @@ import { resolveSegmentDocumentScope, type ResolvedSegmentDocumentScope } from '
 export type DocumentStorageScope = {
   documentId: string;
   scope: ResolvedSegmentDocumentScope;
-  /** The cache identity the reader would request now for this document. */
+  /**
+   * The cache identity the reader would request now for this document. For a
+   * PDF it leaves out the layout revision: storage and reclaim match these
+   * settings on every layout of the version.
+   */
   settingsHash: string;
 };
 
@@ -25,7 +29,7 @@ export async function resolveDocumentStorageScope(
   if (!parsed) return NextResponse.json({ error: 'Invalid request payload' }, { status: 400 });
   const scope = await resolveSegmentDocumentScope(request, parsed.documentId);
   if (scope instanceof Response) return scope;
-  const { settingsHash } = await buildTtsPlaybackPlanningInput(parsed, scope);
+  const { settingsHash } = await buildTtsPlaybackPlanningInput(parsed, scope, { narrationRevision: null });
   return { documentId: parsed.documentId, scope, settingsHash };
 }
 

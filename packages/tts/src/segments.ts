@@ -63,6 +63,11 @@ export interface SegmentationSignatureInput {
   skipBlockKinds: readonly string[];
   isPlainText: boolean;
   namespace: string | null;
+  /**
+   * PDF only: set when a reparse changed the layout's narration text, so the
+   * new layout gets its own plan and audio. Absent for every other layout.
+   */
+  narrationRevision?: string | null;
 }
 
 /**
@@ -79,12 +84,17 @@ export function segmentationSignatureCanonical(input: SegmentationSignatureInput
     skipBlockKinds: [...input.skipBlockKinds].map((kind) => kind.trim()).filter(Boolean).sort(),
     isPlainText: Boolean(input.isPlainText),
     namespace: input.namespace ?? null,
+    // Omitted when absent so existing plans and audio keep their identity.
+    ...(input.narrationRevision ? { narrationRevision: input.narrationRevision } : {}),
   });
 }
 
 export function computeSegmentationSignature(input: SegmentationSignatureInput): string {
   return createHash('sha256').update(segmentationSignatureCanonical(input)).digest('hex').slice(0, 32);
 }
+
+/** Joins a settings hash and the PDF narration revision of a reparsed layout. */
+const NARRATION_REVISION_SEPARATOR = '.';
 
 /**
  * Hash that keys generated playback audio variants. Combines the voice/format
@@ -98,12 +108,32 @@ export function buildTtsPlaybackSettingsHash(
   settings: TTSSegmentSettings,
   segmentation: SegmentationSignatureInput,
 ): string {
+  const { narrationRevision, ...layoutIndependent } = segmentation;
   const separator = String.fromCharCode(0);
-  return createHash('sha256')
+  const hash = createHash('sha256')
     .update(settingsCanonical(settings))
     .update(separator)
-    .update(segmentationSignatureCanonical(segmentation))
+    .update(segmentationSignatureCanonical(layoutIndependent))
     .digest('hex');
+  // A reparsed PDF layout keeps its audio apart by revision, after the part
+  // that every layout of the document shares with these settings.
+  return narrationRevision ? `${hash}${NARRATION_REVISION_SEPARATOR}${narrationRevision}` : hash;
+}
+
+/**
+ * The part of a playback settings hash that names the provider, voice, speed
+ * and segmentation settings without the PDF layout revision. Audio made with
+ * the same settings on another layout of the same document version shares it.
+ */
+export function ttsPlaybackSettingsIdentity(settingsHash: string): string {
+  const end = settingsHash.indexOf(NARRATION_REVISION_SEPARATOR);
+  return end === -1 ? settingsHash : settingsHash.slice(0, end);
+}
+
+/** The PDF layout revision a playback settings hash was made for, or null when it has none. */
+export function ttsPlaybackSettingsRevision(settingsHash: string): string | null {
+  const end = settingsHash.indexOf(NARRATION_REVISION_SEPARATOR);
+  return end === -1 ? null : settingsHash.slice(end + 1);
 }
 
 export function buildTtsSegmentSettingsJson(settings: TTSSegmentSettings): TTSSegmentSettings | string {

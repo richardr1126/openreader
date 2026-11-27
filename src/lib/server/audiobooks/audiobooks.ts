@@ -38,6 +38,7 @@ import {
   type ParsedTtsPlaybackRequestBody,
 } from '@/lib/server/tts/playback-request';
 import { TTS_PLAYBACK_SESSION_TTL_MS } from '@/lib/server/tts/playback-sessions';
+import { resolvePdfNarrationRevision } from '@/lib/server/tts/pdf-narration-revision';
 import { storageLimit } from '@/lib/server/storage/usage';
 import { resolveUserDocumentScope, type ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
 import type { Audiobook, AudiobookStatus, TtsExportArtifactState, TtsExportGenerationState, TtsExportIssue } from '@/types/tts-export';
@@ -51,6 +52,11 @@ export type AudiobookIntent = {
   parsed: ParsedTtsPlaybackRequestBody;
   /** Reference only: terminal state stays in the worker after session expiry. */
   generationOperationId?: string;
+  /**
+   * The PDF layout revision captured when the audiobook ID was assigned. The
+   * request keeps it, so a later reparse cannot move it to another layout.
+   */
+  narrationRevision?: string | null;
 };
 
 export type AudiobookCaller = {
@@ -153,6 +159,7 @@ function toStoredRequest(intent: AudiobookIntent): string | object {
     language: parsed.language,
     skipBlockKinds: parsed.skipBlockKinds,
     generationOperationId: intent.generationOperationId,
+    ...(intent.narrationRevision !== undefined ? { narrationRevision: intent.narrationRevision } : {}),
   };
   return process.env.POSTGRES_URL ? stored : JSON.stringify(stored);
 }
@@ -177,7 +184,22 @@ function intentFromRow(row: Row): AudiobookIntent | null {
     chapterIndex: row.chapterIndex,
     parsed,
     ...(typeof stored.generationOperationId === 'string' ? { generationOperationId: stored.generationOperationId } : {}),
+    // Requests saved before revisions existed belong to a layout without one.
+    narrationRevision: typeof stored.narrationRevision === 'string' ? stored.narrationRevision : null,
   };
+}
+
+/** Captures the layout revision a new request belongs to, once, before its ID is assigned. */
+async function withNarrationRevision(caller: AudiobookCaller, intent: AudiobookIntent): Promise<AudiobookIntent> {
+  if (intent.narrationRevision !== undefined) return intent;
+  const narrationRevision = caller.scope.readerType === 'pdf'
+    ? await resolvePdfNarrationRevision(intent.parsed.documentId, caller.scope, intent.parsed.planObjectKey)
+    : null;
+  return { ...intent, narrationRevision };
+}
+
+function planningInputFor(scope: ResolvedSegmentDocumentScope, intent: AudiobookIntent) {
+  return buildTtsPlaybackPlanningInput(intent.parsed, scope, { narrationRevision: intent.narrationRevision });
 }
 
 async function findRow(id: string, userId: string, documentId: string): Promise<Row | null> {
@@ -249,7 +271,7 @@ async function advanceAudiobook(input: {
   const explicit = command === 'start' || command === 'retry-skipped';
   const runtimeConfig = await getRuntimeConfig();
   const client = new ComputeWorkerClient();
-  const { settingsHash, settingsJson, planning } = await buildTtsPlaybackPlanningInput(intent.parsed, scope);
+  const { settingsHash, settingsJson, planning } = await planningInputFor(scope, intent);
 
   const report = (fields: {
     generation: Audiobook['generation'];
@@ -556,9 +578,11 @@ async function advanceAudiobook(input: {
   });
 }
 
-async function idFor(caller: AudiobookCaller, intent: AudiobookIntent): Promise<string> {
-  const { settingsHash } = await buildTtsPlaybackPlanningInput(intent.parsed, caller.scope);
-  return audiobookId(caller, intent, settingsHash);
+/** The request's ID, and the request with the layout revision that ID was assigned for. */
+async function idFor(caller: AudiobookCaller, requested: AudiobookIntent): Promise<{ id: string; intent: AudiobookIntent }> {
+  const intent = await withNarrationRevision(caller, requested);
+  const { settingsHash } = await planningInputFor(caller.scope, intent);
+  return { id: audiobookId(caller, intent, settingsHash), intent };
 }
 
 type StartOptions = {
@@ -573,10 +597,10 @@ const isoTime = (ms: number | null | undefined) => (ms === null || ms === undefi
 /** Records the request and starts it, or returns the matching existing one. */
 async function startAudiobookUnlocked(
   caller: AudiobookCaller,
-  intent: AudiobookIntent,
+  request: AudiobookIntent,
   options: StartOptions,
 ): Promise<Audiobook> {
-  const id = await idFor(caller, intent);
+  const { id, intent } = await idFor(caller, request);
   const command = options.retrySkipped ? 'retry-skipped' : 'start';
   const requestedAt = Date.now();
   const requested = (audiobook: Audiobook): Audiobook => ({ ...audiobook, requestedAt: isoTime(requestedAt) });
@@ -610,10 +634,10 @@ async function startAudiobookUnlocked(
 /** Reports the audiobook for these settings without asking for one. */
 async function lookupAudiobookUnlocked(
   caller: AudiobookCaller,
-  intent: AudiobookIntent,
+  request: AudiobookIntent,
   options: { includeProgress: boolean },
 ): Promise<Audiobook> {
-  const id = await idFor(caller, intent);
+  const { id, intent } = await idFor(caller, request);
   const row = await findRow(id, caller.scope.storageUserId, intent.parsed.documentId);
   const stored = row ? intentFromRow(row) : null;
   const audiobook = await advanceAudiobook({
@@ -695,7 +719,7 @@ async function stopAudiobookUnlocked(
 
 /** Uncancelled whole-book requests on the same generation session as `intent`, which share its run. */
 async function requestsSharingSession(caller: AudiobookCaller, intent: AudiobookIntent): Promise<string[]> {
-  const { settingsHash } = await buildTtsPlaybackPlanningInput(intent.parsed, caller.scope);
+  const { settingsHash } = await planningInputFor(caller.scope, await withNarrationRevision(caller, intent));
   const rows = await db.select().from(audiobookRequests).where(and(
     eq(audiobookRequests.userId, caller.scope.storageUserId),
     eq(audiobookRequests.documentId, intent.parsed.documentId),
@@ -705,7 +729,7 @@ async function requestsSharingSession(caller: AudiobookCaller, intent: Audiobook
     if (row.chapterIndex !== null || row.cancelledAt || Number(row.documentVersion) !== caller.scope.documentVersion) continue;
     const other = intentFromRow(row);
     if (!other) continue;
-    const planned = await buildTtsPlaybackPlanningInput(other.parsed, caller.scope);
+    const planned = await planningInputFor(caller.scope, other);
     // The plan is part of the session's identity; a request without one yet adopts the current plan.
     const plans = [intent.parsed.planObjectKey, other.parsed.planObjectKey];
     if (planned.settingsHash === settingsHash && (plans.includes(undefined) || plans[0] === plans[1])) sharing.push(row.id);

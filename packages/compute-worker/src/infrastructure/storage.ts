@@ -17,6 +17,8 @@ export interface StoredObjectSummary {
   lastModifiedMs: number;
 }
 
+export const PARSED_PDF_NARRATION_REVISION_METADATA = 'narration-revision';
+
 export interface ParsedPdfArtifactRevision {
   etag: string;
   operationId?: string;
@@ -50,6 +52,8 @@ export interface ArtifactStorage {
   putParsedPdf(documentId: string, namespace: string | null, parsed: unknown, options: {
     operationId: string;
     expected: ParsedPdfArtifactRevision | null;
+    /** Mirrors the layout's `narrationRevision` so callers can read it without the body. */
+    narrationRevision?: string;
     signal: AbortSignal;
   }): Promise<string>;
 }
@@ -287,7 +291,10 @@ export function createArtifactStorage(config: ArtifactStorageConfig): ParsedPdfA
         Body: Buffer.from(JSON.stringify(parsed)),
         ContentType: 'application/json',
         ServerSideEncryption: 'AES256',
-        Metadata: { 'operation-id': options.operationId },
+        Metadata: {
+          'operation-id': options.operationId,
+          ...(options.narrationRevision ? { [PARSED_PDF_NARRATION_REVISION_METADATA]: options.narrationRevision } : {}),
+        },
         ...(options.expected ? { IfMatch: options.expected.etag } : { IfNoneMatch: '*' }),
       }), { abortSignal: options.signal });
       return key;

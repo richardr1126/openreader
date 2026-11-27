@@ -1,3 +1,4 @@
+import { ttsPlaybackSettingsIdentity } from '@openreader/tts/segments';
 import type { ArtifactStorage } from '../infrastructure/storage';
 import {
   documentPreviewArtifactPrefix,
@@ -201,15 +202,18 @@ export async function collectStorageUsage(input: {
  * The cache variants of one document that a reclaim should reset: every
  * (version, settings hash) found in segment storage or attributed export
  * metadata that does not match `keep`. `keep: null` reclaims everything.
+ * A variant matches when it has the kept settings on any PDF layout revision
+ * of that version, so a Force reparse alone never makes audio reclaimable.
  */
 export function reclaimableVariants(
   usage: DocumentStorageUsage | undefined,
   keep: { documentVersion: number; settingsHash?: string } | null,
 ): Array<{ documentVersion: number; settingsHash: string }> {
   if (!usage) return [];
+  const keptIdentity = keep?.settingsHash === undefined ? undefined : ttsPlaybackSettingsIdentity(keep.settingsHash);
   const kept = (documentVersion: number, settingsHash: string) => keep !== null
     && documentVersion === keep.documentVersion
-    && (keep.settingsHash === undefined || settingsHash === keep.settingsHash);
+    && (keptIdentity === undefined || ttsPlaybackSettingsIdentity(settingsHash) === keptIdentity);
   const variants = new Map<string, { documentVersion: number; settingsHash: string }>();
   const consider = (documentVersion: number | null, settingsHash: string | null) => {
     if (documentVersion === null || settingsHash === null || kept(documentVersion, settingsHash)) return;

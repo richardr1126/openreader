@@ -36,6 +36,24 @@ describe('storage usage summaries', () => {
       .toEqual({ currentAudioBytes: 110, unusedAudioBytes: 75, documentDataBytes: 900, truncated: true });
   });
 
+  test('counts audio with the current settings on any PDF layout revision as current, as reclaim keeps it', () => {
+    const current = 'a'.repeat(64);
+    const usage = report([document('doc-1', {
+      variants: [
+        { documentVersion: 2, settingsHash: current, bytes: 100, objects: 2 },
+        { documentVersion: 2, settingsHash: `${current}.${'c'.repeat(32)}`, bytes: 60, objects: 1 },
+        { documentVersion: 2, settingsHash: `${'b'.repeat(64)}.${'c'.repeat(32)}`, bytes: 40, objects: 1 },
+        { documentVersion: 1, settingsHash: `${current}.${'c'.repeat(32)}`, bytes: 30, objects: 1 },
+      ],
+      exports: [{ documentVersion: 2, settingsHash: `${current}.${'e'.repeat(32)}`, bytes: 7, objects: 1 }],
+    })]);
+
+    expect(summarizeDocumentStorage(usage, { documentId: 'doc-1', documentVersion: 2, settingsHash: current }))
+      .toMatchObject({ currentAudioBytes: 167, unusedAudioBytes: 70 });
+    expect(summarizeDocumentStorage(usage, { documentId: 'doc-1', documentVersion: 2, settingsHash: `${current}.${'c'.repeat(32)}` }))
+      .toMatchObject({ currentAudioBytes: 167, unusedAudioBytes: 70 });
+  });
+
   test('reports zero for a document with no stored objects', () => {
     expect(summarizeDocumentStorage(report([]), { documentId: 'doc-1', documentVersion: 1, settingsHash: 'h' }))
       .toEqual({ currentAudioBytes: 0, unusedAudioBytes: 0, documentDataBytes: 0, truncated: false });

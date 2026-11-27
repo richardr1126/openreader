@@ -35,6 +35,7 @@ import { toErrorMessage } from '../infrastructure/errors';
 import { TtsCredentialBrokerClientError } from './tts-credential-broker-error';
 import { EmailDeliveryError } from './email-delivery';
 import { TtsProviderFailedError } from './playback/provider-failure';
+import { PdfLayoutChangedError } from './playback/layout-changed';
 import {
   type ComputeLimitPolicyDocument,
   type WorkerOperationAction,
@@ -331,6 +332,7 @@ export function createWorkerLoopController(input: {
       const inputErrorCode = kind === 'pdf_layout' ? pdfInputErrorCode(error) : undefined;
       const retryable = inputErrorCode ? false
         : error instanceof TtsCredentialBrokerClientError || error instanceof EmailDeliveryError || error instanceof TtsProviderFailedError
+          || error instanceof PdfLayoutChangedError
           ? error.retryable : undefined;
       const notStarted = error instanceof ComputeQueueExpiredError || error instanceof ComputeWorkNotStartedError;
       const action = notStarted
@@ -352,7 +354,8 @@ export function createWorkerLoopController(input: {
             error: {
               message: errorMessage,
               ...(inputErrorCode ? { code: inputErrorCode }
-                : notStarted || error instanceof TtsProviderFailedError ? { code: error.code } : {}),
+                : notStarted || error instanceof TtsProviderFailedError || error instanceof PdfLayoutChangedError
+                  ? { code: error.code } : {}),
             },
           })));
         try {

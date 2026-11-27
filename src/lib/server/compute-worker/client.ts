@@ -230,6 +230,7 @@ export class ComputeWorkerClient {
     storageUserId: string;
     documentId: string;
     documentVersion: number;
+    narrationRevision?: string | null;
   }): Promise<TtsPlaybackCachedVariants> {
     const { variants } = await this.requestJson<{ variants: TtsPlaybackCachedVariants }>(
       'POST', '/v1/tts-playback/cached-variants', input, { signal: AbortSignal.timeout(WORKER_STORAGE_TIMEOUT_MS) });

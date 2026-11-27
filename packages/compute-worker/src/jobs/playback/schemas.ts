@@ -8,6 +8,7 @@ export const ttsPlaybackPlanningSchema = z.object({
   documentSource: z.object({
     namespace: z.string().trim().min(1).max(128).nullable(),
     skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
+    narrationRevision: z.string().regex(/^[a-f0-9]{8,64}$/).optional(),
     extent: z.enum(['section', 'document']),
     isPlainText: z.boolean().optional(),
   }).strict().optional(),

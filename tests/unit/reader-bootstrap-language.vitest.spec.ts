@@ -109,6 +109,19 @@ describe('document language in reader bootstrap', () => {
     expect(mocks.set.mock.calls[0]?.[0]).not.toHaveProperty('language');
   });
 
+  test('plans for the narration revision of the PDF layout it returns', async () => {
+    rows('en');
+    await resolveReaderBootstrapState(request, 'book');
+    expect(mocks.playback.mock.calls[0]?.[6]).toBeNull();
+
+    rows('en');
+    const reparsed = { ...parsed(['Spruce log']), narrationRevision: 'c'.repeat(32) };
+    mocks.object.mockResolvedValueOnce({ Body: { transformToString: async () => JSON.stringify(reparsed) } });
+    const result = await resolveReaderBootstrapState(request, 'book');
+    expect(mocks.playback.mock.calls[1]?.[6]).toBe('c'.repeat(32));
+    expect(result).toMatchObject({ result: { payload: { parsedDocument: { narrationRevision: 'c'.repeat(32) } } } });
+  });
+
   test.each(['epub', 'html'])('passes imported %s metadata to playback', async (type) => {
     rows('tr-TR', type);
     await resolveReaderBootstrapState(request, 'book');

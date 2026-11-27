@@ -118,6 +118,8 @@ export async function resolveAudiobookIntent(
         || (caller.clientId !== undefined && artifact.storageUserId !== caller.scope.storageUserId)) {
         return apiErrorResponse(403, 'PLAN_FORBIDDEN', 'The reading plan does not belong to this document.');
       }
+      // The plan just validated names its layout revision, so it is not read again for it.
+      if (caller.scope.readerType === 'pdf') return { ...base, parsed, narrationRevision: artifact.narrationRevision ?? null };
     }
     return { ...base, parsed };
   }

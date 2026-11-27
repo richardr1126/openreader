@@ -224,6 +224,8 @@ export async function resolveReaderPlayback(
   settings: ReturnType<typeof mergeDocumentSettings>,
   storedPreferences: Record<string, unknown>,
   documentLanguage?: string | null,
+  /** The narration revision of the PDF layout the reader is given. */
+  narrationRevision?: string | null,
 ): Promise<ReaderBootstrapResolution | { plan: ReaderPayload['plan']; playback: ReaderPlaybackPreparation }> {
   if (!isComputeWorkerAvailable()) {
     return {
@@ -237,7 +239,7 @@ export async function resolveReaderPlayback(
   const parsed = await resolveDefaultPlaybackRequest(documentId, scope, settings, storedPreferences, documentLanguage);
   if ('error' in parsed) return { result: { status: 'error', message: parsed.error, retryable: true } };
   const runtimeConfig = await getResolvedRuntimeConfig();
-  const planningInput = await buildTtsPlaybackPlanningInput(parsed, scope);
+  const planningInput = await buildTtsPlaybackPlanningInput(parsed, scope, { narrationRevision });
   let operation;
   try {
     operation = await createAdmittedPlaybackPlanOperation({

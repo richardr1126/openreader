@@ -265,6 +265,7 @@ export async function resolveReaderBootstrapState(
   const documentLanguage = row.language || detectedLanguage;
   const planResult = await resolveReaderPlayback(
     request, documentId, scope, settings, storedRecord(preferenceRows[0]?.dataJson), documentLanguage,
+    parsedPdfDocument ? parsedPdfDocument.narrationRevision ?? null : undefined,
   );
   if ('result' in planResult) return planResult;
 

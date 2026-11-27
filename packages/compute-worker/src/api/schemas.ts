@@ -36,6 +36,7 @@ export const parsedPdfDocumentSchema = z.object({
   documentId: z.string(),
   parserVersion: z.string(),
   parsedAt: z.number(),
+  narrationRevision: z.string().optional(),
   pages: z.array(parsedPdfPageSchema),
 });
 
@@ -132,6 +133,7 @@ export const ttsPlaybackPlanningSchema = z.object({
   documentSource: z.object({
     namespace: z.string().trim().min(1).max(128).nullable(),
     skipBlockKinds: z.array(z.string().trim().min(1).max(64)).max(64).optional(),
+    narrationRevision: z.string().regex(/^[a-f0-9]{8,64}$/).optional(),
     extent: z.enum(['section', 'document']),
     isPlainText: z.boolean().optional(),
   }).strict().optional(),
@@ -227,8 +229,9 @@ export const ttsPlaybackCacheReclaimSchema = z.object({
   storageUserId: z.string().trim().min(1).max(256),
   documentId: documentIdSchema,
   /**
-   * The cache variant to keep. Omit `settingsHash` to keep every variant of
-   * that version; pass null to reclaim every variant of the document.
+   * The cache variant to keep, with its settings on every PDF layout
+   * revision. Omit `settingsHash` to keep every variant of that version; pass
+   * null to reclaim every variant of the document.
    */
   keep: z.object({
     documentVersion: z.number().int().nonnegative(),
@@ -576,7 +579,9 @@ export const modelStatusSchema = z.object({
 export const modelCancelResultSchema = z.object({ cancelled: z.boolean() });
 
 export const pdfLayoutResolutionSchema = z.object({
-  artifact: artifactReferenceSchema.nullable(),
+  artifact: artifactReferenceSchema.extend({
+    narrationRevision: z.string().optional(),
+  }).nullable(),
   operation: computeOperationSchema.nullable(),
 });
 
@@ -614,6 +619,8 @@ export const ttsPlaybackCachedVariantsRequestSchema = z.object({
   storageUserId: z.string().trim().min(1).max(256),
   documentId: documentIdSchema,
   documentVersion: z.number().int().nonnegative(),
+  /** Lists only audio for this PDF layout revision; null lists audio for a layout without one. */
+  narrationRevision: z.string().regex(/^[a-f0-9]{8,64}$/).nullable().optional(),
 }).strict();
 
 export const ttsPlaybackCachedVariantsSchema = z.object({

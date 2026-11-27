@@ -149,7 +149,7 @@ export type TtsPlaybackCompletedSegment = {
 };
 
 export type PdfLayoutResolution = {
-  artifact: { objectKey: string } | null;
+  artifact: { objectKey: string; narrationRevision?: string } | null;
   operation: ComputeOperation<PdfLayoutResult> | null;
 };
 

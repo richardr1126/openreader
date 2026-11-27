@@ -1,3 +1,4 @@
+import { ttsPlaybackSettingsIdentity } from '@openreader/tts/segments';
 import type { UserStorageUsageReport } from '@/lib/server/compute-worker/protocol';
 
 /** Library reclaim resets at most this many documents per request; the client repeats. */
@@ -15,19 +16,20 @@ export type DocumentStorageSummary = {
 
 /**
  * Split one document's playback storage by cache identity. Audio is current
- * only when it matches both the document version and the settings hash the
- * reader would request now. Exports whose metadata could not be read are
- * reported as current because reclaim cannot attribute (and so never deletes)
- * them.
+ * only when it matches both the document version and the settings the reader
+ * would request now, on any PDF layout revision, as reclaim keeps it. Exports
+ * whose metadata could not be read are reported as current because reclaim
+ * cannot attribute (and so never deletes) them.
  */
 export function summarizeDocumentStorage(
   report: UserStorageUsageReport,
   current: { documentId: string; documentVersion: number; settingsHash: string },
 ): DocumentStorageSummary {
   const document = report.documents.find((row) => row.documentId === current.documentId);
+  const currentIdentity = ttsPlaybackSettingsIdentity(current.settingsHash);
   const isCurrent = (documentVersion: number | null, settingsHash: string | null) => (
     documentVersion === null || settingsHash === null
-    || (documentVersion === current.documentVersion && settingsHash === current.settingsHash)
+    || (documentVersion === current.documentVersion && ttsPlaybackSettingsIdentity(settingsHash) === currentIdentity)
   );
   let currentAudioBytes = 0;
   let unusedAudioBytes = 0;

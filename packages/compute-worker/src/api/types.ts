@@ -49,6 +49,8 @@ export interface ParsedPdfDocument {
   documentId: string;
   parserVersion: string;
   parsedAt: number;
+  /** Set by a reparse that changed the narrated blocks; see pdf-narration-revision.ts. */
+  narrationRevision?: string;
   pages: ParsedPdfPage[];
 }
 

@@ -19,6 +19,7 @@ const hoisted = vi.hoisted(() => ({
   findPlan: vi.fn(),
   ensurePdf: vi.fn(),
   settingsHash: vi.fn(),
+  narrationRevision: vi.fn(),
   readerType: { value: 'html' },
   scopes: { value: ['documents:read', 'documents:write', 'audio:generate'] },
   isAnonymous: { value: false },
@@ -110,6 +111,7 @@ vi.mock('@/lib/server/reader/playback', () => ({
 }));
 
 vi.mock('@/lib/server/tts/playback-plans', () => ({ readTtsPlaybackPlanArtifact: hoisted.readPlan }));
+vi.mock('@/lib/server/tts/pdf-narration-revision', () => ({ resolvePdfNarrationRevision: hoisted.narrationRevision }));
 vi.mock('@/lib/server/storage/usage', () => ({ storageLimit: hoisted.storageLimit }));
 vi.mock('@/lib/server/storage/s3', () => ({ getS3Config: () => ({ prefix: 'openreader' }) }));
 const planKey = () => `openreader/tts_playback_plan_v1/doc-1/1/${hoisted.readerType.value}/abcdef12.json`;
@@ -287,7 +289,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       hoisted.resolveSession, hoisted.resolveArtifact, hoisted.createPlayback, hoisted.createArtifact,
       hoisted.createAdmitted, hoisted.exportProgress, hoisted.cancelSession, hoisted.deleteArtifact, hoisted.artifactId,
       hoisted.getOperation, hoisted.plan,
-      hoisted.readPlan, hoisted.findPlan, hoisted.ensurePdf, hoisted.settingsHash, hoisted.storageLimit,
+      hoisted.readPlan, hoisted.findPlan, hoisted.ensurePdf, hoisted.settingsHash, hoisted.storageLimit, hoisted.narrationRevision,
     ]) mock.mockReset();
     hoisted.storageLimit.mockResolvedValue(null);
     // Vite sets BASE_URL to its own base path under test.
@@ -904,6 +906,97 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
 
       expect(hoisted.createPlayback).toHaveBeenCalledOnce();
       expect(hoisted.rows[0]?.planObjectKey).toBe(planKey());
+    });
+
+    test('a keyless PDF request keeps the layout revision its ID was assigned for', async () => {
+      const { buildTtsPlaybackPlanningInput } = await import('@/lib/server/tts/playback-request');
+      const revisionsUsed = () => vi.mocked(buildTtsPlaybackPlanningInput).mock.calls.map((call) => call[2]?.narrationRevision);
+      hoisted.readerType.value = 'pdf';
+      hoisted.narrationRevision.mockResolvedValue('a'.repeat(32));
+      hoisted.plan.mockResolvedValueOnce({ opId: 'plan-op', status: 'running' });
+      hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+      const { json } = await start({ planObjectKey: undefined });
+      expect(json.status).toBe('preparing');
+      const stored = () => {
+        const value = hoisted.rows[0]?.settingsJson;
+        return (typeof value === 'string' ? JSON.parse(value) : value) as Record<string, unknown>;
+      };
+      expect(stored().narrationRevision).toBe('a'.repeat(32));
+      expect(revisionsUsed().every((revision) => revision === 'a'.repeat(32))).toBe(true);
+
+      // A reparse publishes another layout before the plan is ready.
+      hoisted.narrationRevision.mockResolvedValue('b'.repeat(32));
+      vi.mocked(buildTtsPlaybackPlanningInput).mockClear();
+      hoisted.plan.mockResolvedValueOnce({
+        opId: 'plan-op', status: 'failed', error: { code: 'PDF_LAYOUT_CHANGED', message: 'reparsed' },
+      });
+      const reread = await get(json.id);
+      expect(revisionsUsed()).toEqual(['a'.repeat(32)]);
+      expect(reread.json).toMatchObject({
+        status: 'failed',
+        generation: { issue: { code: 'PDF_LAYOUT_CHANGED', message: expect.stringContaining('Request the audiobook again') } },
+      });
+      expect(hoisted.rows[0]?.planObjectKey ?? null).toBeNull();
+
+      // A request saved before revisions existed belongs to a layout without one.
+      const legacy = stored();
+      delete legacy.narrationRevision;
+      hoisted.rows[0]!.settingsJson = typeof hoisted.rows[0]!.settingsJson === 'string' ? JSON.stringify(legacy) : legacy;
+      vi.mocked(buildTtsPlaybackPlanningInput).mockClear();
+      hoisted.plan.mockResolvedValueOnce({ opId: 'plan-op-2', status: 'running' });
+      await get(json.id);
+      expect(revisionsUsed()).toEqual([null]);
+    });
+
+    test('a PDF request naming a saved plan takes its revision from the plan it validated', async () => {
+      const { buildTtsPlaybackPlanningInput } = await import('@/lib/server/tts/playback-request');
+      hoisted.readerType.value = 'pdf';
+      hoisted.readPlan.mockResolvedValue({ artifact: {
+        storageUserId: 'user-1', documentId: 'doc-1', documentVersion: 1, readerType: 'pdf', narrationRevision: 'a'.repeat(32),
+      } });
+      // A second lookup would see the newer layout, for example while the plan is briefly unavailable.
+      hoisted.narrationRevision.mockResolvedValue('b'.repeat(32));
+      hoisted.plan.mockResolvedValueOnce({ opId: 'plan-op', status: 'running' });
+      hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+      vi.mocked(buildTtsPlaybackPlanningInput).mockClear();
+      const { json } = await start();
+      expect(hoisted.narrationRevision).not.toHaveBeenCalled();
+      expect(vi.mocked(buildTtsPlaybackPlanningInput).mock.calls.map((call) => call[2]?.narrationRevision))
+        .toEqual(expect.arrayContaining(['a'.repeat(32)]));
+      expect(vi.mocked(buildTtsPlaybackPlanningInput).mock.calls.every((call) => call[2]?.narrationRevision === 'a'.repeat(32))).toBe(true);
+      const stored = hoisted.rows.find((row) => row.id === json.id)?.settingsJson;
+      expect((typeof stored === 'string' ? JSON.parse(stored) : stored).narrationRevision).toBe('a'.repeat(32));
+
+      // A plan saved before revisions existed belongs to a layout without one.
+      hoisted.readPlan.mockResolvedValue({ artifact: { storageUserId: 'user-1', documentId: 'doc-1', documentVersion: 1, readerType: 'pdf' } });
+      vi.mocked(buildTtsPlaybackPlanningInput).mockClear();
+      await start({ speed: 1.5 });
+      expect(vi.mocked(buildTtsPlaybackPlanningInput).mock.calls.every((call) => call[2]?.narrationRevision === null)).toBe(true);
+      expect(hoisted.narrationRevision).not.toHaveBeenCalled();
+    });
+
+    test('a pending PDF request asks to be requested again only when its plan job reports a replaced layout', async () => {
+      hoisted.readerType.value = 'pdf';
+      hoisted.narrationRevision.mockResolvedValue('a'.repeat(32));
+      hoisted.plan.mockResolvedValueOnce({ opId: 'plan-op', status: 'running' });
+      hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
+      const { json } = await start({ planObjectKey: undefined });
+      const cleared = { opId: 'plan-op', status: 'failed', error: { code: 'TTS_PLAYBACK_CACHE_CLEARED', message: 'TTS playback cache was cleared.' } };
+
+      // A cache clear keeps its own explanation, also after a reparse: another
+      // voice may have saved the original plan, so planning again can still work.
+      hoisted.plan.mockResolvedValueOnce(cleared);
+      expect((await get(json.id)).json.generation.issue).toEqual({ code: 'TTS_PLAYBACK_CACHE_CLEARED', message: 'TTS playback cache was cleared.' });
+      hoisted.narrationRevision.mockResolvedValue('b'.repeat(32));
+      hoisted.plan.mockResolvedValueOnce(cleared);
+      expect((await get(json.id)).json.generation.issue).toEqual({ code: 'TTS_PLAYBACK_CACHE_CLEARED', message: 'TTS playback cache was cleared.' });
+
+      // Once the worker finds the original plan gone, the request can only be made again.
+      hoisted.plan.mockResolvedValueOnce({ opId: 'plan-op', status: 'failed', error: { code: 'PDF_LAYOUT_CHANGED', message: 'reparsed' } });
+      expect((await get(json.id)).json).toMatchObject({
+        status: 'failed',
+        generation: { issue: { code: 'PDF_LAYOUT_CHANGED', message: expect.stringContaining('Request the audiobook again') } },
+      });
     });
   });
 

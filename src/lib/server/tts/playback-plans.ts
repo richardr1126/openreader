@@ -29,6 +29,8 @@ export type TtsPlaybackPlanArtifact = {
   readerType: string;
   settingsHash: string;
   settingsJson?: unknown;
+  /** PDF plans built for a reparsed layout with changed narration. */
+  narrationRevision?: string;
   segments: TtsPlaybackPlanArtifactSegment[];
 };
 
@@ -114,6 +116,7 @@ async function fetchTtsPlaybackPlanArtifact(planObjectKey: string): Promise<TtsP
       readerType: typeof parsed.readerType === 'string' ? parsed.readerType : '',
       settingsHash: typeof parsed.settingsHash === 'string' ? parsed.settingsHash : '',
       settingsJson: parsed.settingsJson,
+      ...(typeof parsed.narrationRevision === 'string' ? { narrationRevision: parsed.narrationRevision } : {}),
       segments,
     },
   };

@@ -44,4 +44,33 @@ describe('cached playback variants', () => {
       { settingsHash: 'older', settingsJson: { ...settings, nativeSpeed: 1 }, segments: 1, durationMs: 1000, updatedAt: 100 },
     ]);
   });
+
+  test('lists only the requested PDF layout revision, so other layouts never take its places', async () => {
+    const audio = 'p/tts_playback_segments_audio_v1/users/u/docs/doc/7/';
+    const sidecars = `p/tts_playback_segments_v1/users/${storageUserHash('u')}/docs/doc/7/`;
+    const current = 'a'.repeat(64);
+    const revision = 'c'.repeat(32);
+    const objects = new Map<string, Stored>();
+    const add = (hash: string, at: number) => {
+      objects.set(`${audio}${hash}/0.mp3`, { body: Buffer.alloc(STREAM_AUDIO_BYTES_PER_SECOND), lastModifiedMs: at });
+      objects.set(`${sidecars}${hash}/segments/0.json`, { body: Buffer.from(JSON.stringify({ settingsJson: { voice: hash } })), lastModifiedMs: at });
+    };
+    // The layout read now has no revision; 50 newer variants belong to a reparsed layout.
+    add(current, 1);
+    for (let index = 0; index < 50; index += 1) add(`${index.toString(16).padStart(64, 'b')}.${revision}`, 100 + index);
+    const list = (narrationRevision?: string | null) => listCachedPlaybackVariants({
+      storage: memoryStorage(objects), s3Prefix: 'p', storageUserId: 'u', documentId: 'doc', documentVersion: 7,
+      ...(narrationRevision === undefined ? {} : { narrationRevision }),
+    });
+
+    expect((await list(null)).map((variant) => variant.settingsHash)).toEqual([current]);
+    expect(await list(revision)).toHaveLength(50);
+    expect((await list()).map((variant) => variant.settingsHash)).not.toContain(current);
+
+    // An older variant of another revision is listed for it, ahead of the 50 newer ones.
+    const earlier = 'e'.repeat(32);
+    add(`${'a'.repeat(64)}.${earlier}`, 2);
+    expect((await list(earlier)).map((variant) => variant.settingsHash)).toEqual([`${'a'.repeat(64)}.${earlier}`]);
+    expect((await list()).map((variant) => variant.settingsHash)).not.toContain(`${'a'.repeat(64)}.${earlier}`);
+  });
 });
