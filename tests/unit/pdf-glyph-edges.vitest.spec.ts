@@ -1,6 +1,8 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
+import { parseHTML } from 'linkedom';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { OPS } from 'pdfjs-dist';
-import { collectGlyphChars, runCharEdges } from '../../src/lib/client/pdf/glyph-edges';
+import { collectGlyphChars, pdfWordRects, runCharEdges } from '../../src/lib/client/pdf/glyph-edges';
 
 const glyph = (unicode: string, width: number, isSpace = false) => ({ unicode, width, isSpace });
 
@@ -50,6 +52,29 @@ describe('PDF glyph edges', () => {
       [' ', 103, 104.25],
       ['b', 105.75, 108.25],
     ]);
+  });
+
+  test('applies a font size selected through a graphics state', () => {
+    const chars = collectGlyphChars(
+      textOps([glyph('a', 500), glyph('b', 500)], [[OPS.setGState, [[['Font', ['F1', 20]]]]]]),
+      fontInfo,
+    );
+
+    expect(chars.map(({ ch, x0, x1 }) => [ch, x0, x1])).toEqual([
+      ['a', 100, 110],
+      ['b', 110, 120],
+    ]);
+  });
+
+  test('keeps the text-layer box on a rotated page', () => {
+    const { document } = parseHTML('<div class="react-pdf__Page" data-page-number="1"><div class="react-pdf__Page__textContent" data-main-rotation="180"><span role="presentation">Hi</span></div></div>');
+    const span = document.querySelector('span') as unknown as HTMLElement;
+    const box = { left: 0, top: 0, right: 10, bottom: 10, width: 10, height: 10 } as DOMRect;
+    const range = { startOffset: 0, endOffset: 1, getClientRects: () => [box] } as unknown as Range;
+    const getPage = vi.fn();
+
+    expect(pdfWordRects(span, range, { getPage } as unknown as PDFDocumentProxy)).toEqual([box]);
+    expect(getPage).not.toHaveBeenCalled();
   });
 
   test('maps a run to fractions of its width, spanning a space pdf.js inserted', () => {

@@ -71,6 +71,14 @@ export function collectGlyphChars(
     state.y = state.lineY;
   };
 
+  const setFont = (loadedName: string, size: number) => {
+    const info = fontInfo(loadedName);
+    state.fontMatrix = info?.fontMatrix?.[0] ? info.fontMatrix : [0.001, 0, 0, 0.001, 0, 0];
+    state.vertical = Boolean(info?.vertical);
+    state.fontDirection = size < 0 ? -1 : 1;
+    state.fontSize = Math.abs(size);
+  };
+
   for (let i = 0; i < operatorList.fnArray.length; i += 1) {
     const args = operatorList.argsArray[i] as unknown[] | null;
     switch (operatorList.fnArray[i]) {
@@ -121,15 +129,15 @@ export function collectGlyphChars(
       case OPS.setTextRise:
         state.textRise = args![0] as number;
         break;
-      case OPS.setFont: {
-        const info = fontInfo(args![0] as string);
-        const size = args![1] as number;
-        state.fontMatrix = info?.fontMatrix?.[0] ? info.fontMatrix : [0.001, 0, 0, 0.001, 0, 0];
-        state.vertical = Boolean(info?.vertical);
-        state.fontDirection = size < 0 ? -1 : 1;
-        state.fontSize = Math.abs(size);
+      case OPS.setFont:
+        setFont(args![0] as string, args![1] as number);
         break;
-      }
+      case OPS.setGState:
+        // An ExtGState can select a font too, as pdf.js's canvas does.
+        for (const [key, value] of (args![0] as Array<[string, unknown]>)) {
+          if (key === 'Font') setFont(...(value as [string, number]));
+        }
+        break;
       case OPS.showText:
         state.x += showText(args![0] as GlyphArg[], state, chars);
         break;
@@ -292,6 +300,9 @@ function charEdgesForSpan(span: HTMLElement, pdfDocument: PDFDocumentProxy): Flo
   const pageNumber = Number(span.closest<HTMLElement>('.react-pdf__Page')?.dataset.pageNumber);
   const textLayer = span.closest('.react-pdf__Page__textContent');
   if (!pageNumber || !textLayer) return null;
+  // The edges are fractions along the content's x axis, which only runs left to
+  // right on screen when the page is not rotated.
+  if (Number(textLayer.getAttribute('data-main-rotation') ?? 0) % 360 !== 0) return null;
   const pageEdges = pdfPageCharEdges(pdfDocument, pageNumber);
   if (!pageEdges) return null;
   textLayer.querySelectorAll<HTMLElement>('span[role="presentation"]').forEach((node, index) => {
