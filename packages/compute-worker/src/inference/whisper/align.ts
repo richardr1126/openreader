@@ -17,7 +17,7 @@ import {
 } from './timestamps';
 import {
   buildWordsFromTimestampedTokens,
-  extractTokenStartTimestamps,
+  extractTokenEndTimestamps,
 } from './timestamps';
 import {
   ensureWhisperModel,
@@ -923,7 +923,7 @@ export async function runWhisperOnnx(
       crossAttentions[`cross_attentions.${layer}`] = new ort.Tensor('float32', merged, [1, heads, concatSeqLen, frames]);
     }
 
-    const tokenStartTimestamps = extractTokenStartTimestamps({
+    const tokenEndTimestamps = extractTokenEndTimestamps({
       crossAttentions,
       decoderLayers: runtime.decoderLayers,
       alignmentHeads: remappedAlignmentHeads,
@@ -935,7 +935,7 @@ export async function runWhisperOnnx(
 
     const timedWords = buildWordsFromTimestampedTokens({
       tokens: generated,
-      tokenStartTimestamps,
+      tokenEndTimestamps,
       tokenizer: runtime.tokenizer,
       eosTokenId: runtime.eosTokenId,
       promptLength: promptTokens.length,

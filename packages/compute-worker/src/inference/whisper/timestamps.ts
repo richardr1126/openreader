@@ -335,7 +335,12 @@ function combineTokensIntoWords(
   return mergePunctuations(words, wordTokens, tokenIndices);
 }
 
-export function extractTokenStartTimestamps(input: {
+/**
+ * The time at which each token ends. Cross-attention row k comes from the
+ * decoder step whose input is token k, which attends to the audio of token
+ * k + 1, so the DTW jump on that row is where token k ends.
+ */
+export function extractTokenEndTimestamps(input: {
   crossAttentions: Record<string, ort.Tensor>;
   decoderLayers: number;
   alignmentHeads: Array<[number, number]>;
@@ -462,7 +467,7 @@ export function extractTokenStartTimestamps(input: {
 
 export function buildWordsFromTimestampedTokens(input: {
   tokens: number[];
-  tokenStartTimestamps: number[];
+  tokenEndTimestamps: number[];
   tokenizer: Pick<Tokenizer, 'decode'>;
   eosTokenId: number;
   promptLength: number;
@@ -472,7 +477,7 @@ export function buildWordsFromTimestampedTokens(input: {
 }): WhisperWordTiming[] {
   const {
     tokens,
-    tokenStartTimestamps,
+    tokenEndTimestamps,
     tokenizer,
     eosTokenId,
     promptLength,
@@ -481,12 +486,13 @@ export function buildWordsFromTimestampedTokens(input: {
     language = 'english',
   } = input;
 
-  const limit = Math.min(tokens.length, tokenStartTimestamps.length);
+  const limit = Math.min(tokens.length, tokenEndTimestamps.length);
   const tokenRanges: TokenTimestamp[] = [];
   for (let i = 0; i < limit; i += 1) {
-    const start = tokenStartTimestamps[i] ?? 0;
-    const end = i + 1 < limit ? (tokenStartTimestamps[i + 1] ?? (start + timePrecision)) : (start + timePrecision);
-    tokenRanges.push([start, Math.max(start, end)]);
+    // A token starts where the previous one ended (huggingface/transformers#36632).
+    const end = tokenEndTimestamps[i] ?? 0;
+    const start = i > 0 ? (tokenEndTimestamps[i - 1] ?? 0) : 0;
+    tokenRanges.push([Math.min(start, end), end]);
   }
 
   const words: WhisperWordTiming[] = [];
