@@ -120,3 +120,30 @@ test('a reparse that lands while a plan is derived moves the plan to the new lay
     ...request, planSignature: computePlaybackPlanSignature(request, null), prefix: PREFIX,
   }))).toBe(false);
 });
+
+test('a held plan from an earlier layout is not rebuilt from the reparsed layout', async () => {
+  const storage = memoryS3();
+  await storage.putParsedPdf(DOCUMENT_ID, null, layout('Old layout text.'), {
+    operationId: 'first-parse', expected: null, signal: AbortSignal.timeout(1_000),
+  });
+  const heldKey = ttsPlaybackPlanArtifactKey({
+    ...request, planSignature: computePlaybackPlanSignature(request, null), prefix: PREFIX,
+  });
+  const revision = await storage.getParsedPdfRevision(DOCUMENT_ID, null, AbortSignal.timeout(1_000));
+  await storage.putParsedPdf(DOCUMENT_ID, null, layout('New layout text.'), {
+    operationId: 'reparse', expected: revision, signal: AbortSignal.timeout(1_000),
+  });
+  await expect(resolveAndPersistTtsPlaybackPlan({
+    request: { ...request, planObjectKey: heldKey }, storage, s3Prefix: PREFIX,
+  })).rejects.toThrow('earlier PDF layout');
+  expect(await storage.objectExists(heldKey)).toBe(false);
+
+  // A held plan for the current layout is rebuilt as before.
+  const currentKey = ttsPlaybackPlanArtifactKey({
+    ...request, planSignature: computePlaybackPlanSignature(request, 'reparse'), prefix: PREFIX,
+  });
+  const rebuilt = await resolveAndPersistTtsPlaybackPlan({
+    request: { ...request, planObjectKey: currentKey }, storage, s3Prefix: PREFIX,
+  });
+  expect(rebuilt.plannedSegments.map((segment) => segment.text)).toEqual(['New layout text.']);
+});

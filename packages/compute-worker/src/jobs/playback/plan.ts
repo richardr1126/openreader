@@ -336,27 +336,36 @@ export async function resolveAndPersistTtsPlaybackPlan(input: {
   startOrdinal: number;
 }> {
   const heldPlanObjectKey = input.request.planObjectKey;
-  const layoutRevision = () => heldPlanObjectKey
-    ? Promise.resolve(null)
-    : readPlaybackPlanLayoutRevision(input.request, input.storage, input.s3Prefix);
+  const readLayoutRevision = () => readPlaybackPlanLayoutRevision(input.request, input.storage, input.s3Prefix);
+  const planKeyFor = (planSignature: string) => ttsPlaybackPlanArtifactKey({
+    documentId: input.request.documentId,
+    documentVersion: input.request.documentVersion,
+    readerType: input.request.readerType,
+    planSignature,
+    prefix: input.s3Prefix,
+  });
   for (let tries = 1; ; tries += 1) {
-    const revision = await layoutRevision();
-    const planSignature = computePlaybackPlanSignature(input.request, revision);
-    const planObjectKey = heldPlanObjectKey ?? ttsPlaybackPlanArtifactKey({
-      documentId: input.request.documentId,
-      documentVersion: input.request.documentVersion,
-      readerType: input.request.readerType,
-      planSignature,
-      prefix: input.s3Prefix,
-    });
+    // A held plan is read as is; its layout matters only if it must be rebuilt.
+    let revision = heldPlanObjectKey ? undefined : await readLayoutRevision();
+    let planSignature = computePlaybackPlanSignature(input.request, revision ?? null);
+    const planObjectKey = heldPlanObjectKey ?? planKeyFor(planSignature);
     const write = await prepareArtifactWrite(input.storage, planObjectKey, input.attempt);
     let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
     if (!plannedSegments || plannedSegments.length === 0) {
+      if (revision === undefined) {
+        revision = await readLayoutRevision();
+        planSignature = computePlaybackPlanSignature(input.request, revision);
+        // Rebuilding a held plan from a reparsed layout would give the earlier
+        // layout's plan identity the new layout's text.
+        if (revision && heldPlanObjectKey !== planKeyFor(planSignature)) {
+          throw new Error('This reading plan belongs to an earlier PDF layout and is no longer available');
+        }
+      }
       const units = await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix);
       // A reparse can replace the layout between reading its revision and its
       // body. Each reparse has its own revision, so an unchanged revision proves
       // the body belongs to the plan identity computed from it.
-      if (await layoutRevision() !== revision) {
+      if (await readLayoutRevision() !== revision) {
         if (tries < MAX_LAYOUT_REVISION_ATTEMPTS) continue;
         throw new Error('The PDF layout changed while its reading plan was being prepared');
       }
