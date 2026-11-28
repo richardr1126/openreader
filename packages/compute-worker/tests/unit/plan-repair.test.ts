@@ -117,6 +117,36 @@ test('a failed audio deletion leaves every record for the next repair', async ()
     .resolves.toMatchObject({ removedSidecars: 1, deletedAudio: 1 });
 });
 
+test('a failed snapshot read leaves the repair to run again', async () => {
+  const { storage, artifacts, playbackStorage } = abScope();
+  await artifacts.putSegmentMetadata(sidecar(0, 'A'));
+  await artifacts.putSegmentMetadata(sidecar(1, 'B'));
+  const flakyKey = artifacts.sidecarKey({ ...scope, ordinal: 1 });
+  const readObject = storage.readObject.bind(storage);
+  let failures = 1;
+  storage.readObject = async (key: string) => {
+    if (key === flakyKey && failures > 0) { failures -= 1; throw new Error('storage unavailable'); }
+    return readObject(key);
+  };
+  const repair = () => repairSegmentsForPlan({
+    storage, playbackStorage, s3Prefix: PREFIX, scope, planObjectKey: NEW_PLAN,
+    plannedSegments: [{ ordinal: 0, segmentKey: 'D' }], clearAudio: async (run) => run(), planIsCurrent: async () => true,
+  });
+  await expect(repair()).rejects.toThrow('storage unavailable');
+  await expect(repair()).resolves.toMatchObject({ removedSidecars: 2 });
+  await expect(artifacts.listSegmentOrdinals(scope)).resolves.toEqual([]);
+});
+
+test('an unreadable record is removed rather than left behind the marker', async () => {
+  const { storage, artifacts, playbackStorage } = abScope();
+  await storage.putObject(artifacts.sidecarKey({ ...scope, ordinal: 0 }), Buffer.from('{not json'));
+  await expect(repairSegmentsForPlan({
+    storage, playbackStorage, s3Prefix: PREFIX, scope, planObjectKey: NEW_PLAN,
+    plannedSegments: [{ ordinal: 0, segmentKey: 'D' }], clearAudio: async (run) => run(), planIsCurrent: async () => true,
+  })).resolves.toMatchObject({ removedSidecars: 1 });
+  await expect(artifacts.listSegmentOrdinals(scope)).resolves.toEqual([]);
+});
+
 function abScope() {
   const { storage, objects } = memoryStorage();
   const artifacts = createTtsPlaybackSegmentArtifactStore({ storage, s3Prefix: PREFIX });

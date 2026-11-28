@@ -158,6 +158,8 @@ export interface TtsPlaybackExportArtifactMetadata {
   generatedSegments?: number;
   skippedSegments?: number;
   plannedSegments?: number;
+  /** Digest of the audio and silence each planned segment contributed, in plan order. */
+  sourceFingerprint?: string;
   chapterIndex?: number;
   dispositionFilename: string;
   sourceSessionId: string;

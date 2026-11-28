@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { buildTtsPlaybackSegmentAudioKey } from '@openreader/tts/segments';
-import type { ArtifactStorage } from '../infrastructure/storage';
+import { isNotFound, type ArtifactStorage } from '../infrastructure/storage';
 import {
   sidecarDescribesSegment,
   type TtsPlaybackSegmentMetadata,
@@ -54,12 +54,35 @@ export async function repairSegmentsForPlan(input: {
   if (await storage.objectExists(markerKey)) return null;
   const now = input.now ?? Date.now();
 
+  // The snapshot must be complete: a record it misses would outlive the
+  // marker. A failed read fails the repair, so the next playback retries it;
+  // only a record that is gone, or one no reader can use, is settled.
   const ordinals = await artifacts.listSegmentOrdinals(scope);
   const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
+  const unreadable: number[] = [];
+  const readSnapshot = async (ordinal: number): Promise<TtsPlaybackSegmentMetadata | 'missing' | 'unreadable'> => {
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await storage.readObject(artifacts.sidecarKey({ ...scope, ordinal }));
+    } catch (error) {
+      if (isNotFound(error)) return 'missing';
+      throw error;
+    }
+    try {
+      const sidecar = JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackSegmentMetadata;
+      return sidecar.schemaVersion === 1 && sidecar.ordinal === ordinal ? sidecar : 'unreadable';
+    } catch {
+      return 'unreadable';
+    }
+  };
   for (let index = 0; index < ordinals.length; index += SIDECAR_READ_BATCH) {
     const batch = ordinals.slice(index, index + SIDECAR_READ_BATCH);
-    const read = await Promise.all(batch.map((ordinal) => artifacts.readSegmentMetadata({ ...scope, ordinal, segmentKey: null })));
-    read.forEach((sidecar, batchIndex) => { if (sidecar) sidecars.set(batch[batchIndex]!, sidecar); });
+    const read = await Promise.all(batch.map(readSnapshot));
+    read.forEach((sidecar, batchIndex) => {
+      const ordinal = batch[batchIndex]!;
+      if (sidecar === 'unreadable') unreadable.push(ordinal);
+      else if (sidecar !== 'missing') sidecars.set(ordinal, sidecar);
+    });
   }
 
   const planned = new Map(input.plannedSegments.map((segment) => [segment.ordinal, segment.segmentKey ?? null]));
@@ -126,19 +149,21 @@ export async function repairSegmentsForPlan(input: {
   }
   // Generation for this plan, or a concurrent repair, may have written a
   // record since the snapshot; only records still as snapshotted change.
-  const readRaw = (ordinal: number) => artifacts.readSegmentMetadata({ ...scope, ordinal, segmentKey: null });
   let relinked = 0;
   for (const sidecar of relinks) {
-    const fresh = await readRaw(sidecar.ordinal);
-    if (fresh && sidecarDescribesSegment(fresh, sidecar.segmentKey)) continue;
+    const fresh = await readSnapshot(sidecar.ordinal);
+    if (typeof fresh === 'object' && sidecarDescribesSegment(fresh, sidecar.segmentKey)) continue;
     await artifacts.putSegmentMetadata(sidecar);
     relinked += 1;
   }
   let removedSidecars = 0;
-  for (const ordinal of removals) {
+  for (const ordinal of [...removals, ...unreadable]) {
     const snapshot = sidecars.get(ordinal);
-    const fresh = await readRaw(ordinal);
-    if (!fresh || !snapshot || fresh.segmentKey !== snapshot.segmentKey || fresh.updatedAt !== snapshot.updatedAt) continue;
+    const fresh = await readSnapshot(ordinal);
+    const unchanged = snapshot
+      ? typeof fresh === 'object' && fresh.segmentKey === snapshot.segmentKey && fresh.updatedAt === snapshot.updatedAt
+      : fresh === 'unreadable';
+    if (!unchanged) continue;
     await storage.deleteObject(artifacts.sidecarKey({ ...scope, ordinal }));
     removedSidecars += 1;
   }
