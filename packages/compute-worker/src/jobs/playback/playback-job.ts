@@ -8,7 +8,8 @@ import { resolveTtsPlaybackSessionInstanceId } from '../../playback/storage';
 import type { JobHandlerContext } from '../context';
 import { createModelDownloadProgressReporter } from '../model-download-progress';
 import { toErrorMessage } from '../../infrastructure/errors';
-import { resolveAndPersistTtsPlaybackPlan } from './plan';
+import { isCurrentReparsedLayoutPlan, resolveAndPersistTtsPlaybackPlan } from './plan';
+import { repairSegmentsForPlan } from '../../playback/plan-repair';
 import { generateExplicitTtsPlaybackSegments } from './segment-generation';
 import { ttsPlaybackRequestSchema } from './schemas';
 import { consumeTtsSynthesisUsage } from '../compute-limit-broker';
@@ -158,6 +159,30 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
         };
       }
 
+      // Reads already refuse an earlier layout's audio; this only reuses what
+      // moved and frees what is gone, so a failure is logged and retried later.
+      const planIsCurrent = () => isCurrentReparsedLayoutPlan(parsed, input.storage, input.s3Prefix, planObjectKey);
+      if (await planIsCurrent().catch(() => false)) {
+        await repairSegmentsForPlan({
+          planIsCurrent,
+          storage: input.storage,
+          playbackStorage,
+          s3Prefix: input.s3Prefix,
+          scope: {
+            storageUserId: parsed.storageUserId,
+            documentId: parsed.documentId,
+            documentVersion: parsed.documentVersion,
+            settingsHash: parsed.settingsHash,
+          },
+          planObjectKey,
+          plannedSegments,
+          clearAudio: audioUsage.clear,
+        }).then((result) => {
+          if (result) input.logger?.info?.({ sessionId: parsed.sessionId, ...result }, 'tts.playback.reparse_repaired');
+        }).catch((error) => {
+          input.logger?.warn?.({ sessionId: parsed.sessionId, error: toErrorMessage(error) }, 'tts.playback.reparse_repair_failed');
+        });
+      }
       const lastOrdinal = plannedSegments.reduce((max, segment) => Math.max(max, segment.ordinal), -1);
       const aheadWindow = parsed.aheadWindow ?? DEFAULT_TTS_PLAYBACK_AHEAD_WINDOW;
       const backgroundExtent = parsed.backgroundExtent ?? 'section';
@@ -173,7 +198,8 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
       const completedOrdinals = new Set<number>();
       const alignedOrdinals = new Set<number>();
       const erroredOrdinals = new Set<number>();
-      const plannedOrdinals = new Set(plannedSegments.map((segment) => segment.ordinal));
+      const plannedKeys = new Map(plannedSegments.map((segment) => [segment.ordinal, segment.segmentKey ?? null]));
+      const plannedOrdinals = new Set(plannedKeys.keys());
       const verificationStartedAt = Date.now();
       if (forceDocumentExtent) await hooks?.onProgress?.({
         completedThroughOrdinal: -1, completedCount: 0, skippedCount: 0,
@@ -206,6 +232,7 @@ export function createTtsPlaybackHandler(input: JobHandlerContext) {
             documentVersion: parsed.documentVersion,
             settingsHash: parsed.settingsHash,
             ordinal,
+            segmentKey: plannedKeys.get(ordinal) ?? null,
           }).catch(() => null)));
         await Promise.all(sidecars.map(async (sidecar) => {
           if (!sidecar) return;

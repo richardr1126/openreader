@@ -199,7 +199,7 @@ export function registerPlaybackSessionRoutes(
       reply.code(404);
       return { error: 'Playback plan not found' };
     }
-    const states = await readModel.listSegmentStates(scope, planSegments.length);
+    const states = await readModel.listSegmentStates({ ...scope, planObjectKey });
     const segments: Array<{ ordinal: number; durationMs: number }> = [];
     for (const [ordinal, state] of states) {
       if (state.status === 'completed') segments.push({ ordinal, durationMs: state.durationMs });

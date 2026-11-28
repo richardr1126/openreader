@@ -792,16 +792,16 @@ describe('TTS playback storage', () => {
     expect(key2).toBe(store.sidecarKey({ ...scope, ordinal: 2 }));
     expect(store.sidecarKey({ ...scope, ordinal: 1 })).toContain('/segments/1.json');
 
-    const sidecar1 = await store.readSegmentMetadata({ ...scope, ordinal: 1 });
+    const sidecar1 = await store.readSegmentMetadata({ ...scope, ordinal: 1, segmentKey: 'seg-1' });
     expect(sidecar1).toMatchObject({
       ordinal: 1,
       audioKey: 'openreader/audio-1.mp3',
       durationMs: 987,
       status: 'completed',
     });
-    const sidecar2 = await store.readSegmentMetadata({ ...scope, ordinal: 2 });
+    const sidecar2 = await store.readSegmentMetadata({ ...scope, ordinal: 2, segmentKey: null });
     expect(sidecar2?.durationMs).toBe(1234);
     // A not-yet-generated ordinal has no sidecar.
-    expect(await store.readSegmentMetadata({ ...scope, ordinal: 3 })).toBeNull();
+    expect(await store.readSegmentMetadata({ ...scope, ordinal: 3, segmentKey: null })).toBeNull();
   });
 });

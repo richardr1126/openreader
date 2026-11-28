@@ -162,6 +162,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         documentVersion: parsed.documentVersion,
         settingsHash: parsed.settingsHash,
         ordinal: segment.ordinal,
+        segmentKey: segment.segmentKey ?? null,
       })));
       batch.forEach((segment, batchIndex) => {
         if (Math.max(0, Math.floor(Number(sidecars[batchIndex]?.cacheEpoch ?? 0))) < cacheEpoch) {

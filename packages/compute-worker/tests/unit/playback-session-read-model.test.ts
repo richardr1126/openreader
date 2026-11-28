@@ -5,6 +5,7 @@ import type {
   TtsPlaybackSessionState,
   TtsPlaybackStorage,
 } from '../../src/playback/storage';
+import { sidecarDescribesSegment } from '../../src/playback/storage';
 import { createPlaybackSessionReadModel } from '../../src/api/playback/session-read-model';
 
 const session: TtsPlaybackSessionState = {
@@ -63,6 +64,7 @@ function createFixture(planLength = 100) {
   const planSegments = Array.from({ length: planLength }, (_, ordinal) => ({
     ordinal,
     text: `Segment ${ordinal}.`,
+    segmentKey: `segment-${ordinal}`,
   }));
   const objects = new Map<string, Buffer>([[
     session.planObjectKey!,
@@ -70,7 +72,10 @@ function createFixture(planLength = 100) {
   ]]);
   let epoch = 0;
   const sidecars = new Map<number, TtsPlaybackSegmentMetadata>();
-  const readSegmentMetadata = vi.fn(async ({ ordinal }: { ordinal: number }) => sidecars.get(ordinal) ?? null);
+  const readSegmentMetadata = vi.fn(async ({ ordinal, segmentKey }: { ordinal: number; segmentKey: string | null }) => {
+    const sidecar = sidecars.get(ordinal);
+    return sidecar && sidecarDescribesSegment(sidecar, segmentKey) ? sidecar : null;
+  });
   const listSegmentOrdinals = vi.fn(async () => [...sidecars.keys()].sort((a, b) => a - b));
   const storage = {
     async readObject(key: string) {
@@ -282,6 +287,25 @@ describe('playback session read model', () => {
     expect(fixture.listSegmentOrdinals).toHaveBeenCalledTimes(2);
     release([0]);
     await staleRead;
+  });
+
+  test('a reparsed plan never reads the earlier plan\'s audio at the same position', async () => {
+    const fixture = createFixture(3);
+    fixture.sidecars.set(0, completedSidecar(0));
+    await expect(fixture.model.readSegmentState(session, 0)).resolves.toMatchObject({ status: 'completed' });
+    await expect(fixture.model.readSegmentIndexRows(session)).resolves.toHaveLength(1);
+
+    const reparsed = { ...session, sessionId: 'session-2', planObjectKey: 'openreader/plans/document-1-reparsed.json' };
+    fixture.objects.set(reparsed.planObjectKey, Buffer.from(JSON.stringify({
+      segments: [{ ordinal: 0, text: 'Figure 2. Field access route', segmentKey: 'segment-figure' }],
+    })));
+    await expect(fixture.model.readSegmentState(reparsed, 0)).resolves.toEqual({ status: 'pending', ordinal: 0 });
+    await expect(fixture.model.readSegmentIndexRows(reparsed)).resolves.toEqual([]);
+    const { sessionId: _sessionId, planObjectKey, ...scope } = reparsed;
+    await expect(fixture.model.listSegmentStates({ ...scope, planObjectKey })).resolves.toEqual(new Map());
+    // The earlier plan still has its own audio.
+    await expect(fixture.model.listSegmentStates({ ...scope, planObjectKey: session.planObjectKey! }))
+      .resolves.toEqual(new Map([[0, { status: 'completed', durationMs: 1200 }]]));
   });
 
   test('invalidates cached sidecars by exact scope and parsed plans by prefix', async () => {

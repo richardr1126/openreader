@@ -226,7 +226,7 @@ export function registerPlaybackExportSessionRoutes(
       return { error: 'Export plan not found' };
     }
     const plannedSegments = groups.reduce((sum, group) => sum + group.ordinals.length, 0);
-    const states = await readModel.listSegmentStates(scope, plannedSegments);
+    const states = await readModel.listSegmentStates({ ...scope, planObjectKey });
     let completedSegments = 0;
     let skippedSegments = 0;
     let lastSkipError: { message: string | null; code: string | null } | null = null;

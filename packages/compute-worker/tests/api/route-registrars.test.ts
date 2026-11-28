@@ -208,7 +208,7 @@ describe('compute worker domain route registrars', () => {
       url: '/v1/tts-playback/exports/progress',
       payload: { ...scope, planObjectKey },
     });
-    expect(scopes).toEqual([scope]);
+    expect(scopes).toEqual([{ ...scope, planObjectKey }]);
 
     expect(response.json()).toMatchObject({
       plannedSegments: 3,
@@ -236,8 +236,8 @@ describe('compute worker domain route registrars', () => {
       readPlanSegments: async (key: string) => (key === planObjectKey
         ? [{ ordinal: 0, text: 'One.' }, { ordinal: 1, text: 'Two.' }, { ordinal: 2, text: 'Three.' }]
         : null),
-      listSegmentStates: async (scope: unknown, planLength: number) => {
-        scopes.push({ scope, planLength });
+      listSegmentStates: async (scope: unknown) => {
+        scopes.push(scope);
         return new Map([
           [2, { status: 'completed', durationMs: 900 }],
           [0, { status: 'completed', durationMs: 1_500 }],
@@ -262,6 +262,6 @@ describe('compute worker domain route registrars', () => {
     expect(response.json()).toEqual({
       segments: [{ ordinal: 0, durationMs: 1_500 }, { ordinal: 2, durationMs: 900 }],
     });
-    expect(scopes).toEqual([{ scope, planLength: 3 }]);
+    expect(scopes).toEqual([{ ...scope, planObjectKey }]);
   });
 });

@@ -5,7 +5,7 @@ import { generateExplicitTtsPlaybackSegments } from '../../src/jobs/playback/seg
 
 vi.mock('../../src/storage/audio-usage', () => ({ createDocumentAudioReporter: () => ({ measure: async () => undefined }) }));
 
-vi.mock('../../src/jobs/playback/plan', () => ({ resolveAndPersistTtsPlaybackPlan: vi.fn() }));
+vi.mock('../../src/jobs/playback/plan', () => ({ resolveAndPersistTtsPlaybackPlan: vi.fn(), isCurrentReparsedLayoutPlan: async () => false }));
 vi.mock('../../src/jobs/playback/segment-generation', () => ({ generateExplicitTtsPlaybackSegments: vi.fn() }));
 
 describe('playback job cache discovery', () => {
