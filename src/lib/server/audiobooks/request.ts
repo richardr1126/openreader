@@ -42,11 +42,15 @@ export function isAudiobookFileId(artifactId: string): boolean {
   return /^[a-f0-9]{8,128}$/i.test(artifactId);
 }
 
-/** The artifact key is user/document-scoped, so the read cannot cross ownership. */
+/**
+ * The artifact key is user/document-scoped, so the read cannot cross ownership.
+ * A file recorded without a source fingerprint may hold an earlier layout's
+ * audio, so a saved link to it is not served; the lookup offers its rebuild.
+ */
 export async function findAudiobookFile(scope: AudiobookCaller['scope'], documentId: string, artifactId: string) {
   const { storageUserId } = scope;
   const artifact = await new ComputeWorkerClient().getTtsPlaybackExportArtifact({ artifactId, storageUserId, documentId });
-  return artifact?.storageUserId === storageUserId ? artifact : null;
+  return artifact?.storageUserId === storageUserId && artifact.sourceFingerprint ? artifact : null;
 }
 
 export type AudiobookBody = {

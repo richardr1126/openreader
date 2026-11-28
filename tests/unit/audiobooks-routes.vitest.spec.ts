@@ -339,7 +339,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
   test('reports a book whose session expired as complete from its cache scope', async () => {
     hoisted.resolveSession.mockResolvedValue({ session: null, operation: null, progress: null });
     hoisted.resolveArtifact.mockReset().mockResolvedValue({
-      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0 }, operation: null,
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0, sourceFingerprint: 'built' }, operation: null,
     });
 
     const found = await lookup({ includeProgress: false });
@@ -379,9 +379,9 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(hoisted.exportProgress).not.toHaveBeenCalled();
   });
 
-  test('checks a file recorded before fingerprints even on a fast lookup', async () => {
+  test('never offers a file recorded before fingerprints, even without progress', async () => {
     hoisted.resolveSession.mockResolvedValue(completeSession);
-    hoisted.exportProgress.mockResolvedValue({ ...summary([chapter(0, 10), chapter(1, 10)]), sourceFingerprint: 'current' });
+    hoisted.exportProgress.mockResolvedValue(null);
     hoisted.resolveArtifact.mockReset().mockResolvedValue({
       artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0 }, operation: null,
     });
@@ -626,7 +626,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
         artifactId: 'abcdef1234567890',
         generatedSegments: 20,
         skippedSegments: 0,
-        dispositionFilename: 'openreader-document.mp3',
+        dispositionFilename: 'openreader-document.mp3', sourceFingerprint: 'built',
       },
       operation: null,
     });
@@ -1140,7 +1140,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
       operation: { opId: 'generation-op', status: 'running' },
     };
     const readyArtifact = {
-      artifact: { artifactId: 'abcdef1234567890', generatedSegments: 20, skippedSegments: 0, dispositionFilename: 'book.mp3' },
+      artifact: { artifactId: 'abcdef1234567890', generatedSegments: 20, skippedSegments: 0, dispositionFilename: 'book.mp3', sourceFingerprint: 'built' },
       operation: null,
     };
 
@@ -1289,7 +1289,7 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
 
   describe('retention', () => {
     const DAY = 24 * 60 * 60 * 1000;
-    const readyArtifact = { artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0 }, operation: null };
+    const readyArtifact = { artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0, sourceFingerprint: 'built' }, operation: null };
     const prune = async () => {
       const { pruneSettledAudiobookRequests } = await import('@/lib/server/audiobooks/audiobooks');
       return pruneSettledAudiobookRequests(Date.now(), Date.now() + 60_000);

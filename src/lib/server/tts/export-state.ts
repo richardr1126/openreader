@@ -106,13 +106,14 @@ export function classifyExportArtifact(input: {
   if (ready) {
     // Deterministic artifact ids outlive retries of skipped segments and
     // reparse repairs; a file built from other sources is replaced rather than
-    // offered. Whenever the scope's progress is read, its fingerprint decides;
-    // a file recorded before sources were fingerprinted cannot match it.
-    const stale = input.counts !== null && (
+    // offered. Whenever the scope's progress is read, its fingerprint decides.
+    // A file recorded before sources were fingerprinted may hold an earlier
+    // layout's audio, so it is never offered; its rebuild only reassembles.
+    const stale = !ready.sourceFingerprint || (input.counts !== null && (
       (ready.generatedSegments ?? input.counts.completedSegments) !== input.counts.completedSegments
       || (ready.skippedSegments ?? 0) !== input.counts.skippedSegments
       || (input.counts.sourceFingerprint !== undefined && ready.sourceFingerprint !== input.counts.sourceFingerprint)
-    );
+    ));
     if (!stale) return 'ready';
   }
   const status = input.artifact.operation?.status;
