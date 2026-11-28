@@ -125,7 +125,7 @@ function createFixture(planLength = 100) {
 describe('playback session read model', () => {
   test('rereads a completed record until its duration is stored', async () => {
     const fixture = createFixture(1);
-    fixture.sidecars.set(0, { ...completedSidecar(0), durationMs: undefined });
+    fixture.sidecars.set(0, { ...completedSidecar(0), durationMs: null });
     const { sessionId: _sessionId, planObjectKey, ...scope } = session;
     const list = () => fixture.model.listSegmentStates({ ...scope, planObjectKey: planObjectKey! });
     await expect(list()).resolves.toEqual(new Map([[0, expect.objectContaining({ durationMs: 1000 })]]));
