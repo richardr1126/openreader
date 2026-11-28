@@ -100,15 +100,18 @@ export function classifyExportGeneration(
 
 export function classifyExportArtifact(input: {
   artifact: TtsPlaybackExportArtifactResolution;
-  counts: { completedSegments: number; skippedSegments: number } | null;
+  counts: { completedSegments: number; skippedSegments: number; sourceFingerprint?: string } | null;
 }): TtsExportArtifactState {
   const ready = input.artifact.artifact;
   if (ready) {
-    // Deterministic artifact ids outlive retries of skipped segments; a file
-    // built from different sidecar counts is replaced rather than offered.
+    // Deterministic artifact ids outlive retries of skipped segments and
+    // reparse repairs; a file built from other sources is replaced rather than
+    // offered. Whenever the scope's progress is read, its fingerprint decides;
+    // a file recorded before sources were fingerprinted cannot match it.
     const stale = input.counts !== null && (
       (ready.generatedSegments ?? input.counts.completedSegments) !== input.counts.completedSegments
       || (ready.skippedSegments ?? 0) !== input.counts.skippedSegments
+      || (input.counts.sourceFingerprint !== undefined && ready.sourceFingerprint !== input.counts.sourceFingerprint)
     );
     if (!stale) return 'ready';
   }

@@ -127,6 +127,7 @@ export interface paths {
                             generatedSegments?: number;
                             skippedSegments?: number;
                             plannedSegments?: number;
+                            sourceFingerprint?: string;
                             chapterIndex?: number;
                             dispositionFilename: string;
                             sourceSessionId: string;
@@ -938,6 +939,7 @@ export interface paths {
                                 message: string | null;
                                 code: string | null;
                             } | null;
+                            sourceFingerprint: string;
                             chapters: {
                                 index: number;
                                 title: string;
@@ -948,6 +950,7 @@ export interface paths {
                                 skippedSegments: number;
                                 generatingSegments: number;
                                 durationMs: number;
+                                sourceFingerprint: string;
                             }[];
                         };
                     };
@@ -4461,6 +4464,7 @@ export interface paths {
                                 generatedSegments?: number;
                                 skippedSegments?: number;
                                 plannedSegments?: number;
+                                sourceFingerprint?: string;
                                 chapterIndex?: number;
                                 dispositionFilename: string;
                                 sourceSessionId: string;
@@ -5609,6 +5613,7 @@ export interface components {
             generatedSegments?: number;
             skippedSegments?: number;
             plannedSegments?: number;
+            sourceFingerprint?: string;
             chapterIndex?: number;
             dispositionFilename: string;
             sourceSessionId: string;
@@ -6103,6 +6108,7 @@ export interface components {
                 generatedSegments?: number;
                 skippedSegments?: number;
                 plannedSegments?: number;
+                sourceFingerprint?: string;
                 chapterIndex?: number;
                 dispositionFilename: string;
                 sourceSessionId: string;

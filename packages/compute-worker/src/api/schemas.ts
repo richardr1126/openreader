@@ -419,6 +419,7 @@ export const ttsPlaybackExportArtifactMetadataSchema = z.object({
   generatedSegments: z.number().optional(),
   skippedSegments: z.number().optional(),
   plannedSegments: z.number().optional(),
+  sourceFingerprint: z.string().optional(),
   chapterIndex: z.number().optional(),
   dispositionFilename: z.string(),
   sourceSessionId: z.string(),
@@ -631,6 +632,8 @@ export const ttsPlaybackExportProgressSummarySchema = z.object({
   completedSegments: z.number(),
   skippedSegments: z.number(),
   lastSkipError: ttsPlaybackSegmentErrorSchema.nullable(),
+  /** What a whole-book file built now would be built from; see `exportSourceFingerprint`. */
+  sourceFingerprint: z.string(),
   chapters: z.array(z.object({
     index: z.number(),
     title: z.string(),
@@ -641,6 +644,7 @@ export const ttsPlaybackExportProgressSummarySchema = z.object({
     skippedSegments: z.number(),
     generatingSegments: z.number(),
     durationMs: z.number(),
+    sourceFingerprint: z.string(),
   })),
 });
 

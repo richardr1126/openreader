@@ -470,7 +470,11 @@ async function advanceAudiobook(input: {
   const chapter = chapterIndex === null ? null : current.progress?.chapters[chapterIndex] ?? null;
   if (chapterIndex !== null && !chapter) throw new ChapterNotFoundError();
   const counts = chapter ?? (current.progress
-    ? { completedSegments: current.progress.completedSegments, skippedSegments: current.progress.skippedSegments }
+    ? {
+      completedSegments: current.progress.completedSegments,
+      skippedSegments: current.progress.skippedSegments,
+      sourceFingerprint: current.progress.sourceFingerprint,
+    }
     : current.generation.progress
       ? { completedSegments: current.generation.progress.completedCount,
         skippedSegments: current.generation.progress.skippedCount ?? 0 }

@@ -17,7 +17,7 @@ export type PlaybackSegmentState =
   | { status: 'pending'; ordinal: number };
 
 export type PlaybackSegmentSettledState =
-  | { status: 'completed'; durationMs: number }
+  | { status: 'completed'; audioKey: string; durationMs: number }
   | { status: 'error'; message: string | null; code: string | null }
   | { status: 'generating' };
 
@@ -143,7 +143,7 @@ export function createPlaybackSessionReadModel(input: {
   // Completed audio never changes status or duration within one cache epoch
   // (alignment may still arrive, which export progress does not need), so
   // progress refreshes re-read only error/generating sidecars.
-  const completedDurationScopes = new Map<string, Map<number, number>>();
+  const completedDurationScopes = new Map<string, Map<number, { audioKey: string; durationMs: number }>>();
 
   const getScopeEpoch = async (session: TtsPlaybackSegmentScope): Promise<number> => {
     return await playbackStorage?.artifacts.getScopeEpoch({
@@ -383,7 +383,7 @@ export function createPlaybackSessionReadModel(input: {
         completedDurationScopes.set(key, completed);
       }
       const states = new Map<number, PlaybackSegmentSettledState>();
-      for (const [ordinal, durationMs] of completed) states.set(ordinal, { status: 'completed', durationMs });
+      for (const [ordinal, audio] of completed) states.set(ordinal, { status: 'completed', ...audio });
       const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(scope).catch((error) => {
         logger?.warn({
           documentId: scope.documentId,
@@ -399,8 +399,8 @@ export function createPlaybackSessionReadModel(input: {
           if (!sidecar) return;
           if (sidecar.status === 'completed' && sidecar.audioKey) {
             const durationMs = Math.max(1, Number(sidecar.durationMs ?? 1000));
-            completed.set(ordinal, durationMs);
-            states.set(ordinal, { status: 'completed', durationMs });
+            completed.set(ordinal, { audioKey: sidecar.audioKey, durationMs });
+            states.set(ordinal, { status: 'completed', audioKey: sidecar.audioKey, durationMs });
           } else if (sidecar.status === 'error') {
             const error = sidecar.error && typeof sidecar.error === 'object'
               ? sidecar.error as { message?: unknown; code?: unknown }

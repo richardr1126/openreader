@@ -410,6 +410,22 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     expect(json.webDownloadUrl).toBeNull();
   });
 
+  test('offers a file only while it was built from the current audio', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue({ ...summary([chapter(0, 10), chapter(1, 10)]), sourceFingerprint: 'current' });
+    const built = (sourceFingerprint?: string) => hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0, sourceFingerprint },
+      operation: null,
+    });
+
+    built('current');
+    expect((await lookup({ includeProgress: true })).json.artifact.state).toBe('ready');
+    built('earlier-layout');
+    expect((await lookup({ includeProgress: true })).json.artifact.state).toBe('stale');
+    built(undefined);
+    expect((await lookup({ includeProgress: true })).json.artifact.state).toBe('stale');
+  });
+
   test('a full account gets a storage issue instead of a new file', async () => {
     hoisted.resolveSession.mockResolvedValue(completeSession);
     hoisted.exportProgress.mockResolvedValue(summary([chapter(0, 0), chapter(1, 0)]));

@@ -3,7 +3,8 @@ import { createDocumentAudioReporter } from '../../storage/audio-usage';
 import { mkdtemp, open, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { exportSourceFingerprint } from '../../playback/export-fingerprint';
 import { isNotFound, type ArtifactStorage } from '../../infrastructure/storage';
 
 import type { TtsPlaybackExportArtifactMetadata, TtsPlaybackExportArtifactRequest, TtsPlaybackExportArtifactResult, TtsPlaybackExportProgress } from '../../operations/contracts';
@@ -31,18 +32,6 @@ const AUDIO_PREFETCH_BATCH = 4;
 export type TtsPlaybackExportSegmentSource =
   | { kind: 'audio'; audioKey: string; durationMs: number }
   | { kind: 'silence'; durationMs: number };
-
-export function ttsPlaybackExportSourceFingerprint(
-  plannedSegments: ReadonlyArray<{ ordinal: number }>,
-  sourcesByOrdinal: ReadonlyMap<number, TtsPlaybackExportSegmentSource>,
-): string {
-  const hash = createHash('sha256');
-  for (const { ordinal } of plannedSegments) {
-    const source = sourcesByOrdinal.get(ordinal);
-    hash.update(`${ordinal}\0${source?.kind === 'audio' ? `a\0${source.audioKey}` : `s\0${source?.durationMs ?? 0}`}\n`);
-  }
-  return hash.digest('hex');
-}
 
 export function resolveTtsPlaybackExportSegmentSource(
   ordinal: number,
@@ -195,7 +184,10 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
     // only while it was built from exactly the current sources. Retrying a
     // skipped segment or repairing a reparsed layout changes them and rebuilds
     // the file; an artifact recorded without them cannot prove it and rebuilds.
-    const sourceFingerprint = ttsPlaybackExportSourceFingerprint(plannedSegments, sourcesByOrdinal);
+    const sourceFingerprint = exportSourceFingerprint(plannedSegments.map((segment) => segment.ordinal), (ordinal) => {
+      const source = sourcesByOrdinal.get(ordinal);
+      return source?.kind === 'audio' ? source : null;
+    });
     const readMetadata = () => input.storage.readObject(metadataKey)
       .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata)
       .catch((error) => { if (isNotFound(error)) return null; throw error; });

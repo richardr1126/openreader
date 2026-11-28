@@ -305,7 +305,7 @@ describe('playback session read model', () => {
     await expect(fixture.model.listSegmentStates({ ...scope, planObjectKey })).resolves.toEqual(new Map());
     // The earlier plan still has its own audio.
     await expect(fixture.model.listSegmentStates({ ...scope, planObjectKey: session.planObjectKey! }))
-      .resolves.toEqual(new Map([[0, { status: 'completed', durationMs: 1200 }]]));
+      .resolves.toEqual(new Map([[0, { status: 'completed', audioKey: expect.any(String), durationMs: 1200 }]]));
   });
 
   test('invalidates cached sidecars by exact scope and parsed plans by prefix', async () => {
