@@ -399,7 +399,9 @@ export function createPlaybackSessionReadModel(input: {
           if (!sidecar) return;
           if (sidecar.status === 'completed' && sidecar.audioKey) {
             const durationMs = Math.max(1, Number(sidecar.durationMs ?? 1000));
-            completed.set(ordinal, { audioKey: sidecar.audioKey, durationMs });
+            // A record without a stored duration is reread: regeneration
+            // probes and stores the real one under the same cache epoch.
+            if (sidecar.durationMs != null) completed.set(ordinal, { audioKey: sidecar.audioKey, durationMs });
             states.set(ordinal, { status: 'completed', audioKey: sidecar.audioKey, durationMs });
           } else if (sidecar.status === 'error') {
             const error = sidecar.error && typeof sidecar.error === 'object'

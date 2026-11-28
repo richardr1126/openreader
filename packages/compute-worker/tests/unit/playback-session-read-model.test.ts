@@ -123,6 +123,16 @@ function createFixture(planLength = 100) {
 }
 
 describe('playback session read model', () => {
+  test('rereads a completed record until its duration is stored', async () => {
+    const fixture = createFixture(1);
+    fixture.sidecars.set(0, { ...completedSidecar(0), durationMs: undefined });
+    const { sessionId: _sessionId, planObjectKey, ...scope } = session;
+    const list = () => fixture.model.listSegmentStates({ ...scope, planObjectKey: planObjectKey! });
+    await expect(list()).resolves.toEqual(new Map([[0, expect.objectContaining({ durationMs: 1000 })]]));
+    fixture.sidecars.set(0, { ...completedSidecar(0), durationMs: 1800 });
+    await expect(list()).resolves.toEqual(new Map([[0, expect.objectContaining({ durationMs: 1800 })]]));
+  });
+
   test('caches only completed sidecars and re-reads missing ordinals', async () => {
     const fixture = createFixture();
     fixture.sidecars.set(0, completedSidecar(0));
