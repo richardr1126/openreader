@@ -370,13 +370,24 @@ describe('/api/v1/documents/[id]/audiobooks', () => {
     hoisted.resolveSession.mockResolvedValue(completeSession);
     hoisted.exportProgress.mockImplementation(() => new Promise(() => undefined));
     hoisted.resolveArtifact.mockReset().mockResolvedValue({
-      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 2234, skippedSegments: 0 }, operation: null,
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 2234, skippedSegments: 0, sourceFingerprint: 'built' }, operation: null,
     });
     const { status, json } = await lookup({ includeProgress: false });
     expect(status).toBe(200);
     expect(json.filename).toBe('book.mp3');
     expect(json.segments).toBeNull();
     expect(hoisted.exportProgress).not.toHaveBeenCalled();
+  });
+
+  test('checks a file recorded before fingerprints even on a fast lookup', async () => {
+    hoisted.resolveSession.mockResolvedValue(completeSession);
+    hoisted.exportProgress.mockResolvedValue({ ...summary([chapter(0, 10), chapter(1, 10)]), sourceFingerprint: 'current' });
+    hoisted.resolveArtifact.mockReset().mockResolvedValue({
+      artifact: { dispositionFilename: 'book.mp3', generatedSegments: 20, skippedSegments: 0 }, operation: null,
+    });
+    const { json } = await lookup({ includeProgress: false });
+    expect(json.artifact.state).toBe('stale');
+    expect(json.downloadUrl).toBeNull();
   });
 
   test('acknowledges Stop without waiting for chapter storage', async () => {

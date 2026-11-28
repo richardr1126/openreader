@@ -463,8 +463,13 @@ async function advanceAudiobook(input: {
     }
   }
 
+  let artifact = await client.resolveTtsPlaybackExportArtifact(artifactScope);
   // Commands have already been applied. Chapter discovery must never gate Stop.
-  if (input.includeProgress && !current.progress) {
+  // A file recorded before exports were fingerprinted may have been built from
+  // an earlier layout's audio, so it is checked against progress once even on
+  // a fast lookup; its rebuild records a fingerprint and stays on the fast path.
+  const unproven = Boolean(artifact.artifact && !artifact.artifact.sourceFingerprint);
+  if ((input.includeProgress || unproven) && !current.progress) {
     current.progress = await client.getTtsPlaybackExportProgress(progressScope);
   }
   const chapter = chapterIndex === null ? null : current.progress?.chapters[chapterIndex] ?? null;
@@ -486,7 +491,6 @@ async function advanceAudiobook(input: {
       && chapter.completedSegments + chapter.skippedSegments === chapter.plannedSegments
     : current.state === 'complete';
 
-  let artifact = await client.resolveTtsPlaybackExportArtifact(artifactScope);
   let artifactState: TtsExportArtifactState = classifyExportArtifact({ artifact, counts });
   // A failed build is only retried on request, so advancing cannot loop on it.
   // A whole-book run that finished after it changed the audio, so that one is new work.
