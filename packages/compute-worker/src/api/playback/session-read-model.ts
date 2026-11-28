@@ -9,13 +9,15 @@ import type {
 
 export type PlaybackSessionRow = TtsPlaybackSessionState;
 
+export type PlaybackPlanSegment = { ordinal: number; text: string; segmentKey: string | null };
+
 export type PlaybackSegmentState =
   | { status: 'completed'; ordinal: number; audioKey: string; durationMs: number }
   | { status: 'error'; ordinal: number; durationMs: number }
   | { status: 'pending'; ordinal: number };
 
 export type PlaybackSegmentSettledState =
-  | { status: 'completed'; durationMs: number }
+  | { status: 'completed'; audioKey: string; durationMs: number }
   | { status: 'error'; message: string | null; code: string | null }
   | { status: 'generating' };
 
@@ -31,7 +33,7 @@ export type PlaybackSegmentManifestRow = {
 
 export interface PlaybackSessionReadModel {
   readSession(sessionId: string): Promise<PlaybackSessionRow | null>;
-  readPlanSegments(planObjectKey: string): Promise<Array<{ ordinal: number; text: string }> | null>;
+  readPlanSegments(planObjectKey: string): Promise<PlaybackPlanSegment[] | null>;
   readSegmentIndexRows(
     session: PlaybackSessionRow,
     options?: { minOrdinal?: number; limit?: number },
@@ -42,9 +44,10 @@ export interface PlaybackSessionReadModel {
     options?: { minOrdinal?: number; limit?: number },
   ): Promise<{ rows: PlaybackSegmentManifestRow[]; erroredOrdinals: number[] }>;
   readSegmentState(session: PlaybackSessionRow, ordinal: number): Promise<PlaybackSegmentState>;
-  /** Every stored segment state for export progress, keyed by plan ordinal. */
-  /** Settled states for one cache scope; export progress needs no live session. */
-  listSegmentStates(scope: TtsPlaybackSegmentScope, planLength: number): Promise<Map<number, PlaybackSegmentSettledState>>;
+  /** Settled states of one plan's segments; export progress needs no live session. */
+  listSegmentStates(
+    scope: TtsPlaybackSegmentScope & { planObjectKey: string },
+  ): Promise<Map<number, PlaybackSegmentSettledState>>;
   forgetCachedSidecar(session: PlaybackSessionRow, ordinal: number): Promise<void>;
   invalidateSidecarsForScope(scope: PlaybackScope): number;
   invalidatePlansUnderPrefix(prefix: string): number;
@@ -103,8 +106,10 @@ function toManifestRows(
     .sort((left, right) => left.ordinal - right.ordinal);
 }
 
-function scopeCacheKey(session: TtsPlaybackSegmentScope, cacheEpoch: number): string {
-  return `${session.storageUserId}\0${session.documentId}\0${Math.max(0, Math.floor(session.documentVersion))}\0${session.settingsHash}\0${Math.max(0, Math.floor(cacheEpoch))}`;
+// A document's plans share one settings scope of sidecars, so cached sidecars
+// are kept per plan: each plan's entries were checked against its passages.
+function scopeCacheKey(session: TtsPlaybackSegmentScope, cacheEpoch: number, planObjectKey: string): string {
+  return `${session.storageUserId}\0${session.documentId}\0${Math.max(0, Math.floor(session.documentVersion))}\0${session.settingsHash}\0${Math.max(0, Math.floor(cacheEpoch))}\0${planObjectKey}`;
 }
 
 function scopeCacheKeyPrefix(scope: PlaybackScope): string {
@@ -125,11 +130,20 @@ export function createPlaybackSessionReadModel(input: {
   const { storage, playbackStorage, logger } = input;
   const sidecarScopes = new Map<string, Map<number, TtsPlaybackSegmentMetadata>>();
   const scopeCollections = new Map<string, Promise<Map<number, TtsPlaybackSegmentMetadata>>>();
-  const plans = new Map<string, Array<{ ordinal: number; text: string }>>();
+  const plans = new Map<string, PlaybackPlanSegment[]>();
+  const planKeys = new WeakMap<PlaybackPlanSegment[], Map<number, string | null>>();
+  const segmentKeysOf = (plan: PlaybackPlanSegment[]): Map<number, string | null> => {
+    let keys = planKeys.get(plan);
+    if (!keys) {
+      keys = new Map(plan.map((segment) => [segment.ordinal, segment.segmentKey]));
+      planKeys.set(plan, keys);
+    }
+    return keys;
+  };
   // Completed audio never changes status or duration within one cache epoch
   // (alignment may still arrive, which export progress does not need), so
   // progress refreshes re-read only error/generating sidecars.
-  const completedDurationScopes = new Map<string, Map<number, number>>();
+  const completedDurationScopes = new Map<string, Map<number, { audioKey: string; durationMs: number }>>();
 
   const getScopeEpoch = async (session: TtsPlaybackSegmentScope): Promise<number> => {
     return await playbackStorage?.artifacts.getScopeEpoch({
@@ -143,8 +157,9 @@ export function createPlaybackSessionReadModel(input: {
   const getSidecarScope = (
     session: TtsPlaybackSegmentScope,
     cacheEpoch: number,
+    planObjectKey: string,
   ): Map<number, TtsPlaybackSegmentMetadata> => {
-    const key = scopeCacheKey(session, cacheEpoch);
+    const key = scopeCacheKey(session, cacheEpoch, planObjectKey);
     let cache = sidecarScopes.get(key);
     if (!cache) {
       if (sidecarScopes.size >= SIDECAR_SCOPE_CACHE_MAX) {
@@ -161,6 +176,7 @@ export function createPlaybackSessionReadModel(input: {
     session: TtsPlaybackSegmentScope,
     ordinal: number,
     cacheEpoch: number,
+    segmentKeys: Map<number, string | null>,
   ): Promise<TtsPlaybackSegmentMetadata | null> => {
     const sidecar = await playbackStorage?.artifacts.readSegmentMetadata({
       storageUserId: session.storageUserId,
@@ -168,6 +184,7 @@ export function createPlaybackSessionReadModel(input: {
       documentVersion: session.documentVersion,
       settingsHash: session.settingsHash,
       ordinal,
+      segmentKey: segmentKeys.get(ordinal) ?? null,
     }).catch(() => null) ?? null;
     if (!sidecar) return null;
     if (Math.max(0, Math.floor(Number(sidecar.cacheEpoch ?? 0))) < cacheEpoch) return null;
@@ -178,11 +195,14 @@ export function createPlaybackSessionReadModel(input: {
     session: PlaybackSessionRow,
     ordinal: number,
   ): Promise<TtsPlaybackSegmentMetadata | null> => {
+    // Without its plan, a sidecar cannot be checked against the session's passage.
+    const plan = session.planObjectKey ? await readPlanSegments(session.planObjectKey) : null;
+    if (!session.planObjectKey || !plan) return null;
     const cacheEpoch = await getScopeEpoch(session);
-    const cache = getSidecarScope(session, cacheEpoch);
+    const cache = getSidecarScope(session, cacheEpoch, session.planObjectKey);
     const cached = cache.get(ordinal);
     if (cached) return cached;
-    const sidecar = await fetchSidecar(session, ordinal, cacheEpoch);
+    const sidecar = await fetchSidecar(session, ordinal, cacheEpoch, segmentKeysOf(plan));
     // Audio state is immutable within an epoch. Priority timeline windows
     // independently refresh missing alignment; streaming need not refetch it.
     if (isCompletedAudioSidecar(sidecar)) cache.set(ordinal, sidecar);
@@ -191,12 +211,15 @@ export function createPlaybackSessionReadModel(input: {
 
   const collectScopeSidecars = async (
     session: PlaybackSessionRow,
-    planLength: number,
+    planObjectKey: string,
+    plan: PlaybackPlanSegment[],
   ): Promise<Map<number, TtsPlaybackSegmentMetadata>> => {
+    const planLength = plan.length;
+    const segmentKeys = segmentKeysOf(plan);
     const cacheEpoch = await getScopeEpoch(session);
-    const cache = getSidecarScope(session, cacheEpoch);
+    const cache = getSidecarScope(session, cacheEpoch, planObjectKey);
     if (planLength <= 0) return new Map(cache);
-    const key = scopeCacheKey(session, cacheEpoch);
+    const key = scopeCacheKey(session, cacheEpoch, planObjectKey);
     const pending = scopeCollections.get(key);
     if (pending) return pending;
     const collect = (async () => {
@@ -215,7 +238,7 @@ export function createPlaybackSessionReadModel(input: {
         .filter((ordinal) => ordinal < planLength && !isCompletedAudioSidecar(cache.get(ordinal)));
       for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
         const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
-        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
+        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch, segmentKeys)));
         batch.forEach((ordinal, batchIndex) => {
           const sidecar = fetched[batchIndex];
           if (!sidecar) return;
@@ -235,21 +258,25 @@ export function createPlaybackSessionReadModel(input: {
 
   const readPlanSegments = async (
     planObjectKey: string,
-  ): Promise<Array<{ ordinal: number; text: string }> | null> => {
+  ): Promise<PlaybackPlanSegment[] | null> => {
     const cached = plans.get(planObjectKey);
     if (cached) return cached;
     try {
       const bytes = await storage.readObject(planObjectKey);
       const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as {
-        segments?: Array<{ ordinal?: unknown; text?: unknown }>;
+        segments?: Array<{ ordinal?: unknown; text?: unknown; segmentKey?: unknown }>;
       };
       if (!Array.isArray(parsed.segments)) return null;
-      const result: Array<{ ordinal: number; text: string }> = [];
+      const result: PlaybackPlanSegment[] = [];
       for (const row of parsed.segments) {
         const ordinal = Number(row.ordinal);
         const text = typeof row.text === 'string' ? row.text : '';
         if (Number.isFinite(ordinal) && text) {
-          result.push({ ordinal: Math.max(0, Math.floor(ordinal)), text });
+          result.push({
+            ordinal: Math.max(0, Math.floor(ordinal)),
+            text,
+            segmentKey: typeof row.segmentKey === 'string' && row.segmentKey ? row.segmentKey : null,
+          });
         }
       }
       if (plans.size >= PLAN_CACHE_MAX) {
@@ -270,7 +297,7 @@ export function createPlaybackSessionReadModel(input: {
     if (!session.planObjectKey) return new Map();
     const planSegments = await readPlanSegments(session.planObjectKey);
     if (!planSegments?.length) return new Map();
-    if (!options) return collectScopeSidecars(session, planSegments.length);
+    if (!options) return collectScopeSidecars(session, session.planObjectKey, planSegments);
     const minOrdinal = Math.max(0, Math.floor(Number(options.minOrdinal ?? 0)));
     const limit = Math.max(1, Math.min(Math.floor(Number(options.limit ?? 500)), 10000));
     // Sidecars are immutable objects rather than rows in an indexed database.
@@ -280,8 +307,9 @@ export function createPlaybackSessionReadModel(input: {
       .filter((segment) => segment.ordinal >= minOrdinal)
       .slice(0, limit);
     const requestedOrdinals = new Set(requestedSegments.map((segment) => segment.ordinal));
+    const segmentKeys = segmentKeysOf(planSegments);
     const cacheEpoch = await getScopeEpoch(session);
-    const cache = getSidecarScope(session, cacheEpoch);
+    const cache = getSidecarScope(session, cacheEpoch, session.planObjectKey);
     const sidecars = new Map<number, TtsPlaybackSegmentMetadata>(
       [...cache].filter(([ordinal]) => requestedOrdinals.has(ordinal)),
     );
@@ -290,7 +318,7 @@ export function createPlaybackSessionReadModel(input: {
       .filter((ordinal) => !isStableCompletedSidecar(cache.get(ordinal)));
     for (let index = 0; index < missing.length; index += SIDECAR_FETCH_BATCH) {
       const batch = missing.slice(index, index + SIDECAR_FETCH_BATCH);
-      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch)));
+      const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(session, ordinal, cacheEpoch, segmentKeys)));
       batch.forEach((ordinal, batchIndex) => {
         const sidecar = fetched[batchIndex];
         if (!sidecar) return;
@@ -338,9 +366,13 @@ export function createPlaybackSessionReadModel(input: {
       }
       return { status: 'pending', ordinal };
     },
-    async listSegmentStates(scope, planLength) {
+    async listSegmentStates({ planObjectKey, ...scope }) {
+      const plan = await readPlanSegments(planObjectKey);
+      if (!plan) return new Map();
+      const planLength = plan.length;
+      const segmentKeys = segmentKeysOf(plan);
       const cacheEpoch = await getScopeEpoch(scope);
-      const key = scopeCacheKey(scope, cacheEpoch);
+      const key = scopeCacheKey(scope, cacheEpoch, planObjectKey);
       let completed = completedDurationScopes.get(key);
       if (!completed) {
         if (completedDurationScopes.size >= SIDECAR_SCOPE_CACHE_MAX) {
@@ -351,7 +383,7 @@ export function createPlaybackSessionReadModel(input: {
         completedDurationScopes.set(key, completed);
       }
       const states = new Map<number, PlaybackSegmentSettledState>();
-      for (const [ordinal, durationMs] of completed) states.set(ordinal, { status: 'completed', durationMs });
+      for (const [ordinal, audio] of completed) states.set(ordinal, { status: 'completed', ...audio });
       const ordinals = (await playbackStorage?.artifacts.listSegmentOrdinals(scope).catch((error) => {
         logger?.warn({
           documentId: scope.documentId,
@@ -361,14 +393,16 @@ export function createPlaybackSessionReadModel(input: {
       }) ?? []).filter((ordinal) => ordinal < planLength && !completed.has(ordinal));
       for (let index = 0; index < ordinals.length; index += SIDECAR_FETCH_BATCH) {
         const batch = ordinals.slice(index, index + SIDECAR_FETCH_BATCH);
-        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(scope, ordinal, cacheEpoch)));
+        const fetched = await Promise.all(batch.map((ordinal) => fetchSidecar(scope, ordinal, cacheEpoch, segmentKeys)));
         batch.forEach((ordinal, batchIndex) => {
           const sidecar = fetched[batchIndex];
           if (!sidecar) return;
           if (sidecar.status === 'completed' && sidecar.audioKey) {
             const durationMs = Math.max(1, Number(sidecar.durationMs ?? 1000));
-            completed.set(ordinal, durationMs);
-            states.set(ordinal, { status: 'completed', durationMs });
+            // A record without a stored duration is reread: regeneration
+            // probes and stores the real one under the same cache epoch.
+            if (sidecar.durationMs != null) completed.set(ordinal, { audioKey: sidecar.audioKey, durationMs });
+            states.set(ordinal, { status: 'completed', audioKey: sidecar.audioKey, durationMs });
           } else if (sidecar.status === 'error') {
             const error = sidecar.error && typeof sidecar.error === 'object'
               ? sidecar.error as { message?: unknown; code?: unknown }
@@ -386,7 +420,8 @@ export function createPlaybackSessionReadModel(input: {
       return states;
     },
     async forgetCachedSidecar(session, ordinal) {
-      getSidecarScope(session, await getScopeEpoch(session)).delete(ordinal);
+      if (!session.planObjectKey) return;
+      getSidecarScope(session, await getScopeEpoch(session), session.planObjectKey).delete(ordinal);
     },
     invalidateSidecarsForScope(scope) {
       const prefix = scopeCacheKeyPrefix(scope);

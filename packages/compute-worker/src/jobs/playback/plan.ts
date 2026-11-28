@@ -230,6 +230,23 @@ export async function readPlaybackPlanLayoutRevision(
   return head?.metadata[PARSED_PDF_NARRATION_REVISION_METADATA] || null;
 }
 
+/** Whether `planObjectKey` is the plan of a reparsed PDF's current layout. */
+export async function isCurrentReparsedLayoutPlan(
+  request: TtsPlaybackPlanCapableRequest,
+  storage: Pick<ArtifactStorage, 'headObject'>,
+  s3Prefix: string,
+  planObjectKey: string,
+): Promise<boolean> {
+  const revision = await readPlaybackPlanLayoutRevision(request, storage, s3Prefix);
+  return revision !== null && planObjectKey === ttsPlaybackPlanArtifactKey({
+    documentId: request.documentId,
+    documentVersion: request.documentVersion,
+    readerType: request.readerType,
+    planSignature: computePlaybackPlanSignature(request, revision),
+    prefix: s3Prefix,
+  });
+}
+
 export function computePlaybackPlanSignature(
   request: TtsPlaybackPlanCapableRequest,
   layoutRevision: string | null,

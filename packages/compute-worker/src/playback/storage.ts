@@ -116,9 +116,12 @@ export interface TtsPlaybackSegmentArtifactStore {
   listSegmentOrdinals(scope: TtsPlaybackSegmentScope): Promise<number[]>;
   /** Write one segment's sidecar. */
   putSegmentMetadata(metadata: TtsPlaybackSegmentMetadata, attempt?: JobAttempt): Promise<string>;
-  /** Read one segment's sidecar by ordinal. Returns null when not yet generated. */
+  /**
+   * Read one segment's sidecar by ordinal. Returns null when not yet generated,
+   * or when the sidecar describes a different passage than `segmentKey`.
+   */
   readSegmentMetadata(
-    input: TtsPlaybackSegmentScope & { ordinal: number },
+    input: TtsPlaybackSegmentScope & { ordinal: number; segmentKey: string | null },
   ): Promise<TtsPlaybackSegmentMetadata | null>;
   getScopeEpoch(scope: TtsPlaybackResetScope): Promise<number>;
   incrementScopeEpoch(scope: TtsPlaybackResetScope, updatedAt?: number): Promise<number>;
@@ -130,6 +133,21 @@ export interface TtsPlaybackStorage {
 }
 
 type KvEntry = Awaited<ReturnType<KvStoreLike['get']>>;
+
+/**
+ * Sidecars are addressed by plan ordinal, but a document's plans can differ
+ * (a PDF reparse moves passages to other ordinals) while sharing one settings
+ * scope. A sidecar is this plan's only when it was written for the passage the
+ * plan has at that ordinal; otherwise its audio is another passage's. Every
+ * released v5 plan keys its passages, so a keyless sidecar is never trusted
+ * for a keyed passage.
+ */
+export function sidecarDescribesSegment(
+  sidecar: Pick<TtsPlaybackSegmentMetadata, 'segmentKey'>,
+  segmentKey: string | null,
+): boolean {
+  return !segmentKey || sidecar.segmentKey === segmentKey;
+}
 
 function hashScope(value: string): string {
   return createHash('sha256').update(value).digest('hex');
@@ -614,11 +632,13 @@ export function createTtsPlaybackSegmentArtifactStore(input: {
     },
 
     async readSegmentMetadata(scope) {
+      let sidecar: TtsPlaybackSegmentMetadata;
       try {
-        return metadataFromBytes(await input.storage.readObject(sidecarKey(scope)), scope.ordinal);
+        sidecar = metadataFromBytes(await input.storage.readObject(sidecarKey(scope)), scope.ordinal);
       } catch {
         return null;
       }
+      return sidecarDescribesSegment(sidecar, scope.segmentKey) ? sidecar : null;
     },
 
     async getScopeEpoch(scope) {

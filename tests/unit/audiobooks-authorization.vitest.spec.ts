@@ -32,7 +32,7 @@ beforeEach(() => {
   mocks.auth.mockResolvedValue({ userId: 'owner', user: { isAnonymous: false } });
   mocks.scope.mockResolvedValue({ userId: 'owner', storageUserId: 'owner', documentVersion: 1, readerType: 'html' });
   mocks.operation.mockResolvedValue({ subject: { kind: 'tts_playback', documentId: 'shared-content' } });
-  mocks.artifact.mockResolvedValue({ storageUserId: 'owner', objectKey: 'owned-file', contentType: 'audio/mpeg', dispositionFilename: 'book.mp3' });
+  mocks.artifact.mockResolvedValue({ storageUserId: 'owner', objectKey: 'owned-file', contentType: 'audio/mpeg', dispositionFilename: 'book.mp3', sourceFingerprint: 'built' });
   mocks.proxy.mockResolvedValue(new Response('event: snapshot\n\n'));
   mocks.send.mockResolvedValue(new Response('audio'));
   mocks.admissions = [{ id: 'owned-admission' }];
@@ -69,6 +69,12 @@ test('file lookup is scoped to the owner and rejects mismatched metadata', async
   mocks.artifact.mockResolvedValue({ storageUserId: 'other-user' });
   expect((await file(fileRequest(), fileContext)).status).toBe(404);
   expect(mocks.artifact).toHaveBeenCalledWith({ artifactId: 'abcdef1234567890', storageUserId: 'owner', documentId: 'shared-content' });
+  expect(mocks.send).not.toHaveBeenCalled();
+});
+
+test('a saved link to a file recorded before fingerprints is not served', async () => {
+  mocks.artifact.mockResolvedValue({ storageUserId: 'owner', objectKey: 'owned-file', contentType: 'audio/mpeg', dispositionFilename: 'book.mp3' });
+  expect((await file(fileRequest(), fileContext)).status).toBe(404);
   expect(mocks.send).not.toHaveBeenCalled();
 });
 

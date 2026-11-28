@@ -4,6 +4,7 @@ import { mkdtemp, open, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { exportSourceFingerprint } from '../../playback/export-fingerprint';
 import { isNotFound, type ArtifactStorage } from '../../infrastructure/storage';
 
 import type { TtsPlaybackExportArtifactMetadata, TtsPlaybackExportArtifactRequest, TtsPlaybackExportArtifactResult, TtsPlaybackExportProgress } from '../../operations/contracts';
@@ -162,6 +163,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         documentVersion: parsed.documentVersion,
         settingsHash: parsed.settingsHash,
         ordinal: segment.ordinal,
+        segmentKey: segment.segmentKey ?? null,
       })));
       batch.forEach((segment, batchIndex) => {
         if (Math.max(0, Math.floor(Number(sidecars[batchIndex]?.cacheEpoch ?? 0))) < cacheEpoch) {
@@ -179,15 +181,20 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
     }
 
     // Artifact ids are deterministic per scope, so a ready artifact is reused
-    // only while it still describes the current sidecars. Retrying skipped
-    // segments changes the counts and rebuilds the file without its silence.
+    // only while it was built from exactly the current sources. Retrying a
+    // skipped segment or repairing a reparsed layout changes them and rebuilds
+    // the file; an artifact recorded without them cannot prove it and rebuilds.
+    const sourceFingerprint = exportSourceFingerprint(plannedSegments.map((segment) => segment.ordinal), (ordinal) => {
+      const source = sourcesByOrdinal.get(ordinal);
+      return source?.kind === 'audio' ? source : null;
+    });
     const readMetadata = () => input.storage.readObject(metadataKey)
       .then((bytes) => JSON.parse(Buffer.from(bytes).toString('utf8')) as TtsPlaybackExportArtifactMetadata)
       .catch((error) => { if (isNotFound(error)) return null; throw error; });
     const reusable = async (metadata: TtsPlaybackExportArtifactMetadata | null) =>
       metadata?.schemaVersion === 1 && metadata.status === 'ready'
       && metadata.artifactId === parsed.artifactId
-      && metadata.generatedSegments === generatedSegments && metadata.skippedSegments === skippedSegments
+      && metadata.sourceFingerprint === sourceFingerprint
       && await input.storage.objectExists(metadata.objectKey) ? metadata : null;
     const existingMetadata = await readMetadata();
     const existingArtifact = await reusable(existingMetadata);
@@ -275,6 +282,7 @@ export function createTtsPlaybackExportHandler(input: JobHandlerContext) {
         generatedSegments,
         skippedSegments,
         plannedSegments: plannedSegments.length,
+        sourceFingerprint,
         ...(parsed.chapterIndex === undefined ? {} : { chapterIndex: parsed.chapterIndex }),
         dispositionFilename: buildExportFilename({
           documentId: parsed.documentId,

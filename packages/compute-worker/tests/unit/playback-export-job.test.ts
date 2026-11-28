@@ -265,6 +265,30 @@ describe('TTS playback export job', () => {
     expect(storage.objects.get(rebuilt.artifact.objectKey)?.toString()).toBe('onetwo');
   });
 
+  test('rebuilds a ready artifact whose sources changed under the same counts', async () => {
+    const storage = pdfPlanStorage();
+    const sidecars = new Map([
+      [0, sidecar(0, 'completed', 'audio/1')], [1, sidecar(1, 'completed', 'audio/0')],
+    ]);
+    const run = handler(storage, sidecars);
+    // An export built from an earlier layout's audio, then the reparse repair.
+    const stale = await run({ ...request, chapterIndex: 0 }, 0);
+    expect(storage.objects.get(stale.artifact.objectKey)?.toString()).toBe('twoone');
+    sidecars.set(0, sidecar(0, 'completed', 'audio/0'));
+    sidecars.set(1, sidecar(1, 'completed', 'audio/1'));
+    const rebuilt = await run({ ...request, chapterIndex: 0 }, 0);
+    expect(storage.objects.get(rebuilt.artifact.objectKey)?.toString()).toBe('onetwo');
+
+    // Metadata recorded before sources were fingerprinted cannot prove them.
+    const legacy = { ...rebuilt.artifact, sourceFingerprint: undefined };
+    const metadataKey = [...storage.objects.keys()].find((key) => key.endsWith('.json') && key !== request.planObjectKey)!;
+    storage.objects.set(metadataKey, Buffer.from(JSON.stringify(legacy)));
+    const proven = await run({ ...request, chapterIndex: 0 }, 0);
+    expect(proven.artifact.createdAt).toBeGreaterThanOrEqual(rebuilt.artifact.createdAt);
+    expect(proven.artifact.sourceFingerprint).toBe(rebuilt.artifact.sourceFingerprint);
+    expect(proven.artifact.objectKey).not.toBe(rebuilt.artifact.objectKey);
+  });
+
   test('rebuilds a missing final file from settled cached sources', async () => {
     const storage = pdfPlanStorage();
     const run = handler(storage, new Map([

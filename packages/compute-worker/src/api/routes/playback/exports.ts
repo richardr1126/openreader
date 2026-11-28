@@ -8,6 +8,7 @@ import {
   ttsPlaybackPlanArtifactPrefix,
 } from '../../../storage/artifact-addressing';
 import { deletePrefix } from '../../../storage/prefix-cleanup';
+import { exportSourceFingerprint } from '../../../playback/export-fingerprint';
 import { groupExportChapters, type ExportChapterGroup } from '../../../jobs/playback/export-chapters';
 import { readPersistedTtsPlaybackPlanSegments } from '../../../jobs/playback/plan';
 import { toComputeOperation } from '../../compute-operation';
@@ -226,10 +227,14 @@ export function registerPlaybackExportSessionRoutes(
       return { error: 'Export plan not found' };
     }
     const plannedSegments = groups.reduce((sum, group) => sum + group.ordinals.length, 0);
-    const states = await readModel.listSegmentStates(scope, plannedSegments);
+    const states = await readModel.listSegmentStates({ ...scope, planObjectKey });
     let completedSegments = 0;
     let skippedSegments = 0;
     let lastSkipError: { message: string | null; code: string | null } | null = null;
+    const audioOf = (ordinal: number) => {
+      const state = states.get(ordinal);
+      return state?.status === 'completed' ? state : null;
+    };
     const chapters = groups.map((group) => {
       let completed = 0;
       let skipped = 0;
@@ -259,6 +264,7 @@ export function registerPlaybackExportSessionRoutes(
         skippedSegments: skipped,
         generatingSegments: generating,
         durationMs,
+        sourceFingerprint: exportSourceFingerprint(group.ordinals, audioOf),
       };
     });
     return {
@@ -266,6 +272,8 @@ export function registerPlaybackExportSessionRoutes(
       completedSegments,
       skippedSegments,
       lastSkipError,
+      // Chapters group the whole plan in order, so together they are the book.
+      sourceFingerprint: exportSourceFingerprint(groups.flatMap((group) => group.ordinals), audioOf),
       chapters,
     };
   });

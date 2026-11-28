@@ -138,6 +138,9 @@ Current Playwright policy:
   Playwright cases (bootstrap setup plus Chromium/WebKit journeys, including the
   playback cases). Treat the counts as a checkpoint, not a rule preventing
   legitimate new coverage.
+- Known intermittent failures that also reproduce on `main` are logged in
+  `v5/KNOWN_E2E_FLAKES.md`. Check it before blaming a change, and add an entry
+  when a failure is shown to predate the change.
 
 ## Local Stack Discipline
 

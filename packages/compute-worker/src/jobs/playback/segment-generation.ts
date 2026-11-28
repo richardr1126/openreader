@@ -302,6 +302,7 @@ export async function generateExplicitTtsPlaybackSegments(input: {
       documentVersion: input.request.documentVersion,
       settingsHash: input.request.settingsHash,
       ordinal: segment.original.ordinal,
+      segmentKey: segment.segmentKey,
     });
 
   const computeAlignment = async (

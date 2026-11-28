@@ -417,6 +417,9 @@
           "plannedSegments": {
             "type": "number"
           },
+          "sourceFingerprint": {
+            "type": "string"
+          },
           "chapterIndex": {
             "type": "number"
           },
@@ -2573,6 +2576,9 @@
               },
               "plannedSegments": {
                 "type": "number"
+              },
+              "sourceFingerprint": {
+                "type": "string"
               },
               "chapterIndex": {
                 "type": "number"
@@ -5412,6 +5418,9 @@
                     "plannedSegments": {
                       "type": "number"
                     },
+                    "sourceFingerprint": {
+                      "type": "string"
+                    },
                     "chapterIndex": {
                       "type": "number"
                     },
@@ -7212,6 +7221,9 @@
                       "additionalProperties": false,
                       "nullable": true
                     },
+                    "sourceFingerprint": {
+                      "type": "string"
+                    },
                     "chapters": {
                       "type": "array",
                       "items": {
@@ -7245,6 +7257,9 @@
                           },
                           "durationMs": {
                             "type": "number"
+                          },
+                          "sourceFingerprint": {
+                            "type": "string"
                           }
                         },
                         "required": [
@@ -7256,7 +7271,8 @@
                           "completedSegments",
                           "skippedSegments",
                           "generatingSegments",
-                          "durationMs"
+                          "durationMs",
+                          "sourceFingerprint"
                         ],
                         "additionalProperties": false
                       }
@@ -7267,6 +7283,7 @@
                     "completedSegments",
                     "skippedSegments",
                     "lastSkipError",
+                    "sourceFingerprint",
                     "chapters"
                   ],
                   "additionalProperties": false
@@ -17880,6 +17897,9 @@
                         },
                         "plannedSegments": {
                           "type": "number"
+                        },
+                        "sourceFingerprint": {
+                          "type": "string"
                         },
                         "chapterIndex": {
                           "type": "number"

@@ -7,6 +7,7 @@ import {
   resolveAndPersistTtsPlaybackPlan,
 } from '../../src/jobs/playback/plan';
 import { ttsPlaybackPlanArtifactKey } from '../../src/storage/artifact-addressing';
+import { createTtsPlaybackSegmentArtifactStore } from '../../src/playback/storage';
 
 const PREFIX = 'openreader';
 const DOCUMENT_ID = 'b'.repeat(64);
@@ -92,6 +93,21 @@ test('Force reparse gives narration a plan from the new layout and keeps the old
     request: { ...request, planObjectKey: before.planObjectKey }, storage, s3Prefix: PREFIX,
   });
   expect(held.plannedSegments.map((segment) => segment.text)).toEqual(['Edited block text.']);
+
+  // Both plans share the settings scope, so the earlier layout's audio at the
+  // same position must not be read as the new passage's.
+  const segments = createTtsPlaybackSegmentArtifactStore({ storage, s3Prefix: PREFIX });
+  const sidecarScope = { storageUserId: request.storageUserId, documentId: DOCUMENT_ID, documentVersion: 1, settingsHash: 'hash', ordinal: 0 };
+  await segments.putSegmentMetadata({
+    schemaVersion: 1, status: 'completed', ...sidecarScope, readerType: 'pdf',
+    segmentKey: before.plannedSegments[0]!.segmentKey ?? null, textLength: 18, audioKey: 'audio/edited.mp3',
+    audioFormat: 'mp3', durationMs: 1000, alignment: null, error: null, updatedAt: 1,
+  });
+  expect(after.plannedSegments[0]!.segmentKey).not.toBe(before.plannedSegments[0]!.segmentKey);
+  await expect(segments.readSegmentMetadata({ ...sidecarScope, segmentKey: after.plannedSegments[0]!.segmentKey ?? null }))
+    .resolves.toBeNull();
+  await expect(segments.readSegmentMetadata({ ...sidecarScope, segmentKey: before.plannedSegments[0]!.segmentKey ?? null }))
+    .resolves.toMatchObject({ audioKey: 'audio/edited.mp3' });
 });
 
 test('a reparse that lands while a plan is derived moves the plan to the new layout identity', async () => {

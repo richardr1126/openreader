@@ -268,9 +268,19 @@ segment identity fields. It is keyed by plan ordinal, not segment id, so readers
 can address it directly from the plan without recomputing audio hashes or listing
 S3. Because each ordinal has its own object, there is no read-merge-write race.
 
-Completed sidecars are treated as immutable and cached by the worker process.
-Missing or non-completed sidecars are re-read so new generation progress from this
-or another worker is discovered.
+Completed sidecars are treated as immutable and cached by the worker process,
+per plan. Missing or non-completed sidecars are re-read so new generation
+progress from this or another worker is discovered.
+
+Plans of one document can share a settings scope: a PDF reparse gives the new
+layout its own plan, but the voice and settings are unchanged. Every sidecar read
+therefore takes the plan's segment key for that ordinal, and a sidecar written
+for another passage reads as missing. The first playback or export run on a
+reparsed layout's plan repairs the scope once (`playback/plan-repair.ts`): it
+cancels sessions still on an earlier plan, deletes audio of passages the new
+plan no longer has, copies a moved passage's sidecar (audio, duration, timing)
+to its new ordinal, and removes the remaining earlier sidecars. A marker beside
+`segments/` records that the plan's scope was repaired.
 
 ---
 
