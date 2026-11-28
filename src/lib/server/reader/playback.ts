@@ -11,6 +11,7 @@ import { assertAuthoritativePlaybackPlan, normalizePlaybackPlan } from '@/lib/sh
 import { listAdminProviders } from '@/lib/server/admin/providers';
 import { resolveTtsCredentials } from '@/lib/server/admin/resolve-credentials';
 import { ComputeWorkerClient, getComputeWorkerClient, isComputeWorkerAvailable } from '@/lib/server/compute-worker/client';
+import { documentCreatedAtMs, resolvePdfSkipBlockKinds } from '@/lib/server/tts/document-skip-kinds';
 import type { ComputeOperation, TtsPlaybackPlanResult } from '@/lib/server/compute-worker/protocol';
 import type { ComputeLimitPolicyDocument } from '@openreader/runtime-config/compute-limits';
 import { getResolvedRuntimeConfig } from '@/lib/server/runtime-config';
@@ -53,7 +54,13 @@ export async function resolveDefaultPlaybackRequest(
     maxBlockLength: settings.playback?.maxSegmentLength ?? preferences.ttsSegmentMaxBlockLength,
     language,
     ...(scope.readerType === 'pdf'
-      ? { skipBlockKinds: settings.pdf?.skipBlockKinds ?? preferences.pdfSkipBlockKinds }
+      ? {
+        skipBlockKinds: resolvePdfSkipBlockKinds(
+          settings.pdf?.skipBlockKinds,
+          storedPreferences,
+          await documentCreatedAtMs(documentId, scope.storageUserId),
+        ),
+      }
       : {}),
   };
 }

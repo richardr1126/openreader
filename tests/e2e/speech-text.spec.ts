@@ -24,8 +24,15 @@ test('speech defaults and independent book overrides persist without changing di
   await citations.click();
   await brackets.click();
   await page.getByRole('option', { name: 'Both', exact: true }).click();
+  const saved = page.waitForRequest(request => request.method() === 'PUT' && request.url().endsWith('/api/user/state/preferences'));
   await page.getByRole('region', { name: 'Unsaved changes', exact: true }).getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Unsaved changes', exact: true })).toBeHidden();
+  // Untouched defaults stay defaults rather than becoming saved choices.
+  const { patch } = (await saved).postDataJSON() as { patch: Record<string, unknown> };
+  expect(patch).toHaveProperty('speechText');
+  expect(patch).not.toHaveProperty('pdfSkipBlockKinds');
+  expect(patch).not.toHaveProperty('voiceCustomization');
+  expect(patch).not.toHaveProperty('ttsSegmentMaxBlockLength');
   await page.reload();
   await expect(citations).toHaveAttribute('aria-checked', 'true');
   await expect(brackets).toContainText('Both');

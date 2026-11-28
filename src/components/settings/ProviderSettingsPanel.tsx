@@ -252,16 +252,19 @@ export function ProviderSettingsPanel({
   const savedModelOptions = modelOptions.normalized === readModelOptions(effectiveProviderType, selectedDefaults.modelOptions, finalModel).normalized
     ? ''
     : modelOptions.normalized;
+  const speechTextChanged = localSpeechText.citations !== speechText.citations || localSpeechText.brackets !== speechText.brackets;
+  const customizationChanged = VOICE_CUSTOMIZATION_FIELDS.some(key => localCustomization[key] !== voiceCustomization[key]);
+  const pdfSkipKindsChanged = JSON.stringify(localPdfSkipKinds) !== JSON.stringify(pdfSkipBlockKinds);
   const dirty = viewModel.selectedProviderRef !== providerRef
     || viewModel.selectedProviderType !== providerType
     || finalModel !== ttsModel
     || localInstructions !== ttsInstructions
     || !!modelOptions.error || savedModelOptions !== ttsModelOptions
     || localVoice !== voice
-    || VOICE_CUSTOMIZATION_FIELDS.some(key => localCustomization[key] !== voiceCustomization[key])
+    || customizationChanged
     || localMaxSegmentLength !== ttsSegmentMaxBlockLength
-    || JSON.stringify(localPdfSkipKinds) !== JSON.stringify(pdfSkipBlockKinds)
-    || localSpeechText.citations !== speechText.citations || localSpeechText.brackets !== speechText.brackets
+    || pdfSkipKindsChanged
+    || speechTextChanged
     || (providerModelPolicy.supportsNativeModelSpeed && localSpeed !== voiceSpeed);
 
   const discard = () => {
@@ -280,10 +283,12 @@ export function ProviderSettingsPanel({
         ttsModel: finalModel,
         ttsInstructions: savedInstructions,
         ttsModelOptions: savedModelOptions,
-        speechText: localSpeechText,
-        voiceCustomization: localCustomization,
-        ttsSegmentMaxBlockLength: localMaxSegmentLength,
-        pdfSkipBlockKinds: localPdfSkipKinds,
+        // Store only what changed. A default saved here would read as the
+        // user's choice, so a later default change would never reach them.
+        ...(speechTextChanged ? { speechText: localSpeechText } : {}),
+        ...(customizationChanged ? { voiceCustomization: localCustomization } : {}),
+        ...(localMaxSegmentLength !== ttsSegmentMaxBlockLength ? { ttsSegmentMaxBlockLength: localMaxSegmentLength } : {}),
+        ...(pdfSkipKindsChanged ? { pdfSkipBlockKinds: localPdfSkipKinds } : {}),
         ...(shownVoice ? { voice: shownVoice } : {}),
         ...(providerModelPolicy.supportsNativeModelSpeed ? { voiceSpeed: localSpeed } : {}),
       });

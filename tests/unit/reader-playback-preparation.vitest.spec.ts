@@ -3,10 +3,15 @@ import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createAdmittedPlaybackPlanOperation, resolveDefaultPlaybackRequest, resolveReaderPlayback } from '@/lib/server/reader/playback';
 import { buildTtsPlaybackPlanningInput } from '@/lib/server/tts/playback-request';
 import type { ResolvedSegmentDocumentScope } from '@/lib/server/tts/segments-auth';
-import { DEFAULT_DOCUMENT_SETTINGS } from '@/types/document-settings';
+import { DEFAULT_DOCUMENT_SETTINGS, PDF_TABLE_TEXT_ADDED_AT_MS } from '@/types/document-settings';
 
 const mocks = vi.hoisted(() => ({
   providers: vi.fn(), voices: vi.fn(), credentials: vi.fn(), completed: vi.fn(), enqueue: vi.fn(), readPlan: vi.fn(), resolvePlan: vi.fn(),
+  createdAt: vi.fn(),
+}));
+vi.mock('@/lib/server/tts/document-skip-kinds', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/server/tts/document-skip-kinds')>(),
+  documentCreatedAtMs: mocks.createdAt,
 }));
 vi.mock('@openreader/tts/voice-resolution', () => ({ resolveVoices: mocks.voices }));
 vi.mock('@/lib/server/admin/resolve-credentials', () => ({ resolveTtsCredentials: mocks.credentials }));
@@ -50,6 +55,7 @@ function plan(segments = [0, 1], readerType = 'html') {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.resolvePlan.mockResolvedValue(null);
+  mocks.createdAt.mockResolvedValue(null);
   mocks.providers.mockResolvedValue([{ slug: 'kitten', providerType: 'custom-openai', defaultModel: 'KittenTTS', enabled: true }]);
   mocks.voices.mockResolvedValue({ voices: ['Bella', 'Jasper'], status: 'listed' });
   mocks.credentials.mockResolvedValue({ provider: 'custom-openai', apiKey: 'credential-sentinel', baseUrl: 'http://provider.invalid/v1' });
@@ -130,6 +136,24 @@ describe('bootstrap playback preparation', () => {
     await prepare({ ...DEFAULT_DOCUMENT_SETTINGS, playback: {}, pdf: {} });
     expect(mocks.enqueue.mock.calls.at(-1)?.[0].settingsHash).toBe(inheritedHash);
   });
+  test('a PDF added before table and chart text was kept keeps its earlier skip list', async () => {
+    const pdfScope = { ...scope, readerType: 'pdf' } as ResolvedSegmentDocumentScope;
+    const skipped = async (createdAt: number | null, settings = DEFAULT_DOCUMENT_SETTINGS, saved: Record<string, unknown> = preferences) => {
+      mocks.createdAt.mockResolvedValue(createdAt);
+      const parsed = await resolveDefaultPlaybackRequest(documentId, pdfScope, settings, saved);
+      if ('error' in parsed) throw new Error(parsed.error);
+      return parsed.skipBlockKinds;
+    };
+    const earlier = ['header', 'footer', 'footnote', 'vision_footnote'];
+
+    expect(await skipped(null)).toEqual(earlier);
+    expect(await skipped(PDF_TABLE_TEXT_ADDED_AT_MS - 1)).toEqual(earlier);
+    expect(await skipped(PDF_TABLE_TEXT_ADDED_AT_MS)).toEqual([...earlier, 'table', 'chart']);
+    // A saved preference and a book's own list apply whenever the PDF was added.
+    expect(await skipped(PDF_TABLE_TEXT_ADDED_AT_MS, DEFAULT_DOCUMENT_SETTINGS, { ...preferences, pdfSkipBlockKinds: ['header'] })).toEqual(['header']);
+    expect(await skipped(null, { ...DEFAULT_DOCUMENT_SETTINGS, pdf: { skipBlockKinds: ['chart'] } })).toEqual(['chart']);
+  });
+
   test.each([
     ['auto', 'tr-TR', 'F1', 'tr-TR'],
     ['auto', 'de-DE', 'F1', 'de-DE'],

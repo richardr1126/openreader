@@ -21,7 +21,7 @@ import {
   parsedPdfArtifactKey,
   ttsPlaybackPlanArtifactKey,
 } from '../../storage/artifact-addressing';
-import type { ArtifactStorage } from '../../infrastructure/storage';
+import { PARSED_PDF_NARRATION_REVISION_METADATA, type ArtifactStorage } from '../../infrastructure/storage';
 import type { TtsPlaybackPlanCapableRequest } from './schemas';
 
 export type TtsPlaybackSegmentInput = {
@@ -209,7 +209,31 @@ export function resolvePlaybackStartOrdinal(
   return match.ordinal;
 }
 
-export function computePlaybackPlanSignature(request: TtsPlaybackPlanCapableRequest): string {
+/**
+ * The revision of a reparsed PDF layout, or null for a PDF still on its first
+ * layout and for other readers. A plan is derived from the layout, so a reparse
+ * must give narration a new plan rather than reuse the one built from the old
+ * layout. Old plans stay in place for the sessions and exports that hold them.
+ */
+export async function readPlaybackPlanLayoutRevision(
+  request: Pick<TtsPlaybackPlanCapableRequest, 'documentId' | 'readerType' | 'planning'>,
+  storage: Pick<ArtifactStorage, 'headObject'>,
+  s3Prefix: string,
+): Promise<string | null> {
+  const documentSource = request.planning.documentSource;
+  if (request.readerType !== 'pdf' || !documentSource || !storage.headObject) return null;
+  const head = await storage.headObject(parsedPdfArtifactKey({
+    documentId: request.documentId,
+    namespace: documentSource.namespace,
+    prefix: s3Prefix,
+  }));
+  return head?.metadata[PARSED_PDF_NARRATION_REVISION_METADATA] || null;
+}
+
+export function computePlaybackPlanSignature(
+  request: TtsPlaybackPlanCapableRequest,
+  layoutRevision: string | null,
+): string {
   const documentSource = request.planning.documentSource;
   return computeSegmentationSignature({
     maxBlockLength: request.planning.maxBlockLength ?? null,
@@ -220,9 +244,12 @@ export function computePlaybackPlanSignature(request: TtsPlaybackPlanCapableRequ
     // Plans contain user-scoped document text and settings metadata. Include
     // the storage owner in their stable identity so identical content owned by
     // different users cannot reuse an operation or artifact across scopes.
+    // A layout revision joins only when present, so a never-reparsed PDF keeps
+    // its existing plan identity.
     namespace: JSON.stringify([
       documentSource?.namespace ?? null,
       request.storageUserId,
+      ...(layoutRevision ? [layoutRevision] : []),
     ]),
   });
 }
@@ -294,6 +321,8 @@ export async function readPersistedTtsPlaybackPlanSegments(
   });
 }
 
+const MAX_LAYOUT_REVISION_ATTEMPTS = 3;
+
 export async function resolveAndPersistTtsPlaybackPlan(input: {
   request: TtsPlaybackPlanCapableRequest;
   storage: ArtifactStorage;
@@ -306,36 +335,55 @@ export async function resolveAndPersistTtsPlaybackPlan(input: {
   plannedSegments: TtsPlaybackSegmentInput[];
   startOrdinal: number;
 }> {
-  const planSignature = computePlaybackPlanSignature(input.request);
-  const computedPlanObjectKey = ttsPlaybackPlanArtifactKey({
+  const heldPlanObjectKey = input.request.planObjectKey;
+  const readLayoutRevision = () => readPlaybackPlanLayoutRevision(input.request, input.storage, input.s3Prefix);
+  const planKeyFor = (planSignature: string) => ttsPlaybackPlanArtifactKey({
     documentId: input.request.documentId,
     documentVersion: input.request.documentVersion,
     readerType: input.request.readerType,
     planSignature,
     prefix: input.s3Prefix,
   });
-  const planObjectKey = input.request.planObjectKey ?? computedPlanObjectKey;
-  const write = await prepareArtifactWrite(input.storage, planObjectKey, input.attempt);
-  let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
-  if (!plannedSegments || plannedSegments.length === 0) {
-    plannedSegments = planTtsPlaybackSegments(
-      input.request,
-      await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix),
-    );
-    const computed = plannedSegments;
-    const winner = await publishOrAdoptArtifact(
-      () => persistTtsPlaybackPlan({ write, planObjectKey, request: input.request, segments: computed }),
-      () => readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey, input.request),
-      input.attempt,
-    );
-    plannedSegments = winner ?? computed;
+  for (let tries = 1; ; tries += 1) {
+    // A held plan is read as is; its layout matters only if it must be rebuilt.
+    let revision = heldPlanObjectKey ? undefined : await readLayoutRevision();
+    let planSignature = computePlaybackPlanSignature(input.request, revision ?? null);
+    const planObjectKey = heldPlanObjectKey ?? planKeyFor(planSignature);
+    const write = await prepareArtifactWrite(input.storage, planObjectKey, input.attempt);
+    let plannedSegments = await readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey);
+    if (!plannedSegments || plannedSegments.length === 0) {
+      if (revision === undefined) {
+        revision = await readLayoutRevision();
+        planSignature = computePlaybackPlanSignature(input.request, revision);
+        // Rebuilding a held plan from a reparsed layout would give the earlier
+        // layout's plan identity the new layout's text.
+        if (revision && heldPlanObjectKey !== planKeyFor(planSignature)) {
+          throw new Error('This reading plan belongs to an earlier PDF layout and is no longer available');
+        }
+      }
+      const units = await resolvePlaybackSourceUnits(input.request, input.storage, input.s3Prefix);
+      // A reparse can replace the layout between reading its revision and its
+      // body. Each reparse has its own revision, so an unchanged revision proves
+      // the body belongs to the plan identity computed from it.
+      if (await readLayoutRevision() !== revision) {
+        if (tries < MAX_LAYOUT_REVISION_ATTEMPTS) continue;
+        throw new Error('The PDF layout changed while its reading plan was being prepared');
+      }
+      const computed = planTtsPlaybackSegments(input.request, units);
+      const winner = await publishOrAdoptArtifact(
+        () => persistTtsPlaybackPlan({ write, planObjectKey, request: input.request, segments: computed }),
+        () => readPersistedTtsPlaybackPlanSegments(input.storage, planObjectKey, input.request),
+        input.attempt,
+      );
+      plannedSegments = winner ?? computed;
+    }
+    return {
+      planObjectKey,
+      planSignature,
+      plannedSegments,
+      startOrdinal: input.requireStartOrdinal
+        ? resolvePlaybackStartOrdinal(plannedSegments, input.request)
+        : 0,
+    };
   }
-  return {
-    planObjectKey,
-    planSignature,
-    plannedSegments,
-    startOrdinal: input.requireStartOrdinal
-      ? resolvePlaybackStartOrdinal(plannedSegments, input.request)
-      : 0,
-  };
 }
